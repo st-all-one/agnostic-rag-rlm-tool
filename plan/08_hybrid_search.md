@@ -1,14 +1,22 @@
-# Busca Híbrida — BM25 + Semântico + RRF
+# Busca Híbrida — BM25 + Entity + Semântico + RRF
 
 ## Visão Geral
 
-O `arlm-search` combina busca textual (BM25 via SQLite FTS5) com busca semântica (vetorial via LanceDB) usando fusão RRF (Reciprocal Rank Fusion). Cada tipo de busca é especialista no seu domínio, e a fusão combina os melhores resultados de ambos.
+O `arlm-search` suporta 4 tiers de busca, do mais rápido (FTS5 puro) ao mais
+preciso (LLM rerank). O tier padrão é **entity** (BM25 + entity RRF), que não
+precisa de embeddings nem de LLM.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    arlm-search                                │
 │                                                              │
+│  Tier 0 (fts):     BM25 (FTS5) ──► results                  │
+│  Tier 1 (entity):  BM25 + Entity RRF ──► results (padrão)   │
+│  Tier 2 (vector):  BM25 + Entity + Vector RRF                │
+│  Tier 3 (llm):     Tier 2 + LLM rerank (--llm only)         │
+│                                                              │
 │  query ──┬──► BM25 (SQLite FTS5) ──► results_bm25 ──┐       │
+│          ├──► Entity match (FTS5) ──► results_ent ───┤       │
 │          │                                           ├──► RRF│
 │          └──► Semantic (LanceDB) ──► results_sem ──┘        │
 │                                                    │        │
@@ -312,10 +320,88 @@ impl HybridSearch {
 
 ## Latência Típica
 
-| Operação | Latência | Notas |
-|----------|---------|-------|
-| BM25 search (10k docs) | ~5ms | FTS5 com porter stemmer |
-| Semantic search (10k vectors) | ~10ms | LanceDB HNSW |
-| RRF fusion | ~1ms | Rust puro, HashMap |
-| Text recovery | ~5ms | SQLite SELECT |
-| **Total** | **~21ms** | Muito abaixo do threshold de 100ms |
+| Tier | Operação | Latência | Notas |
+|------|----------|---------|-------|
+| 0 (fts) | BM25 search (10k docs) | ~5ms | FTS5 com porter stemmer |
+| 1 (entity) | BM25 + entity RRF | ~8ms | Padrão, sem embedding |
+| 2 (vector) | BM25 + entity + vector RRF | ~21ms | Requer embeddings |
+| 3 (llm) | Tier 2 + LLM rerank | ~200ms | Requer --llm |
+| — | RRF fusion | ~1ms | Rust puro, HashMap |
+| — | Text recovery | ~5ms | SQLite SELECT |
+
+## Sistema de Tiers (Plano 16)
+
+### Implementação
+
+```rust
+pub enum SearchTier {
+    Fts,        // BM25 only (~5ms)
+    Entity,     // BM25 + entity RRF (~8ms, padrão)
+    Vector,     // BM25 + entity + vector RRF (~21ms)
+    LlmRerank,  // Tier 2 + LLM rerank (~200ms, requer --llm)
+}
+
+impl HybridSearch {
+    pub fn search(
+        &self,
+        query: &str,
+        project: &str,
+        options: SearchOptions,
+    ) -> Result<Vec<SearchResult>> {
+        let mut candidates = Vec::new();
+
+        // Tier 0: BM25 sempre roda
+        let bm25 = self.bm25.search(query, project, options.top_k * 3)?;
+        candidates.extend(bm25.into_iter().map(SearchCandidate::from_bm25));
+
+        // Tier 1+: entity match
+        if matches!(options.tier, SearchTier::Entity | SearchTier::Vector | SearchTier::LlmRerank) {
+            let entities = self.extract_query_entities(query);
+            let entity_hits = self.entity_search.search(&entities, project, options.top_k * 3)?;
+            candidates.extend(entity_hits.into_iter().map(SearchCandidate::from_entity));
+        }
+
+        // Tier 2+: vector search
+        if matches!(options.tier, SearchTier::Vector | SearchTier::LlmRerank) {
+            if let Some(embedder) = &self.embedder {
+                let embedding = embedder.embed(query)?;
+                let vector_hits = self.vector_search.search(&embedding, project, options.top_k * 3)?;
+                candidates.extend(vector_hits.into_iter().map(SearchCandidate::from_vector));
+            }
+        }
+
+        // RRF fusion
+        let fused = self.rrf_fuse(candidates, options.top_k);
+
+        // Tier 3: LLM rerank (requer --llm)
+        if matches!(options.tier, SearchTier::LlmRerank) {
+            if let Some(llm) = &self.llm {
+                return self.llm_rerank(llm, query, fused, options.top_k);
+            }
+        }
+
+        Ok(fused)
+    }
+}
+```
+
+### Entity Search (determinístico, sem embedding)
+
+```rust
+impl EntitySearch {
+    pub fn search(
+        &self,
+        query_entities: &[String],
+        project: &str,
+        top_k: usize,
+    ) -> Result<Vec<EntityResult>> {
+        let mut results = Vec::new();
+        for entity in query_entities {
+            let hits = self.storage.search_entity(entity, project)?;
+            results.extend(hits);
+        }
+        let fused = self.rrf_fuse(results, top_k);
+        Ok(fused)
+    }
+}
+```

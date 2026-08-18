@@ -410,3 +410,183 @@ arlm session resume s_abc123
 - **Hash verification:** SHA256 de cada chunk
 - **Schema versioning:** Migrações automáticas
 - **Corruption detection:** `arlm verify --project ./x`
+
+## Wiki Persist (Plano 16)
+
+### Conceito
+
+A memória pode ser persistida como markdown no diretório do projeto,
+criando uma wiki inspectável, git-versionada, e editável à mão.
+
+### Estrutura
+
+```
+projeto/
+├── .arlm/
+│   ├── wiki/
+│   │   ├── _global/
+│   │   │   └── rules.md
+│   │   ├── searches/
+│   │   │   └── 2024-01-15_bug-login.md
+│   │   ├── analyses/
+│   │   │   └── 001-auth-analysis.md
+│   │   ├── sessions/
+│   │   │   └── s_abc123.md
+│   │   └── trajectories/
+│   │       └── run_abc123.md
+│   └── knowledge.db
+└── src/
+```
+
+### Frontmatter YAML
+
+Toda página persistida tem frontmatter:
+
+```yaml
+---
+title: Bug de login - análise
+created: 2024-01-15T10:30:00Z
+updated: 2024-01-15T10:30:00Z
+query: "bug de login"
+tier: entity
+project: meu-projeto
+entities:
+  - validate_token
+  - jwt
+  - session
+tags: []
+pinned: false
+expires_at: null
+salience: 1.0
+access_count: 0
+supersedes: null
+---
+```
+
+### API
+
+```rust
+impl MemoryEngine {
+    /// Persiste output como markdown no projeto
+    pub fn persist(
+        &self,
+        path: &str,
+        body: &str,
+        metadata: PageMetadata,
+    ) -> Result<()> {
+        // 1. Cria frontmatter YAML
+        // 2. Escreve em .arlm/wiki/<path>
+        // 3. Indexa no SQLite (FTS5 + entities)
+        // 4. (opcional) git commit
+    }
+
+    /// Lista páginas persistidas
+    pub fn list_pages(
+        &self,
+        project: &str,
+        scope: Option<&str>,
+    ) -> Result<Vec<PageInfo>> {}
+
+    /// Busca páginas persistidas
+    pub fn search_pages(
+        &self,
+        query: &str,
+        project: &str,
+    ) -> Result<Vec<PageHit>> {}
+}
+```
+
+## Decay e Retenção (Plano 16)
+
+### Fórmula de Saliência
+
+```rust
+pub fn compute_salience(
+    page: &Page,
+    now: i64,
+    config: &DecayConfig,
+) -> f64 {
+    let age_days = (now - page.created_at) as f64 / 86400.0;
+    let days_since_access = page.last_accessed_at
+        .map(|t| (now - t) as f64 / 86400.0)
+        .unwrap_or(age_days);
+
+    let temporal = page.salience_base * (-config.lambda * age_days).exp();
+    let access_bonus = config.sigma * (1.0 + page.access_count as f64).ln()
+        * (-config.mu * days_since_access).exp();
+
+    (temporal + access_bonus).clamp(0.0, 1.0)
+}
+```
+
+### Regras de Retenção
+
+| Tipo | Retenção | Decay |
+|------|----------|-------|
+| Pinned | Indefinida | Nenhum |
+| Rules/Gotchas | Indefinida | Nenhum |
+| Análises | 90d hot → 180d cold → evict | Salience decay |
+| Buscas | 30d hot → 90d cold → evict | Salience decay |
+| Sessions | 30d | Salience decay |
+| TTL explícito | Conforme expires_at | Nenhum |
+
+### API
+
+```rust
+impl MemoryEngine {
+    pub fn run_decay(
+        &self,
+        project: &str,
+        config: &DecayConfig,
+    ) -> Result<DecayResult> {}
+}
+```
+
+## Entity-Assisted Recall (Plano 16)
+
+### Extração (determinística, na indexação)
+
+```rust
+pub fn extract_entities(chunk: &Chunk, file_path: &str) -> Vec<String> {
+    // Regex: funções, structs, imports, paths, strings significativas
+    // Dedup + limit (10 por chunk)
+}
+```
+
+### Schema
+
+```sql
+CREATE TABLE chunk_entities (
+    chunk_id INTEGER NOT NULL,
+    entity TEXT NOT NULL,
+    PRIMARY KEY (chunk_id, entity),
+    FOREIGN KEY (chunk_id) REFERENCES chunks(id)
+);
+
+CREATE INDEX idx_entity_text ON chunk_entities(entity);
+
+CREATE VIRTUAL TABLE entities_fts USING fts5(
+    entity,
+    content='',
+    tokenize='unicode61'
+);
+```
+
+### API
+
+```rust
+impl MemoryEngine {
+    pub fn extract_entities(
+        &self,
+        chunk: &Chunk,
+        file_path: &str,
+    ) -> Vec<String> {}
+
+    pub fn search_by_entity(
+        &self,
+        entities: &[String],
+        project: &str,
+        top_k: usize,
+    ) -> Result<Vec<SearchResult>> {}
+}
+```

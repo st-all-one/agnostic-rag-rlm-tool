@@ -1,31 +1,39 @@
 1. Visão Geral da Arquitetura (Camadas)
 
-A arquitetura é organizada em 4 camadas principais, com fluxo de dados estritamente unidirecional para evitar contenção de locks:
+A arquitetura é organizada em 5 camadas principais, com fluxo de dados
+estritamente unidirecional. **Princípio fundamental:** o arlm é
+determinístico por padrão. LLM é opt-in via `--llm`.
+
 text
 
 ┌─────────────────────────────────────────────────────────────────┐
 │                      CLI Layer (CLAP)                         │
-│            (load, search, chunk, dispatch, status)            │
+│  (index, search, context, persist, decay, run --llm, status)  │
 └─────────────────────────────┬───────────────────────────────────┘
                               │
 ┌─────────────────────────────▼───────────────────────────────────┐
 │                 Orchestration Core (Controller)                │
 │  Gerencia transações, coordena workers e fusão de resultados  │
+│  SEM LLM: busca + persist + decay (determinístico)            │
+│  COM --LLM: engine RLM recursivo (opt-in)                     │
 └──────────────┬──────────────────────────────┬──────────────────┘
                │                              │
 ┌──────────────▼──────────────┐ ┌─────────────▼──────────────────┐
-│   Persistence & Metadata    │ │   Vector & Hybrid Search       │
-│   (SQLite - rusqlite)       │ │   (LanceDB - lancedb crate)   │
-│   - Metadados dos chunks    │ │   - Embeddings (BGE-M3)        │
-│   - Estado dos buffers      │ │   - Índice HNSW               │
-│   - FTS5 (BM25)             │ │   - Busca por similaridade     │
-│   - Variáveis/Filas tasks   │ │                               │
+│   Persistence & Metadata    │ │   Hybrid Search                │
+│   (SQLite - rusqlite)       │ │   (FTS5 + Entity + LanceDB)   │
+│   - Metadados dos chunks    │ │   - BM25 (FTS5)                │
+│   - Estado dos buffers      │ │   - Entity RRF (lexical)       │
+│   - FTS5 (BM25)             │ │   - Vector HNSW (opcional)     │
+│   - Entities (lexical)      │ │   - LLM rerank (--llm only)    │
+│   - Decay/saliência         │ │                               │
+│   - Wiki markdown persist   │ │                               │
 └─────────────────────────────┘ └───────────────────────────────┘
                │                              │
 ┌──────────────▼──────────────────────────────▼──────────────────┐
 │              Ingestion & Embedding Pipeline                    │
 │  - Memmap I/O (memmap2)    - Chunking (Rayon)                │
-│  - Embedding Generator (candle + BGE-M3 quantizado)          │
+│  - Entity extraction (regex, determinístico)                  │
+│  - Embedding (candle BGE-M3, OPCIONAL)                       │
 └─────────────────────────────────────────────────────────────────┘
 
 2. Estratégia de Persistência e Busca (O Coração)
@@ -196,3 +204,43 @@ Concorrência	Síncrono + Canais + Rayon	Overhead zero de async runtime (Tokio) 
 Build	lto=true, codegen-units=1	Binário mínimo e instruções de máquina maximamente agressivas.
 
 Essa arquitetura garante que o rlm-cli seja uma bomba de desempenho: navegação instantânea em documentos de 1GB+, buscas abaixo de 100ms, e completamente autônomo (funciona offline em qualquer servidor/container).
+
+## 9. Filosofia Determinística (Plano 16)
+
+O arlm é **pura e determinística por padrão**. LLM é opt-in via `--llm`.
+
+### O que funciona SEM LLM (padrão)
+
+| Comando | Latência | O que faz |
+|---------|----------|-----------|
+| `arlm index` | ~30s/10k arquivos | Chunking Rayon + entity extraction |
+| `arlm search` | ~5–21ms | FTS5 + entity RRF (+ vector se embeddings existem) |
+| `arlm context` | ~10ms | Chunks formatados como prompt |
+| `arlm persist` | ~5ms | Salva output como markdown |
+| `arlm decay` | ~50ms | Fórmula de saliência (puro math) |
+| `arlm consolidate` | ~100ms | Merge por hash + dedup |
+
+### O que REQUER --llm
+
+| Comando | Flag | O que faz |
+|---------|------|-----------|
+| `arlm run` | `--llm` | RLM recursivo (Planner→Solver→Synthesizer) |
+| `arlm consolidate --llm` | `--llm` | Consolidação por LLM (páginas coerentes) |
+| `arlm search --llm` | `--llm` | Rerank por LLM dos candidatos |
+
+### Por que isso importa
+
+- **Zero dependência de API key** para uso diário (busca, contexto, persist)
+- **Latência previsível** — sem I/O de rede nas operações quentes
+- **Funciona offline** — indexação, busca, decay são 100% locais
+- **Custo zero** — sem chamadas LLM para operações determinísticas
+- **Embeddings opcionais** — FTS5 + entity RRF funciona sem modelo de embedding
+
+### Tier de busca
+
+```
+Tier 0 (fts):        BM25 puro                    ~5ms
+Tier 1 (entity):     BM25 + entity RRF            ~8ms   ← padrão
+Tier 2 (vector):     BM25 + entity + vector RRF   ~21ms
+Tier 3 (llm):        Tier 2 + LLM rerank          ~200ms ← requer --llm
+```

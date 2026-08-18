@@ -60,13 +60,27 @@ arlm index ./meu-projeto \
 ### 2. `arlm search` — Busca Rápida
 
 ```bash
-# Busca híbrida (BM25 + semântico + RRF)
+# Busca padrão (determinística, sem LLM)
 arlm search "bug no login" --project ./meu-projeto
+# → usa tier entity (BM25 + entity RRF), ~8ms
+
+# Busca FTS5 puro (mais rápida)
+arlm search "validate_token" --project ./meu-projeto --tier fts
+# → usa apenas BM25, ~5ms
+
+# Busca com embeddings (requer embeddings pré-computados)
+arlm search "bug de autenticação" --project ./meu-projeto --tier vector
+# → BM25 + entity + vector RRF, ~21ms
+
+# Busca com LLM rerank (requer --llm)
+arlm search "bug complexo" --project ./meu-projeto --llm
+# → Tier 2 + LLM rerank, ~200ms
 
 # Output JSON:
 arlm search "bug no login" --project ./meu-projeto --format json
 {
   "query": "bug no login",
+  "tier": "entity",
   "results": [
     {
       "chunk_id": 42,
@@ -77,7 +91,7 @@ arlm search "bug no login" --project ./meu-projeto --format json
       "content": "fn validate_token(token: &str) -> Result<bool> {"
     }
   ],
-  "duration_ms": 23
+  "duration_ms": 8
 }
 
 # Busca com filtros
@@ -86,6 +100,10 @@ arlm search "error handling" \
   --file-pattern "*.rs" \
   --min-score 0.5 \
   --top-k 10
+
+# Busca + persist (salva resultado como markdown)
+arlm search "bug no login" --project ./meu-projeto --persist
+# → salva em .arlm/wiki/searches/2024-01-15_bug-no-login.md
 ```
 
 ### 3. `arlm context` — Contexto para Agente
@@ -131,18 +149,27 @@ arlm context "tarefa" --project ./x --format json
 arlm context "tarefa" --project ./x --format markdown
 ```
 
-### 4. `arlm run` — Executar RLM Recursivo
+### 4. `arlm run` — Executar RLM Recursivo (REQUER --llm)
 
 ```bash
-# Executa análise RLM completa
+# ⚠️ arlm run REQUER --llm (modo determinístico não suporta recursão)
 arlm run "analise a arquitetura deste projeto e encontre vulnerabilidades" \
   --project ./meu-projeto \
+  --llm \
   --backend openai \
   --model gpt-4 \
   --depth 3 \
   --max-nodes 20 \
   --concurrency 4 \
   --format tree
+
+# Sem --llm, arlm run retorna erro:
+$ arlm run "analise..." --project ./x
+error: `arlm run` requires --llm flag. Use `arlm search` or `arlm context` for deterministic operations.
+
+# Com --llm --persist, salva a análise como markdown:
+arlm run "analise completa" --project ./x --llm --persist
+# → salva em .arlm/wiki/analyses/001-analise-completa.md
 
 # Output (árvore em tempo real):
 # RLM run abc123 (auto, maxDepth=3)
@@ -154,7 +181,7 @@ arlm run "analise a arquitetura deste projeto e encontre vulnerabilidades" \
 # └─ n6 [pending] Sintetizar findings
 
 # Output JSON:
-arlm run "tarefa" --project ./x --format json
+arlm run "tarefa" --project ./x --llm --format json
 {
   "run_id": "abc123",
   "task": "analise a arquitetura...",
@@ -165,7 +192,7 @@ arlm run "tarefa" --project ./x --format json
 }
 
 # Run assíncrono (background):
-arlm run "tarefa" --project ./x --async
+arlm run "tarefa" --project ./x --llm --async
 # → Retorna run_id, pode consultar com arlm status <run_id>
 
 # Cancelar run:
@@ -204,14 +231,86 @@ arlm history --project ./meu-projeto --limit 20
 ### 7. `arlm consolidate` — Limpar Memória
 
 ```bash
-# Consolida memória (remove duplicatas, agrega padrões)
+# Consolida memória (determinístico: merge por hash + dedup)
 arlm consolidate --project ./meu-projeto
+
+# Consolida com LLM (páginas coerentes, extrai decisions/gotchas)
+arlm consolidate --project ./meu-projeto --llm
 
 # Consolida tudo
 arlm consolidate --all
 
 # Remove análises antigas
 arlm consolidate --project ./meu-projeto --max-age 30d
+```
+
+### 8. `arlm persist` — Salvar Conhecimento como Markdown
+
+```bash
+# Persiste busca recente
+arlm search "bug login" --persist
+# → salva em .arlm/wiki/searches/2024-01-15_bug-login.md
+
+# Persiste contexto formatado
+arlm context "analise auth" --persist
+# → salva em .arlm/wiki/analyses/001-auth-analysis.md
+
+# Persiste nota manual
+arlm persist --path "decisions/0007-db.md" \
+  --body "# Decidimos usar Postgres\n\nMotivo: ..."
+# → salva em .arlm/wiki/decisions/0007-db.md
+
+# Persiste com tag
+arlm persist --path "gotchas/001-unwraps.md" \
+  --body "# Não usar unwrap em produção" \
+  --pinned
+# → pinned: true, sobrevive ao decay
+
+# Persiste sessão
+arlm session persist s_abc123
+# → salva em .arlm/wiki/sessions/s_abc123.md
+```
+
+### 9. `arlm decay` — Retenção e Esquecimento
+
+```bash
+# Roda decay (dry run — mostra o que seria removido)
+arlm decay --project ./x --dry-run
+
+# Roda decay (aplica)
+arlm decay --project ./x
+
+# Decay global (todos os projetos)
+arlm decay --all
+
+# Hard delete de tombstones antigas
+arlm decay --purge --older-than 180d
+
+# Mantém pinned e rules (sempre sobrevivem)
+# evicted pages ficam como tombstone por hard_delete_days
+```
+
+### 10. `arlm checkpoints` / `arlm restore-page`
+
+```bash
+# Lista commits recentes da wiki
+arlm checkpoints --project ./x
+
+# Restaura uma página de um commit anterior
+arlm restore-page --path "decisions/001-db.md" --from abc123
+```
+
+### 11. `arlm entities` — Entidades do Projeto
+
+```bash
+# Lista entidades extraídas
+arlm entities --project ./x
+
+# Top 50 entidades
+arlm entities --project ./x --top 50
+
+# Busca por entidade
+arlm entities --project ./x --search "jwt"
 ```
 
 ### 8. `arlm serve` — HTTP API Server
@@ -305,6 +404,14 @@ RLM run abc123 (auto, maxDepth=3)
 --quiet                 # Output mínimo
 --no-color              # Sem cores
 --timeout <ms>          # Timeout global
+
+# Modo determinístico (padrão — sem LLM):
+--tier <tier>           # fts|entity|vector (padrão: entity)
+--persist               # Salva output como markdown no projeto
+--persist-path <path>   # Path customizado dentro de .arlm/wiki/
+
+# Modo LLM (opt-in — requer --llm):
+--llm                   # Ativa LLM para esta operação
 --backend <backend>     # LLM backend (openai|anthropic|ollama|gemini)
 --model <model>         # Modelo LLM
 ```

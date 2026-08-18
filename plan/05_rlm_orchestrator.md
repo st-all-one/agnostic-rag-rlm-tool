@@ -1,5 +1,10 @@
 # RLM Orchestrator — Engine Recursivo
 
+> **⚠️ Modo LLM (opt-in via `--llm`):** O engine RLM recursivo é o único
+> componente do arlm que requer LLM. Ele é ativado apenas com a flag `--llm`.
+> Todas as outras operações (search, context, persist, decay) são
+> determinísticas e não precisam de LLM.
+
 ## Visão Geral
 
 O `arlm-core` é o engine RLM recursivo que implementa o padrão Planner → Solver → Synthesizer. Diferente do Python original que usa REPL, este é um **orquestrador puro** que delega execução ao agente host.
