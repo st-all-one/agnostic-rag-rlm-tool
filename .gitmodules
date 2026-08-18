@@ -1,0 +1,3 @@
+[submodule "ai-guides"]
+	path = ai-guides
+	url = https://github.com/st-all-one/ai-guides.git
