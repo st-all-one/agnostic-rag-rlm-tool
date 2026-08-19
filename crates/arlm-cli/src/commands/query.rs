@@ -12,6 +12,7 @@ pub struct QueryConfig<'a> {
     pub project: &'a Path,
     pub format: Format,
     pub verbose: bool,
+    pub llm: bool,
 }
 
 pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
@@ -19,6 +20,59 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
 
     let pname = project_name(config.project);
 
+    if config.verbose {
+        output::info(&format!("Querying: {}", config.question));
+    }
+
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+    storage.ensure_uuids().ok();
+
+    // Search for relevant context
+    let context_str = if let Ok(Some(buffer)) = storage.get_buffer_by_name(&pname) {
+        let bm25 =
+            arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
+        let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
+        let options = arlm_search::SearchOptions {
+            tier: arlm_search::SearchTier::Entity,
+            top_k: 10,
+        };
+        let results = hybrid
+            .search(config.question, None, buffer.id, &options, None, Some(&storage))
+            .await
+            .unwrap_or_default();
+        arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    // Without --llm: return deterministic search results as context
+    if !config.llm {
+        match config.format {
+            Format::Json => {
+                let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+                    "question": config.question,
+                    "context": context_str,
+                    "project": pname,
+                    "llm": false,
+                }));
+                output.print();
+            }
+            Format::Tree => {
+                output::success(&format!("Context for: {}", config.question));
+                println!("\n{context_str}");
+            }
+            Format::Markdown => {
+                println!("## {}\n\n{context_str}", config.question);
+            }
+            Format::Prompt => {
+                println!("{context_str}");
+            }
+        }
+        return Ok(());
+    }
+
+    // With --llm: call LLM with context
     let backend_name = config.backend.unwrap_or("ollama");
     let kind: arlm_llm::BackendKind = backend_name.parse().context("failed to parse backend")?;
 
@@ -34,26 +88,6 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
 
     let llm_backend =
         arlm_llm::get_backend(&kind, api_key, None).context("failed to create LLM backend")?;
-
-    if config.verbose {
-        output::info(&format!("Querying: {}", config.question));
-    }
-
-    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
-    storage.ensure_uuids().ok();
-
-    let context_str = if let Ok(Some(buffer)) = storage.get_buffer_by_name(&pname) {
-        let bm25 =
-            arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-        let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
-        let results = hybrid
-            .search_fts(config.question, buffer.id, 10, None)
-            .unwrap_or_default();
-        arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
-            .unwrap_or_default()
-    } else {
-        String::new()
-    };
 
     let prompt = format!(
         "Based on the following project context, answer this question:\n\nQuestion: {}\n\nContext:\n{context_str}",
@@ -80,11 +114,7 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
                 "question": config.question,
                 "answer": response.content,
                 "model": response.model,
-                "usage": {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
-                },
+                "llm": true,
             }));
             output.print();
         }
@@ -112,6 +142,7 @@ mod tests {
     async fn test_query_no_project() {
         let tmp = TempDir::new().unwrap();
         let project_path = tmp.path().join("nonexistent");
+        // Without --llm, query succeeds even if project doesn't exist (returns empty context)
         let config = QueryConfig {
             question: "what is auth?",
             backend: Some("ollama"),
@@ -119,6 +150,25 @@ mod tests {
             project: project_path.as_path(),
             format: Format::Json,
             verbose: false,
+            llm: false,
+        };
+        let result = execute(config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_query_with_llm_no_project() {
+        let tmp = TempDir::new().unwrap();
+        let project_path = tmp.path().join("nonexistent");
+        // With --llm but no backend configured, should fail
+        let config = QueryConfig {
+            question: "what is auth?",
+            backend: Some("ollama"),
+            model: None,
+            project: project_path.as_path(),
+            format: Format::Json,
+            verbose: false,
+            llm: true,
         };
         let result = execute(config).await;
         assert!(result.is_err());

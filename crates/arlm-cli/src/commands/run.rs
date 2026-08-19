@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 
 use crate::output::{self, Format, LiveTree};
+use crate::util::data_dir;
 
 pub struct RunConfig<'a> {
     pub task: &'a str,
@@ -18,6 +19,7 @@ pub struct RunConfig<'a> {
     pub format: Format,
     pub verbose: bool,
     pub live: bool,
+    pub agent: Option<&'a str>,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -74,6 +76,18 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
         Some(p)
     };
 
+    let abort = arlm_core::AbortSignal::new();
+    let abort_for_handler = abort.clone();
+
+    // Spawn Ctrl+C handler
+    let abort_for_signal = abort_for_handler.clone();
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            output::warn("Cancelling run...");
+            abort_for_signal.cancel();
+        }
+    });
+
     let input = arlm_core::StartRunInput {
         run_id: Arc::from(run_id.as_str()),
         task: config.task.to_string(),
@@ -91,6 +105,8 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
         max_nodes: config.max_nodes,
         concurrency: config.concurrency,
         max_budget: config.max_budget,
+        agent: config.agent.unwrap_or("arlm").to_string(),
+        abort,
         ..Default::default()
     };
 
@@ -154,6 +170,55 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
         p.finish_and_clear();
     }
 
+    // Persist run to database
+    {
+        let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+        let total_usage = result.root.total_usage();
+        let partial = if result.final_output.is_empty() {
+            None
+        } else {
+            Some(result.final_output.as_str())
+        };
+
+        fn convert_node(node: &arlm_core::RlmNode) -> arlm_storage::sqlite::runs::FlatNode {
+            arlm_storage::sqlite::runs::FlatNode {
+                node_id: node.id.clone(),
+                depth: node.depth,
+                task: node.task.clone(),
+                status: node.status.to_string(),
+                node_type: node.decision.as_ref().map(|d| d.action.to_string()),
+                cost_usd: node.usage.cost_usd,
+                tokens: node.usage.tokens,
+                errors: node.usage.errors,
+                started_at_ms: node.started_at_ms,
+                finished_at_ms: node.finished_at_ms,
+                result: node.result.clone(),
+                error: node.error.clone(),
+                children: node.children.iter().map(convert_node).collect(),
+            }
+        }
+
+        let flat_root = convert_node(&result.root);
+        storage.insert_run(
+            &result.run_id,
+            config.task,
+            &result.backend,
+            "auto",
+            "completed",
+            "arlm",
+            result.root.started_at_ms,
+            result.stats.duration_ms,
+            total_usage.cost_usd,
+            total_usage.tokens,
+            result.stats.nodes_visited,
+            result.stats.max_depth_seen,
+            result.stats.nodes_visited,
+            partial,
+            None,
+            Some(&flat_root),
+        )?;
+    }
+
     match config.format {
         Format::Json => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
@@ -215,6 +280,7 @@ mod tests {
             format: Format::Json,
             verbose: false,
             live: false,
+            agent: None,
         };
         let result = execute(config).await;
         assert!(result.is_err());

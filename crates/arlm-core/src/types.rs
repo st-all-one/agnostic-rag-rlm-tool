@@ -97,6 +97,7 @@ pub struct StartRunInput {
     pub retry_policy: RetryPolicy,
     pub enable_cache: bool,
     pub compaction: CompactionPolicy,
+    pub abort: AbortSignal,
 }
 
 impl Default for StartRunInput {
@@ -121,6 +122,7 @@ impl Default for StartRunInput {
             retry_policy: RetryPolicy::default(),
             enable_cache: true,
             compaction: CompactionPolicy::default(),
+            abort: AbortSignal::new(),
         }
     }
 }

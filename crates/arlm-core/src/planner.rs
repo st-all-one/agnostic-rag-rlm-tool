@@ -22,6 +22,7 @@ pub async fn plan_node(
     llm: Arc<dyn LlmBackend + Send + Sync>,
     budget: &RunBudget,
     nodes_visited: u32,
+    model_override: Option<&str>,
 ) -> Result<PlannerDecision> {
     let _timer = ScopedTimer::new("plan_node");
     let summary = budget.summary();
@@ -52,7 +53,10 @@ Decomposition multiplies cost — only decompose when it clearly helps."#,
         time = summary.time_remaining_ms / 1000,
     );
 
-    let model = input.model.clone().unwrap_or_else(|| "gpt-4o".to_string());
+    let model = model_override
+        .or(input.model.as_deref())
+        .unwrap_or("gpt-4o")
+        .to_string();
 
     let messages = vec![
         Message {

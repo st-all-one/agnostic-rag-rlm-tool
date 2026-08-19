@@ -20,6 +20,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 mod commands;
+mod config;
 mod metrics;
 mod output;
 mod util;
@@ -42,12 +43,28 @@ struct Cli {
     verbose: bool,
 
     /// Output format: json, tree, markdown, prompt
-    #[arg(short, long, global = true, default_value = "tree")]
-    format: OutputFormatArg,
+    #[arg(short, long, global = true)]
+    format: Option<OutputFormatArg>,
 
     /// Project path
-    #[arg(short, long, global = true, default_value = ".")]
-    project: PathBuf,
+    #[arg(short, long, global = true)]
+    project: Option<PathBuf>,
+
+    /// Config file path (default: ~/.arlm/config.toml)
+    #[arg(long, global = true)]
+    config: Option<PathBuf>,
+
+    /// LLM backend (overrides config)
+    #[arg(long, global = true)]
+    backend: Option<String>,
+
+    /// Model name (overrides config)
+    #[arg(long, global = true)]
+    model: Option<String>,
+
+    /// Agent name (overrides config)
+    #[arg(long, global = true)]
+    agent: Option<String>,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]
@@ -96,6 +113,10 @@ enum Commands {
         /// Render the RLM recursion tree in real time
         #[arg(long)]
         live: bool,
+
+        /// Agent identifier for cost attribution (or set ARLM_AGENT env var)
+        #[arg(long, env = "ARLM_AGENT")]
+        agent: Option<String>,
     },
 
     /// Index a project directory
@@ -160,6 +181,10 @@ enum Commands {
         /// Model name
         #[arg(long)]
         model: Option<String>,
+
+        /// Use RLM engine for recursive analysis
+        #[arg(long)]
+        llm: bool,
     },
 
     /// Build context for an agent task
@@ -201,6 +226,10 @@ enum Commands {
     Cost {
         /// Show costs for a specific run
         run_id: Option<String>,
+
+        /// Filter by agent name
+        #[arg(long)]
+        agent: Option<String>,
     },
 
     /// Manage sessions
@@ -217,6 +246,36 @@ enum Commands {
         /// Dry run — show what would be decayed without modifying
         #[arg(long)]
         dry_run: bool,
+    },
+
+    /// Cancel a running RLM run
+    Cancel {
+        /// Run ID to cancel
+        run_id: String,
+    },
+
+    /// List checkpoints for runs
+    Checkpoints {
+        /// Specific run ID to check
+        run_id: Option<String>,
+    },
+
+    /// Restore a persisted wiki page
+    RestorePage {
+        /// Page name to restore
+        page_name: String,
+    },
+
+    /// Manage wiki with git integration
+    Wiki {
+        /// Action: init, commit, log
+        action: String,
+    },
+
+    /// Search for entities in indexed code
+    Entities {
+        /// Entity query
+        query: String,
     },
 
     /// Persist search/analysis results as wiki pages
@@ -268,12 +327,39 @@ fn main() -> Result<()> {
 
     arlm_core::logging::init_logging(cli.verbose);
 
-    let format = match cli.format {
-        OutputFormatArg::Json => output::Format::Json,
-        OutputFormatArg::Tree => output::Format::Tree,
-        OutputFormatArg::Markdown => output::Format::Markdown,
-        OutputFormatArg::Prompt => output::Format::Prompt,
+    // Load config file and merge with CLI args
+    let cfg = if let Some(ref config_path) = cli.config {
+        config::Config::load_from(config_path)?
+    } else {
+        config::Config::load().unwrap_or_default()
     };
+
+    // Resolve final values: CLI args override config, config overrides defaults
+    let project = cli
+        .project
+        .or(cfg.project)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let backend = cli.backend.or(cfg.backend);
+    let model = cli.model.or(cfg.model);
+    let agent_name = cli.agent.or(cfg.agent.name);
+    let format = cli
+        .format
+        .map(|f| match f {
+            OutputFormatArg::Json => output::Format::Json,
+            OutputFormatArg::Tree => output::Format::Tree,
+            OutputFormatArg::Markdown => output::Format::Markdown,
+            OutputFormatArg::Prompt => output::Format::Prompt,
+        })
+        .or_else(|| {
+            cfg.format.as_deref().map(|s| match s {
+                "json" => output::Format::Json,
+                "tree" => output::Format::Tree,
+                "markdown" => output::Format::Markdown,
+                "prompt" => output::Format::Prompt,
+                _ => output::Format::Tree,
+            })
+        })
+        .unwrap_or(output::Format::Tree);
 
     let rt = tokio::runtime::Runtime::new()?;
 
@@ -281,26 +367,28 @@ fn main() -> Result<()> {
         Commands::Run {
             task,
             llm,
-            backend,
-            model,
+            backend: cmd_backend,
+            model: cmd_model,
             depth,
             max_nodes,
             concurrency,
             max_budget,
             live,
+            agent: cmd_agent,
         } => rt.block_on(commands::run::execute(commands::run::RunConfig {
             task: &task,
             llm,
-            backend: backend.as_deref(),
-            model: model.as_deref(),
+            backend: cmd_backend.as_deref().or(backend.as_deref()),
+            model: cmd_model.as_deref().or(model.as_deref()),
             depth,
             max_nodes,
             concurrency,
             max_budget,
-            project: &cli.project,
+            project: &project,
             format,
             verbose: cli.verbose,
             live,
+            agent: cmd_agent.as_deref().or(agent_name.as_deref()),
         })),
         Commands::Index { path, chunk_size, ignore_patterns, watch } => {
             commands::index::execute(commands::index::IndexConfig {
@@ -308,7 +396,7 @@ fn main() -> Result<()> {
                 chunk_size,
                 ignore_patterns: &ignore_patterns,
                 watch,
-                project: &cli.project,
+                project: &project,
                 format,
                 verbose: cli.verbose,
             })
@@ -323,80 +411,96 @@ fn main() -> Result<()> {
             max_tokens,
         } => rt.block_on(commands::search::execute(commands::search::SearchConfig {
             query: &query,
-            top_k,
+            top_k: cfg.search.top_k.unwrap_or(top_k as u32) as usize,
             file_pattern: file_pattern.as_deref(),
             min_score,
             all,
             tier: &tier,
-            max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
-            project: &cli.project,
+            max_tokens: if max_tokens == 0 { cfg.search.max_tokens } else { Some(max_tokens) },
+            project: &project,
             format,
             verbose: cli.verbose,
         })),
         Commands::Query {
             question,
-            backend,
-            model,
+            backend: cmd_backend,
+            model: cmd_model,
+            llm,
         } => rt.block_on(commands::query::execute(commands::query::QueryConfig {
             question: &question,
-            backend: backend.as_deref(),
-            model: model.as_deref(),
-            project: &cli.project,
+            backend: cmd_backend.as_deref().or(backend.as_deref()),
+            model: cmd_model.as_deref().or(model.as_deref()),
+            project: &project,
             format,
             verbose: cli.verbose,
+            llm,
         })),
         Commands::Context { task, top_k, all, tier, max_tokens } => {
             rt.block_on(commands::context::execute(commands::context::ContextConfig {
                 task: &task,
-                top_k,
+                top_k: cfg.search.top_k.unwrap_or(top_k as u32) as usize,
                 all,
                 tier: &tier,
-                max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
-                project: &cli.project,
+                max_tokens: if max_tokens == 0 { cfg.search.max_tokens } else { Some(max_tokens) },
+                project: &project,
                 format,
                 verbose: cli.verbose,
             }))
         }
         Commands::Status { run_id } => {
-            commands::status::execute(run_id.as_deref(), &cli.project, format)
+            commands::status::execute(run_id.as_deref(), &project, format)
         }
         Commands::History { limit } => {
             commands::history::execute(commands::history::HistoryConfig {
                 limit,
-                project: &cli.project,
+                project: &project,
                 format,
             })
         }
-        Commands::Cost { run_id } => {
-            commands::cost::execute(run_id.as_deref(), &cli.project, format);
-            Ok(())
+        Commands::Cost { run_id, agent: cmd_agent } => {
+            commands::cost::execute(run_id.as_deref(), cmd_agent.as_deref().or(agent_name.as_deref()), &project, format)
         }
         Commands::Session { action } => match action {
             SessionAction::Create { title } => {
-                commands::session::execute_create(&title, &cli.project, format)
+                commands::session::execute_create(&title, &project, format)
             }
             SessionAction::Resume { session_id } => {
-                commands::session::execute_resume(&session_id, &cli.project, format)
+                commands::session::execute_resume(&session_id, &project, format)
             }
-            SessionAction::List => commands::session::execute_list(&cli.project, format),
+            SessionAction::List => commands::session::execute_list(&project, format),
         },
         Commands::Consolidate => {
             commands::consolidate::execute(commands::consolidate::ConsolidateConfig {
-                project: &cli.project,
+                project: &project,
                 format,
                 verbose: cli.verbose,
             })
         }
         Commands::Decay { dry_run } => commands::decay::execute(commands::decay::DecayArgs {
             dry_run,
-            project: &cli.project,
+            project: &project,
             format,
         }),
+        Commands::Cancel { run_id } => {
+            commands::cancel::execute(&run_id, &project, format)
+        }
+        Commands::Checkpoints { run_id } => {
+            commands::checkpoints::execute(run_id.as_deref(), format)
+        }
+        Commands::RestorePage { page_name } => {
+            commands::restore_page::execute(&page_name, &project, format)
+        }
+        Commands::Wiki { action } => {
+            commands::wiki::execute(&action, &project, format)
+        }
+        Commands::Entities { query } => {
+            commands::entities::execute(&query, &project, format)
+        }
         Commands::Persist { title, query } => {
             commands::persist::execute(commands::persist::PersistArgs {
                 title,
                 query,
-                project: &cli.project,
+                project: &project,
                 format,
             })
         }
@@ -404,7 +508,7 @@ fn main() -> Result<()> {
             rt.block_on(commands::serve::execute(commands::serve::ServeConfig {
                 port,
                 host: &host,
-                project: &cli.project,
+                project: &project,
                 verbose: cli.verbose,
                 mcp,
             }))

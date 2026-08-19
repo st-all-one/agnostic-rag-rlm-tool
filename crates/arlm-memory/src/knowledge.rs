@@ -137,6 +137,30 @@ impl KnowledgeEngine {
 
         let path_str = file_path.to_str().context("file path is not valid UTF-8")?;
 
+        // Check if file has changed by computing file hash
+        let file_hash = compute_hash(content.as_bytes());
+        let existing_chunks = self
+            .storage
+            .list_chunks(buffer_id)
+            .context("failed to list chunks")?;
+        let file_chunks: Vec<_> = existing_chunks
+            .iter()
+            .filter(|c| c.file_path == path_str)
+            .collect();
+
+        // If file hash matches and chunks exist, skip re-indexing
+        if !file_chunks.is_empty() {
+            let stored_hash = &file_chunks[0].hash;
+            if stored_hash == &file_hash {
+                tracing::debug!(file = path_str, "file unchanged, skipping");
+                return Ok(file_chunks.iter().map(|c| c.id).collect());
+            }
+            // File changed, delete old chunks
+            self.storage
+                .delete_chunks_for_file(path_str)
+                .context("failed to delete old chunks")?;
+        }
+
         let bytes = content.as_bytes();
         let chunk_size = options.max_chunk_bytes;
         let mut chunk_ids = Vec::new();
@@ -185,6 +209,14 @@ impl KnowledgeEngine {
             self.storage
                 .insert_chunk_content(chunk_id, chunk_text)
                 .context("failed to insert chunk content")?;
+
+            // Extract and store entities for entity search tier
+            let entities = arlm_storage::Storage::extract_entities(chunk_text, path_str);
+            if !entities.is_empty() {
+                self.storage
+                    .insert_chunk_entities(chunk_id, &entities)
+                    .context("failed to insert chunk entities")?;
+            }
 
             chunk_ids.push(chunk_id);
 

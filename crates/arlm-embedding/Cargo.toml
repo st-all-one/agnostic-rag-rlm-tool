@@ -25,6 +25,7 @@ thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
 rusqlite.workspace = true
+tiktoken-rs.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

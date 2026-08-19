@@ -19,6 +19,7 @@ use crate::solver;
 use crate::synthesizer;
 use crate::token_counter::TokenCounter;
 use crate::types::{Action, NodeStatus, RlmNode, RlmRunResult, RunStats, StartRunInput, now_ms};
+use crate::types::AbortSignal;
 
 /// Shared engine state with atomic counters.
 #[derive(Debug)]
@@ -80,6 +81,7 @@ struct RunNodeParamsOwned {
     cache: Arc<ResultCache>,
     llm: Arc<dyn LlmBackend + Send + Sync>,
     router: Arc<Mutex<DepthRouter>>,
+    abort: Arc<AbortSignal>,
 }
 
 /// Run the RLM engine on a task with an internal event bus.
@@ -144,6 +146,7 @@ pub async fn run_rlm_engine_with_events(
         cache: cache.clone(),
         llm: llm.clone(),
         router: router.clone(),
+        abort: Arc::new(input.abort.clone()),
     })
     .await?;
 
@@ -211,6 +214,11 @@ async fn run_node_inner(params: &RunNodeParamsOwned) -> Result<RlmNode> {
     let node_id = params.state.next_node_id();
     params.state.record_visit(params.depth);
 
+    // 0. GUARD: abort check
+    if params.abort.is_cancelled() {
+        return Ok(RlmNode::cancelled(&node_id, params.depth, &params.task));
+    }
+
     // 1. GUARD: node budget check
     if params.state.nodes_visited() >= params.input.max_nodes {
         return Ok(RlmNode::skipped(&node_id, params.depth, &params.task));
@@ -246,15 +254,18 @@ async fn run_node_inner(params: &RunNodeParamsOwned) -> Result<RlmNode> {
 
     // 2. CHECK forced solve
     if let Some(reason) = get_forced_solve_reason_owned(params) {
-        return solve_node_owned(&node_id, params, Some(&reason)).await;
+        let model = params.router.lock().select_model(params.depth, params.input.model.as_deref());
+        return solve_node_owned(&node_id, params, Some(&reason), Some(&model)).await;
     }
 
     // 3. ROUTE: suggest depth based on query complexity
     let suggested_depth = params.router.lock().suggest_depth(&params.task);
+    let selected_model = params.router.lock().select_model(params.depth, params.input.model.as_deref());
     info!(
         task = %params.task,
         current_depth = params.depth,
         suggested_depth,
+        selected_model = %selected_model,
         "depth router suggestion"
     );
 
@@ -266,6 +277,7 @@ async fn run_node_inner(params: &RunNodeParamsOwned) -> Result<RlmNode> {
         params.llm.clone(),
         &params.budget,
         params.state.nodes_visited(),
+        Some(&selected_model),
     )
     .await?;
 
@@ -280,7 +292,7 @@ async fn run_node_inner(params: &RunNodeParamsOwned) -> Result<RlmNode> {
     // 5. HANDLE PLAN DECISION
     match decision.action {
         Action::Solve => {
-            let result = solve_node_owned(&node_id, params, None).await;
+            let result = solve_node_owned(&node_id, params, None, Some(&selected_model)).await;
             let success = result.is_ok();
             params.router.lock().record_outcome(params.depth, success);
             result
@@ -305,7 +317,7 @@ async fn run_node_inner(params: &RunNodeParamsOwned) -> Result<RlmNode> {
             let subtasks: Vec<String> = subtasks.into_iter().take(max_children).collect();
 
             if subtasks.len() < 2 {
-                return solve_node_owned(&node_id, params, None).await;
+                return solve_node_owned(&node_id, params, None, Some(&selected_model)).await;
             }
 
             // RECURSE: spawn each child as a separate task for true concurrency
@@ -330,6 +342,7 @@ async fn run_node_inner(params: &RunNodeParamsOwned) -> Result<RlmNode> {
                     cache: params.cache.clone(),
                     llm: params.llm.clone(),
                     router: params.router.clone(),
+                    abort: params.abort.clone(),
                 };
 
                 let sem = semaphore.clone();
@@ -373,6 +386,7 @@ async fn run_node_inner(params: &RunNodeParamsOwned) -> Result<RlmNode> {
                 &params.input,
                 params.llm.clone(),
                 &params.budget,
+                Some(&selected_model),
             )
             .await?;
 
@@ -390,15 +404,16 @@ async fn solve_node_owned(
     node_id: &str,
     params: &RunNodeParamsOwned,
     forced_reason: Option<&str>,
+    model_override: Option<&str>,
 ) -> Result<RlmNode> {
+    let model = model_override
+        .or(params.input.model.as_deref())
+        .unwrap_or("gpt-4o");
+
     params.events.emit(RlmEvent::NodeSolve {
         run_id: params.input.run_id.clone(),
         node_id: node_id.to_string(),
-        model: params
-            .input
-            .model
-            .clone()
-            .unwrap_or_else(|| "gpt-4o".to_string()),
+        model: model.to_string(),
         forced_reason: forced_reason.map(String::from),
     });
 
@@ -409,6 +424,7 @@ async fn solve_node_owned(
         &params.budget,
         &params.cache,
         forced_reason,
+        Some(model),
     )
     .await?;
 
@@ -509,6 +525,7 @@ mod tests {
             cache,
             llm,
             router: Arc::new(Mutex::new(DepthRouter::new())),
+            abort: Arc::new(AbortSignal::new()),
         }
     }
 
@@ -542,6 +559,7 @@ mod tests {
             cache,
             llm,
             router: Arc::new(Mutex::new(DepthRouter::new())),
+            abort: Arc::new(AbortSignal::new()),
         };
         let reason = get_forced_solve_reason_owned(&params);
         assert!(reason.is_some());

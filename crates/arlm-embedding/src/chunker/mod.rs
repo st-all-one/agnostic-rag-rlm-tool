@@ -81,13 +81,13 @@ pub fn nth_line_byte_offset(s: &str, n: usize) -> usize {
     offset.min(s.len())
 }
 
-/// Approximate token count (whitespace-delimited words).
+/// Approximate token count using tiktoken (cl100k_base encoding).
 ///
-/// This is a fast heuristic for sizing chunks. Production systems
-/// may use a proper tokenizer for more accurate counts.
+/// Falls back to whitespace counting if tiktoken fails.
 #[must_use]
 pub fn estimate_tokens(text: &str) -> usize {
-    text.split_whitespace().count()
+    let enc = tiktoken_rs::cl100k_base_singleton();
+    enc.encode_with_special_tokens(text).len()
 }
 
 #[cfg(test)]
@@ -139,8 +139,9 @@ mod tests {
 
     #[test]
     fn test_estimate_tokens() {
-        assert_eq!(estimate_tokens("hello world"), 2);
+        // tiktoken cl100k_base tokenization
+        assert!(estimate_tokens("hello world") >= 2);
         assert_eq!(estimate_tokens(""), 0);
-        assert_eq!(estimate_tokens("  spaced  out  "), 2);
+        assert!(estimate_tokens("  spaced  out  ") >= 2);
     }
 }

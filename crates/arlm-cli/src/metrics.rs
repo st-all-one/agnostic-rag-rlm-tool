@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -8,6 +9,8 @@ struct Inner {
     search_results_count: AtomicU64,
     cache_hits_total: AtomicU64,
     nodes_total: AtomicU64,
+    agent_requests: parking_lot::Mutex<HashMap<String, u64>>,
+    agent_tokens: parking_lot::Mutex<HashMap<String, u64>>,
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +27,8 @@ impl ArlmMetrics {
                 search_results_count: AtomicU64::new(0),
                 cache_hits_total: AtomicU64::new(0),
                 nodes_total: AtomicU64::new(0),
+                agent_requests: parking_lot::Mutex::new(HashMap::new()),
+                agent_tokens: parking_lot::Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -45,6 +50,14 @@ impl ArlmMetrics {
 
     pub fn record_node(&self) {
         self.inner.nodes_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record request for a specific agent.
+    pub fn record_agent_request(&self, agent: &str, tokens: u64) {
+        let mut requests = self.inner.agent_requests.lock();
+        *requests.entry(agent.to_string()).or_insert(0) += 1;
+        let mut tokens_map = self.inner.agent_tokens.lock();
+        *tokens_map.entry(agent.to_string()).or_insert(0) += tokens;
     }
 
     #[must_use]
@@ -70,6 +83,31 @@ impl ArlmMetrics {
         let _ = writeln!(out, "# HELP arlm_nodes_total Total nodes visited");
         let _ = writeln!(out, "# TYPE arlm_nodes_total counter");
         let _ = writeln!(out, "arlm_nodes_total {nodes}");
+
+        // Agent-specific metrics
+        let agent_requests = self.inner.agent_requests.lock();
+        let agent_tokens = self.inner.agent_tokens.lock();
+
+        if !agent_requests.is_empty() {
+            let _ = writeln!(
+                out,
+                "# HELP arlm_agent_requests_total Requests per agent"
+            );
+            let _ = writeln!(out, "# TYPE arlm_agent_requests_total counter");
+            for (agent, count) in agent_requests.iter() {
+                let _ = writeln!(out, "arlm_agent_requests_total{{agent=\"{agent}\"}} {count}");
+            }
+
+            let _ = writeln!(
+                out,
+                "# HELP arlm_agent_tokens_total Tokens per agent"
+            );
+            let _ = writeln!(out, "# TYPE arlm_agent_tokens_total counter");
+            for (agent, tokens) in agent_tokens.iter() {
+                let _ = writeln!(out, "arlm_agent_tokens_total{{agent=\"{agent}\"}} {tokens}");
+            }
+        }
+
         out
     }
 }

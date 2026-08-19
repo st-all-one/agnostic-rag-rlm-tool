@@ -49,11 +49,19 @@ const SIMPLE_SIGNALS: &[&str] = &[
 
 const MAX_DEPTH: u32 = 5;
 
+/// Model tiers: expensive at root, cheaper at leaves.
+const MODEL_TIERS: &[&str] = &[
+    "gpt-4o",       // depth 0 — root
+    "gpt-4o-mini",  // depth 1
+    "gpt-4o-mini",  // depth 2
+    "gpt-4o-mini",  // depth 3
+    "gpt-4o-mini",  // depth 4+
+];
+
 #[derive(Debug)]
 pub struct DepthRouter {
     depth_successes: HashMap<u32, u32>,
     depth_attempts: HashMap<u32, u32>,
-    #[allow(dead_code)]
     default_depth: u32,
 }
 
@@ -111,6 +119,23 @@ impl DepthRouter {
         *self.depth_attempts.entry(d).or_insert(0) += 1;
         if success {
             *self.depth_successes.entry(d).or_insert(0) += 1;
+        }
+    }
+
+    /// Select the best model for a given depth.
+    ///
+    /// Uses the root model for depth 0, cheaper models for deeper nodes.
+    /// If a custom model is provided, it's used at depth 0 and the tier
+    /// model for deeper levels.
+    #[must_use]
+    pub fn select_model(&self, depth: u32, custom_model: Option<&str>) -> String {
+        let idx = (depth as usize).min(MODEL_TIERS.len() - 1);
+        if depth == 0 {
+            custom_model
+                .unwrap_or(MODEL_TIERS[0])
+                .to_string()
+        } else {
+            MODEL_TIERS[idx].to_string()
         }
     }
 
@@ -379,5 +404,29 @@ mod tests {
     fn test_default_trait() {
         let router = DepthRouter::default();
         assert_eq!(router.default_depth, 2);
+    }
+
+    #[test]
+    fn test_select_model_depth_0() {
+        let router = DepthRouter::new();
+        assert_eq!(router.select_model(0, None), "gpt-4o");
+    }
+
+    #[test]
+    fn test_select_model_depth_0_custom() {
+        let router = DepthRouter::new();
+        assert_eq!(router.select_model(0, Some("claude-sonnet")), "claude-sonnet");
+    }
+
+    #[test]
+    fn test_select_model_depth_1() {
+        let router = DepthRouter::new();
+        assert_eq!(router.select_model(1, None), "gpt-4o-mini");
+    }
+
+    #[test]
+    fn test_select_model_deep() {
+        let router = DepthRouter::new();
+        assert_eq!(router.select_model(10, None), "gpt-4o-mini");
     }
 }

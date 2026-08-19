@@ -192,6 +192,9 @@ struct ContextRequest {
     task: String,
     #[serde(default = "default_top_k")]
     top_k: usize,
+    /// Agent name for metrics tracking.
+    #[serde(default)]
+    agent: Option<String>,
 }
 
 fn default_top_k() -> usize {
@@ -202,7 +205,7 @@ async fn context_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ContextRequest>,
 ) -> impl IntoResponse {
-    let result = handle_context(&state, &req);
+    let result = handle_context(&state, &req).await;
     match result {
         Ok(data) => ApiResponse::ok(data).into_response(),
         Err(e) => {
@@ -214,7 +217,7 @@ async fn context_handler(
     }
 }
 
-fn handle_context(state: &AppState, req: &ContextRequest) -> Result<serde_json::Value> {
+async fn handle_context(state: &AppState, req: &ContextRequest) -> Result<serde_json::Value> {
     let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
     let buffer = storage
@@ -225,11 +228,22 @@ fn handle_context(state: &AppState, req: &ContextRequest) -> Result<serde_json::
     let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
     let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
 
+    let options = arlm_search::SearchOptions {
+        tier: arlm_search::SearchTier::Entity,
+        top_k: req.top_k,
+    };
+
     let results = hybrid
-        .search_fts(&req.task, buffer.id, req.top_k, None)
-        .context("FTS search failed")?;
+        .search(&req.task, None, buffer.id, &options, None, Some(&storage))
+        .await
+        .context("hybrid search failed")?;
 
     state.metrics.record_search(results.len() as u64);
+
+    // Record agent metrics if agent name provided
+    if let Some(ref agent) = req.agent {
+        state.metrics.record_agent_request(agent, 0);
+    }
 
     let context = arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
         .context("failed to build context")?;
@@ -249,13 +263,16 @@ struct SearchRequest {
     top_k: usize,
     file_pattern: Option<String>,
     min_score: Option<f32>,
+    /// Agent name for metrics tracking.
+    #[serde(default)]
+    agent: Option<String>,
 }
 
 async fn search_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SearchRequest>,
 ) -> impl IntoResponse {
-    let result = handle_search(&state, &req);
+    let result = handle_search(&state, &req).await;
     match result {
         Ok(data) => ApiResponse::ok(data).into_response(),
         Err(e) => {
@@ -267,7 +284,7 @@ async fn search_handler(
     }
 }
 
-fn handle_search(state: &AppState, req: &SearchRequest) -> Result<serde_json::Value> {
+async fn handle_search(state: &AppState, req: &SearchRequest) -> Result<serde_json::Value> {
     let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
     let buffer = storage
@@ -278,9 +295,15 @@ fn handle_search(state: &AppState, req: &SearchRequest) -> Result<serde_json::Va
     let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
     let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
 
+    let options = arlm_search::SearchOptions {
+        tier: arlm_search::SearchTier::Entity,
+        top_k: req.top_k,
+    };
+
     let results = hybrid
-        .search_fts(&req.query, buffer.id, req.top_k, None)
-        .context("FTS search failed")?;
+        .search(&req.query, None, buffer.id, &options, None, Some(&storage))
+        .await
+        .context("hybrid search failed")?;
 
     let search_results =
         arlm_search::build_search_results(&storage, &results, None).context("failed to build results")?;
@@ -309,6 +332,11 @@ fn handle_search(state: &AppState, req: &SearchRequest) -> Result<serde_json::Va
 
     state.metrics.record_search(items.len() as u64);
 
+    // Record agent metrics if agent name provided
+    if let Some(ref agent) = req.agent {
+        state.metrics.record_agent_request(agent, 0);
+    }
+
     Ok(serde_json::json!({
         "query": req.query,
         "results": items,
@@ -325,6 +353,9 @@ struct RunRequest {
     max_nodes: u32,
     backend: Option<String>,
     model: Option<String>,
+    /// Agent name for metrics tracking.
+    #[serde(default)]
+    agent: Option<String>,
 }
 
 fn default_depth() -> u32 {
@@ -393,6 +424,11 @@ async fn handle_run(state: &AppState, req: &RunRequest) -> Result<serde_json::Va
         .context("RLM engine failed")?;
 
     state.metrics.record_node();
+
+    // Record agent metrics if agent name provided
+    if let Some(ref agent) = req.agent {
+        state.metrics.record_agent_request(agent, 0);
+    }
 
     Ok(serde_json::json!({
         "run_id": result.run_id,
@@ -519,11 +555,61 @@ async fn status_by_id(
 }
 
 fn handle_status_by_id(_state: &AppState, run_id: &str) -> serde_json::Value {
-    serde_json::json!({
-        "run_id": run_id,
-        "status": "unknown",
-        "message": "Run tracking not yet persisted",
-    })
+    let storage = match arlm_storage::Storage::open(&data_dir()) {
+        Ok(s) => s,
+        Err(e) => {
+            return serde_json::json!({
+                "run_id": run_id,
+                "status": "error",
+                "message": format!("Failed to open storage: {e}"),
+            });
+        }
+    };
+
+    match storage.get_run(run_id) {
+        Ok(Some(run)) => {
+            let usage = storage.get_run_model_usage(run_id).unwrap_or_default();
+            let models: Vec<serde_json::Value> = usage
+                .iter()
+                .map(|u| {
+                    serde_json::json!({
+                        "model": u.model,
+                        "calls": u.calls,
+                        "input_tokens": u.input_tokens,
+                        "output_tokens": u.output_tokens,
+                        "cost": u.cost,
+                    })
+                })
+                .collect();
+
+            serde_json::json!({
+                "run_id": run.id,
+                "task": run.task,
+                "status": run.status,
+                "agent": run.agent,
+                "started_at": run.started_at,
+                "finished_at": run.finished_at,
+                "duration_ms": run.duration_ms,
+                "total_cost": run.total_cost,
+                "total_tokens": run.total_tokens,
+                "models": models,
+            })
+        }
+        Ok(None) => {
+            serde_json::json!({
+                "run_id": run_id,
+                "status": "not_found",
+                "message": "Run not found",
+            })
+        }
+        Err(e) => {
+            serde_json::json!({
+                "run_id": run_id,
+                "status": "error",
+                "message": format!("Failed to query run: {e}"),
+            })
+        }
+    }
 }
 
 fn extract_run_id(event: &RlmEvent) -> &str {

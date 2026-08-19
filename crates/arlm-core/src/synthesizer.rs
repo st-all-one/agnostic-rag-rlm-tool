@@ -22,6 +22,7 @@ pub async fn synthesize(
     input: &StartRunInput,
     llm: Arc<dyn LlmBackend + Send + Sync>,
     budget: &RunBudget,
+    model_override: Option<&str>,
 ) -> Result<String> {
     let _timer = ScopedTimer::new("synthesize");
 
@@ -34,7 +35,10 @@ pub async fn synthesize(
          Synthesize a unified, complete answer. Handle failed/cancelled children gracefully.",
     );
 
-    let model = input.model.clone().unwrap_or_else(|| "gpt-4o".to_string());
+    let model = model_override
+        .or(input.model.as_deref())
+        .unwrap_or("gpt-4o")
+        .to_string();
 
     let messages = vec![
         Message {

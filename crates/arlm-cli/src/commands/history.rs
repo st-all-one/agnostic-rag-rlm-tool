@@ -17,15 +17,17 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
 
     let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
-    let history = arlm_memory::HistoryManager::new(storage);
+    let history = arlm_memory::HistoryManager::new(storage.clone());
     let limit = i64::try_from(config.limit).unwrap_or(i64::MAX);
     let records = history
         .recent(None, limit)
         .context("failed to get history")?;
 
+    let runs = storage.list_runs(limit).context("failed to get runs")?;
+
     match config.format {
         Format::Json => {
-            let items: Vec<serde_json::Value> = records
+            let query_items: Vec<serde_json::Value> = records
                 .iter()
                 .map(|r| {
                     serde_json::json!({
@@ -39,16 +41,50 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
                     })
                 })
                 .collect();
+            let run_items: Vec<serde_json::Value> = runs
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "run_id": r.id,
+                        "task": r.task,
+                        "status": r.status,
+                        "backend": r.backend,
+                        "duration_ms": r.duration_ms,
+                        "total_cost": r.total_cost,
+                        "total_tokens": r.total_tokens,
+                        "nodes_visited": r.nodes_visited,
+                    })
+                })
+                .collect();
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
-                "history": items,
-                "count": records.len(),
+                "queries": query_items,
+                "queries_count": records.len(),
+                "runs": run_items,
+                "runs_count": runs.len(),
             }));
             output.print();
         }
         Format::Tree => {
-            if records.is_empty() {
-                output::warn("No query history found.");
-            } else {
+            if !runs.is_empty() {
+                output::info(&format!("Recent {} run(s):", runs.len()));
+                for r in &runs {
+                    let date = chrono::DateTime::from_timestamp(r.started_at.unwrap_or(0), 0)
+                        .map_or_else(|| "-".to_string(), |dt| dt.format("%Y-%m-%d %H:%M").to_string());
+                    let dur = r.duration_ms.map_or_else(|| "-".to_string(), |d| format!("{d}ms"));
+                    println!(
+                        "  {} — {} ({}, {}, ${:.4})",
+                        r.id,
+                        r.task,
+                        r.status.as_deref().unwrap_or("unknown"),
+                        dur,
+                        r.total_cost,
+                    );
+                }
+                println!();
+            }
+
+            if !records.is_empty() {
+                output::info(&format!("Recent {} query(ies):", records.len()));
                 let rows: Vec<crate::output::tree::HistoryRow> = records
                     .iter()
                     .map(|r| {
@@ -72,12 +108,37 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
                     .collect();
                 print!("{}", crate::output::tree::render_history_table(&rows));
             }
+
+            if runs.is_empty() && records.is_empty() {
+                output::warn("No history found.");
+            }
         }
         Format::Markdown => {
-            println!("# Query History\n");
-            if records.is_empty() {
-                println!("No query history found.");
-            } else {
+            if !runs.is_empty() {
+                println!("## Recent Runs\n");
+                println!("| Run ID | Task | Status | Cost | Duration |");
+                println!("|--------|------|--------|------|----------|");
+                for r in &runs {
+                    let task_display = if r.task.len() > 30 {
+                        format!("{}...", &r.task[..30])
+                    } else {
+                        r.task.clone()
+                    };
+                    let dur = r.duration_ms.map_or_else(|| "-".to_string(), |d| format!("{d}ms"));
+                    println!(
+                        "| {} | {} | {} | ${:.4} | {} |",
+                        r.id,
+                        task_display,
+                        r.status.as_deref().unwrap_or("-"),
+                        r.total_cost,
+                        dur,
+                    );
+                }
+                println!();
+            }
+
+            if !records.is_empty() {
+                println!("## Query History\n");
                 println!("| Date | Query | Duration | Results |");
                 println!("|------|-------|----------|---------|");
                 for r in &records {
@@ -99,16 +160,36 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
                     println!("| {date} | {query_display} | {dur} | {res} |");
                 }
             }
+
+            if runs.is_empty() && records.is_empty() {
+                println!("No history found.");
+            }
         }
         Format::Prompt => {
-            if records.is_empty() {
-                println!("No query history found.");
-            } else {
+            if !runs.is_empty() {
+                println!("Recent runs:");
+                for r in &runs {
+                    println!(
+                        "  {} — {} ({}, ${:.4})",
+                        r.id,
+                        r.task,
+                        r.status.as_deref().unwrap_or("unknown"),
+                        r.total_cost,
+                    );
+                }
+                println!();
+            }
+
+            if !records.is_empty() {
                 println!("Recent queries:");
                 for r in &records {
                     let results = r.results_count.unwrap_or(0);
                     println!("  - [{}] {} ({results} results)", r.created_at, r.query);
                 }
+            }
+
+            if runs.is_empty() && records.is_empty() {
+                println!("No history found.");
             }
         }
     }

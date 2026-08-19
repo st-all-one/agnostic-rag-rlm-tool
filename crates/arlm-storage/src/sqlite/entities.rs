@@ -119,6 +119,28 @@ impl Storage {
         Ok(())
     }
 
+    /// Get entities for a chunk.
+    pub fn get_chunk_entities(&self, chunk_id: i64) -> Result<Option<Vec<String>>> {
+        let conn = self.conn();
+        let conn = conn.lock();
+
+        let mut stmt = conn
+            .prepare("SELECT entity FROM chunk_entities WHERE chunk_id = ?1")
+            .context("failed to prepare get_chunk_entities query")?;
+
+        let entities: Vec<String> = stmt
+            .query_map(params![chunk_id], |row| row.get(0))
+            .context("failed to query chunk entities")?
+            .filter_map(std::result::Result::ok)
+            .collect();
+
+        if entities.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(entities))
+        }
+    }
+
     /// Search entities via FTS5, returning matching chunk IDs with BM25 scores.
     ///
     /// # Errors

@@ -67,6 +67,11 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
         .index_directory(&pname, &absolute_path, &opts)
         .context("failed to index directory")?;
 
+    // Auto-populate FTS5 index after indexing
+    let bm25 = arlm_search::Bm25Search::new(knowledge.storage())
+        .context("failed to create BM25 search for FTS population")?;
+    let fts_count = bm25.populate_fts().context("failed to populate FTS index")?;
+
     progress.finish_and_clear();
 
     match config.format {
@@ -156,6 +161,10 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
 
                     match knowledge.index_directory(&pname, &absolute_path, &opts) {
                         Ok(result) => {
+                            // Re-populate FTS after reindex
+                            if let Ok(bm25) = arlm_search::Bm25Search::new(knowledge.storage()) {
+                                let _ = bm25.populate_fts();
+                            }
                             output::success(&format!(
                                 "Reindexed {} files → {} chunks",
                                 result.files_processed, result.chunks_created,

@@ -290,7 +290,13 @@ impl MemoryEngine {
         let total_files = files.len();
 
         // Run ingestion pipeline
-        let pipeline = IngestionPipeline::new(embedder, None);
+        let cache_path = std::env::temp_dir().join("arlm_embedding_cache.db");
+        let cache = arlm_embedding::embedder::cache::EmbeddingCache::open(
+            cache_path.to_str().unwrap_or(":memory:"),
+            1024,
+        )
+        .ok();
+        let pipeline = IngestionPipeline::new(embedder, cache);
         let ingest_options = arlm_embedding::pipeline::IngestOptions {
             max_tokens: 512,
             overlap_tokens: 64,

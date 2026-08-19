@@ -231,6 +231,33 @@ impl Storage {
         Ok(())
     }
 
+    /// Check if a chunk with the same hash exists for a file.
+    #[must_use]
+    pub fn chunk_exists_by_hash(&self, file_path: &str, hash: &[u8]) -> bool {
+        let conn = self.conn();
+        let conn = conn.lock();
+
+        conn.query_row(
+            "SELECT COUNT(*) FROM chunks WHERE file_path = ?1 AND hash = ?2",
+            params![file_path, hash],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|count| count > 0)
+        .unwrap_or(false)
+    }
+
+    /// Delete all chunks for a file path.
+    pub fn delete_chunks_for_file(&self, file_path: &str) -> Result<usize> {
+        let conn = self.conn();
+        let conn = conn.lock();
+
+        let deleted = conn
+            .execute("DELETE FROM chunks WHERE file_path = ?1", params![file_path])
+            .context("failed to delete chunks")?;
+
+        Ok(deleted)
+    }
+
     /// Get `last_accessed_at` for multiple chunks by ID.
     ///
     /// Returns a map of `chunk_id` -> `last_accessed_at` (unix seconds).

@@ -23,6 +23,7 @@ pub async fn solve_task(
     budget: &RunBudget,
     cache: &ResultCache,
     forced_reason: Option<&str>,
+    model_override: Option<&str>,
 ) -> Result<String> {
     let _timer = ScopedTimer::new("solve_task");
 
@@ -41,7 +42,10 @@ pub async fn solve_task(
         format!("Solve this task directly and return a concrete answer.\n\nTask: {task}")
     };
 
-    let model = input.model.clone().unwrap_or_else(|| "gpt-4o".to_string());
+    let model = model_override
+        .or(input.model.as_deref())
+        .unwrap_or("gpt-4o")
+        .to_string();
 
     let messages = vec![
         Message {
