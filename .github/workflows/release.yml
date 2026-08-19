@@ -1,0 +1,138 @@
+# Release workflow
+#
+# Roda quando uma tag v* é enviada (git push --tags). Para cada arquitetura
+# compila o binário `arlm` com o profile release (LTO fat, strip, panic=abort),
+# empacota num tarball/zip junto com um sha256sums.txt e publica como GitHub
+# Release vinculado à tag.
+#
+# Targets publicados:
+#   - x86_64-unknown-linux-gnu      (ubuntu-latest, cargo)
+#   - x86_64-unknown-linux-musl     (ubuntu-latest, cross)
+#   - aarch64-unknown-linux-gnu     (ubuntu-24.04-arm, cargo)
+#   - aarch64-unknown-linux-musl    (ubuntu-latest, cross)
+#   - aarch64-apple-darwin           (macos-14, cargo)
+#   - x86_64-pc-windows-msvc        (windows-latest, cargo)
+#
+# Uso:
+#   git tag v0.1.0 && git push origin v0.1.0
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Binário por arquitetura ────────────────────────────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cmd: cargo
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            cmd: cross
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            cmd: cargo
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            cmd: cross
+          - target: aarch64-apple-darwin
+            os: macos-14
+            cmd: cargo
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            cmd: cargo
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install cross (for cross-compiled targets)
+        if: matrix.cmd == 'cross'
+        uses: taiki-e/install-action@cross
+
+      - name: Build (cross)
+        if: matrix.cmd == 'cross'
+        run: cross build --release --workspace --bins --target ${{ matrix.target }}
+
+      - name: Build (native/cargo)
+        if: matrix.cmd == 'cargo'
+        run: cargo build --release --workspace --bins --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARGET="${{ matrix.target }}"
+          STAGING="staging"
+          mkdir -p "$STAGING"
+          if command -v sha256sum >/dev/null 2>&1; then
+            SHA="sha256sum"
+          else
+            SHA="shasum -a 256"
+          fi
+          if [[ "$TARGET" == *-pc-windows-* ]]; then
+            cp "target/$TARGET/release/arlm" "$STAGING/arlm.exe"
+            ( cd "$STAGING" && tar -a -c -f "../arlm-${VERSION}-${TARGET}.zip" . )
+            ( cd "$STAGING" && $SHA arlm.exe ) > "checksums-${TARGET}.sha256"
+          else
+            cp "target/$TARGET/release/arlm" "$STAGING/arlm"
+            tar -czf "arlm-${VERSION}-${TARGET}.tar.gz" -C "$STAGING" arlm
+            ( cd "$STAGING" && $SHA arlm ) > "checksums-${TARGET}.sha256"
+          fi
+
+      - name: Upload binaries (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: arlm-${{ matrix.target }}
+          path: |
+            arlm-*.*
+            checksums-*.sha256
+          if-no-files-found: error
+
+  # ── GitHub Release com assets + sha256sums.txt ────────────────────────────
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Build sha256sums.txt
+        run: |
+          cd dist
+          for f in arlm-*.tar.gz arlm-*.zip; do
+            [ -f "$f" ] && sha256sum "$f"
+          done > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+          generate_release_notes: true
