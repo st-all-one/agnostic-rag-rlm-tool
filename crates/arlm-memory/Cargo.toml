@@ -1,0 +1,31 @@
+[package]
+name = "arlm-memory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+arlm-storage.workspace = true
+arlm-embedding.workspace = true
+arlm-search.workspace = true
+rusqlite.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+sha2.workspace = true
+hex.workspace = true
+uuid.workspace = true
+notify.workspace = true
+parking_lot.workspace = true
+crossbeam-channel.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

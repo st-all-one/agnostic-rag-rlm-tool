@@ -1,0 +1,84 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MPL-2.0"
+repository = "https://github.com/user/arlm"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[workspace.dependencies]
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
+
+# Storage
+rusqlite = { version = "0.32", features = ["bundled", "vtab"] }
+lancedb = "0.37"
+arrow = "58"
+arrow-array = "58"
+
+# Embedding
+candle-core = { version = "0.11", features = [] }
+candle-transformers = "0.11"
+candle-nn = "0.11"
+tokenizers = "0.21"
+
+# Async
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Utilities
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+rayon = "1.10"
+memmap2 = "0.9"
+zstd = "0.13"
+sha2 = "0.10"
+hex = "0.4"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+crossbeam-channel = "0.5"
+num_cpus = "1.16"
+indicatif = "0.17"
+console = "0.15"
+mimalloc = "0.1"
+notify = "7"
+
+# Internal crates
+arlm-storage = { path = "crates/arlm-storage" }
+arlm-embedding = { path = "crates/arlm-embedding" }
+arlm-search = { path = "crates/arlm-search" }
+arlm-llm = { path = "crates/arlm-llm" }
+arlm-memory = { path = "crates/arlm-memory" }
+arlm-core = { path = "crates/arlm-core" }
+
+# Testing
+tempfile = "3"
+proptest = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+opt-level = 3
