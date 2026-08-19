@@ -3,11 +3,13 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::output::{self, Format};
-use crate::util::project_dirs;
+use crate::util::{data_dir, project_name};
 
 pub struct IndexConfig<'a> {
     pub path: &'a Path,
     pub chunk_size: usize,
+    pub ignore_patterns: &'a [String],
+    pub watch: bool,
     pub project: &'a Path,
     pub format: Format,
     pub verbose: bool,
@@ -22,22 +24,17 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
         .canonicalize()
         .with_context(|| format!("failed to resolve path: {}", config.path.display()))?;
 
-    let project_name = config
-        .project
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("default");
-
-    let data_dir = project_dirs().join(project_name);
+    let pname = project_name(config.project);
 
     if config.verbose {
         output::info(&format!("Indexing {}...", absolute_path.display()));
     }
 
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+    storage.ensure_uuids().ok();
 
     let buffer = storage
-        .get_buffer_by_name(project_name)
+        .get_buffer_by_name(&pname)
         .context("failed to check buffer")?;
 
     let _buffer_id = if let Some(buf) = buffer {
@@ -45,7 +42,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
     } else {
         storage
             .insert_buffer(&arlm_storage::sqlite::buffers::NewBuffer {
-                name: project_name.to_string(),
+                name: pname.clone(),
                 path: absolute_path.to_string_lossy().to_string(),
             })
             .context("failed to create buffer")?
@@ -54,6 +51,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
     let knowledge = arlm_memory::KnowledgeEngine::new(storage);
     let opts = arlm_memory::knowledge::IndexOptions {
         max_chunk_bytes: config.chunk_size * 4,
+        ignore_patterns: config.ignore_patterns.to_vec(),
         ..Default::default()
     };
 
@@ -66,7 +64,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
     progress.set_message("Indexing files...");
 
     let result = knowledge
-        .index_directory(project_name, &absolute_path, &opts)
+        .index_directory(&pname, &absolute_path, &opts)
         .context("failed to index directory")?;
 
     progress.finish_and_clear();
@@ -76,7 +74,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
             let dur: u64 = result.duration_ms.try_into().unwrap_or(u64::MAX);
             let output = crate::output::json::JsonOutput::ok()
                 .with_data(serde_json::json!({
-                    "project": project_name,
+                    "project": pname,
                     "path": absolute_path.display().to_string(),
                     "files_processed": result.files_processed,
                     "chunks_created": result.chunks_created,
@@ -93,7 +91,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
                 "Indexed {} files → {} chunks in {dur_secs:.1}s",
                 result.files_processed, result.chunks_created,
             ));
-            output::info(&format!("Database: {}/knowledge.db", data_dir.display()));
+            output::info(&format!("Database: {}/knowledge.db", data_dir().display()));
         }
         Format::Markdown => {
             let dur_ms = u64::try_from(result.duration_ms).unwrap_or(u64::MAX);
@@ -107,8 +105,72 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
         Format::Prompt => {
             println!(
                 "Indexed {} files into {} chunks. Project: {}.",
-                result.files_processed, result.chunks_created, project_name,
+                result.files_processed, result.chunks_created, pname,
             );
+        }
+    }
+
+    // Watch mode: monitor for changes and reindex
+    if config.watch {
+        use arlm_memory::watch::{WatchMonitor, WatchOptions};
+
+        output::info("Watching for file changes... (Ctrl+C to stop)");
+
+        let watch_opts = WatchOptions {
+            debounce_ms: 500,
+            recursive: true,
+        };
+
+        let handle = WatchMonitor::watch(&absolute_path, &watch_opts)
+            .context("failed to start file watcher")?;
+
+        loop {
+            match handle.recv() {
+                Ok(event) => {
+                    let is_relevant = event.paths.iter().any(|p| {
+                        p.extension()
+                            .and_then(|e| e.to_str())
+                            .is_some_and(|ext| {
+                                matches!(ext, "rs" | "py" | "js" | "ts" | "go" | "java" | "c" | "cpp" | "h" | "rb" | "md" | "txt" | "json" | "yaml" | "toml")
+                            })
+                    });
+
+                    if !is_relevant {
+                        continue;
+                    }
+
+                    output::info(&format!(
+                        "Detected {} change(s), reindexing...",
+                        event.paths.len()
+                    ));
+
+                    let storage = arlm_storage::Storage::open(&data_dir())
+                        .context("failed to open storage")?;
+
+                    let knowledge = arlm_memory::KnowledgeEngine::new(storage);
+                    let opts = arlm_memory::knowledge::IndexOptions {
+                        max_chunk_bytes: config.chunk_size * 4,
+                        ignore_patterns: config.ignore_patterns.to_vec(),
+                        ..Default::default()
+                    };
+
+                    match knowledge.index_directory(&pname, &absolute_path, &opts) {
+                        Ok(result) => {
+                            output::success(&format!(
+                                "Reindexed {} files → {} chunks",
+                                result.files_processed, result.chunks_created,
+                            ));
+                        }
+                        Err(e) => {
+                            output::error(&format!("Reindex failed: {e}"));
+                        }
+                    }
+                }
+                Err(e) => {
+                    output::error(&format!("Watch error: {e}"));
+                    break;
+                }
+            }
         }
     }
 
@@ -123,11 +185,15 @@ mod tests {
     #[test]
     fn test_index_empty_dir() {
         let tmp = TempDir::new().unwrap();
+        // SAFETY: test-only, single-threaded
+        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
         let project = TempDir::new().unwrap();
         let project_path = tmp.path().join("test-project");
         let config = IndexConfig {
             path: project.path(),
             chunk_size: 512,
+            ignore_patterns: &[],
+            watch: false,
             project: project_path.as_path(),
             format: Format::Json,
             verbose: false,

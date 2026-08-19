@@ -42,6 +42,8 @@ pub struct IndexProjectOptions {
     pub embedding_model: String,
     /// Embedding dimensions.
     pub embedding_dims: i64,
+    /// Additional glob patterns to ignore.
+    pub ignore_patterns: Vec<String>,
 }
 
 impl Default for IndexProjectOptions {
@@ -52,6 +54,7 @@ impl Default for IndexProjectOptions {
             max_chunk_bytes: 1500,
             embedding_model: "bge-m3".to_string(),
             embedding_dims: 1024,
+            ignore_patterns: Vec::new(),
         }
     }
 }
@@ -239,6 +242,7 @@ impl MemoryEngine {
                 max_chunk_bytes: options.max_chunk_bytes,
                 embedding_model: options.embedding_model.clone(),
                 embedding_dims: options.embedding_dims,
+                ignore_patterns: options.ignore_patterns.clone(),
             },
         )?;
 
@@ -281,8 +285,8 @@ impl MemoryEngine {
         }
 
         // Discover files
-        let files =
-            discover_files(&options.dir_path).context("failed to discover files")?;
+        let files = discover_files(&options.dir_path, &options.ignore_patterns)
+            .context("failed to discover files")?;
         let total_files = files.len();
 
         // Run ingestion pipeline

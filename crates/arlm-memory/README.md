@@ -5,7 +5,7 @@ Sistema de memória externa multi-projeto para o arlm.
 ## Responsabilidades
 
 - **Project**: Gerenciamento de projetos
-- **Knowledge**: Base de conhecimento acumulado
+- **Knowledge**: Base de conhecimento acumulado com ignore patterns
 - **History**: Histórico de consultas
 - **Consolidation**: Limpeza e merge de memória
 - **Transfer**: Transferência entre projetos
@@ -19,11 +19,11 @@ Sistema de memória externa multi-projeto para o arlm.
 src/
 ├── lib.rs              # Re-exports, ScopedTimer
 ├── project.rs          # ProjectManager (CRUD)
-├── knowledge.rs        # KnowledgeEngine (indexing)
+├── knowledge.rs        # KnowledgeEngine (indexing com ignore patterns)
 ├── history.rs          # HistoryManager
 ├── consolidation.rs    # MemoryEngine (dedup, cleanup)
 ├── transfer.rs         # TransferEngine (cross-project)
-├── watch.rs            # FileWatcher (inotify)
+├── watch.rs            # WatchMonitor (inotify)
 ├── session.rs          # SessionManager (multi-turn)
 └── trajectory.rs       # TrajectoryStore (replay)
 ```
@@ -31,53 +31,56 @@ src/
 ## Uso
 
 ```rust
-use arlm_memory::{ProjectManager, KnowledgeEngine};
+use arlm_memory::{KnowledgeEngine, SessionManager};
 
-// Criar projeto
-let projects = ProjectManager::new(storage.clone());
-let project_id = projects.create("meu-projeto", "/path/to/project")?;
-
-// Indexar conhecimento
-let knowledge = KnowledgeEngine::new(storage, embedding_pipeline);
-knowledge.index_file(project_id, "src/main.rs")?;
-
-// Buscar contexto
-let context = knowledge.search("bug no login", project_id, 10)?;
+// Indexar diretório com ignore patterns
+let knowledge = KnowledgeEngine::new(storage);
+let opts = IndexOptions {
+    max_chunk_bytes: 1500,
+    ignore_patterns: vec!["*.log".to_string(), "dist/".to_string()],
+    ..Default::default()
+};
+let result = knowledge.index_directory("meu-projeto", &dir_path, &opts)?;
 
 // Sessões multi-turn
 let sessions = SessionManager::new(storage);
-let session_id = sessions.create(project_id, "Análise de bug")?;
-sessions.add_turn(session_id, "Qual é o problema?", "Erro 401 no login")?;
+let session_id = sessions.create("meu-projeto", "Análise de bug")?;
 ```
 
 ## Funcionalidades
 
+### Indexação com Ignore Patterns
+
+```rust
+let opts = IndexOptions {
+    ignore_patterns: vec![
+        "*.log".to_string(),
+        "dist/".to_string(),
+        ".env".to_string(),
+    ],
+    ..Default::default()
+};
+knowledge.index_directory("projeto", &path, &opts)?;
+```
+
+### Watch Mode
+
+```rust
+use arlm_memory::watch::{WatchMonitor, WatchOptions};
+
+let handle = WatchMonitor::watch(&path, &WatchOptions::default())?;
+loop {
+    let event = handle.recv()?;
+    println!("Mudança detectada: {:?}", event.paths);
+}
+```
+
 ### Consolidation
-```rust
-// Remove duplicatas por hash
-// Merge de padrões similares
-// Remove análises antigas
-engine.consolidate(project_id, MaxAge::Days(30))?;
-```
 
-### Transfer
 ```rust
-// Transferir chunks entre projetos
-// Filtro por linguagem, tipo, confiança
-transferEngine::transfer(
-    source_project,
-    target_project,
-    TransferFilter { language: Some("rust"), ..Default::default() }
-)?;
-```
-
-### Watch
-```rust
-// Monitorar mudanças em arquivos
-let watcher = FileWatcher::new(Path::new("./src"))?;
-watcher.on_change(|event| {
-    println!("Arquivo mudou: {:?}", event.path);
-})?;
+let engine = ConsolidationEngine::new(storage);
+let result = engine.consolidate(buffer_id, &ConsolidateOptions::default())?;
+println!("Removidos: {} duplicatas", result.duplicate_chunks_removed);
 ```
 
 ## Testes

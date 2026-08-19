@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::util::project_dirs;
+use crate::util::data_dir;
 
 /// MCP server state shared across handlers.
 #[allow(dead_code)]
@@ -220,8 +220,7 @@ fn call_rlm_context(state: &McpState, args: Option<&serde_json::Value>) -> Resul
         .and_then(serde_json::Value::as_u64)
         .map_or(10, |v| v as usize);
 
-    let data_dir = project_dirs().join(&state.project_name);
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
     let buffer = storage
         .get_buffer_by_name(&state.project_name)
@@ -235,7 +234,7 @@ fn call_rlm_context(state: &McpState, args: Option<&serde_json::Value>) -> Resul
         .search_fts(task, buffer.id, top_k, None)
         .context("FTS search failed")?;
 
-    let context = arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt)
+    let context = arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
         .context("failed to build context")?;
 
     Ok(format!(
@@ -265,8 +264,7 @@ fn call_rlm_search(state: &McpState, args: Option<&serde_json::Value>) -> Result
         .and_then(serde_json::Value::as_f64)
         .map(|v| v as f32);
 
-    let data_dir = project_dirs().join(&state.project_name);
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
     let buffer = storage
         .get_buffer_by_name(&state.project_name)
@@ -281,7 +279,7 @@ fn call_rlm_search(state: &McpState, args: Option<&serde_json::Value>) -> Result
         .context("FTS search failed")?;
 
     let search_results =
-        arlm_search::build_search_results(&storage, &results).context("failed to build results")?;
+        arlm_search::build_search_results(&storage, &results, None).context("failed to build results")?;
 
     let items: Vec<serde_json::Value> = search_results
         .iter()

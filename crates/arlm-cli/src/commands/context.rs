@@ -3,45 +3,75 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::output::{self, Format};
-use crate::util::project_dirs;
+use crate::util::{data_dir, project_name};
 
 pub struct ContextConfig<'a> {
     pub task: &'a str,
     pub top_k: usize,
+    pub all: bool,
+    pub tier: &'a str,
+    pub max_tokens: Option<u32>,
     pub project: &'a Path,
     pub format: Format,
     pub verbose: bool,
 }
 
+fn parse_tier(tier: &str) -> arlm_search::SearchTier {
+    match tier {
+        "fts" => arlm_search::SearchTier::Fts,
+        "entity" => arlm_search::SearchTier::Entity,
+        "vector" => arlm_search::SearchTier::Vector,
+        "llm_rerank" => arlm_search::SearchTier::LlmRerank,
+        _ => arlm_search::SearchTier::Entity, // auto defaults to entity
+    }
+}
+
 #[allow(clippy::needless_pass_by_value)]
-pub fn execute(config: ContextConfig<'_>) -> Result<()> {
+pub async fn execute(config: ContextConfig<'_>) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_context");
 
-    let project_name = config
-        .project
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("default");
-
-    let data_dir = project_dirs().join(project_name);
+    let pname = project_name(config.project);
 
     if config.verbose {
         output::info(&format!("Building context for task: {}...", config.task));
     }
 
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
-
-    let buffer = storage
-        .get_buffer_by_name(project_name)
-        .context("failed to check buffer")?
-        .context("project not found. Run `arlm index` first.")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+    storage.ensure_uuids().ok();
 
     let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-    let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
 
-    let results = hybrid
-        .search_fts(config.task, buffer.id, config.top_k, None)
-        .context("FTS search failed")?;
+    let tier = parse_tier(config.tier);
+
+    let results = if config.all {
+        let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
+        hybrid
+            .search_all(config.task, config.top_k, &storage)
+            .context("cross-project search failed")?
+    } else {
+        let buffer = storage
+            .get_buffer_by_name(&pname)
+            .context("failed to check buffer")?
+            .context("project not found. Run `arlm index` first.")?;
+
+        if matches!(tier, arlm_search::SearchTier::Fts) {
+            let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
+            hybrid
+                .search_fts(config.task, buffer.id, config.top_k, None)
+                .context("FTS search failed")?
+        } else {
+            let entity = arlm_search::EntitySearch::new(storage.clone()).ok();
+            let hybrid = arlm_search::HybridSearch::new(bm25, entity, None);
+            let options = arlm_search::SearchOptions {
+                tier,
+                top_k: config.top_k,
+            };
+            hybrid
+                .search(config.task, None, buffer.id, &options, None, Some(&storage))
+                .await
+                .context("hybrid search failed")?
+        }
+    };
 
     let search_format = match config.format {
         Format::Json => arlm_search::OutputFormat::Json,
@@ -49,14 +79,14 @@ pub fn execute(config: ContextConfig<'_>) -> Result<()> {
         _ => arlm_search::OutputFormat::Prompt,
     };
 
-    let context = arlm_search::build_context(&storage, &results, search_format)
+    let context = arlm_search::build_context(&storage, &results, search_format, config.max_tokens)
         .context("failed to build context")?;
 
     match config.format {
         Format::Json => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                 "task": config.task,
-                "project": project_name,
+                "project": pname,
                 "context": context,
                 "results_count": results.len(),
             }));
@@ -79,18 +109,23 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    #[test]
-    fn test_context_no_project() {
+    #[tokio::test]
+    async fn test_context_no_project() {
         let tmp = TempDir::new().unwrap();
+        // SAFETY: test-only, single-threaded
+        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
         let project_path = tmp.path().join("nonexistent");
         let config = ContextConfig {
             task: "fix auth bug",
             top_k: 10,
+            all: false,
+            tier: "auto",
+            max_tokens: None,
             project: project_path.as_path(),
             format: Format::Json,
             verbose: false,
         };
-        let result = execute(config);
+        let result = execute(config).await;
         assert!(result.is_err());
     }
 }

@@ -349,7 +349,7 @@ impl HybridSearch {
             return Ok(results);
         };
 
-        let search_results = build_search_results(storage, &results)?;
+        let search_results = build_search_results(storage, &results, None)?;
 
         let reranked = Self::llm_rerank(search_results, query, backend.as_ref()).await?;
 
@@ -360,6 +360,62 @@ impl HybridSearch {
                 score: s.score,
             })
             .collect())
+    }
+
+    /// Search across all buffers (projects) with RRF fusion.
+    ///
+    /// Iterates all buffers in the database, runs BM25 search on each,
+    /// and fuses results using Reciprocal Rank Fusion.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if listing buffers or BM25 search fails.
+    pub fn search_all(
+        &self,
+        query: &str,
+        top_k: usize,
+        storage: &Storage,
+    ) -> Result<Vec<HybridResult>> {
+        let buffers = storage.list_buffers().context("failed to list buffers")?;
+
+        if buffers.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut all_results: Vec<Vec<HybridResult>> = Vec::with_capacity(buffers.len());
+
+        for buffer in &buffers {
+            match self.bm25.search(query, buffer.id, top_k * 2) {
+                Ok(bm25_results) => {
+                    let results: Vec<HybridResult> = bm25_results
+                        .into_iter()
+                        .map(|r| HybridResult {
+                            chunk_id: r.chunk_id,
+                            #[allow(clippy::cast_possible_truncation)]
+                            score: r.score as f32,
+                        })
+                        .collect();
+                    all_results.push(results);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        buffer = %buffer.name,
+                        error = %e,
+                        "BM25 search failed on buffer, skipping"
+                    );
+                }
+            }
+        }
+
+        let fused = Self::rrf_fuse(&all_results, top_k, self.rrf_k);
+
+        tracing::info!(
+            buffers = buffers.len(),
+            results_count = fused.len(),
+            "cross-project search completed"
+        );
+
+        Ok(fused)
     }
 
     /// Reciprocal Rank Fusion of multiple result lists.
@@ -737,6 +793,17 @@ mod tests {
         let hybrid = HybridSearch::new(bm25, None, None);
         assert!(hybrid.decay().enabled);
         assert!((hybrid.decay().lambda - 0.01).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_search_all_empty_db() {
+        let tmp = tempfile::tempdir().unwrap();
+        let storage = arlm_storage::Storage::open(tmp.path()).unwrap();
+        let bm25 = Bm25Search::new(&storage).unwrap();
+        let hybrid = HybridSearch::new(bm25, None, None);
+
+        let results = hybrid.search_all("test", 10, &storage).unwrap();
+        assert!(results.is_empty());
     }
 
     #[test]

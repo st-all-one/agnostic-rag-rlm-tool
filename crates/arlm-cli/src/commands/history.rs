@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::output::{self, Format};
-use crate::util::project_dirs;
+use crate::util::data_dir;
 
 pub struct HistoryConfig<'a> {
     pub limit: usize,
@@ -15,15 +15,7 @@ pub struct HistoryConfig<'a> {
 pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_history");
 
-    let project_name = config
-        .project
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("default");
-
-    let data_dir = project_dirs().join(project_name);
-
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
     let history = arlm_memory::HistoryManager::new(storage);
     let limit = i64::try_from(config.limit).unwrap_or(i64::MAX);
@@ -132,6 +124,8 @@ mod tests {
     #[test]
     fn test_history_empty() {
         let tmp = TempDir::new().unwrap();
+        // SAFETY: test-only, single-threaded
+        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
         let project_path = tmp.path().join("nonexistent");
         let config = HistoryConfig {
             limit: 10,

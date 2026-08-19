@@ -3,50 +3,80 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::output::{self, Format};
-use crate::util::project_dirs;
+use crate::util::{data_dir, project_name};
 
 pub struct SearchConfig<'a> {
     pub query: &'a str,
     pub top_k: usize,
     pub file_pattern: Option<&'a str>,
     pub min_score: Option<f32>,
+    pub all: bool,
+    pub tier: &'a str,
+    pub max_tokens: Option<u32>,
     pub project: &'a Path,
     pub format: Format,
     pub verbose: bool,
 }
 
+fn parse_tier(tier: &str) -> arlm_search::SearchTier {
+    match tier {
+        "fts" => arlm_search::SearchTier::Fts,
+        "entity" => arlm_search::SearchTier::Entity,
+        "vector" => arlm_search::SearchTier::Vector,
+        "llm_rerank" => arlm_search::SearchTier::LlmRerank,
+        _ => arlm_search::SearchTier::Entity, // auto defaults to entity
+    }
+}
+
 #[allow(clippy::needless_pass_by_value)]
-pub fn execute(config: SearchConfig<'_>) -> Result<()> {
+pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_search");
 
-    let project_name = config
-        .project
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("default");
-
-    let data_dir = project_dirs().join(project_name);
+    let pname = project_name(config.project);
 
     if config.verbose {
         output::info(&format!("Searching '{}'...", config.query));
     }
 
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
-
-    let buffer = storage
-        .get_buffer_by_name(project_name)
-        .context("failed to check buffer")?
-        .context("project not found. Run `arlm index` first.")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+    storage.ensure_uuids().ok();
 
     let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-    let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
 
-    let results = hybrid
-        .search_fts(config.query, buffer.id, config.top_k, None)
-        .context("FTS search failed")?;
+    let tier = parse_tier(config.tier);
 
-    let search_results =
-        arlm_search::build_search_results(&storage, &results).context("failed to build results")?;
+    let results = if config.all {
+        let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
+        hybrid
+            .search_all(config.query, config.top_k, &storage)
+            .context("cross-project search failed")?
+    } else {
+        let buffer = storage
+            .get_buffer_by_name(&pname)
+            .context("failed to check buffer")?
+            .context("project not found. Run `arlm index` first.")?;
+
+        if matches!(tier, arlm_search::SearchTier::Fts) {
+            let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
+            hybrid
+                .search_fts(config.query, buffer.id, config.top_k, None)
+                .context("FTS search failed")?
+        } else {
+            let entity = arlm_search::EntitySearch::new(storage.clone()).ok();
+            let hybrid = arlm_search::HybridSearch::new(bm25, entity, None);
+            let options = arlm_search::SearchOptions {
+                tier,
+                top_k: config.top_k,
+            };
+            hybrid
+                .search(config.query, None, buffer.id, &options, None, Some(&storage))
+                .await
+                .context("hybrid search failed")?
+        }
+    };
+
+    let search_results = arlm_search::build_search_results(&storage, &results, config.max_tokens)
+        .context("failed to build results")?;
 
     match config.format {
         Format::Json => {
@@ -126,20 +156,25 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    #[test]
-    fn test_search_no_project() {
+    #[tokio::test]
+    async fn test_search_no_project() {
         let tmp = TempDir::new().unwrap();
+        // SAFETY: test-only, single-threaded
+        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
         let project_path = tmp.path().join("nonexistent");
         let config = SearchConfig {
             query: "test query",
             top_k: 10,
             file_pattern: None,
             min_score: None,
+            all: false,
+            tier: "auto",
+            max_tokens: None,
             project: project_path.as_path(),
             format: Format::Json,
             verbose: false,
         };
-        let result = execute(config);
+        let result = execute(config).await;
         assert!(result.is_err());
     }
 }

@@ -18,7 +18,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::metrics::ArlmMetrics;
 use crate::output;
-use crate::util::project_dirs;
+use crate::util::{data_dir, project_name};
 
 /// Shared application state.
 #[derive(Clone)]
@@ -41,28 +41,22 @@ pub struct ServeConfig<'a> {
 pub async fn execute(config: ServeConfig<'_>) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_serve");
 
-    let project_name = config
-        .project
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("default")
-        .to_string();
+    let pname = project_name(config.project).to_string();
 
-    let data_dir = project_dirs().join(&project_name);
-    let _storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+    let _storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
     output::info(&format!(
         "Starting arlm server on {}:{}",
         config.host, config.port
     ));
-    output::info(&format!("Project: {project_name}"));
+    output::info(&format!("Project: {pname}"));
 
     let metrics = ArlmMetrics::new();
     let event_bus = EventBus::new();
 
     let state = Arc::new(AppState {
         project: config.project.to_path_buf(),
-        project_name,
+        project_name: pname,
         verbose: config.verbose,
         metrics,
         event_bus,
@@ -221,8 +215,7 @@ async fn context_handler(
 }
 
 fn handle_context(state: &AppState, req: &ContextRequest) -> Result<serde_json::Value> {
-    let data_dir = project_dirs().join(&state.project_name);
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
     let buffer = storage
         .get_buffer_by_name(&state.project_name)
@@ -238,7 +231,7 @@ fn handle_context(state: &AppState, req: &ContextRequest) -> Result<serde_json::
 
     state.metrics.record_search(results.len() as u64);
 
-    let context = arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt)
+    let context = arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
         .context("failed to build context")?;
 
     Ok(serde_json::json!({
@@ -275,8 +268,7 @@ async fn search_handler(
 }
 
 fn handle_search(state: &AppState, req: &SearchRequest) -> Result<serde_json::Value> {
-    let data_dir = project_dirs().join(&state.project_name);
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
     let buffer = storage
         .get_buffer_by_name(&state.project_name)
@@ -291,7 +283,7 @@ fn handle_search(state: &AppState, req: &SearchRequest) -> Result<serde_json::Va
         .context("FTS search failed")?;
 
     let search_results =
-        arlm_search::build_search_results(&storage, &results).context("failed to build results")?;
+        arlm_search::build_search_results(&storage, &results, None).context("failed to build results")?;
 
     let items: Vec<serde_json::Value> = search_results
         .iter()
@@ -376,7 +368,7 @@ async fn handle_run(state: &AppState, req: &RunRequest) -> Result<serde_json::Va
     let llm_backend =
         arlm_llm::get_backend(&kind, api_key, None).context("failed to create LLM backend")?;
 
-    let run_id = format!("run-{}", uuid::Uuid::new_v4().as_simple());
+    let run_id = format!("run-{}", uuid::Uuid::now_v7().as_simple());
 
     let input = arlm_core::StartRunInput {
         run_id: std::sync::Arc::from(run_id.as_str()),
@@ -447,7 +439,7 @@ fn handle_index(state: &AppState, req: &IndexRequest) -> Result<serde_json::Valu
         None => state.project.clone(),
     };
 
-    let data_dir = project_dirs().join(&state.project_name);
+    let data_dir = data_dir();
 
     let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
 
@@ -493,9 +485,8 @@ async fn status_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }
 }
 
-fn handle_status_all(state: &AppState) -> Result<serde_json::Value> {
-    let data_dir = project_dirs().join(&state.project_name);
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+fn handle_status_all(_state: &AppState) -> Result<serde_json::Value> {
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
     let buffers = storage.list_buffers().context("failed to list buffers")?;
 
@@ -555,10 +546,10 @@ async fn events_stream(
 ) -> Sse<impl futures::Stream<Item = Result<Event, Infallible>>> {
     let (tx, rx) = mpsc::channel(256);
     let event_bus = state.event_bus.clone();
-    let data_dir = project_dirs().join(&state.project_name);
+    let dir = data_dir();
 
     // Replay past events from JSONL log if available
-    let log_path = data_dir.join(format!("run_{run_id}.events.jsonl"));
+    let log_path = dir.join(format!("run_{run_id}.events.jsonl"));
     if let Ok(past_events) = arlm_core::jsonl_logger::JsonlEventLogger::replay(&log_path) {
         for event in &past_events {
             if extract_run_id(event) == run_id {
@@ -606,7 +597,7 @@ mod tests {
     use tower::ServiceExt;
 
     fn unique_project_name() -> String {
-        format!("test-proj-{}", uuid::Uuid::new_v4().as_simple())
+        format!("test-proj-{}", uuid::Uuid::now_v7().as_simple())
     }
 
     fn app_state(tmp: &tempfile::TempDir, project_name: &str) -> Arc<AppState> {
@@ -720,10 +711,10 @@ mod tests {
     async fn test_events_stream_replays_past_events() {
         let tmp = tempfile::TempDir::new().unwrap();
         let proj = unique_project_name();
-        let data_dir = project_dirs().join(&proj);
-        std::fs::create_dir_all(&data_dir).unwrap();
+        let dir = data_dir();
+        std::fs::create_dir_all(&dir).unwrap();
 
-        let log_path = data_dir.join("run_run-replay.events.jsonl");
+        let log_path = dir.join("run_run-replay.events.jsonl");
         let event = RlmEvent::RunStart {
             run_id: Arc::from("run-replay"),
             task: "replay test".to_string(),

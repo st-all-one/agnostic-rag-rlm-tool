@@ -8,6 +8,8 @@ use arlm_storage::sqlite::chunks::NewChunk;
 
 use crate::ScopedTimer;
 
+use arlm_embedding::pipeline::discover_files;
+
 /// Options for indexing knowledge into a project.
 #[derive(Debug, Clone)]
 pub struct IndexOptions {
@@ -17,6 +19,8 @@ pub struct IndexOptions {
     pub embedding_model: String,
     /// Embedding dimensions.
     pub embedding_dims: i64,
+    /// Additional glob patterns to ignore (e.g., `["*.log", "dist/"]`).
+    pub ignore_patterns: Vec<String>,
 }
 
 impl Default for IndexOptions {
@@ -25,6 +29,7 @@ impl Default for IndexOptions {
             max_chunk_bytes: 1500,
             embedding_model: "bge-m3".to_string(),
             embedding_dims: 1024,
+            ignore_patterns: Vec::new(),
         }
     }
 }
@@ -78,30 +83,17 @@ impl KnowledgeEngine {
             .context("failed to find project")?
             .context("project not found")?;
 
+        let files = discover_files(dir_path, &options.ignore_patterns)
+            .context("failed to discover files")?;
+
         let mut files_processed: u64 = 0;
         let mut chunks_created: u64 = 0;
 
-        let entries = std::fs::read_dir(dir_path)
-            .with_context(|| format!("failed to read directory: {}", dir_path.display()))?;
-
-        for entry in entries {
-            let entry = entry.context("failed to read dir entry")?;
-            let path = entry.path();
-
-            // Skip non-files, hidden files, and SQLite internals
-            if !path.is_file() {
-                continue;
-            }
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with('.') || name.ends_with("-shm") || name.ends_with("-wal") {
-                    continue;
-                }
-            }
-
-            self.index_file(buffer.id, &path, options)?;
+        for path in &files {
+            self.index_file(buffer.id, path, options)?;
             files_processed += 1;
 
-            let chunks = Self::count_file_chunks(&path, options.max_chunk_bytes);
+            let chunks = Self::count_file_chunks(path, options.max_chunk_bytes);
             chunks_created += chunks;
         }
 

@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::output::{self, Format};
-use crate::util::project_dirs;
+use crate::util::{data_dir, project_name};
 
 pub struct QueryConfig<'a> {
     pub question: &'a str,
@@ -17,11 +17,7 @@ pub struct QueryConfig<'a> {
 pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_query");
 
-    let project_name = config
-        .project
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("default");
+    let pname = project_name(config.project);
 
     let backend_name = config.backend.unwrap_or("ollama");
     let kind: arlm_llm::BackendKind = backend_name.parse().context("failed to parse backend")?;
@@ -43,17 +39,17 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
         output::info(&format!("Querying: {}", config.question));
     }
 
-    let data_dir = project_dirs().join(project_name);
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+    storage.ensure_uuids().ok();
 
-    let context_str = if let Ok(Some(buffer)) = storage.get_buffer_by_name(project_name) {
+    let context_str = if let Ok(Some(buffer)) = storage.get_buffer_by_name(&pname) {
         let bm25 =
             arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
         let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
         let results = hybrid
             .search_fts(config.question, buffer.id, 10, None)
             .unwrap_or_default();
-        arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt)
+        arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
             .unwrap_or_default()
     } else {
         String::new()

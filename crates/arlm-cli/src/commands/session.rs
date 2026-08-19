@@ -3,54 +3,51 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::output::{self, Format};
-use crate::util::project_dirs;
+use crate::util::{data_dir, project_name};
 
 pub fn execute_create(title: &str, project: &Path, format: Format) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_session_create");
 
-    let project_name = project
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("default");
+    let pname = project_name(project);
 
-    let storage = open_storage(project)?;
+    let storage = open_storage()?;
     let mgr =
         arlm_memory::SessionManager::new(storage).context("failed to create session manager")?;
     let session_id = mgr
-        .create(project_name, title)
+        .create(&pname, title)
         .context("failed to create session")?;
 
     match format {
         Format::Json => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                 "session_id": session_id,
-                "project": project_name,
+                "project": pname,
                 "title": title,
             }));
             output.print();
         }
         Format::Tree => {
             output::success(&format!("Session created: {session_id}"));
-            println!("  Project: {project_name}");
+            println!("  Project: {pname}");
             println!("  Title: {title}");
         }
         Format::Markdown => {
             println!(
-                "# Session Created\n\n- **ID:** {session_id}\n- **Project:** {project_name}\n- **Title:** {title}"
+                "# Session Created\n\n- **ID:** {session_id}\n- **Project:** {pname}\n- **Title:** {title}"
             );
         }
         Format::Prompt => {
-            println!("Session created: {session_id} (project: {project_name}, title: {title})");
+            println!("Session created: {session_id} (project: {pname}, title: {title})");
         }
     }
 
     Ok(())
 }
 
-pub fn execute_resume(session_id: &str, project: &Path, format: Format) -> Result<()> {
+pub fn execute_resume(session_id: &str, _project: &Path, format: Format) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_session_resume");
 
-    let storage = open_storage(project)?;
+    let storage = open_storage()?;
     let mgr =
         arlm_memory::SessionManager::new(storage).context("failed to create session manager")?;
 
@@ -128,10 +125,10 @@ pub fn execute_resume(session_id: &str, project: &Path, format: Format) -> Resul
     Ok(())
 }
 
-pub fn execute_list(project: &Path, format: Format) -> Result<()> {
+pub fn execute_list(_project: &Path, format: Format) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_session_list");
 
-    let storage = open_storage(project)?;
+    let storage = open_storage()?;
     let mgr =
         arlm_memory::SessionManager::new(storage).context("failed to create session manager")?;
 
@@ -212,13 +209,8 @@ pub fn execute_list(project: &Path, format: Format) -> Result<()> {
     Ok(())
 }
 
-fn open_storage(project: &Path) -> Result<arlm_storage::Storage> {
-    let project_name = project
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("default");
-    let data_dir = project_dirs().join(project_name);
-    arlm_storage::Storage::open(&data_dir).context("failed to open storage")
+fn open_storage() -> Result<arlm_storage::Storage> {
+    arlm_storage::Storage::open(&data_dir()).context("failed to open storage")
 }
 
 #[cfg(test)]
@@ -229,6 +221,8 @@ mod tests {
     #[test]
     fn test_session_create_and_list() {
         let tmp = TempDir::new().unwrap();
+        // SAFETY: test-only, single-threaded
+        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
         let project = tmp.path().join("test-proj");
         std::fs::create_dir_all(&project).unwrap();
 

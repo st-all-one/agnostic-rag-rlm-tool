@@ -269,16 +269,36 @@ pub fn compute_hash(text: &str) -> String {
 
 /// Discover files in a directory recursively, respecting common ignore patterns.
 ///
+/// # Arguments
+///
+/// * `root` - Root directory to search.
+/// * `extra_ignores` - Additional glob patterns to ignore (e.g., `["*.log", "dist/"]`).
+///
 /// # Errors
 ///
 /// Returns an error if the directory cannot be read.
-pub fn discover_files(root: &Path) -> EmbeddingResult<Vec<PathBuf>> {
+pub fn discover_files(root: &Path, extra_ignores: &[String]) -> EmbeddingResult<Vec<PathBuf>> {
     let mut files = Vec::with_capacity(256);
-    discover_files_recursive(root, &mut files)?;
+    discover_files_recursive(root, extra_ignores, &mut files)?;
     Ok(files)
 }
 
-fn discover_files_recursive(dir: &Path, files: &mut Vec<PathBuf>) -> EmbeddingResult<()> {
+/// Default ignore patterns applied to all projects.
+const DEFAULT_IGNORES: &[&str] = &[
+    ".env",
+    ".env.*",
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+    "*.jks",
+];
+
+fn discover_files_recursive(
+    dir: &Path,
+    extra_ignores: &[String],
+    files: &mut Vec<PathBuf>,
+) -> EmbeddingResult<()> {
     if !dir.is_dir() {
         return Ok(());
     }
@@ -299,16 +319,42 @@ fn discover_files_recursive(dir: &Path, files: &mut Vec<PathBuf>) -> EmbeddingRe
             {
                 continue;
             }
+
+            // Check default ignore patterns
+            let dominated = DEFAULT_IGNORES.iter().any(|pat| glob_match(pat, name));
+            if dominated {
+                continue;
+            }
+
+            // Check user-specified ignore patterns
+            let dominated = extra_ignores.iter().any(|pat| glob_match(pat, name));
+            if dominated {
+                continue;
+            }
         }
 
         if path.is_dir() {
-            discover_files_recursive(&path, files)?;
+            discover_files_recursive(&path, extra_ignores, files)?;
         } else if path.is_file() && is_text_file(&path) {
             files.push(path);
         }
     }
 
     Ok(())
+}
+
+/// Simple glob matching for single-component patterns.
+///
+/// Supports `*` wildcard matching against a filename.
+#[must_use]
+fn glob_match(pattern: &str, name: &str) -> bool {
+    if let Some(suffix) = pattern.strip_prefix("*.") {
+        return name.ends_with(suffix) && name.len() > suffix.len() + 1;
+    }
+    if let Some(prefix) = pattern.strip_suffix(".*") {
+        return name.starts_with(prefix) && name.len() > prefix.len() + 1;
+    }
+    name == pattern
 }
 
 /// Check if a file is likely text-based (by extension).
@@ -363,13 +409,38 @@ mod tests {
         std::fs::write(dir.path().join("a.rs"), "fn main() {}").expect("write");
         std::fs::write(dir.path().join("b.py"), "print('hello')").expect("write");
         std::fs::write(dir.path().join("c.png"), b"binary").expect("write");
+        std::fs::write(dir.path().join(".env"), "SECRET=1").expect("write");
+        std::fs::write(dir.path().join("key.pem"), "-----").expect("write");
 
         let sub = dir.path().join("sub");
         std::fs::create_dir(&sub).expect("mkdir");
         std::fs::write(sub.join("d.txt"), "text").expect("write");
 
-        let files = discover_files(dir.path()).expect("discover");
-        assert_eq!(files.len(), 3); // a.rs, b.py, sub/d.txt
+        let files = discover_files(dir.path(), &[]).expect("discover");
+        assert_eq!(files.len(), 3); // a.rs, b.py, sub/d.txt (filtered: .env, key.pem, c.png)
+    }
+
+    #[test]
+    fn test_discover_files_custom_ignore() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("a.rs"), "fn main() {}").expect("write");
+        std::fs::write(dir.path().join("b.log"), "log entry").expect("write");
+        std::fs::write(dir.path().join("c.rs"), "fn foo() {}").expect("write");
+
+        let ignores = vec!["*.log".to_string()];
+        let files = discover_files(dir.path(), &ignores).expect("discover");
+        assert_eq!(files.len(), 2); // a.rs, c.rs (filtered: b.log)
+    }
+
+    #[test]
+    fn test_glob_match() {
+        assert!(glob_match("*.pem", "server.pem"));
+        assert!(glob_match("*.pem", "key.pem"));
+        assert!(!glob_match("*.pem", "pem.txt"));
+        assert!(glob_match(".env.*", ".env.local"));
+        assert!(!glob_match(".env.*", ".env"));
+        assert!(glob_match(".env", ".env"));
+        assert!(!glob_match(".env", ".env.local"));
     }
 
     #[test]

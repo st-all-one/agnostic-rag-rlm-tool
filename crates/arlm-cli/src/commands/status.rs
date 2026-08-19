@@ -3,19 +3,13 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::output::{self, Format};
-use crate::util::project_dirs;
+use crate::util::data_dir;
 
-pub fn execute(run_id: Option<&str>, project: &Path, format: Format) -> Result<()> {
+pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_status");
 
-    let project_name = project
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("default");
-
-    let data_dir = project_dirs().join(project_name);
-
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+    storage.ensure_uuids().ok();
 
     let buffers = storage.list_buffers().context("failed to list buffers")?;
 
@@ -118,6 +112,8 @@ mod tests {
     #[test]
     fn test_status_empty() {
         let tmp = TempDir::new().unwrap();
+        // SAFETY: test-only, single-threaded
+        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
         let project_path = tmp.path().join("nonexistent");
         let result = execute(None, project_path.as_path(), Format::Json);
         assert!(result.is_ok());

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0] - 2026-08-19
+
+### Changed
+- `IndexOptions` ganhou campo `ignore_patterns: Vec<String>`
+- `IndexProjectOptions` ganhou campo `ignore_patterns: Vec<String>`
+- `index_directory()` agora usa `discover_files()` com ignore patterns
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

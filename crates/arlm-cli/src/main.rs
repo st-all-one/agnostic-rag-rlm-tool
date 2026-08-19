@@ -10,7 +10,8 @@
         clippy::duration_suboptimal_units,
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
-        clippy::cast_precision_loss
+        clippy::cast_precision_loss,
+        unsafe_code
     )
 )]
 use std::path::PathBuf;
@@ -106,6 +107,15 @@ enum Commands {
         /// Maximum tokens per chunk
         #[arg(long, default_value_t = 512)]
         chunk_size: usize,
+
+        /// Ignore patterns (glob). Can be specified multiple times.
+        /// Default: .env, .env.*, *.pem, *.key
+        #[arg(long = "ignore", action = clap::ArgAction::Append)]
+        ignore_patterns: Vec<String>,
+
+        /// Watch for file changes and reindex automatically
+        #[arg(short, long)]
+        watch: bool,
     },
 
     /// Search project with hybrid BM25 + semantic
@@ -124,6 +134,18 @@ enum Commands {
         /// Minimum score threshold
         #[arg(long)]
         min_score: Option<f32>,
+
+        /// Search across all indexed projects
+        #[arg(short, long)]
+        all: bool,
+
+        /// Search tier: fts, entity, vector, auto (default: auto)
+        #[arg(long, default_value = "auto")]
+        tier: String,
+
+        /// Maximum tokens in output (0 = unlimited)
+        #[arg(long, default_value_t = 8000)]
+        max_tokens: u32,
     },
 
     /// Query with RLM analysis
@@ -148,6 +170,18 @@ enum Commands {
         /// Top K results
         #[arg(long, default_value_t = 10)]
         top_k: usize,
+
+        /// Search across all indexed projects
+        #[arg(short, long)]
+        all: bool,
+
+        /// Search tier: fts, entity, vector, auto (default: auto)
+        #[arg(long, default_value = "auto")]
+        tier: String,
+
+        /// Maximum tokens in output (0 = unlimited)
+        #[arg(long, default_value_t = 8000)]
+        max_tokens: u32,
     },
 
     /// Show project and run status
@@ -268,10 +302,12 @@ fn main() -> Result<()> {
             verbose: cli.verbose,
             live,
         })),
-        Commands::Index { path, chunk_size } => {
+        Commands::Index { path, chunk_size, ignore_patterns, watch } => {
             commands::index::execute(commands::index::IndexConfig {
                 path: &path,
                 chunk_size,
+                ignore_patterns: &ignore_patterns,
+                watch,
                 project: &cli.project,
                 format,
                 verbose: cli.verbose,
@@ -282,15 +318,21 @@ fn main() -> Result<()> {
             top_k,
             file_pattern,
             min_score,
-        } => commands::search::execute(commands::search::SearchConfig {
+            all,
+            tier,
+            max_tokens,
+        } => rt.block_on(commands::search::execute(commands::search::SearchConfig {
             query: &query,
             top_k,
             file_pattern: file_pattern.as_deref(),
             min_score,
+            all,
+            tier: &tier,
+            max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
             project: &cli.project,
             format,
             verbose: cli.verbose,
-        }),
+        })),
         Commands::Query {
             question,
             backend,
@@ -303,14 +345,17 @@ fn main() -> Result<()> {
             format,
             verbose: cli.verbose,
         })),
-        Commands::Context { task, top_k } => {
-            commands::context::execute(commands::context::ContextConfig {
+        Commands::Context { task, top_k, all, tier, max_tokens } => {
+            rt.block_on(commands::context::execute(commands::context::ContextConfig {
                 task: &task,
                 top_k,
+                all,
+                tier: &tier,
+                max_tokens: if max_tokens == 0 { None } else { Some(max_tokens) },
                 project: &cli.project,
                 format,
                 verbose: cli.verbose,
-            })
+            }))
         }
         Commands::Status { run_id } => {
             commands::status::execute(run_id.as_deref(), &cli.project, format)

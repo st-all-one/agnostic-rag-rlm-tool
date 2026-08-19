@@ -92,7 +92,7 @@ impl SessionManager {
     pub fn create(&self, project_name: &str, title: &str) -> Result<String> {
         let _timer = ScopedTimer::new("session_create");
 
-        let id = format!("s_{}", uuid::Uuid::new_v4());
+        let id = format!("s_{}", uuid::Uuid::now_v7());
 
         let conn = self.storage.conn();
         let conn = conn.lock();

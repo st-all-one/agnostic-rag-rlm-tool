@@ -7,6 +7,7 @@ use super::conn::Storage;
 #[derive(Debug, Clone)]
 pub struct Buffer {
     pub id: i64,
+    pub uuid: Option<String>,
     pub name: String,
     pub path: String,
     pub total_chunks: i64,
@@ -24,6 +25,24 @@ pub struct NewBuffer {
     pub path: String,
 }
 
+const BUFFER_COLUMNS: &str =
+    "id, uuid, name, path, total_chunks, total_files, embedding_model, embedding_dims, last_indexed_at, created_at";
+
+fn row_to_buffer(row: &rusqlite::Row<'_>) -> rusqlite::Result<Buffer> {
+    Ok(Buffer {
+        id: row.get(0)?,
+        uuid: row.get(1)?,
+        name: row.get(2)?,
+        path: row.get(3)?,
+        total_chunks: row.get(4)?,
+        total_files: row.get(5)?,
+        embedding_model: row.get(6)?,
+        embedding_dims: row.get(7)?,
+        last_indexed_at: row.get(8)?,
+        created_at: row.get(9)?,
+    })
+}
+
 impl Storage {
     /// Insert a new buffer and return its ID.
     ///
@@ -31,12 +50,13 @@ impl Storage {
     ///
     /// Returns an error if the database insert fails.
     pub fn insert_buffer(&self, buffer: &NewBuffer) -> Result<i64> {
+        let uuid = uuid::Uuid::now_v7().to_string();
         let conn = self.conn();
         let conn = conn.lock();
 
         conn.execute(
-            "INSERT INTO buffers (name, path) VALUES (?1, ?2)",
-            params![buffer.name, buffer.path],
+            "INSERT INTO buffers (name, path, uuid) VALUES (?1, ?2, ?3)",
+            params![buffer.name, buffer.path, uuid],
         )
         .context("failed to insert buffer")?;
 
@@ -56,25 +76,12 @@ impl Storage {
         let conn = conn.lock();
 
         let mut stmt = conn
-            .prepare(
-                "SELECT id, name, path, total_chunks, total_files, embedding_model, embedding_dims, last_indexed_at, created_at
-                 FROM buffers WHERE id = ?1",
-            )
+            .prepare(&format!(
+                "SELECT {BUFFER_COLUMNS} FROM buffers WHERE id = ?1"
+            ))
             .context("failed to prepare get_buffer query")?;
 
-        let mut rows = stmt.query_map(params![id], |row| {
-            Ok(Buffer {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                path: row.get(2)?,
-                total_chunks: row.get(3)?,
-                total_files: row.get(4)?,
-                embedding_model: row.get(5)?,
-                embedding_dims: row.get(6)?,
-                last_indexed_at: row.get(7)?,
-                created_at: row.get(8)?,
-            })
-        })?;
+        let mut rows = stmt.query_map(params![id], row_to_buffer)?;
 
         rows.next().transpose().context("failed to get buffer")
     }
@@ -89,29 +96,38 @@ impl Storage {
         let conn = conn.lock();
 
         let mut stmt = conn
-            .prepare(
-                "SELECT id, name, path, total_chunks, total_files, embedding_model, embedding_dims, last_indexed_at, created_at
-                 FROM buffers WHERE name = ?1",
-            )
+            .prepare(&format!(
+                "SELECT {BUFFER_COLUMNS} FROM buffers WHERE name = ?1"
+            ))
             .context("failed to prepare get_buffer_by_name query")?;
 
-        let mut rows = stmt.query_map(params![name], |row| {
-            Ok(Buffer {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                path: row.get(2)?,
-                total_chunks: row.get(3)?,
-                total_files: row.get(4)?,
-                embedding_model: row.get(5)?,
-                embedding_dims: row.get(6)?,
-                last_indexed_at: row.get(7)?,
-                created_at: row.get(8)?,
-            })
-        })?;
+        let mut rows = stmt.query_map(params![name], row_to_buffer)?;
 
         rows.next()
             .transpose()
             .context("failed to get buffer by name")
+    }
+
+    /// Get a buffer by UUID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_buffer_by_uuid(&self, uuid: &str) -> Result<Option<Buffer>> {
+        let conn = self.conn();
+        let conn = conn.lock();
+
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {BUFFER_COLUMNS} FROM buffers WHERE uuid = ?1"
+            ))
+            .context("failed to prepare get_buffer_by_uuid query")?;
+
+        let mut rows = stmt.query_map(params![uuid], row_to_buffer)?;
+
+        rows.next()
+            .transpose()
+            .context("failed to get buffer by uuid")
     }
 
     /// List all buffers.
@@ -124,30 +140,53 @@ impl Storage {
         let conn = conn.lock();
 
         let mut stmt = conn
-            .prepare(
-                "SELECT id, name, path, total_chunks, total_files, embedding_model, embedding_dims, last_indexed_at, created_at
-                 FROM buffers ORDER BY name",
-            )
+            .prepare(&format!(
+                "SELECT {BUFFER_COLUMNS} FROM buffers ORDER BY name"
+            ))
             .context("failed to prepare list_buffers query")?;
 
         let rows = stmt
-            .query_map([], |row| {
-                Ok(Buffer {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    path: row.get(2)?,
-                    total_chunks: row.get(3)?,
-                    total_files: row.get(4)?,
-                    embedding_model: row.get(5)?,
-                    embedding_dims: row.get(6)?,
-                    last_indexed_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                })
-            })?
+            .query_map([], row_to_buffer)?
             .filter_map(std::result::Result::ok)
             .collect();
 
         Ok(rows)
+    }
+
+    /// Backfill UUID for existing buffers that don't have one.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database update fails.
+    pub fn ensure_uuids(&self) -> Result<u64> {
+        let conn = self.conn();
+        let conn = conn.lock();
+
+        let mut stmt = conn
+            .prepare("SELECT id FROM buffers WHERE uuid IS NULL")
+            .context("failed to prepare ensure_uuids query")?;
+
+        let ids: Vec<i64> = stmt
+            .query_map([], |row| row.get(0))?
+            .filter_map(std::result::Result::ok)
+            .collect();
+
+        let mut updated = 0u64;
+        for id in ids {
+            let uuid = uuid::Uuid::now_v7().to_string();
+            conn.execute(
+                "UPDATE buffers SET uuid = ?1 WHERE id = ?2",
+                params![uuid, id],
+            )
+            .context("failed to update buffer uuid")?;
+            updated += 1;
+        }
+
+        if updated > 0 {
+            tracing::info!(updated, "backfilled UUIDs for existing buffers");
+        }
+
+        Ok(updated)
     }
 
     /// Update buffer counts after indexing.
@@ -226,6 +265,24 @@ mod tests {
         let retrieved = storage.get_buffer(id).unwrap().unwrap();
         assert_eq!(retrieved.name, "my-project");
         assert_eq!(retrieved.path, "/path/to/project");
+        assert!(retrieved.uuid.is_some());
+    }
+
+    #[test]
+    fn test_get_buffer_by_uuid() {
+        let (storage, _tmp) = setup_storage();
+
+        let buffer = NewBuffer {
+            name: "my-project".to_string(),
+            path: "/path/to/project".to_string(),
+        };
+
+        storage.insert_buffer(&buffer).unwrap();
+        let buffers = storage.list_buffers().unwrap();
+        let uuid = buffers[0].uuid.as_deref().unwrap();
+
+        let retrieved = storage.get_buffer_by_uuid(uuid).unwrap().unwrap();
+        assert_eq!(retrieved.name, "my-project");
     }
 
     #[test]
@@ -275,5 +332,37 @@ mod tests {
         assert_eq!(retrieved.total_chunks, 100);
         assert_eq!(retrieved.total_files, 10);
         assert!(retrieved.last_indexed_at.is_some());
+    }
+
+    #[test]
+    fn test_ensure_uuids_backfill() {
+        let (storage, _tmp) = setup_storage();
+
+        // Insert a buffer normally (gets UUID)
+        let buffer = NewBuffer {
+            name: "project-a".to_string(),
+            path: "/path/a".to_string(),
+        };
+        let id = storage.insert_buffer(&buffer).unwrap();
+
+        // Manually NULL the UUID to simulate old data
+        {
+            let conn = storage.conn();
+            let conn = conn.lock();
+            conn.execute("UPDATE buffers SET uuid = NULL WHERE id = ?1", params![id])
+                .unwrap();
+        }
+
+        // Verify UUID is NULL
+        let b = storage.get_buffer(id).unwrap().unwrap();
+        assert!(b.uuid.is_none());
+
+        // Backfill
+        let count = storage.ensure_uuids().unwrap();
+        assert_eq!(count, 1);
+
+        // Verify UUID is now set
+        let b = storage.get_buffer(id).unwrap().unwrap();
+        assert!(b.uuid.is_some());
     }
 }

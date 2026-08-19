@@ -1,0 +1,13 @@
+[build]
+jobs = 8
+rustflags = ["-C", "target-cpu=native"]
+
+[env]
+PROTOC = "/usr/bin/protoc"
+
+[alias]
+c = "check"
+b = "build"
+r = "run"
+t = "test"
+cl = "clippy"

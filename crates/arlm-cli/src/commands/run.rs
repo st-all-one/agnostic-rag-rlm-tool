@@ -52,7 +52,7 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
     let llm_backend =
         arlm_llm::get_backend(&kind, api_key, None).context("failed to create LLM backend")?;
 
-    let run_id = format!("run-{}", uuid::Uuid::new_v4().as_simple());
+    let run_id = format!("run-{}", uuid::Uuid::now_v7().as_simple());
 
     if config.verbose {
         output::info(&format!(

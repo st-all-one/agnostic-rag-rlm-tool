@@ -8,6 +8,13 @@ use crate::types::{ChunkWithText, HybridResult, OutputFormat, SearchResult};
 
 /// Assemble context from search results for LLM consumption.
 ///
+/// # Arguments
+///
+/// * `storage` - Storage to load chunk content from.
+/// * `results` - Search results to include.
+/// * `format` - Output format (Prompt, Json, Markdown).
+/// * `max_tokens` - Optional token budget. Chunks are truncated/skipped to fit.
+///
 /// # Errors
 ///
 /// Returns an error if chunk metadata or content cannot be loaded from storage.
@@ -15,10 +22,17 @@ pub fn build_context(
     storage: &Storage,
     results: &[HybridResult],
     format: OutputFormat,
+    max_tokens: Option<u32>,
 ) -> Result<String> {
     let start = Instant::now();
 
     let chunks = load_chunks(storage, results)?;
+
+    let chunks = if let Some(budget) = max_tokens {
+        apply_token_budget(results, &chunks, budget)
+    } else {
+        chunks
+    };
 
     let output = match format {
         OutputFormat::Prompt => format_prompt(results, &chunks),
@@ -29,6 +43,7 @@ pub fn build_context(
     tracing::info!(
         format = %format,
         chunks_loaded = chunks.len(),
+        max_tokens = ?max_tokens,
         elapsed_ms = start.elapsed().as_millis(),
         "context assembled"
     );
@@ -38,14 +53,27 @@ pub fn build_context(
 
 /// Build rich search results with full metadata.
 ///
+/// # Arguments
+///
+/// * `storage` - Storage to load chunk content from.
+/// * `results` - Search results to include.
+/// * `max_tokens` - Optional token budget. Results are truncated to fit.
+///
 /// # Errors
 ///
 /// Returns an error if chunk metadata or content cannot be loaded from storage.
 pub fn build_search_results(
     storage: &Storage,
     results: &[HybridResult],
+    max_tokens: Option<u32>,
 ) -> Result<Vec<SearchResult>> {
     let chunks = load_chunks(storage, results)?;
+
+    let chunks = if let Some(budget) = max_tokens {
+        apply_token_budget(results, &chunks, budget)
+    } else {
+        chunks
+    };
 
     let search_results: Vec<SearchResult> = results
         .iter()
@@ -94,6 +122,77 @@ fn load_chunks(storage: &Storage, results: &[HybridResult]) -> Result<Vec<ChunkW
     }
 
     Ok(chunks)
+}
+
+/// Apply a token budget by keeping the highest-scoring chunks that fit.
+///
+/// Estimates tokens using word-count heuristic (words × 1.3).
+/// Truncates the last chunk's content to fit the remaining budget.
+fn apply_token_budget(
+    results: &[HybridResult],
+    chunks: &[ChunkWithText],
+    max_tokens: u32,
+) -> Vec<ChunkWithText> {
+    let mut used_tokens: u32 = 0;
+    let mut selected = Vec::with_capacity(chunks.len());
+
+    for hr in results {
+        if let Some(chunk) = chunks.iter().find(|c| c.id == hr.chunk_id) {
+            let chunk_tokens = estimate_tokens(&chunk.content);
+
+            if used_tokens + chunk_tokens <= max_tokens {
+                used_tokens += chunk_tokens;
+                selected.push(chunk.clone());
+            } else {
+                // Try to fit a truncated version
+                let remaining = max_tokens.saturating_sub(used_tokens);
+                if remaining > 100 {
+                    let truncated = truncate_to_tokens(&chunk.content, remaining);
+                    let truncated_tokens = estimate_tokens(&truncated);
+                    used_tokens += truncated_tokens;
+                    let mut truncated_chunk = chunk.clone();
+                    truncated_chunk.content = truncated;
+                    selected.push(truncated_chunk);
+                }
+                break;
+            }
+        }
+    }
+
+    selected
+}
+
+/// Estimate token count using word-count heuristic.
+fn estimate_tokens(text: &str) -> u32 {
+    if text.is_empty() {
+        return 0;
+    }
+    let words = text.split_whitespace().count();
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    let tokens = (words as f64 * 1.3).ceil() as u32;
+    tokens
+}
+
+/// Truncate text to approximately fit within the given token budget.
+fn truncate_to_tokens(text: &str, max_tokens: u32) -> String {
+    // Approximate words from tokens: words ≈ tokens / 1.3
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    let max_words = (max_tokens as f64 / 1.3).floor() as usize;
+
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() <= max_words {
+        return text.to_string();
+    }
+
+    words[..max_words].join(" ")
 }
 
 fn format_prompt(results: &[HybridResult], chunks: &[ChunkWithText]) -> String {
@@ -212,7 +311,7 @@ mod tests {
             score: 0.85,
         }];
 
-        let ctx = build_context(&storage, &results, OutputFormat::Prompt).unwrap();
+        let ctx = build_context(&storage, &results, OutputFormat::Prompt, None).unwrap();
         assert!(ctx.contains("## Project Context"));
         assert!(ctx.contains("src/main.rs"));
         assert!(ctx.contains("fn main()"));
@@ -229,7 +328,7 @@ mod tests {
             score: 0.90,
         }];
 
-        let ctx = build_context(&storage, &results, OutputFormat::Markdown).unwrap();
+        let ctx = build_context(&storage, &results, OutputFormat::Markdown, None).unwrap();
         assert!(ctx.contains("# Search Results"));
         assert!(ctx.contains("src/main.rs"));
     }
@@ -244,7 +343,7 @@ mod tests {
             score: 0.75,
         }];
 
-        let ctx = build_context(&storage, &results, OutputFormat::Json).unwrap();
+        let ctx = build_context(&storage, &results, OutputFormat::Json, None).unwrap();
         assert!(ctx.contains("chunk_id"));
         assert!(ctx.contains("src/main.rs"));
     }
@@ -259,7 +358,7 @@ mod tests {
             score: 0.95,
         }];
 
-        let search_results = build_search_results(&storage, &results).unwrap();
+        let search_results = build_search_results(&storage, &results, None).unwrap();
         assert_eq!(search_results.len(), 1);
         assert_eq!(search_results[0].chunk_id, chunk_id);
         assert_eq!(search_results[0].file_path, "src/main.rs");
@@ -269,7 +368,7 @@ mod tests {
     #[test]
     fn test_build_context_empty() {
         let (storage, _tmp) = setup();
-        let ctx = build_context(&storage, &[], OutputFormat::Prompt).unwrap();
+        let ctx = build_context(&storage, &[], OutputFormat::Prompt, None).unwrap();
         assert!(ctx.contains("## Project Context"));
     }
 

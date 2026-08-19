@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] - 2026-08-19
+
+### Changed
+- `discover_files()` agora aceita `extra_ignores: &[String]` para padrões customizados
+- Padrões default: `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`
+- Função auxiliar `glob_match()` para matching de glob patterns
+
+### Added
+- `test_discover_files_custom_ignore` e `test_glob_match` tests
+
 ## [Unreleased]
 
 ### Changed

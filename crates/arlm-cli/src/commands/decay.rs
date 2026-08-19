@@ -9,8 +9,7 @@ pub struct DecayArgs<'a> {
 }
 
 pub fn execute(args: DecayArgs<'_>) -> Result<()> {
-    let db_path = args.project.join(".arlm/knowledge.db");
-    let storage = Storage::open(&db_path)?;
+    let storage = Storage::open(&crate::util::data_dir())?;
 
     let conn = storage.conn();
     let conn = conn.lock();

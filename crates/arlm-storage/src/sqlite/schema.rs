@@ -10,6 +10,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/008_add_events.sql"),
     include_str!("../../migrations/009_add_entities.sql"),
     include_str!("../../migrations/010_add_last_accessed_at.sql"),
+    include_str!("../../migrations/011_add_uuid_to_buffers.sql"),
 ];
 
 /// Run all pending migrations.
@@ -115,6 +116,6 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
     }
 }

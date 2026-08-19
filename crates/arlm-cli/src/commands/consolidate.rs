@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::output::{self, Format};
-use crate::util::project_dirs;
+use crate::util::{data_dir, project_name};
 
 pub struct ConsolidateConfig<'a> {
     pub project: &'a Path,
@@ -15,23 +15,18 @@ pub struct ConsolidateConfig<'a> {
 pub fn execute(config: ConsolidateConfig<'_>) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_consolidate");
 
-    let project_name = config
-        .project
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("default");
+    let pname = project_name(config.project);
 
-    let data_dir = project_dirs().join(project_name);
-
-    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
+    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+    storage.ensure_uuids().ok();
 
     let buffer = storage
-        .get_buffer_by_name(project_name)
+        .get_buffer_by_name(&pname)
         .context("failed to check buffer")?
         .context("project not found. Run `arlm index` first.")?;
 
     if config.verbose {
-        output::info(&format!("Consolidating project: {project_name}..."));
+        output::info(&format!("Consolidating project: {pname}..."));
     }
 
     let engine = arlm_memory::ConsolidationEngine::new(storage);
@@ -43,14 +38,14 @@ pub fn execute(config: ConsolidateConfig<'_>) -> Result<()> {
     match config.format {
         Format::Json => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
-                "project": project_name,
+                "project": pname,
                 "duplicate_chunks_removed": result.duplicate_chunks_removed,
                 "low_confidence_patterns_removed": result.low_confidence_patterns_removed,
             }));
             output.print();
         }
         Format::Tree => {
-            output::success(&format!("Consolidation complete for '{project_name}'"));
+            output::success(&format!("Consolidation complete for '{pname}'"));
             println!("  Duplicates removed: {}", result.duplicate_chunks_removed);
             println!(
                 "  Low-confidence patterns removed: {}",
@@ -59,13 +54,13 @@ pub fn execute(config: ConsolidateConfig<'_>) -> Result<()> {
         }
         Format::Markdown => {
             println!(
-                "# Consolidation Complete\n\n- **Project:** {project_name}\n- **Duplicates removed:** {}\n- **Low-confidence patterns removed:** {}\n",
+                "# Consolidation Complete\n\n- **Project:** {pname}\n- **Duplicates removed:** {}\n- **Low-confidence patterns removed:** {}\n",
                 result.duplicate_chunks_removed, result.low_confidence_patterns_removed,
             );
         }
         Format::Prompt => {
             println!(
-                "Consolidation complete for {project_name}: {} duplicates, {} patterns removed.",
+                "Consolidation complete for {pname}: {} duplicates, {} patterns removed.",
                 result.duplicate_chunks_removed, result.low_confidence_patterns_removed,
             );
         }

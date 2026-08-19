@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0] - 2026-08-19
+
+### Changed
+- **BREAKING:** Single database compartilhado (`~/.arlm/knowledge.db`) em vez de DB por projeto
+- `Storage::open()` agora aponta para o diretório shared data
+- `Buffer` struct ganhou campo `uuid: Option<String>` (UUIDv7)
+
+### Added
+- Migration 011: coluna `uuid` (UUIDv7) na tabela `buffers`
+- `get_buffer_by_uuid()` para lookup por UUID
+- `ensure_uuids()` para backfill de UUIDs em buffers existentes
+- `insert_buffer()` agora gera UUIDv7 automaticamente
+- `Buffer_COLUMNS` e `row_to_buffer()` para reduzir duplicação de queries
+
 ## [0.1.0] - 2026-08-19
 
 ### Added
