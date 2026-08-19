@@ -83,9 +83,7 @@ impl BatchEmbedder {
         results
             .into_iter()
             .map(|opt| {
-                opt.ok_or_else(|| {
-                    EmbeddingError::ModelNotLoaded("result slot not filled".into())
-                })
+                opt.ok_or_else(|| EmbeddingError::ModelNotLoaded("result slot not filled".into()))
             })
             .collect::<EmbeddingResult<Vec<_>>>()
     }
@@ -126,6 +124,7 @@ impl Embedder for BatchEmbedder {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::useless_vec)]
 mod tests {
     use super::*;
     use crate::embedder::fallback::FallbackEmbedder;

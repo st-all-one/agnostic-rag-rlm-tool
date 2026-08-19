@@ -10,7 +10,8 @@ use crate::types::Bm25Result;
 
 pub struct Bm25Search {
     conn: Arc<Mutex<Connection>>,
-    _storage: Storage,
+    #[allow(dead_code)]
+    storage: Storage,
 }
 
 impl Bm25Search {
@@ -23,7 +24,7 @@ impl Bm25Search {
         let conn = storage.conn();
         let s = Self {
             conn,
-            _storage: storage.clone(),
+            storage: storage.clone(),
         };
         s.ensure_fts_table()?;
         Ok(s)
@@ -31,10 +32,14 @@ impl Bm25Search {
 
     fn ensure_fts_table(&self) -> Result<()> {
         let conn = self.conn.lock();
+        // detail='column': stores column but not position (~40% smaller than full)
+        // Supports: OR, AND, NOT, column-specific queries.
+        // Does NOT support: phrases, NEAR queries (not needed for BM25).
         conn.execute_batch(
             "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(\
                 content, \
-                tokenize='porter unicode61'\
+                tokenize='porter unicode61', \
+                detail='column'\
             );",
         )
         .context("failed to create chunks_fts table")?;
@@ -259,7 +264,7 @@ mod tests {
     #[test]
     fn test_populate_and_search() {
         let (search, _tmp) = setup();
-        let storage = search._storage.clone();
+        let storage = search.storage.clone();
 
         let buffer_id = create_buffer(&storage, 0);
         let chunk_id = create_chunk(&storage, buffer_id, "src/main.rs");
@@ -283,7 +288,7 @@ mod tests {
     #[test]
     fn test_search_buffer_filter() {
         let (search, _tmp) = setup();
-        let storage = search._storage.clone();
+        let storage = search.storage.clone();
 
         let buf1 = create_buffer(&storage, 0);
         let buf2 = create_buffer(&storage, 1);
@@ -302,7 +307,7 @@ mod tests {
     #[test]
     fn test_search_all() {
         let (search, _tmp) = setup();
-        let storage = search._storage.clone();
+        let storage = search.storage.clone();
 
         let buf = create_buffer(&storage, 0);
         let c1 = create_chunk(&storage, buf, "a.rs");
@@ -318,7 +323,7 @@ mod tests {
     #[test]
     fn test_populate_fts() {
         let (search, _tmp) = setup();
-        let storage = search._storage.clone();
+        let storage = search.storage.clone();
 
         let buf = create_buffer(&storage, 0);
         let c1 = create_chunk(&storage, buf, "a.rs");

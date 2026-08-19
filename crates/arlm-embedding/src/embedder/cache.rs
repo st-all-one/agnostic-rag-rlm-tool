@@ -73,8 +73,7 @@ impl EmbeddingCache {
         let hash = Self::content_hash(text);
         let conn = self.conn.lock();
 
-        let mut stmt =
-            conn.prepare("SELECT embedding FROM embedding_cache WHERE hash = ?1")?;
+        let mut stmt = conn.prepare("SELECT embedding FROM embedding_cache WHERE hash = ?1")?;
 
         let result = stmt.query_row(rusqlite::params![hash], |row| {
             let blob: Vec<u8> = row.get(0)?;
@@ -137,10 +136,8 @@ impl EmbeddingCache {
     #[must_use]
     pub fn len(&self) -> usize {
         let conn = self.conn.lock();
-        conn.query_row("SELECT COUNT(*) FROM embedding_cache", [], |row| {
-            row.get(0)
-        })
-        .unwrap_or(0)
+        conn.query_row("SELECT COUNT(*) FROM embedding_cache", [], |row| row.get(0))
+            .unwrap_or(0)
     }
 
     /// Whether the cache is empty.
@@ -188,6 +185,7 @@ fn bytes_to_embedding(bytes: &[u8], expected_dims: usize) -> EmbeddingResult<Emb
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -211,9 +209,7 @@ mod tests {
     fn test_cache_contains() {
         let cache = EmbeddingCache::in_memory(4).expect("cache");
         assert!(!cache.contains("hello"));
-        cache
-            .put("hello", &vec![1.0, 2.0, 3.0, 4.0])
-            .expect("put");
+        cache.put("hello", &vec![1.0, 2.0, 3.0, 4.0]).expect("put");
         assert!(cache.contains("hello"));
     }
 
@@ -221,21 +217,15 @@ mod tests {
     fn test_cache_len() {
         let cache = EmbeddingCache::in_memory(4).expect("cache");
         assert_eq!(cache.len(), 0);
-        cache
-            .put("a", &vec![1.0, 2.0, 3.0, 4.0])
-            .expect("put");
-        cache
-            .put("b", &vec![5.0, 6.0, 7.0, 8.0])
-            .expect("put");
+        cache.put("a", &vec![1.0, 2.0, 3.0, 4.0]).expect("put");
+        cache.put("b", &vec![5.0, 6.0, 7.0, 8.0]).expect("put");
         assert_eq!(cache.len(), 2);
     }
 
     #[test]
     fn test_cache_clear() {
         let cache = EmbeddingCache::in_memory(4).expect("cache");
-        cache
-            .put("a", &vec![1.0, 2.0, 3.0, 4.0])
-            .expect("put");
+        cache.put("a", &vec![1.0, 2.0, 3.0, 4.0]).expect("put");
         cache.clear().expect("clear");
         assert!(cache.is_empty());
     }
@@ -264,9 +254,7 @@ mod tests {
     #[test]
     fn test_cache_overwrite() {
         let cache = EmbeddingCache::in_memory(4).expect("cache");
-        cache
-            .put("a", &vec![1.0, 2.0, 3.0, 4.0])
-            .expect("put");
+        cache.put("a", &vec![1.0, 2.0, 3.0, 4.0]).expect("put");
         cache
             .put("a", &vec![5.0, 6.0, 7.0, 8.0])
             .expect("overwrite");

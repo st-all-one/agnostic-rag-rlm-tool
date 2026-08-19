@@ -65,13 +65,14 @@ Decomposition multiplies cost — only decompose when it clearly helps."#,
         },
     ];
 
-    let request = CompletionRequest {
+    let sampling = crate::sampling::SamplingArgs::for_node_type(Action::Decompose);
+    let request = sampling.apply_to_request(CompletionRequest {
         model: model.clone(),
         messages,
-        temperature: Some(0.1),
+        temperature: None,
         max_tokens: Some(512),
         stop: None,
-    };
+    });
 
     let response = retry_with_backoff(&input.retry_policy.inner, || {
         let req = request.clone();

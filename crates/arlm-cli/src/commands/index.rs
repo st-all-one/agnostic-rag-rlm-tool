@@ -91,8 +91,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
             let dur_secs = dur_ms as f64 / 1000.0;
             output::success(&format!(
                 "Indexed {} files → {} chunks in {dur_secs:.1}s",
-                result.files_processed,
-                result.chunks_created,
+                result.files_processed, result.chunks_created,
             ));
             output::info(&format!("Database: {}/knowledge.db", data_dir.display()));
         }
@@ -102,8 +101,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
             let dur_secs = dur_ms as f64 / 1000.0;
             println!(
                 "# Indexing Complete\n\n- **Files:** {}\n- **Chunks:** {}\n- **Duration:** {dur_secs:.1}s\n",
-                result.files_processed,
-                result.chunks_created,
+                result.files_processed, result.chunks_created,
             );
         }
         Format::Prompt => {

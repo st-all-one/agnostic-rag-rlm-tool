@@ -1,15 +1,37 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::panic,
+        clippy::needless_borrow,
+        clippy::unnecessary_literal_bound,
+        clippy::float_cmp,
+        clippy::duration_suboptimal_units,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )
+)]
+pub mod checkpoint;
 pub mod consolidation;
 pub mod history;
 pub mod knowledge;
+pub mod persist;
 pub mod project;
 pub mod session;
 pub mod trajectory;
 pub mod transfer;
 pub mod watch;
 
+pub use checkpoint::{CheckpointInfo, CheckpointManager};
 pub use consolidation::{ConsolidateOptions, ConsolidateResult, ConsolidationEngine};
 pub use history::{HistoryManager, QueryRecord};
 pub use knowledge::KnowledgeEngine;
+pub use persist::{
+    AnalysisPersistOptions, DecisionPersistOptions, Frontmatter, PersistEngine, PersistResult,
+    SearchPersistOptions, SessionPersistOptions, TrajectoryPersistOptions, WikiScope,
+};
 pub use project::{ProjectInfo, ProjectManager};
 pub use session::{SessionManager, SessionRecord};
 pub use trajectory::{RunTrajectory, TrajectoryEngine};

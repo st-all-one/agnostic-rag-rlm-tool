@@ -14,3 +14,7 @@
 - ResultCache para dedup de subtasks
 - EngineState com atomic counters
 - Unit tests (78 testes)
+
+### Fixed
+- **Bug crítico em CostBudget**: `f64` não somava corretamente usando `fetch_add` em bits
+  - Corrigido para usar CAS loop (compare_exchange_weak) para adição atômica correta de f64

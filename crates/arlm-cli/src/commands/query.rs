@@ -47,9 +47,9 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
     let context_str = if let Ok(Some(buffer)) = storage.get_buffer_by_name(project_name) {
         let bm25 =
             arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-        let hybrid = arlm_search::HybridSearch::new(bm25, None);
+        let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
         let results = hybrid
-            .search_fts(config.question, buffer.id, 10)
+            .search_fts(config.question, buffer.id, 10, None)
             .unwrap_or_default();
         arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt)
             .unwrap_or_default()

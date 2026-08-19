@@ -7,8 +7,16 @@ pub fn render_tree(root_id: &str, task: &str, max_depth: u32) -> String {
     let dim = Style::new().dim();
 
     let mut out = String::new();
-    let _ = writeln!(out, "{}", bold.apply_to(format!("RLM run {root_id} (maxDepth={max_depth})")));
-    let _ = writeln!(out, "{}", dim.apply_to(format!("└─ [completed/solve] {task} ✓")));
+    let _ = writeln!(
+        out,
+        "{}",
+        bold.apply_to(format!("RLM run {root_id} (maxDepth={max_depth})"))
+    );
+    let _ = writeln!(
+        out,
+        "{}",
+        dim.apply_to(format!("└─ [completed/solve] {task} ✓"))
+    );
     out
 }
 
@@ -18,10 +26,18 @@ pub fn render_search_results(results: &[SearchResultItem]) -> String {
     let cyan = Style::new().cyan();
 
     let mut out = String::new();
-    let _ = writeln!(out, "{}", bold.apply_to(format!("Search Results ({})", results.len())));
+    let _ = writeln!(
+        out,
+        "{}",
+        bold.apply_to(format!("Search Results ({})", results.len()))
+    );
 
     for (i, r) in results.iter().enumerate() {
-        let prefix = if i == results.len() - 1 { "└─" } else { "├─" };
+        let prefix = if i == results.len() - 1 {
+            "└─"
+        } else {
+            "├─"
+        };
         let score_str = format!("{:.2}", r.score);
         let score_display = if r.score >= 0.8 {
             console::Style::new().green().apply_to(score_str)

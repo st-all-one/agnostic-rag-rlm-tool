@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
+use crate::types::NodeStatus;
+
 /// Events emitted by the RLM engine.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RlmEvent {
     RunStart {
         run_id: Arc<str>,
@@ -51,6 +54,13 @@ pub enum RlmEvent {
         run_id: Arc<str>,
         node_id: String,
         task_hash: Arc<str>,
+    },
+    NodeEnd {
+        run_id: Arc<str>,
+        node_id: String,
+        status: NodeStatus,
+        duration_ms: u64,
+        cost: f64,
     },
     RunEnd {
         run_id: Arc<str>,
@@ -100,6 +110,7 @@ impl Default for EventBus {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
 

@@ -60,11 +60,10 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
                 let rows: Vec<crate::output::tree::HistoryRow> = records
                     .iter()
                     .map(|r| {
-                        let date = chrono::DateTime::from_timestamp(r.created_at, 0)
-                            .map_or_else(
-                                || r.created_at.to_string(),
-                                |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
-                            );
+                        let date = chrono::DateTime::from_timestamp(r.created_at, 0).map_or_else(
+                            || r.created_at.to_string(),
+                            |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
+                        );
                         let duration = r
                             .duration_ms
                             .map_or_else(|| "-".to_string(), |d| format!("{d}ms"));
@@ -90,11 +89,10 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
                 println!("| Date | Query | Duration | Results |");
                 println!("|------|-------|----------|---------|");
                 for r in &records {
-                    let date = chrono::DateTime::from_timestamp(r.created_at, 0)
-                        .map_or_else(
-                            || r.created_at.to_string(),
-                            |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
-                        );
+                    let date = chrono::DateTime::from_timestamp(r.created_at, 0).map_or_else(
+                        || r.created_at.to_string(),
+                        |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
+                    );
                     let dur = r
                         .duration_ms
                         .map_or_else(|| "-".to_string(), |d| format!("{d}ms"));

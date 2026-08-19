@@ -1,9 +1,25 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::panic,
+        clippy::needless_borrow,
+        clippy::unnecessary_literal_bound,
+        clippy::float_cmp,
+        clippy::duration_suboptimal_units,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )
+)]
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 mod commands;
+mod metrics;
 mod output;
 mod util;
 
@@ -75,6 +91,10 @@ enum Commands {
         /// Maximum budget in USD
         #[arg(long, default_value_t = 1.0)]
         max_budget: f64,
+
+        /// Render the RLM recursion tree in real time
+        #[arg(long)]
+        live: bool,
     },
 
     /// Index a project directory
@@ -167,6 +187,10 @@ enum Commands {
         /// Host to bind to
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
+
+        /// Enable MCP (Model Context Protocol) server on /mcp endpoint
+        #[arg(long)]
+        mcp: bool,
     },
 }
 
@@ -211,6 +235,7 @@ fn main() -> Result<()> {
             max_nodes,
             concurrency,
             max_budget,
+            live,
         } => rt.block_on(commands::run::execute(commands::run::RunConfig {
             task: &task,
             llm,
@@ -223,6 +248,7 @@ fn main() -> Result<()> {
             project: &cli.project,
             format,
             verbose: cli.verbose,
+            live,
         })),
         Commands::Index { path, chunk_size } => {
             commands::index::execute(commands::index::IndexConfig {
@@ -298,12 +324,13 @@ fn main() -> Result<()> {
                 verbose: cli.verbose,
             })
         }
-        Commands::Serve { port, host } => {
+        Commands::Serve { port, host, mcp } => {
             rt.block_on(commands::serve::execute(commands::serve::ServeConfig {
                 port,
                 host: &host,
                 project: &cli.project,
                 verbose: cli.verbose,
+                mcp,
             }))
         }
     }

@@ -50,8 +50,10 @@ pub fn build_search_results(
     let search_results: Vec<SearchResult> = results
         .iter()
         .filter_map(|hr| {
-            chunks.iter().find(|c| c.id == hr.chunk_id).map(|c| {
-                SearchResult {
+            chunks
+                .iter()
+                .find(|c| c.id == hr.chunk_id)
+                .map(|c| SearchResult {
                     chunk_id: hr.chunk_id,
                     score: hr.score,
                     file_path: c.file_path.clone(),
@@ -59,8 +61,7 @@ pub fn build_search_results(
                     line_end: c.line_end,
                     content: c.content.clone(),
                     language: c.language.clone(),
-                }
-            })
+                })
         })
         .collect();
 

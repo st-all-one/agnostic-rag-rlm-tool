@@ -47,7 +47,14 @@ impl HistoryManager {
 
         let id = self
             .storage
-            .insert_history(buffer_id, query, query_type, results_count, duration_ms, used_by)
+            .insert_history(
+                buffer_id,
+                query,
+                query_type,
+                results_count,
+                duration_ms,
+                used_by,
+            )
             .context("failed to record query")?;
 
         tracing::info!(history_id = id, query_type, used_by, "query recorded");
@@ -124,7 +131,14 @@ mod tests {
         let (mgr, _tmp) = setup();
 
         let id = mgr
-            .record(None, "find bugs", Some("search"), Some(5), Some(23), Some("opencode"))
+            .record(
+                None,
+                "find bugs",
+                Some("search"),
+                Some(5),
+                Some(23),
+                Some("opencode"),
+            )
             .unwrap();
         assert!(id > 0);
 
@@ -151,15 +165,8 @@ mod tests {
         let (mgr, _tmp) = setup();
 
         for i in 0..5 {
-            mgr.record(
-                None,
-                &format!("query {i}"),
-                None,
-                None,
-                None,
-                None,
-            )
-            .unwrap();
+            mgr.record(None, &format!("query {i}"), None, None, None, None)
+                .unwrap();
         }
 
         let recent = mgr.recent(None, 3).unwrap();

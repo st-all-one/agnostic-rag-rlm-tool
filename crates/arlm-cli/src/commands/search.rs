@@ -39,10 +39,10 @@ pub fn execute(config: SearchConfig<'_>) -> Result<()> {
         .context("project not found. Run `arlm index` first.")?;
 
     let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-    let hybrid = arlm_search::HybridSearch::new(bm25, None);
+    let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
 
     let results = hybrid
-        .search_fts(config.query, buffer.id, config.top_k)
+        .search_fts(config.query, buffer.id, config.top_k, None)
         .context("FTS search failed")?;
 
     let search_results =
@@ -55,9 +55,10 @@ pub fn execute(config: SearchConfig<'_>) -> Result<()> {
                 .filter(|r| config.min_score.is_none_or(|min| r.score >= min))
                 .filter(|r| {
                     #[allow(clippy::unnecessary_map_or)]
-                    config.file_pattern.as_ref().map_or(true, |pat| {
-                        r.file_path.contains(&**pat)
-                    })
+                    config
+                        .file_pattern
+                        .as_ref()
+                        .map_or(true, |pat| r.file_path.contains(&**pat))
                 })
                 .map(|r| {
                     serde_json::json!({
@@ -72,12 +73,11 @@ pub fn execute(config: SearchConfig<'_>) -> Result<()> {
                 })
                 .collect();
 
-            let output = crate::output::json::JsonOutput::ok()
-                .with_data(serde_json::json!({
-                    "query": config.query,
-                    "results": items,
-                    "count": search_results.len(),
-                }));
+            let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+                "query": config.query,
+                "results": items,
+                "count": search_results.len(),
+            }));
             output.print();
         }
         Format::Tree => {

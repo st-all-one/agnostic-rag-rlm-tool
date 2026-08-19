@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use crate::chunker::{
-    ChunkingStrategy, RawChunk, estimate_tokens, nth_line_byte_offset, prev_char_boundary,
-    detect_language,
+    ChunkingStrategy, RawChunk, detect_language, estimate_tokens, nth_line_byte_offset,
+    prev_char_boundary,
 };
 
 /// Configuration for code-aware chunking.
@@ -29,9 +29,10 @@ impl ChunkingStrategy for CodeChunker {
         let language = detect_language(path);
 
         match language.as_deref() {
-            Some("rust" | "python" | "javascript" | "typescript" | "go" | "java" | "cpp" | "c" | "ruby" | "php") => {
-                self.chunk_by_structures(content, language.as_deref())
-            }
+            Some(
+                "rust" | "python" | "javascript" | "typescript" | "go" | "java" | "cpp" | "c"
+                | "ruby" | "php",
+            ) => self.chunk_by_structures(content, language.as_deref()),
             _ => self.chunk_by_lines(content, language.as_deref()),
         }
     }
@@ -110,11 +111,7 @@ impl CodeChunker {
     }
 
     /// Chunk by lines with overlap.
-    fn chunk_by_lines<'a>(
-        &self,
-        content: &'a str,
-        language: Option<&str>,
-    ) -> Vec<RawChunk<'a>> {
+    fn chunk_by_lines<'a>(&self, content: &'a str, language: Option<&str>) -> Vec<RawChunk<'a>> {
         let mut chunks = Vec::with_capacity(64);
         let mut line_start = 0usize;
         let mut byte_start = 0usize;
@@ -237,9 +234,7 @@ fn is_structure_start(line: &str, language: Option<&str>) -> bool {
                 || line.starts_with("type ")
         }
         Some("python") => {
-            line.starts_with("def ")
-                || line.starts_with("class ")
-                || line.starts_with("async def ")
+            line.starts_with("def ") || line.starts_with("class ") || line.starts_with("async def ")
         }
         Some("javascript" | "typescript") => {
             line.starts_with("function ")
@@ -253,9 +248,7 @@ fn is_structure_start(line: &str, language: Option<&str>) -> bool {
                 || line.starts_with("let ")
         }
         Some("go") => {
-            line.starts_with("func ")
-                || line.starts_with("type ")
-                || line.starts_with("package ")
+            line.starts_with("func ") || line.starts_with("type ") || line.starts_with("package ")
         }
         Some("java") => {
             line.starts_with("public class ")
@@ -282,7 +275,11 @@ fn is_structure_start(line: &str, language: Option<&str>) -> bool {
 
 /// Find the 1-based line number for a byte offset.
 fn byte_start_line(content: &str, byte_offset: usize) -> usize {
-    content[..byte_offset].chars().filter(|&c| c == '\n').count() + 1
+    content[..byte_offset]
+        .chars()
+        .filter(|&c| c == '\n')
+        .count()
+        + 1
 }
 
 #[cfg(test)]

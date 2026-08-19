@@ -35,10 +35,10 @@ impl Storage {
         let conn = conn.lock();
 
         conn.execute(
-                "INSERT INTO buffers (name, path) VALUES (?1, ?2)",
-                params![buffer.name, buffer.path],
-            )
-            .context("failed to insert buffer")?;
+            "INSERT INTO buffers (name, path) VALUES (?1, ?2)",
+            params![buffer.name, buffer.path],
+        )
+        .context("failed to insert buffer")?;
 
         let buffer_id = conn.last_insert_rowid();
         tracing::info!(buffer_id, name = %buffer.name, path = %buffer.path, "inserted buffer");
@@ -182,12 +182,17 @@ impl Storage {
         let conn = self.conn();
         let conn = conn.lock();
 
-        conn.execute("DELETE FROM chunk_texts WHERE chunk_id IN (SELECT id FROM chunks WHERE buffer_id = ?1)", params![buffer_id])?;
-        conn.execute(
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM chunk_texts WHERE chunk_id IN (SELECT id FROM chunks WHERE buffer_id = ?1)",
+            params![buffer_id],
+        )?;
+        tx.execute(
             "DELETE FROM chunks WHERE buffer_id = ?1",
             params![buffer_id],
         )?;
-        conn.execute("DELETE FROM buffers WHERE id = ?1", params![buffer_id])?;
+        tx.execute("DELETE FROM buffers WHERE id = ?1", params![buffer_id])?;
+        tx.commit()?;
 
         tracing::info!(buffer_id, "deleted buffer");
 

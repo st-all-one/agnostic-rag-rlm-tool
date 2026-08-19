@@ -154,8 +154,7 @@ impl ProjectInfo {
             id: buffer.id,
             name: buffer.name.clone(),
             path: PathBuf::from(&buffer.path),
-            created_at: DateTime::from_timestamp(buffer.created_at, 0)
-                .unwrap_or_default(),
+            created_at: DateTime::from_timestamp(buffer.created_at, 0).unwrap_or_default(),
             last_indexed_at: buffer
                 .last_indexed_at
                 .and_then(|ts| DateTime::from_timestamp(ts, 0)),

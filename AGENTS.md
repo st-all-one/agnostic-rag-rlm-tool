@@ -270,3 +270,5 @@ SQLITE3_FLAGS="-DSQLITE_DIRECT_OVERFLOW_READ -DSQLITE_ENABLE_BATCH_ATOMIC_WRITE 
 - `ai-guides/rlm_guide/` — RLM architecture and patterns
 - `ai-guides/rust_guide/` — Rust 2024 best practices
 - `ai-guides/sqlite_guide/` — SQLite optimization, FTS5, WAL
+
+NEVER COMMIT

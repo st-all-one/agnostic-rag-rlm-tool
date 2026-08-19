@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, params, params_from_iter};
 
 use super::conn::Storage;
 
@@ -19,6 +19,7 @@ pub struct Chunk {
     pub token_count: Option<i64>,
     pub status: String,
     pub created_at: i64,
+    pub last_accessed_at: i64,
 }
 
 /// New chunk to insert.
@@ -81,7 +82,7 @@ impl Storage {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count, status, created_at
+                "SELECT id, buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count, status, created_at, last_accessed_at
                  FROM chunks WHERE id = ?1",
             )
             .context("failed to prepare get_chunk query")?;
@@ -101,6 +102,7 @@ impl Storage {
                 token_count: row.get(10)?,
                 status: row.get(11)?,
                 created_at: row.get(12)?,
+                last_accessed_at: row.get(13)?,
             })
         })?;
 
@@ -154,7 +156,7 @@ impl Storage {
 
         let mut stmt = conn
             .prepare(
-                "SELECT id, buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count, status, created_at
+                "SELECT id, buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count, status, created_at, last_accessed_at
                  FROM chunks WHERE buffer_id = ?1 ORDER BY id",
             )
             .context("failed to prepare list_chunks query")?;
@@ -175,6 +177,7 @@ impl Storage {
                     token_count: row.get(10)?,
                     status: row.get(11)?,
                     created_at: row.get(12)?,
+                    last_accessed_at: row.get(13)?,
                 })
             })?
             .filter_map(std::result::Result::ok)
@@ -198,6 +201,76 @@ impl Storage {
             |row| row.get(0),
         )
         .context("failed to count chunks")
+    }
+
+    /// Refresh `last_accessed_at` for the given chunk IDs to `unixepoch()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update fails.
+    pub fn refresh_last_accessed(&self, chunk_ids: &[i64]) -> Result<()> {
+        if chunk_ids.is_empty() {
+            return Ok(());
+        }
+        let conn = self.conn();
+        let conn = conn.lock();
+
+        let placeholders: Vec<String> = chunk_ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect();
+        let sql = format!(
+            "UPDATE chunks SET last_accessed_at = unixepoch() WHERE id IN ({})",
+            placeholders.join(", ")
+        );
+
+        conn.execute(&sql, params_from_iter(chunk_ids.iter()))
+            .context("failed to refresh last_accessed_at")?;
+
+        Ok(())
+    }
+
+    /// Get `last_accessed_at` for multiple chunks by ID.
+    ///
+    /// Returns a map of `chunk_id` -> `last_accessed_at` (unix seconds).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_chunks_last_accessed(
+        &self,
+        chunk_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, i64>> {
+        if chunk_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let conn = self.conn();
+        let conn = conn.lock();
+
+        let placeholders: Vec<String> = chunk_ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect();
+        let sql = format!(
+            "SELECT id, last_accessed_at FROM chunks WHERE id IN ({})",
+            placeholders.join(", ")
+        );
+
+        let mut stmt = conn
+            .prepare(&sql)
+            .context("failed to prepare get_chunks_last_accessed query")?;
+        let rows = stmt.query_map(params_from_iter(chunk_ids.iter()), |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+        })?;
+
+        let mut map = std::collections::HashMap::new();
+        for row in rows {
+            let (id, ts) = row.context("failed to read last_accessed_at row")?;
+            map.insert(id, ts);
+        }
+        Ok(map)
     }
 }
 

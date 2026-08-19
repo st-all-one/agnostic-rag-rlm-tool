@@ -42,6 +42,7 @@ futures = "0.3"
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde_yaml_ng = "0.9"
 
 # Utilities
 anyhow = "1"
@@ -56,12 +57,16 @@ hex = "0.4"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 parking_lot = "0.12"
+regex = "1"
 crossbeam-channel = "0.5"
 num_cpus = "1.16"
 indicatif = "0.17"
 console = "0.15"
 mimalloc = "0.1"
 notify = "7"
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
 
 # Internal crates
 arlm-storage = { path = "crates/arlm-storage" }

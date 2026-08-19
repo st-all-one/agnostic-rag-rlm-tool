@@ -14,7 +14,8 @@ pub fn execute_create(title: &str, project: &Path, format: Format) -> Result<()>
         .unwrap_or("default");
 
     let storage = open_storage(project)?;
-    let mgr = arlm_memory::SessionManager::new(storage).context("failed to create session manager")?;
+    let mgr =
+        arlm_memory::SessionManager::new(storage).context("failed to create session manager")?;
     let session_id = mgr
         .create(project_name, title)
         .context("failed to create session")?;
@@ -34,7 +35,9 @@ pub fn execute_create(title: &str, project: &Path, format: Format) -> Result<()>
             println!("  Title: {title}");
         }
         Format::Markdown => {
-            println!("# Session Created\n\n- **ID:** {session_id}\n- **Project:** {project_name}\n- **Title:** {title}");
+            println!(
+                "# Session Created\n\n- **ID:** {session_id}\n- **Project:** {project_name}\n- **Title:** {title}"
+            );
         }
         Format::Prompt => {
             println!("Session created: {session_id} (project: {project_name}, title: {title})");
@@ -48,15 +51,20 @@ pub fn execute_resume(session_id: &str, project: &Path, format: Format) -> Resul
     let _timer = arlm_core::logging::ScopedTimer::new("cli_session_resume");
 
     let storage = open_storage(project)?;
-    let mgr = arlm_memory::SessionManager::new(storage).context("failed to create session manager")?;
+    let mgr =
+        arlm_memory::SessionManager::new(storage).context("failed to create session manager")?;
 
     let session = mgr
         .get(session_id)
         .context("failed to get session")?
         .context("session not found")?;
 
-    let contexts = mgr.get_contexts(session_id).context("failed to get contexts")?;
-    let history = mgr.get_history(session_id, 10).context("failed to get history")?;
+    let contexts = mgr
+        .get_contexts(session_id)
+        .context("failed to get contexts")?;
+    let history = mgr
+        .get_history(session_id, 10)
+        .context("failed to get history")?;
 
     match format {
         Format::Json => {

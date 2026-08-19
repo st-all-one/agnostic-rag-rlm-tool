@@ -72,6 +72,7 @@ impl Embedder for FallbackEmbedder {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::useless_vec)]
 mod tests {
     use super::*;
 

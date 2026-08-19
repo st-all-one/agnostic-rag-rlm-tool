@@ -3,8 +3,8 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 
-use arlm_storage::sqlite::chunks::NewChunk;
 use arlm_storage::Storage;
+use arlm_storage::sqlite::chunks::NewChunk;
 
 use crate::ScopedTimer;
 
@@ -143,9 +143,7 @@ impl KnowledgeEngine {
         let content = std::fs::read_to_string(file_path)
             .with_context(|| format!("failed to read file: {}", file_path.display()))?;
 
-        let path_str = file_path
-            .to_str()
-            .context("file path is not valid UTF-8")?;
+        let path_str = file_path.to_str().context("file path is not valid UTF-8")?;
 
         let bytes = content.as_bytes();
         let chunk_size = options.max_chunk_bytes;
@@ -202,11 +200,7 @@ impl KnowledgeEngine {
             line_start = line_end + 1;
         }
 
-        tracing::debug!(
-            file = path_str,
-            chunks = chunk_ids.len(),
-            "file indexed"
-        );
+        tracing::debug!(file = path_str, chunks = chunk_ids.len(), "file indexed");
 
         Ok(chunk_ids)
     }
@@ -234,15 +228,14 @@ impl KnowledgeEngine {
     }
 
     fn count_file_chunks(path: &Path, max_chunk_bytes: usize) -> u64 {
-        std::fs::read(path)
-            .map_or(0, |bytes| {
-                let len = bytes.len();
-                if len == 0 {
-                    1
-                } else {
-                    ((len - 1) / max_chunk_bytes + 1) as u64
-                }
-            })
+        std::fs::read(path).map_or(0, |bytes| {
+            let len = bytes.len();
+            if len == 0 {
+                1
+            } else {
+                ((len - 1) / max_chunk_bytes + 1) as u64
+            }
+        })
     }
 }
 
@@ -353,9 +346,7 @@ mod tests {
         std::fs::write(&file2, "print('hello')").unwrap();
 
         let opts = IndexOptions::default();
-        let result = engine
-            .index_directory("test", &src_dir, &opts)
-            .unwrap();
+        let result = engine.index_directory("test", &src_dir, &opts).unwrap();
 
         assert_eq!(result.files_processed, 2);
         assert!(result.chunks_created >= 2);

@@ -21,6 +21,20 @@ impl Storage {
     /// Returns an error if the directory cannot be created, the database cannot
     /// be opened, pragmas cannot be applied, or migrations fail.
     pub fn open(path: &Path) -> Result<Self> {
+        Self::open_with_options(path, false)
+    }
+
+    /// Open with exclusive mode for CLI (single-process, no -shm file).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be created, the database cannot
+    /// be opened, pragmas cannot be applied, or migrations fail.
+    pub fn open_exclusive(path: &Path) -> Result<Self> {
+        Self::open_with_options(path, true)
+    }
+
+    fn open_with_options(path: &Path, exclusive: bool) -> Result<Self> {
         std::fs::create_dir_all(path).context("failed to create storage directory")?;
 
         let db_path = path.join("knowledge.db");
@@ -39,15 +53,24 @@ impl Storage {
             PRAGMA wal_autocheckpoint=2000;
             PRAGMA journal_size_limit=33554432;
             PRAGMA hard_heap_limit=104857600;
+            PRAGMA threads=4;
+            PRAGMA automatic_index=ON;
+            PRAGMA analysis_limit=1000;
             PRAGMA optimize;
             ",
         )
         .context("failed to apply SQLite pragmas")?;
 
+        // Exclusive mode: eliminates -shm file (single-process CLI)
+        if exclusive {
+            conn.execute_batch("PRAGMA locking_mode=EXCLUSIVE;")
+                .context("failed to set exclusive locking")?;
+        }
+
         // Run migrations
         schema::run_migrations(&conn)?;
 
-        tracing::info!(path = %db_path.display(), "SQLite storage opened");
+        tracing::info!(path = %db_path.display(), exclusive, "SQLite storage opened");
 
         Ok(Self {
             sqlite: Arc::new(Mutex::new(conn)),

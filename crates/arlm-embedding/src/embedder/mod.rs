@@ -120,6 +120,7 @@ impl OwnedFile {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -139,7 +140,7 @@ mod tests {
     fn test_owned_file_not_utf8() {
         let dir = tempfile::tempdir().expect("tempdir");
         let file_path = dir.path().join("binary.bin");
-        std::fs::write(&file_path, &[0xFF, 0xFE, 0x00]).expect("write");
+        std::fs::write(&file_path, [0xFF, 0xFE, 0x00]).expect("write");
 
         let result = OwnedFile::new(&file_path);
         assert!(result.is_err());

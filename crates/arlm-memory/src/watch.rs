@@ -53,9 +53,7 @@ impl WatchHandle {
     ///
     /// Returns an error if the channel is disconnected.
     pub fn recv(&self) -> Result<WatchEvent> {
-        self.rx
-            .recv()
-            .context("watch channel disconnected")
+        self.rx.recv().context("watch channel disconnected")
     }
 
     /// Try to receive an event without blocking.
@@ -98,7 +96,8 @@ impl WatchMonitor {
                     let _ = tx.send(watch_event);
                 }
             },
-            notify::Config::default().with_poll_interval(Duration::from_millis(options.debounce_ms)),
+            notify::Config::default()
+                .with_poll_interval(Duration::from_millis(options.debounce_ms)),
         )
         .context("failed to create file watcher")?;
 

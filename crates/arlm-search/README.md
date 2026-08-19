@@ -25,10 +25,16 @@ src/
 
 | Tier | Nome | Latência | Como funciona |
 |------|------|----------|---------------|
-| 0 | `fts` | ~5ms | BM25 puro via FTS5 |
+| 0 | `fts` | ~7ms | BM25 puro via FTS5 |
 | 1 | `entity` | ~8ms | BM25 + entity RRF (padrão) |
 | 2 | `vector` | ~21ms | BM25 + entity + vector RRF |
 | 3 | `llm` | ~200ms | Tier 2 + LLM rerank (requer --llm) |
+
+## FTS5 Otimizado
+
+Tabela FTS5 usa `detail='column'` para ~40% menos espaço:
+- Suporta: OR, AND, NOT, queries por coluna
+- Não suporta: frases, NEAR (não necessário para BM25)
 
 ## Uso
 

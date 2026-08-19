@@ -37,10 +37,10 @@ pub fn execute(config: ContextConfig<'_>) -> Result<()> {
         .context("project not found. Run `arlm index` first.")?;
 
     let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-    let hybrid = arlm_search::HybridSearch::new(bm25, None);
+    let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
 
     let results = hybrid
-        .search_fts(config.task, buffer.id, config.top_k)
+        .search_fts(config.task, buffer.id, config.top_k, None)
         .context("FTS search failed")?;
 
     let search_format = match config.format {

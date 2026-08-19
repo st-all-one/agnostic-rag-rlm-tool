@@ -15,6 +15,12 @@ pub trait LlmBackend: Send + Sync {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::unnecessary_literal_bound
+)]
 mod tests {
     use super::*;
     use crate::types::{Message, Role, UsageSummary};

@@ -315,10 +315,10 @@ fn discover_files_recursive(dir: &Path, files: &mut Vec<PathBuf>) -> EmbeddingRe
 #[must_use]
 pub fn is_text_file(path: &Path) -> bool {
     let text_extensions = [
-        "rs", "py", "js", "jsx", "ts", "tsx", "go", "java", "cpp", "cc", "cxx", "c", "h",
-        "rb", "php", "md", "txt", "log", "json", "yaml", "yml", "toml", "xml", "html", "css",
-        "scss", "sql", "sh", "bash", "zsh", "fish", "vim", "el", "lisp", "r", "R", "jl",
-        "swift", "kt", "scala", "ex", "exs", "erl", "hs", "ml", "clj", "lua", "pl", "pm",
+        "rs", "py", "js", "jsx", "ts", "tsx", "go", "java", "cpp", "cc", "cxx", "c", "h", "rb",
+        "php", "md", "txt", "log", "json", "yaml", "yml", "toml", "xml", "html", "css", "scss",
+        "sql", "sh", "bash", "zsh", "fish", "vim", "el", "lisp", "r", "R", "jl", "swift", "kt",
+        "scala", "ex", "exs", "erl", "hs", "ml", "clj", "lua", "pl", "pm",
     ];
 
     path.extension()
@@ -327,6 +327,7 @@ pub fn is_text_file(path: &Path) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -385,11 +386,7 @@ mod tests {
 
         let dir = tempfile::tempdir().expect("tempdir");
         let file_path = dir.path().join("test.rs");
-        std::fs::write(
-            &file_path,
-            "fn main() {\n    println!(\"hello\");\n}",
-        )
-        .expect("write");
+        std::fs::write(&file_path, "fn main() {\n    println!(\"hello\");\n}").expect("write");
 
         let embedder = Arc::new(FallbackEmbedder::new(128));
         let pipeline = IngestionPipeline::new(embedder, None);

@@ -1,7 +1,10 @@
 pub mod json;
+pub mod live_tree;
 pub mod markdown;
 pub mod prompt;
 pub mod tree;
+
+pub use live_tree::LiveTree;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {

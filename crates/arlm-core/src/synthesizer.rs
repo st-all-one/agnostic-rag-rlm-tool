@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::budget::RunBudget;
 use crate::logging::ScopedTimer;
-use crate::types::{NodeStatus, RlmNode, StartRunInput};
+use crate::types::{Action, NodeStatus, RlmNode, StartRunInput};
 
 const SYNTHESIZER_SYSTEM: &str = "You are a synthesizer in an RLM system. Merge child outputs into one coherent, complete answer.";
 
@@ -47,13 +47,14 @@ pub async fn synthesize(
         },
     ];
 
-    let request = CompletionRequest {
+    let sampling = crate::sampling::SamplingArgs::for_node_type(Action::Solve);
+    let request = sampling.apply_to_request(CompletionRequest {
         model: model.clone(),
         messages,
-        temperature: Some(0.3),
+        temperature: None,
         max_tokens: Some(4096),
         stop: None,
-    };
+    });
 
     let response = retry_with_backoff(&input.retry_policy.inner, || {
         let req = request.clone();

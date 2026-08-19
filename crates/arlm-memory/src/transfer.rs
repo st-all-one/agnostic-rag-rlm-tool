@@ -149,11 +149,7 @@ impl TransferEngine {
     /// # Errors
     ///
     /// Returns an error if the query fails.
-    pub fn common_patterns(
-        &self,
-        from_buffer_id: i64,
-        to_buffer_id: i64,
-    ) -> Result<Vec<String>> {
+    pub fn common_patterns(&self, from_buffer_id: i64, to_buffer_id: i64) -> Result<Vec<String>> {
         let _timer = ScopedTimer::new("knowledge_common_patterns");
 
         let source_patterns = self

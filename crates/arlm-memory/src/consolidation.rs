@@ -117,11 +117,7 @@ impl ConsolidationEngine {
         Ok(removed)
     }
 
-    fn remove_low_confidence_patterns(
-        &self,
-        buffer_id: i64,
-        min_confidence: f64,
-    ) -> Result<u64> {
+    fn remove_low_confidence_patterns(&self, buffer_id: i64, min_confidence: f64) -> Result<u64> {
         let conn = self.storage.conn();
         let conn = conn.lock();
 

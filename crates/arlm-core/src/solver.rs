@@ -7,7 +7,7 @@ use tracing::info;
 use crate::budget::RunBudget;
 use crate::cache::ResultCache;
 use crate::logging::ScopedTimer;
-use crate::types::StartRunInput;
+use crate::types::{Action, StartRunInput};
 
 const SOLVER_SYSTEM: &str = "You are a worker node in an RLM system. Solve the task directly and return a concrete, actionable answer.";
 
@@ -54,13 +54,14 @@ pub async fn solve_task(
         },
     ];
 
-    let request = CompletionRequest {
+    let sampling = crate::sampling::SamplingArgs::for_node_type(Action::Solve);
+    let request = sampling.apply_to_request(CompletionRequest {
         model: model.clone(),
         messages,
-        temperature: Some(0.3),
+        temperature: None,
         max_tokens: Some(2048),
         stop: None,
-    };
+    });
 
     let response = retry_with_backoff(&input.retry_policy.inner, || {
         let req = request.clone();
@@ -85,17 +86,18 @@ pub async fn solve_task(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 mod tests {
     #[test]
     fn test_solver_prompt_with_forced_reason() {
         let task = "implement feature X";
         let reason = "max depth reached";
         let prompt = format!(
-            r#"Solve this task directly. You were forced to solve because: {reason}
+            "Solve this task directly. You were forced to solve because: {reason}
 
 Task: {task}
 
-Provide a concrete, actionable answer."#,
+Provide a concrete, actionable answer.",
         );
         assert!(prompt.contains("forced to solve"));
         assert!(prompt.contains(task));
@@ -105,9 +107,9 @@ Provide a concrete, actionable answer."#,
     fn test_solver_prompt_without_forced_reason() {
         let task = "fix bug Y";
         let prompt = format!(
-            r#"Solve this task directly and return a concrete answer.
+            "Solve this task directly and return a concrete answer.
 
-Task: {task}"#,
+Task: {task}",
         );
         assert!(!prompt.contains("forced"));
         assert!(prompt.contains(task));

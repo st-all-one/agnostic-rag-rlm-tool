@@ -63,29 +63,40 @@ impl RunBudget {
     }
 }
 
-/// Cost budget in USD.
+/// Cost budget in USD using atomic CAS loop for correct f64 addition.
 #[derive(Debug)]
 struct CostBudget {
-    spent: AtomicU64,
+    spent_bits: AtomicU64,
     max: f64,
 }
 
 impl CostBudget {
     fn new(max: f64) -> Self {
         Self {
-            spent: AtomicU64::new(0),
+            spent_bits: AtomicU64::new(0),
             max,
         }
     }
 
     fn spend(&self, amount: f64) {
-        let bits = amount.to_bits();
-        self.spent.fetch_add(bits, Ordering::Relaxed);
+        loop {
+            let current_bits = self.spent_bits.load(Ordering::Relaxed);
+            let current = f64::from_bits(current_bits);
+            let new_val = current + amount;
+            let new_bits = new_val.to_bits();
+            if self
+                .spent_bits
+                .compare_exchange_weak(current_bits, new_bits, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+            {
+                break;
+            }
+        }
     }
 
     #[allow(clippy::cast_precision_loss)]
     fn remaining(&self) -> f64 {
-        let spent_bits = self.spent.load(Ordering::Relaxed);
+        let spent_bits = self.spent_bits.load(Ordering::Relaxed);
         let spent = f64::from_bits(spent_bits);
         (self.max - spent).max(0.0)
     }

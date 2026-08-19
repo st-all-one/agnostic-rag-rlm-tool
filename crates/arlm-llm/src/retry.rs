@@ -122,6 +122,12 @@ where
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::duration_suboptimal_units
+)]
 mod tests {
     use super::*;
     use std::sync::Arc;

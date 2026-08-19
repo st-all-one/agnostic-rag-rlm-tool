@@ -1,7 +1,16 @@
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
-const MIGRATIONS: &[&str] = &[include_str!("../../migrations/001_initial.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../../migrations/001_initial.sql"),
+    include_str!("../../migrations/004_add_runs_cost.sql"),
+    include_str!("../../migrations/005_add_trajectories.sql"),
+    include_str!("../../migrations/006_add_sessions.sql"),
+    include_str!("../../migrations/007_add_result_cache.sql"),
+    include_str!("../../migrations/008_add_events.sql"),
+    include_str!("../../migrations/009_add_entities.sql"),
+    include_str!("../../migrations/010_add_last_accessed_at.sql"),
+];
 
 /// Run all pending migrations.
 ///
@@ -45,6 +54,10 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         }
     }
 
+    // Run ANALYZE after migrations for accurate query planning stats
+    conn.execute_batch("ANALYZE;")
+        .context("failed to run ANALYZE")?;
+
     Ok(())
 }
 
@@ -67,7 +80,7 @@ mod tests {
             .unwrap()
             .query_map([], |row| row.get(0))
             .unwrap()
-            .filter_map(|r| r.ok())
+            .filter_map(std::result::Result::ok)
             .collect();
 
         assert!(tables.contains(&"chunks".to_string()));
@@ -77,6 +90,15 @@ mod tests {
         assert!(tables.contains(&"history".to_string()));
         assert!(tables.contains(&"patterns".to_string()));
         assert!(tables.contains(&"schema_version".to_string()));
+        assert!(tables.contains(&"runs".to_string()));
+        assert!(tables.contains(&"run_model_usage".to_string()));
+        assert!(tables.contains(&"node_calls".to_string()));
+        assert!(tables.contains(&"trajectories".to_string()));
+        assert!(tables.contains(&"sessions".to_string()));
+        assert!(tables.contains(&"session_contexts".to_string()));
+        assert!(tables.contains(&"session_history".to_string()));
+        assert!(tables.contains(&"result_cache".to_string()));
+        assert!(tables.contains(&"events".to_string()));
     }
 
     #[test]
@@ -93,6 +115,6 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 8);
     }
 }

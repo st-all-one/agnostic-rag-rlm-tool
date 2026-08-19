@@ -441,6 +441,12 @@ pub fn now_ms() -> u64 {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::float_cmp
+)]
 mod tests {
     use super::*;
 

@@ -79,6 +79,18 @@ task → planner → solve → solver → result
 - **Budget**: Para quando custo/tokens/tempo estouram
 - **Error threshold**: Para após N erros consecutivos
 
+## Budget
+
+```rust
+// Controle de custo com CAS loop para f64 correto
+pub struct CostBudget {
+    spent_bits: AtomicU64,  // f64 bits via CAS loop
+    max: f64,
+}
+```
+
+**Nota**: O `CostBudget` usa `compare_exchange_weak` para adição atômica correta de `f64`. Usar `fetch_add` em bits de `f64` não resulta em soma correta.
+
 ## Concorrência
 
 ```rust

@@ -5,6 +5,7 @@ pub enum SearchTier {
     Fts,
     Entity,
     Vector,
+    LlmRerank,
 }
 
 impl fmt::Display for SearchTier {
@@ -13,6 +14,7 @@ impl fmt::Display for SearchTier {
             Self::Fts => write!(f, "fts"),
             Self::Entity => write!(f, "entity"),
             Self::Vector => write!(f, "vector"),
+            Self::LlmRerank => write!(f, "llm_rerank"),
         }
     }
 }
@@ -26,6 +28,12 @@ pub struct Bm25Result {
 #[derive(Debug, Clone)]
 pub struct SemanticResult {
     pub chunk_id: u64,
+    pub score: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntityResult {
+    pub chunk_id: i64,
     pub score: f32,
 }
 
@@ -98,6 +106,7 @@ mod tests {
         assert_eq!(SearchTier::Fts.to_string(), "fts");
         assert_eq!(SearchTier::Entity.to_string(), "entity");
         assert_eq!(SearchTier::Vector.to_string(), "vector");
+        assert_eq!(SearchTier::LlmRerank.to_string(), "llm_rerank");
     }
 
     #[test]

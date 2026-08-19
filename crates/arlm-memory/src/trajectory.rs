@@ -132,11 +132,7 @@ impl TrajectoryEngine {
     /// # Errors
     ///
     /// Returns an error if the query fails.
-    pub fn find_by_hash(
-        &self,
-        task: &str,
-        project_name: &str,
-    ) -> Result<Option<RunTrajectory>> {
+    pub fn find_by_hash(&self, task: &str, project_name: &str) -> Result<Option<RunTrajectory>> {
         let task_hash = compute_task_hash(task);
 
         let conn = self.storage.conn();
@@ -169,7 +165,9 @@ impl TrajectoryEngine {
             })
         })?;
 
-        rows.next().transpose().context("failed to find trajectory by hash")
+        rows.next()
+            .transpose()
+            .context("failed to find trajectory by hash")
     }
 
     /// Find similar trajectories by semantic search on task text.
@@ -245,11 +243,7 @@ impl TrajectoryEngine {
     /// # Errors
     ///
     /// Returns an error if the trajectory is not found.
-    pub fn replay_strategy(
-        &self,
-        task: &str,
-        project_name: &str,
-    ) -> Result<Option<Vec<String>>> {
+    pub fn replay_strategy(&self, task: &str, project_name: &str) -> Result<Option<Vec<String>>> {
         let trajectory = self.find_by_hash(task, project_name)?;
 
         Ok(trajectory.map(|t| flatten_decomposition(&t.root)))

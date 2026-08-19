@@ -83,6 +83,17 @@ PRAGMA busy_timeout=5000;
 PRAGMA wal_autocheckpoint=2000;
 PRAGMA journal_size_limit=33554432; -- 32MB
 PRAGMA hard_heap_limit=104857600;   -- 100MB
+PRAGMA threads=4;                   -- sort paralelo
+PRAGMA automatic_index=ON;          -- índices automáticos
+PRAGMA analysis_limit=1000;         -- ANALYZE rápido
+PRAGMA locking_mode=EXCLUSIVE;      -- CLI only (open_exclusive)
+```
+
+## Uso Exclusive (CLI)
+
+```rust
+// Para CLI single-process (elimina arquivo -shm)
+let storage = Storage::open_exclusive(Path::new("~/.arlm/data"))?;
 ```
 
 ## Testes

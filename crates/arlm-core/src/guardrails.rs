@@ -31,6 +31,7 @@ pub fn sanitize_subtasks(subtasks: &[String], parent_task: &str) -> Vec<String> 
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
 
@@ -69,7 +70,7 @@ mod tests {
         let subtasks = vec![
             "  Subtask 1  ".to_string(),
             "Subtask 2".to_string(),
-            "".to_string(),
+            String::new(),
             "   ".to_string(),
         ];
         let result = sanitize_subtasks(&subtasks, "parent task");

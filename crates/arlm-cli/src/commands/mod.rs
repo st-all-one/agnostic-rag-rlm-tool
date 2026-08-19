@@ -3,6 +3,7 @@ pub mod context;
 pub mod cost;
 pub mod history;
 pub mod index;
+pub mod mcp;
 pub mod query;
 pub mod run;
 pub mod search;

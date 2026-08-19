@@ -44,8 +44,7 @@ impl JsonOutput {
             map.insert("metadata".to_string(), serde_json::json!(self.metadata));
         }
         let output = serde_json::Value::Object(map);
-        serde_json::to_string_pretty(&output)
-            .unwrap_or_else(|_| r#"{"status":"ok"}"#.to_string())
+        serde_json::to_string_pretty(&output).unwrap_or_else(|_| r#"{"status":"ok"}"#.to_string())
     }
 }
 
@@ -56,7 +55,7 @@ mod tests {
     #[test]
     fn test_json_output_ok() {
         let output = JsonOutput::ok();
-        let s = format!("{}", output.status);
+        let s = output.status.clone();
         assert_eq!(s, "ok");
     }
 

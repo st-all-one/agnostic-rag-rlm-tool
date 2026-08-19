@@ -29,11 +29,7 @@ struct BgeM3Model {
 
 impl BgeM3Model {
     #[allow(clippy::unused_self)]
-    fn forward(
-        &self,
-        _input_ids: &Tensor,
-        _attention_mask: &Tensor,
-    ) -> EmbeddingResult<Tensor> {
+    fn forward(&self, _input_ids: &Tensor, _attention_mask: &Tensor) -> EmbeddingResult<Tensor> {
         // Placeholder: real implementation loads from safetensors
         Err(EmbeddingError::ModelNotLoaded(
             "BGE-M3 model files not found. Provide a model directory with \
@@ -80,10 +76,7 @@ impl BgeM3Embedder {
     }
 
     /// Tokenize and prepare model inputs for a batch of texts.
-    fn prepare_inputs(
-        &self,
-        texts: &[&str],
-    ) -> EmbeddingResult<(Tensor, Tensor)> {
+    fn prepare_inputs(&self, texts: &[&str]) -> EmbeddingResult<(Tensor, Tensor)> {
         let encodings: Vec<_> = texts
             .iter()
             .map(|t| {
@@ -111,8 +104,8 @@ impl BgeM3Embedder {
             attention_masks.push(mask);
         }
 
-        let input_ids =
-            Tensor::new(input_ids, &self.device).map_err(|e| EmbeddingError::Candle(e.to_string()))?;
+        let input_ids = Tensor::new(input_ids, &self.device)
+            .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
         let attention_mask = Tensor::new(attention_masks, &self.device)
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
 
@@ -184,6 +177,7 @@ impl Embedder for BgeM3Embedder {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -214,7 +208,8 @@ mod tests {
             "pre_tokenizer": {"type": "Whitespace"},
             "post_processor": null
         });
-        std::fs::write(&tok_path, serde_json::to_string(&vocab).expect("json")).expect("write tokenizer");
+        std::fs::write(&tok_path, serde_json::to_string(&vocab).expect("json"))
+            .expect("write tokenizer");
         let embedder = BgeM3Embedder::new(dir.path(), 128).expect("create");
         let (ids, mask) = embedder.prepare_inputs(&["hello"]).expect("prepare");
         assert!(ids.dim(0).unwrap_or(0) >= 1);

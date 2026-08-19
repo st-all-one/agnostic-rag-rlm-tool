@@ -1,8 +1,6 @@
 use std::path::Path;
 
-use crate::chunker::{
-    ChunkingStrategy, RawChunk, estimate_tokens, prev_char_boundary,
-};
+use crate::chunker::{ChunkingStrategy, RawChunk, estimate_tokens, prev_char_boundary};
 
 /// A separator used to split text recursively.
 struct Separator {
@@ -50,7 +48,10 @@ impl RecursiveChunker {
         Self {
             max_tokens,
             overlap_tokens,
-            separators: separators.into_iter().map(|p| Separator { pattern: p }).collect(),
+            separators: separators
+                .into_iter()
+                .map(|p| Separator { pattern: p })
+                .collect(),
         }
     }
 
@@ -179,8 +180,7 @@ mod tests {
 
     #[test]
     fn test_recursive_chunker_custom_separators() {
-        let chunker =
-            RecursiveChunker::with_separators(3, 0, vec!["|||"]);
+        let chunker = RecursiveChunker::with_separators(3, 0, vec!["|||"]);
         let content = "First word here. ||| Second word here. ||| Third word here.";
         let path = Path::new("test.txt");
         let chunks = chunker.chunk(content, path);

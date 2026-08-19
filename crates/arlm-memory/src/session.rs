@@ -136,11 +136,7 @@ impl SessionManager {
         )
         .context("failed to insert session context")?;
 
-        tracing::info!(
-            session_id,
-            version = new_version,
-            "session context added"
-        );
+        tracing::info!(session_id, version = new_version, "session context added");
 
         Ok(new_version)
     }
@@ -169,7 +165,9 @@ impl SessionManager {
             })
         })?;
 
-        rows.next().transpose().context("failed to get latest context")
+        rows.next()
+            .transpose()
+            .context("failed to get latest context")
     }
 
     /// Get all contexts for a session, ordered by version.
@@ -226,7 +224,11 @@ impl SessionManager {
     /// # Errors
     ///
     /// Returns an error if the query fails.
-    pub fn get_history(&self, session_id: &str, limit: i64) -> Result<Vec<(String, Option<String>, i64)>> {
+    pub fn get_history(
+        &self,
+        session_id: &str,
+        limit: i64,
+    ) -> Result<Vec<(String, Option<String>, i64)>> {
         let conn = self.storage.conn();
         let conn = conn.lock();
 
@@ -261,9 +263,7 @@ impl SessionManager {
         let conn = conn.lock();
 
         let mut stmt = conn
-            .prepare(
-                "SELECT id, project_name, title, created_at FROM sessions WHERE id = ?1",
-            )
+            .prepare("SELECT id, project_name, title, created_at FROM sessions WHERE id = ?1")
             .context("failed to prepare get_session")?;
 
         let mut rows = stmt.query_map(params![session_id], |row| {
@@ -327,8 +327,7 @@ mod tests {
 
         mgr.record_query(&id, "what is auth?", Some("Auth is..."))
             .unwrap();
-        mgr.record_query(&id, "how does login work?", None)
-            .unwrap();
+        mgr.record_query(&id, "how does login work?", None).unwrap();
 
         let history = mgr.get_history(&id, 10).unwrap();
         assert_eq!(history.len(), 2);

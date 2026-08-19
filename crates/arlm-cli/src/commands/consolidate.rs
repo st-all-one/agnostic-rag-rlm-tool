@@ -60,15 +60,13 @@ pub fn execute(config: ConsolidateConfig<'_>) -> Result<()> {
         Format::Markdown => {
             println!(
                 "# Consolidation Complete\n\n- **Project:** {project_name}\n- **Duplicates removed:** {}\n- **Low-confidence patterns removed:** {}\n",
-                result.duplicate_chunks_removed,
-                result.low_confidence_patterns_removed,
+                result.duplicate_chunks_removed, result.low_confidence_patterns_removed,
             );
         }
         Format::Prompt => {
             println!(
                 "Consolidation complete for {project_name}: {} duplicates, {} patterns removed.",
-                result.duplicate_chunks_removed,
-                result.low_confidence_patterns_removed,
+                result.duplicate_chunks_removed, result.low_confidence_patterns_removed,
             );
         }
     }
