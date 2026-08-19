@@ -14,6 +14,8 @@ pub enum RlmBackend {
     Anthropic,
     Gemini,
     Ollama,
+    DeepSeek,
+    MiMo,
 }
 
 impl fmt::Display for RlmBackend {
@@ -23,6 +25,8 @@ impl fmt::Display for RlmBackend {
             Self::Anthropic => write!(f, "anthropic"),
             Self::Gemini => write!(f, "gemini"),
             Self::Ollama => write!(f, "ollama"),
+            Self::DeepSeek => write!(f, "deepseek"),
+            Self::MiMo => write!(f, "mimo"),
         }
     }
 }

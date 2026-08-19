@@ -31,6 +31,8 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
         arlm_llm::BackendKind::Anthropic => "ANTHROPIC_API_KEY",
         arlm_llm::BackendKind::Gemini => "GEMINI_API_KEY",
         arlm_llm::BackendKind::Ollama => "",
+        arlm_llm::BackendKind::DeepSeek => "DEEPSEEK_API_KEY",
+        arlm_llm::BackendKind::MiMo => "MIMO_API_KEY",
     })
     .ok();
 

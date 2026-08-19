@@ -178,6 +178,24 @@ enum Commands {
     /// Consolidate memory (dedup, cleanup)
     Consolidate,
 
+    /// Run salience decay on indexed chunks
+    Decay {
+        /// Dry run — show what would be decayed without modifying
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Persist search/analysis results as wiki pages
+    Persist {
+        /// Title for the wiki page
+        #[arg(long)]
+        title: Option<String>,
+
+        /// Query that produced this result
+        #[arg(long)]
+        query: Option<String>,
+    },
+
     /// Start HTTP API server
     Serve {
         /// Port to listen on
@@ -322,6 +340,19 @@ fn main() -> Result<()> {
                 project: &cli.project,
                 format,
                 verbose: cli.verbose,
+            })
+        }
+        Commands::Decay { dry_run } => commands::decay::execute(commands::decay::DecayArgs {
+            dry_run,
+            project: &cli.project,
+            format,
+        }),
+        Commands::Persist { title, query } => {
+            commands::persist::execute(commands::persist::PersistArgs {
+                title,
+                query,
+                project: &cli.project,
+                format,
             })
         }
         Commands::Serve { port, host, mcp } => {

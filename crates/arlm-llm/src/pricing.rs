@@ -67,6 +67,19 @@ impl PricingTable {
             ModelPricing::new(0.075, 0.30),
         );
 
+        // DeepSeek models
+        models.insert(
+            "deepseek-v3".to_string(),
+            ModelPricing::new(0.27, 1.10),
+        );
+        models.insert(
+            "deepseek-r1".to_string(),
+            ModelPricing::new(0.55, 2.19),
+        );
+
+        // MiMo (zero cost via local or API)
+        models.insert("mimo".to_string(), ModelPricing::new(0.0, 0.0));
+
         // Ollama (local) - zero cost
         models.insert("llama3".to_string(), ModelPricing::new(0.0, 0.0));
         models.insert("codellama".to_string(), ModelPricing::new(0.0, 0.0));

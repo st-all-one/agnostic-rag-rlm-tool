@@ -1,0 +1,48 @@
+# ═══════════════════════════════════════════════════════════════
+# arlm — Exemplo de docker-compose
+#
+# A imagem é distribuída via DockerHub: arlm/arlm
+# Para usar, copie este arquivo para seu projeto e ajuste.
+#
+# Uso:
+#   docker compose up -d              # Inicia servidor
+#   docker compose exec arlm status   # Ver status
+#   docker compose down               # Para
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ─── Servidor HTTP ────────────────────────────────────────
+  arlm:
+    image: arlm/arlm:latest
+    container_name: arlm-server
+    ports:
+      - "${ARLM_PORT:-8080}:8080"
+    volumes:
+      # Dados persistentes (knowledge.db, vectors.lance, wiki/)
+      # NAMED VOLUME: dados sobrevivem a restart/recreate
+      - arlm-data:/home/arlm/.arlm
+      # Projetos para indexar (bind mount read-only)
+      - ${PROJECTS_DIR:-.}:/projects:ro
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      # Chaves de API (opcional, para operações com LLM via --llm)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    restart: unless-stopped
+
+  # ─── CLI interativo ───────────────────────────────────────
+  # Uso: docker compose run --rm arlm-cli context "tarefa"
+  arlm-cli:
+    image: arlm/arlm:latest
+    profiles: ["cli"]
+    volumes:
+      - arlm-data:/home/arlm/.arlm
+      - ${PROJECTS_DIR:-.}:/projects:ro
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+
+volumes:
+  arlm-data:

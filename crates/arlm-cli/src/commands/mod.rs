@@ -1,9 +1,11 @@
 pub mod consolidate;
 pub mod context;
 pub mod cost;
+pub mod decay;
 pub mod history;
 pub mod index;
 pub mod mcp;
+pub mod persist;
 pub mod query;
 pub mod run;
 pub mod search;

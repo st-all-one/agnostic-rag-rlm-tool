@@ -14,8 +14,10 @@
     )
 )]
 pub mod anthropic;
+pub mod deepseek;
 pub mod factory;
 pub mod gemini;
+pub mod mimo;
 pub mod ollama;
 pub mod openai;
 pub mod pricing;

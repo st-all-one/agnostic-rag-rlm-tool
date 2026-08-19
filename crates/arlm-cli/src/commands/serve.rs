@@ -368,6 +368,8 @@ async fn handle_run(state: &AppState, req: &RunRequest) -> Result<serde_json::Va
         arlm_llm::BackendKind::Anthropic => "ANTHROPIC_API_KEY",
         arlm_llm::BackendKind::Gemini => "GEMINI_API_KEY",
         arlm_llm::BackendKind::Ollama => "",
+        arlm_llm::BackendKind::DeepSeek => "DEEPSEEK_API_KEY",
+        arlm_llm::BackendKind::MiMo => "MIMO_API_KEY",
     })
     .ok();
 
@@ -384,6 +386,8 @@ async fn handle_run(state: &AppState, req: &RunRequest) -> Result<serde_json::Va
             arlm_llm::BackendKind::Anthropic => arlm_core::RlmBackend::Anthropic,
             arlm_llm::BackendKind::Gemini => arlm_core::RlmBackend::Gemini,
             arlm_llm::BackendKind::Ollama => arlm_core::RlmBackend::Ollama,
+            arlm_llm::BackendKind::DeepSeek => arlm_core::RlmBackend::DeepSeek,
+            arlm_llm::BackendKind::MiMo => arlm_core::RlmBackend::MiMo,
         },
         model: req.model.clone(),
         project: state.project_name.clone(),

@@ -1,0 +1,38 @@
+# Build artifacts
+target/
+*.o
+*.d
+*.rlib
+
+# Git
+.git/
+.gitignore
+.gitmodules
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Documentation
+*.md
+LICENSE
+plan/
+ai-guides/
+
+# Seeds
+.seeds/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.yml
+docker/Dockerfile*
+docker/build.sh
+
+# Temporary
+tmp/
+*.tmp

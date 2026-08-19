@@ -44,6 +44,8 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
         arlm_llm::BackendKind::Anthropic => "ANTHROPIC_API_KEY",
         arlm_llm::BackendKind::Gemini => "GEMINI_API_KEY",
         arlm_llm::BackendKind::Ollama => "",
+        arlm_llm::BackendKind::DeepSeek => "DEEPSEEK_API_KEY",
+        arlm_llm::BackendKind::MiMo => "MIMO_API_KEY",
     })
     .ok();
 
@@ -80,6 +82,8 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
             arlm_llm::BackendKind::Anthropic => arlm_core::RlmBackend::Anthropic,
             arlm_llm::BackendKind::Gemini => arlm_core::RlmBackend::Gemini,
             arlm_llm::BackendKind::Ollama => arlm_core::RlmBackend::Ollama,
+            arlm_llm::BackendKind::DeepSeek => arlm_core::RlmBackend::DeepSeek,
+            arlm_llm::BackendKind::MiMo => arlm_core::RlmBackend::MiMo,
         },
         model: config.model.map(String::from),
         project: project_name.to_string(),

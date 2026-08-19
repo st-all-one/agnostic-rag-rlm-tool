@@ -1,5 +1,7 @@
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use memmap2::Mmap;
 use thiserror::Error;
 
 pub mod batch;
@@ -64,46 +66,60 @@ pub trait Embedder: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-/// A file loaded into owned memory.
+/// A file memory-mapped for zero-copy reading.
 ///
-/// Reads the file content into a `String`. For production use with very large
-/// files, consider enabling `unsafe_code` at the crate level and using `memmap2`
-/// for zero-copy memory-mapped I/O.
+/// Uses `memmap2` to map the file into virtual memory without loading it
+/// entirely into RAM. The OS manages paging — only accessed pages are
+/// physically loaded. The `&str` returned by [`content()`](Self::content)
+/// borrows directly from the mmap buffer.
 pub struct OwnedFile {
+    _mmap: Mmap,
     path: PathBuf,
     language: Option<String>,
-    content: String,
+    content: &'static str,
 }
 
 impl OwnedFile {
-    /// Load a file and detect its language.
+    /// Memory-map a file and detect its language.
     ///
     /// # Errors
     ///
-    /// Returns an error if the file cannot be read or is not valid UTF-8.
+    /// Returns an error if the file cannot be opened or is not valid UTF-8.
+    #[allow(unsafe_code)]
     pub fn new(path: &Path) -> Result<Self, EmbeddingError> {
-        let content = std::fs::read_to_string(path)?;
+        let file = File::open(path)?;
+        // SAFETY: we open the file read-only and the indexing pipeline never
+        // writes to source files. The mmap is kept alive by OwnedFile.
+        let mmap = unsafe { Mmap::map(&file)? };
+
+        let content = std::str::from_utf8(&mmap).map_err(|_| EmbeddingError::NotUtf8(path.to_path_buf()))?;
 
         let language = crate::chunker::detect_language(path);
 
         tracing::info!(
             path = %path.display(),
-            bytes = content.len(),
+            bytes = mmap.len(),
             language = language.as_deref().unwrap_or("unknown"),
-            "loaded file"
+            "loaded file (mmap)"
         );
 
+        // SAFETY: `content` borrows from `mmap` which lives in `_mmap` field.
+        // The `&'static str` is safe because the mmap outlives this struct,
+        // and we never mutate the underlying mapping.
+        let content_static: &'static str = unsafe { std::mem::transmute(content) };
+
         Ok(Self {
+            _mmap: mmap,
             path: path.to_path_buf(),
             language,
-            content,
+            content: content_static,
         })
     }
 
-    /// The file content as a string slice.
+    /// The file content as a string slice (zero-copy, borrows from mmap).
     #[must_use]
     pub fn content(&self) -> &str {
-        &self.content
+        self.content
     }
 
     /// The file path.

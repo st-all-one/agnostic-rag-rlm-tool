@@ -1,0 +1,20 @@
+{
+  "commands": {
+    "rlm": {
+      "command": "arlm context \"$ARGUMENTS\" --project . --format prompt",
+      "description": "Search project context with RLM"
+    },
+    "rlm-search": {
+      "command": "arlm search \"$ARGUMENTS\" --project . --format json",
+      "description": "Search code with RLM"
+    },
+    "rlm-analyze": {
+      "command": "arlm run \"$ARGUMENTS\" --project . --depth 3 --format tree",
+      "description": "Analyze with RLM recursively"
+    },
+    "rlm-index": {
+      "command": "arlm index .",
+      "description": "Index project for RLM search"
+    }
+  }
+}

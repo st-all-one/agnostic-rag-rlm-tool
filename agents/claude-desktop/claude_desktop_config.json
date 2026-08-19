@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "arlm": {
+      "command": "arlm",
+      "args": ["serve", "--mcp", "--port", "8080"],
+      "env": {
+        "ARLM_PROJECT": ".",
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}

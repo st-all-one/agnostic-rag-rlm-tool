@@ -1,0 +1,53 @@
+{
+  "tools": [
+    {
+      "name": "rlm_context",
+      "description": "Busca contexto relevante do projeto usando RLM. Use para entender código, encontrar bugs, ou obter histórico de análises anteriores.",
+      "parameters": {
+        "task": {
+          "type": "string",
+          "description": "Tarefa, pergunta ou descrição do que precisa de contexto"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["prompt", "json", "markdown"],
+          "default": "prompt",
+          "description": "Formato do output"
+        }
+      },
+      "command": "arlm context \"{{task}}\" --project {{cwd}} --format {{format}}"
+    },
+    {
+      "name": "rlm_search",
+      "description": "Busca rápida no código do projeto. Retorna trechos relevantes com scores.",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "Termos de busca"
+        },
+        "top_k": {
+          "type": "integer",
+          "default": 5,
+          "description": "Número de resultados"
+        }
+      },
+      "command": "arlm search \"{{query}}\" --project {{cwd}} --top-k {{top_k}} --format json"
+    },
+    {
+      "name": "rlm_run",
+      "description": "Executa análise RLM recursiva. Use para tarefas complexas que precisam de decomposição.",
+      "parameters": {
+        "task": {
+          "type": "string",
+          "description": "Tarefa complexa para analisar recursivamente"
+        },
+        "depth": {
+          "type": "integer",
+          "default": 3,
+          "description": "Profundidade máxima de recursão"
+        }
+      },
+      "command": "arlm run \"{{task}}\" --project {{cwd}} --depth {{depth}} --format tree"
+    }
+  ]
+}

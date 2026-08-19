@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use crate::anthropic::AnthropicBackend;
+use crate::deepseek::DeepSeekBackend;
 use crate::gemini::GeminiBackend;
+use crate::mimo::MiMoBackend;
 use crate::ollama::OllamaBackend;
 use crate::openai::OpenAiBackend;
 use crate::retry::RetryConfig;
@@ -14,6 +16,8 @@ pub enum BackendKind {
     Anthropic,
     Ollama,
     Gemini,
+    DeepSeek,
+    MiMo,
 }
 
 impl std::fmt::Display for BackendKind {
@@ -23,6 +27,8 @@ impl std::fmt::Display for BackendKind {
             Self::Anthropic => write!(f, "anthropic"),
             Self::Ollama => write!(f, "ollama"),
             Self::Gemini => write!(f, "gemini"),
+            Self::DeepSeek => write!(f, "deepseek"),
+            Self::MiMo => write!(f, "mimo"),
         }
     }
 }
@@ -36,8 +42,10 @@ impl std::str::FromStr for BackendKind {
             "anthropic" | "claude" => Ok(Self::Anthropic),
             "ollama" | "local" => Ok(Self::Ollama),
             "gemini" | "google" => Ok(Self::Gemini),
+            "deepseek" | "ds" => Ok(Self::DeepSeek),
+            "mimo" => Ok(Self::MiMo),
             _ => Err(LlmError::Backend(format!(
-                "unknown backend: {s}. Supported: openai, anthropic, ollama, gemini"
+                "unknown backend: {s}. Supported: openai, anthropic, ollama, gemini, deepseek, mimo"
             ))),
         }
     }
@@ -94,6 +102,26 @@ pub fn get_backend(
             }
             Arc::new(b)
         }
+        BackendKind::DeepSeek => {
+            let key = api_key.ok_or_else(|| {
+                LlmError::Auth("DEEPSEEK_API_KEY required for DeepSeek backend".to_string())
+            })?;
+            let mut b = DeepSeekBackend::new(key).with_retry_config(retry_config);
+            if let Some(url) = base_url {
+                b = b.with_base_url(url);
+            }
+            Arc::new(b)
+        }
+        BackendKind::MiMo => {
+            let key = api_key.ok_or_else(|| {
+                LlmError::Auth("MIMO_API_KEY required for MiMo backend".to_string())
+            })?;
+            let mut b = MiMoBackend::new(key).with_retry_config(retry_config);
+            if let Some(url) = base_url {
+                b = b.with_base_url(url);
+            }
+            Arc::new(b)
+        }
     };
 
     Ok(backend)
@@ -109,6 +137,8 @@ mod tests {
         assert_eq!(BackendKind::Anthropic.to_string(), "anthropic");
         assert_eq!(BackendKind::Ollama.to_string(), "ollama");
         assert_eq!(BackendKind::Gemini.to_string(), "gemini");
+        assert_eq!(BackendKind::DeepSeek.to_string(), "deepseek");
+        assert_eq!(BackendKind::MiMo.to_string(), "mimo");
     }
 
     #[test]
@@ -138,6 +168,15 @@ mod tests {
         assert_eq!(
             "google".parse::<BackendKind>().unwrap(),
             BackendKind::Gemini
+        );
+        assert_eq!(
+            "deepseek".parse::<BackendKind>().unwrap(),
+            BackendKind::DeepSeek
+        );
+        assert_eq!("ds".parse::<BackendKind>().unwrap(), BackendKind::DeepSeek);
+        assert_eq!(
+            "mimo".parse::<BackendKind>().unwrap(),
+            BackendKind::MiMo
         );
     }
 
@@ -177,6 +216,32 @@ mod tests {
     fn test_get_backend_gemini_requires_key() {
         let backend = get_backend(&BackendKind::Gemini, None, None);
         assert!(backend.is_err());
+    }
+
+    #[test]
+    fn test_get_backend_deepseek_requires_key() {
+        let backend = get_backend(&BackendKind::DeepSeek, None, None);
+        assert!(backend.is_err());
+    }
+
+    #[test]
+    fn test_get_backend_deepseek_with_key() {
+        let backend = get_backend(&BackendKind::DeepSeek, Some("test-key".to_string()), None);
+        assert!(backend.is_ok());
+        assert_eq!(backend.expect("should succeed").name(), "deepseek");
+    }
+
+    #[test]
+    fn test_get_backend_mimo_requires_key() {
+        let backend = get_backend(&BackendKind::MiMo, None, None);
+        assert!(backend.is_err());
+    }
+
+    #[test]
+    fn test_get_backend_mimo_with_key() {
+        let backend = get_backend(&BackendKind::MiMo, Some("test-key".to_string()), None);
+        assert!(backend.is_ok());
+        assert_eq!(backend.expect("should succeed").name(), "mimo");
     }
 
     #[test]

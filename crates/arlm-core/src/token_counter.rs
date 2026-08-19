@@ -1,4 +1,75 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::OnceLock;
+
+/// Model context window limits (in tokens).
+///
+/// Keyed by substring — the longest matching key wins.
+/// Fallback: 128K tokens.
+static MODEL_CONTEXT_LIMITS: OnceLock<HashMap<&'static str, u32>> = OnceLock::new();
+
+fn context_limits() -> &'static HashMap<&'static str, u32> {
+    MODEL_CONTEXT_LIMITS.get_or_init(|| {
+        let mut m = HashMap::new();
+        // OpenAI
+        m.insert("gpt-4o", 128_000);
+        m.insert("gpt-4o-mini", 128_000);
+        m.insert("gpt-4-turbo", 128_000);
+        m.insert("gpt-4", 8_192);
+        m.insert("gpt-3.5-turbo", 16_385);
+        m.insert("o1", 200_000);
+        m.insert("o3", 200_000);
+        // Anthropic
+        m.insert("claude-4", 1_000_000);
+        m.insert("claude-3.5-sonnet", 200_000);
+        m.insert("claude-3-opus", 200_000);
+        m.insert("claude-3-sonnet", 200_000);
+        m.insert("claude-3-haiku", 200_000);
+        m.insert("claude", 200_000);
+        // Google
+        m.insert("gemini-2.5", 1_000_000);
+        m.insert("gemini-2.0", 1_000_000);
+        m.insert("gemini-1.5-pro", 2_000_000);
+        m.insert("gemini-1.5-flash", 1_000_000);
+        m.insert("gemini", 1_000_000);
+        // DeepSeek
+        m.insert("deepseek-v4", 1_000_000);
+        m.insert("deepseek-v3", 131_072);
+        m.insert("deepseek-r1", 131_072);
+        m.insert("deepseek", 131_072);
+        // MiMo
+        m.insert("mimo", 131_072);
+        // Qwen
+        m.insert("qwen3-max", 256_000);
+        m.insert("qwen3", 131_072);
+        // Meta
+        m.insert("llama-4", 1_000_000);
+        m.insert("llama-3.3", 131_072);
+        m.insert("llama-3.1", 131_072);
+        m.insert("llama-3", 8_192);
+        m
+    })
+}
+
+/// Look up the context window limit for a model by substring match.
+///
+/// Returns the limit for the longest matching key, or 128K as fallback.
+#[must_use]
+pub fn get_context_limit(model_name: &str) -> u32 {
+    let limits = context_limits();
+    let lower = model_name.to_lowercase();
+
+    // Find longest matching key
+    let mut best_len = 0;
+    let mut best_limit = 128_000;
+    for (key, &limit) in limits {
+        if lower.contains(key) && key.len() > best_len {
+            best_len = key.len();
+            best_limit = limit;
+        }
+    }
+    best_limit
+}
 
 /// Token counter for tracking usage across the RLM engine.
 ///
@@ -210,5 +281,46 @@ mod tests {
                      This is a longer sentence with many words to estimate tokens.";
         let est = TokenCounter::estimate(text);
         assert!(est > 20);
+    }
+
+    #[test]
+    fn test_get_context_limit_gpt4o() {
+        assert_eq!(get_context_limit("gpt-4o"), 128_000);
+        assert_eq!(get_context_limit("gpt-4o-mini"), 128_000);
+    }
+
+    #[test]
+    fn test_get_context_limit_claude() {
+        assert_eq!(get_context_limit("claude-4-sonnet"), 1_000_000);
+        assert_eq!(get_context_limit("claude-3.5-sonnet"), 200_000);
+        assert_eq!(get_context_limit("claude-3-opus"), 200_000);
+    }
+
+    #[test]
+    fn test_get_context_limit_gemini() {
+        assert_eq!(get_context_limit("gemini-2.5-pro"), 1_000_000);
+        assert_eq!(get_context_limit("gemini-1.5-pro"), 2_000_000);
+    }
+
+    #[test]
+    fn test_get_context_limit_deepseek() {
+        assert_eq!(get_context_limit("deepseek-v3"), 131_072);
+        assert_eq!(get_context_limit("deepseek-r1"), 131_072);
+    }
+
+    #[test]
+    fn test_get_context_limit_mimo() {
+        assert_eq!(get_context_limit("mimo"), 131_072);
+    }
+
+    #[test]
+    fn test_get_context_limit_unknown_fallback() {
+        assert_eq!(get_context_limit("some-unknown-model"), 128_000);
+    }
+
+    #[test]
+    fn test_get_context_limit_longest_match() {
+        // "gpt-4" matches "gpt-4" (8192) but "gpt-4o" matches "gpt-4o" (128000)
+        assert_eq!(get_context_limit("gpt-4o-2024-08-06"), 128_000);
     }
 }

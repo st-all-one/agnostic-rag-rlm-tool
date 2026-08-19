@@ -1,0 +1,18 @@
+# .aider.conf.yml — Configuração do arlm para Aider
+#
+# Instalar:
+#   Copie este arquivo para .aider.conf.yml na raiz do projeto
+#   Certifique-se de que 'arlm' está no PATH
+#
+# Uso:
+#   arlm context automaticamente enriquece o contexto do Aider
+
+rlm_context:
+  command: "arlm context \"{question}\" --project . --format prompt"
+  inject: true
+  priority: 10
+
+rlm_search:
+  command: "arlm search \"{question}\" --project . --format json"
+  inject: false
+  priority: 20

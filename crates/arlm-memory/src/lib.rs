@@ -15,6 +15,7 @@
 )]
 pub mod checkpoint;
 pub mod consolidation;
+pub mod engine;
 pub mod history;
 pub mod knowledge;
 pub mod persist;
@@ -26,6 +27,7 @@ pub mod watch;
 
 pub use checkpoint::{CheckpointInfo, CheckpointManager};
 pub use consolidation::{ConsolidateOptions, ConsolidateResult, ConsolidationEngine};
+pub use engine::{IndexProjectOptions, IndexProjectResult, MemoryEngine, SearchOptions, SearchResult};
 pub use history::{HistoryManager, QueryRecord};
 pub use knowledge::KnowledgeEngine;
 pub use persist::{
