@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+use crate::ScopedTimer;
 use crate::persist::format::WIKI_DIR;
 use crate::persist::types::WikiScope;
-use crate::ScopedTimer;
 
 /// Engine for persisting wiki markdown pages.
 pub struct PersistEngine {
@@ -44,7 +44,11 @@ impl PersistEngine {
     /// # Errors
     ///
     /// Returns an error if file creation or writing fails.
-    pub fn persist_raw(&self, wiki_path: &str, body: &str) -> Result<crate::persist::PersistResult> {
+    pub fn persist_raw(
+        &self,
+        wiki_path: &str,
+        body: &str,
+    ) -> Result<crate::persist::PersistResult> {
         let _timer = ScopedTimer::new("persist_raw");
 
         let file_path = self.wiki_root.join(wiki_path);

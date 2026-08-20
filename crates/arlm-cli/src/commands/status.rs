@@ -12,24 +12,23 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
     storage.ensure_uuids().ok();
 
     if let Some(rid) = run_id {
-        let run = storage
-            .get_run(rid)
-            .context("failed to query run")?;
+        let run = storage.get_run(rid).context("failed to query run")?;
 
         match run {
             Some(r) => match format {
                 Format::Json => {
-                    let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
-                        "run_id": r.id,
-                        "task": r.task,
-                        "status": r.status,
-                        "backend": r.backend,
-                        "duration_ms": r.duration_ms,
-                        "total_cost": r.total_cost,
-                        "total_tokens": r.total_tokens,
-                        "nodes_visited": r.nodes_visited,
-                        "error": r.error,
-                    }));
+                    let output =
+                        crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+                            "run_id": r.id,
+                            "task": r.task,
+                            "status": r.status,
+                            "backend": r.backend,
+                            "duration_ms": r.duration_ms,
+                            "total_cost": r.total_cost,
+                            "total_tokens": r.total_tokens,
+                            "nodes_visited": r.nodes_visited,
+                            "error": r.error,
+                        }));
                     output.print();
                 }
                 Format::Tree => {
@@ -57,25 +56,34 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
                     println!("- **Nodes:** {}", r.nodes_visited.unwrap_or(0));
                 }
                 Format::Prompt => {
-                    println!("Run {}: {} ({})", r.id, r.task, r.status.as_deref().unwrap_or("unknown"));
-                    println!("  Cost: ${:.4}, Tokens: {}, Nodes: {}", r.total_cost, r.total_tokens, r.nodes_visited.unwrap_or(0));
+                    println!(
+                        "Run {}: {} ({})",
+                        r.id,
+                        r.task,
+                        r.status.as_deref().unwrap_or("unknown")
+                    );
+                    println!(
+                        "  Cost: ${:.4}, Tokens: {}, Nodes: {}",
+                        r.total_cost,
+                        r.total_tokens,
+                        r.nodes_visited.unwrap_or(0)
+                    );
                 }
             },
-            None => {
-                match format {
-                    Format::Json => {
-                        let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+            None => match format {
+                Format::Json => {
+                    let output =
+                        crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                             "run_id": rid,
                             "status": "not_found",
                             "message": "Run not found",
                         }));
-                        output.print();
-                    }
-                    _ => {
-                        output::warn(&format!("Run {rid} not found"));
-                    }
+                    output.print();
                 }
-            }
+                _ => {
+                    output::warn(&format!("Run {rid} not found"));
+                }
+            },
         }
         return Ok(());
     }
@@ -144,7 +152,9 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
                 println!();
                 output::info(&format!("Recent {} run(s):", runs.len()));
                 for r in &runs {
-                    let dur = r.duration_ms.map_or_else(|| "-".to_string(), |d| format!("{d}ms"));
+                    let dur = r
+                        .duration_ms
+                        .map_or_else(|| "-".to_string(), |d| format!("{d}ms"));
                     println!(
                         "  {} — {} ({}, ${:.4})",
                         r.id,

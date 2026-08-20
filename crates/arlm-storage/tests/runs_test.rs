@@ -1,7 +1,17 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss, clippy::cast_possible_wrap, clippy::cast_lossless, clippy::float_cmp)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::float_cmp
+)]
 
-use arlm_storage::sqlite::nodes::FlatNode;
 use arlm_storage::Storage;
+use arlm_storage::sqlite::nodes::FlatNode;
 use tempfile::TempDir;
 
 fn setup_storage() -> (Storage, TempDir) {
@@ -15,8 +25,22 @@ fn test_insert_and_get_run() {
     let (storage, _tmp) = setup_storage();
     storage
         .insert_run(
-            "run-001", "test task", "openai", "auto", "completed", "arlm", 1000, 500, 0.05, 150, 3,
-            2, 5, None, None, None,
+            "run-001",
+            "test task",
+            "openai",
+            "auto",
+            "completed",
+            "arlm",
+            1000,
+            500,
+            0.05,
+            150,
+            3,
+            2,
+            5,
+            None,
+            None,
+            None,
         )
         .unwrap();
     let run = storage.get_run("run-001").unwrap().unwrap();
@@ -90,8 +114,22 @@ fn test_run_cost() {
     };
     storage
         .insert_run(
-            "run-001", "test", "openai", "auto", "completed", "arlm", 1000, 1000, 0.10, 150, 2, 1,
-            2, None, None, Some(&root),
+            "run-001",
+            "test",
+            "openai",
+            "auto",
+            "completed",
+            "arlm",
+            1000,
+            1000,
+            0.10,
+            150,
+            2,
+            1,
+            2,
+            None,
+            None,
+            Some(&root),
         )
         .unwrap();
     let cost = storage.run_cost("run-001").unwrap();
@@ -103,14 +141,42 @@ fn test_total_cost() {
     let (storage, _tmp) = setup_storage();
     storage
         .insert_run(
-            "run-001", "test", "openai", "auto", "completed", "arlm", 1000, 500, 0.05, 100, 1, 1,
-            1, None, None, None,
+            "run-001",
+            "test",
+            "openai",
+            "auto",
+            "completed",
+            "arlm",
+            1000,
+            500,
+            0.05,
+            100,
+            1,
+            1,
+            1,
+            None,
+            None,
+            None,
         )
         .unwrap();
     storage
         .insert_run(
-            "run-002", "test", "openai", "auto", "completed", "arlm", 2000, 500, 0.07, 100, 1, 1,
-            1, None, None, None,
+            "run-002",
+            "test",
+            "openai",
+            "auto",
+            "completed",
+            "arlm",
+            2000,
+            500,
+            0.07,
+            100,
+            1,
+            1,
+            1,
+            None,
+            None,
+            None,
         )
         .unwrap();
     let total = storage.total_cost().unwrap();
@@ -161,8 +227,22 @@ fn test_insert_run_with_flat_node_tree() {
     };
     storage
         .insert_run(
-            "run-001", "test task", "openai", "auto", "completed", "arlm", 1000, 1000, 0.05, 150,
-            2, 1, 2, None, None, Some(&root),
+            "run-001",
+            "test task",
+            "openai",
+            "auto",
+            "completed",
+            "arlm",
+            1000,
+            1000,
+            0.05,
+            150,
+            2,
+            1,
+            2,
+            None,
+            None,
+            Some(&root),
         )
         .unwrap();
     let run = storage.get_run("run-001").unwrap().unwrap();

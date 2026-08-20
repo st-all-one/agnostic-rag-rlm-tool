@@ -44,13 +44,18 @@ pub use events::{EventBus, EventSink, RlmEvent};
 pub use guardrails::{detect_cycle, normalize_task, sanitize_subtasks};
 pub use memory::MemoryProvider;
 pub use planner::{parse_planner_decision, plan_node};
-pub use repl::{CodeBlock, CodeExecutor, LlmCallback, LlmQueryServer, ReplResult, find_code_blocks, format_repl_result};
+pub use repl::{
+    CodeBlock, CodeExecutor, LlmCallback, LlmQueryServer, ReplResult, find_code_blocks,
+    format_repl_result,
+};
 pub use router::DepthRouter;
 pub use sampling::SamplingArgs;
 pub use solver::{PersistentSolver, StateInspector, solve_task};
 pub use synthesizer::{build_children_block, synthesize};
 pub use token_counter::TokenCounter;
-pub use tools::{CodeSearch, ExecutableTool, ListFilesTool, ReadFileTool, SearchCodeTool, ToolRegistry};
+pub use tools::{
+    CodeSearch, ExecutableTool, ListFilesTool, ReadFileTool, SearchCodeTool, ToolRegistry,
+};
 pub use types::*;
 
 #[must_use]

@@ -62,10 +62,8 @@ pub fn count_all_summaries(storage: &Storage) -> Result<i64> {
         .connection()
         .context("failed to acquire connection")?;
 
-    conn.execute(|conn| {
-        Ok(conn.query_row("SELECT COUNT(*) FROM summaries", [], |row| row.get(0))?)
-    })
-    .context("failed to count all summaries")
+    conn.execute(|conn| Ok(conn.query_row("SELECT COUNT(*) FROM summaries", [], |row| row.get(0))?))
+        .context("failed to count all summaries")
 }
 
 /// Insert a hierarchical summary record.

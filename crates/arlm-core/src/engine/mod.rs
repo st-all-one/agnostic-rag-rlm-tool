@@ -20,10 +20,10 @@ pub mod node;
 pub mod state;
 
 pub use crate::engine::compactor::RootCompactor;
-pub use crate::engine::node::get_forced_solve_reason_owned;
 pub use crate::engine::node::RunNodeParamsOwned;
-pub use crate::engine::state::EngineState;
+pub use crate::engine::node::get_forced_solve_reason_owned;
 use crate::engine::node::run_node_owned;
+pub use crate::engine::state::EngineState;
 
 /// Run the RLM engine on a task with an internal event bus.
 ///

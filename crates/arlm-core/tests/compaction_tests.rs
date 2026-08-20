@@ -5,7 +5,7 @@
     clippy::single_char_pattern
 )]
 
-use arlm_core::compaction::{split_into_chunks, Compaction, SearchResult};
+use arlm_core::compaction::{Compaction, SearchResult, split_into_chunks};
 
 fn make_result(score: f32, file_path: &str) -> SearchResult {
     SearchResult {

@@ -149,11 +149,10 @@ impl HybridSearch {
             }
         }
 
-        let mut fused: Vec<HybridResult> =
-            Self::rrf_fuse(&chunk_lists, top_k, self.rrf_k)
-                .into_iter()
-                .chain(Self::rrf_fuse(&summary_lists, top_k, self.rrf_k))
-                .collect();
+        let mut fused: Vec<HybridResult> = Self::rrf_fuse(&chunk_lists, top_k, self.rrf_k)
+            .into_iter()
+            .chain(Self::rrf_fuse(&summary_lists, top_k, self.rrf_k))
+            .collect();
         fused.sort_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)

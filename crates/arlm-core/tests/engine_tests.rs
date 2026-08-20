@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use arlm_core::engine::{get_forced_solve_reason_owned, EngineState, RunNodeParamsOwned};
+use arlm_core::engine::{EngineState, RunNodeParamsOwned, get_forced_solve_reason_owned};
 use arlm_core::*;
 
 #[test]
@@ -178,8 +178,9 @@ async fn test_run_rlm_engine_with_memory_persists() {
     };
     let llm: Arc<dyn arlm_llm::LlmBackend + Send + Sync> = Arc::new(MockLlm);
     let memory: Option<Arc<dyn arlm_core::MemoryProvider>> = Some(Arc::new(MockMemory::default()));
-    let result =
-        run_rlm_engine_with_events(input, llm, EventBus::new(), memory).await.expect("ok");
+    let result = run_rlm_engine_with_events(input, llm, EventBus::new(), memory)
+        .await
+        .expect("ok");
     assert_eq!(result.run_id, "test-run-mem");
 }
 
@@ -207,4 +208,3 @@ async fn test_root_compactor_summarize_with_llm() {
         .expect("summarize");
     assert!(summary.contains("[Root summary]"));
 }
-

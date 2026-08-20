@@ -53,7 +53,9 @@ pub fn get_project_by_name(storage: &Storage, name: &str) -> Result<Option<Proje
 
     conn.execute(|conn| {
         let mut stmt = conn
-            .prepare(&format!("SELECT {PROJECT_COLUMNS} FROM buffers WHERE name = ?1"))
+            .prepare(&format!(
+                "SELECT {PROJECT_COLUMNS} FROM buffers WHERE name = ?1"
+            ))
             .context("failed to prepare get_project_by_name query")?;
         let mut rows = stmt.query_map(params![name], row_to_project)?;
         Ok(rows.next().transpose()?)
@@ -73,7 +75,9 @@ pub fn get_project_by_id(storage: &Storage, id: i64) -> Result<Option<ProjectRow
 
     conn.execute(|conn| {
         let mut stmt = conn
-            .prepare(&format!("SELECT {PROJECT_COLUMNS} FROM buffers WHERE id = ?1"))
+            .prepare(&format!(
+                "SELECT {PROJECT_COLUMNS} FROM buffers WHERE id = ?1"
+            ))
             .context("failed to prepare get_project_by_id query")?;
         let mut rows = stmt.query_map(params![id], row_to_project)?;
         Ok(rows.next().transpose()?)
@@ -93,7 +97,9 @@ pub fn get_project_by_uuid(storage: &Storage, uuid: &str) -> Result<Option<Proje
 
     conn.execute(|conn| {
         let mut stmt = conn
-            .prepare(&format!("SELECT {PROJECT_COLUMNS} FROM buffers WHERE uuid = ?1"))
+            .prepare(&format!(
+                "SELECT {PROJECT_COLUMNS} FROM buffers WHERE uuid = ?1"
+            ))
             .context("failed to prepare get_project_by_uuid query")?;
         let mut rows = stmt.query_map(params![uuid], row_to_project)?;
         Ok(rows.next().transpose()?)
@@ -113,7 +119,9 @@ pub fn list_projects(storage: &Storage) -> Result<Vec<ProjectRow>> {
 
     conn.execute(|conn| {
         let mut stmt = conn
-            .prepare(&format!("SELECT {PROJECT_COLUMNS} FROM buffers ORDER BY name"))
+            .prepare(&format!(
+                "SELECT {PROJECT_COLUMNS} FROM buffers ORDER BY name"
+            ))
             .context("failed to prepare list_projects query")?;
         let rows = stmt
             .query_map([], row_to_project)?

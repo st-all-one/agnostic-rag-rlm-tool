@@ -1,9 +1,16 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::all,
+    clippy::pedantic,
+    clippy::nursery
+)]
 
 use arlm_memory::transfer::*;
+use arlm_storage::Storage;
 use arlm_storage::sqlite::buffers::NewBuffer;
 use arlm_storage::sqlite::chunks::NewChunk;
-use arlm_storage::Storage;
 use tempfile::TempDir;
 
 fn setup() -> (TransferEngine, Storage, TempDir) {

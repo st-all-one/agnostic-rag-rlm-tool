@@ -70,7 +70,9 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
     // Auto-populate FTS5 index after indexing
     let bm25 = arlm_search::Bm25Search::new(knowledge.storage())
         .context("failed to create BM25 search for FTS population")?;
-    let fts_count = bm25.populate_fts().context("failed to populate FTS index")?;
+    let fts_count = bm25
+        .populate_fts()
+        .context("failed to populate FTS index")?;
 
     progress.finish_and_clear();
 
@@ -133,11 +135,25 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
             match handle.recv() {
                 Ok(event) => {
                     let is_relevant = event.paths.iter().any(|p| {
-                        p.extension()
-                            .and_then(|e| e.to_str())
-                            .is_some_and(|ext| {
-                                matches!(ext, "rs" | "py" | "js" | "ts" | "go" | "java" | "c" | "cpp" | "h" | "rb" | "md" | "txt" | "json" | "yaml" | "toml")
-                            })
+                        p.extension().and_then(|e| e.to_str()).is_some_and(|ext| {
+                            matches!(
+                                ext,
+                                "rs" | "py"
+                                    | "js"
+                                    | "ts"
+                                    | "go"
+                                    | "java"
+                                    | "c"
+                                    | "cpp"
+                                    | "h"
+                                    | "rb"
+                                    | "md"
+                                    | "txt"
+                                    | "json"
+                                    | "yaml"
+                                    | "toml"
+                            )
+                        })
                     });
 
                     if !is_relevant {

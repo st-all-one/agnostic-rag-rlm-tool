@@ -114,7 +114,6 @@ pub struct SearchCodeTool {
     search: Option<Arc<dyn CodeSearch>>,
 }
 
-
 impl SearchCodeTool {
     /// Create a search tool with no backend configured.
     #[must_use]
@@ -139,11 +138,9 @@ impl SearchCodeTool {
 
 impl ExecutableTool for SearchCodeTool {
     fn execute(&self, args: &str) -> Result<String, String> {
-        let parsed: serde_json::Value = serde_json::from_str(args)
-            .map_err(|e| format!("invalid JSON args: {e}"))?;
-        let query = parsed["query"]
-            .as_str()
-            .ok_or("missing 'query' argument")?;
+        let parsed: serde_json::Value =
+            serde_json::from_str(args).map_err(|e| format!("invalid JSON args: {e}"))?;
+        let query = parsed["query"].as_str().ok_or("missing 'query' argument")?;
         let limit = parsed["limit"].as_u64().unwrap_or(10);
 
         match &self.search {
@@ -172,11 +169,9 @@ pub struct ReadFileTool;
 
 impl ExecutableTool for ReadFileTool {
     fn execute(&self, args: &str) -> Result<String, String> {
-        let parsed: serde_json::Value = serde_json::from_str(args)
-            .map_err(|e| format!("invalid JSON args: {e}"))?;
-        let path = parsed["path"]
-            .as_str()
-            .ok_or("missing 'path' argument")?;
+        let parsed: serde_json::Value =
+            serde_json::from_str(args).map_err(|e| format!("invalid JSON args: {e}"))?;
+        let path = parsed["path"].as_str().ok_or("missing 'path' argument")?;
 
         std::fs::read_to_string(path).map_err(|e| format!("failed to read file: {e}"))
     }
@@ -199,11 +194,12 @@ pub struct ListFilesTool;
 
 impl ExecutableTool for ListFilesTool {
     fn execute(&self, args: &str) -> Result<String, String> {
-        let parsed: serde_json::Value = serde_json::from_str(args)
-            .map_err(|e| format!("invalid JSON args: {e}"))?;
+        let parsed: serde_json::Value =
+            serde_json::from_str(args).map_err(|e| format!("invalid JSON args: {e}"))?;
         let path = parsed["path"].as_str().unwrap_or(".");
 
-        let entries = std::fs::read_dir(path).map_err(|e| format!("failed to read directory: {e}"))?;
+        let entries =
+            std::fs::read_dir(path).map_err(|e| format!("failed to read directory: {e}"))?;
 
         let mut result = Vec::new();
         for entry in entries {

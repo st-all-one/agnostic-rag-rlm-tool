@@ -162,4 +162,3 @@ impl From<Arc<EventBus>> for EventSink {
         Self { bus }
     }
 }
-

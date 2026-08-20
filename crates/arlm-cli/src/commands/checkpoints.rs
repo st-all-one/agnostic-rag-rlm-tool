@@ -16,10 +16,11 @@ pub fn execute(run_id: Option<&str>, format: Format) -> Result<()> {
 
             match format {
                 Format::Json => {
-                    let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
-                        "run_id": id,
-                        "checkpoints": trajectories.len(),
-                    }));
+                    let output =
+                        crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+                            "run_id": id,
+                            "checkpoints": trajectories.len(),
+                        }));
                     output.print();
                 }
                 _ => {
@@ -70,7 +71,9 @@ pub fn execute(run_id: Option<&str>, format: Format) -> Result<()> {
                                 .unwrap_or(0);
                             println!(
                                 "{} | {} | {} checkpoints",
-                                run.id, run.status.as_deref().unwrap_or("unknown"), count
+                                run.id,
+                                run.status.as_deref().unwrap_or("unknown"),
+                                count
                             );
                         }
                     }

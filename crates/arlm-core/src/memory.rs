@@ -19,11 +19,7 @@ pub trait MemoryProvider: Send + Sync {
     ///
     /// # Errors
     /// Returns an error message string when the backend fails.
-    fn save_trajectory(
-        &self,
-        input: &StartRunInput,
-        result: &RlmRunResult,
-    ) -> Result<(), String>;
+    fn save_trajectory(&self, input: &StartRunInput, result: &RlmRunResult) -> Result<(), String>;
 }
 
 /// Convenience wrapper so `Option<Arc<dyn MemoryProvider>>` can be used ergonomically.

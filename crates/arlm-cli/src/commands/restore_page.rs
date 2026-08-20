@@ -18,8 +18,7 @@ pub fn execute(page_name: &str, project: &Path, format: Format) -> Result<()> {
         .context("project not found, run 'arlm index' first")?;
 
     // Search for the page in persisted results
-    let bm25 =
-        arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
+    let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
     let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
     let results = hybrid
         .search_fts(page_name, buffer.id, 10, None)

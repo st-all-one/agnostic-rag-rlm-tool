@@ -1,6 +1,16 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss, clippy::cast_possible_wrap, clippy::cast_lossless, clippy::float_cmp)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::float_cmp
+)]
 
-use arlm_storage::sqlite::schema::{run_migrations, MIGRATION_COUNT};
+use arlm_storage::sqlite::schema::{MIGRATION_COUNT, run_migrations};
 use rusqlite::Connection;
 use tempfile::TempDir;
 
@@ -39,7 +49,10 @@ fn test_migrations_run() {
         "events",
         "summaries",
     ] {
-        assert!(tables.contains(&expected.to_string()), "missing table {expected}");
+        assert!(
+            tables.contains(&expected.to_string()),
+            "missing table {expected}"
+        );
     }
 }
 
@@ -53,7 +66,9 @@ fn test_migrations_are_idempotent() {
     run_migrations(&conn).unwrap();
 
     let version: i64 = conn
-        .query_row("SELECT MAX(version) FROM schema_version", [], |row| row.get(0))
+        .query_row("SELECT MAX(version) FROM schema_version", [], |row| {
+            row.get(0)
+        })
         .unwrap();
     // Idempotent: a second run must not add rows or change the version.
     assert_eq!(version as usize, MIGRATION_COUNT);

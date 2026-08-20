@@ -81,67 +81,11 @@ pub fn nth_line_byte_offset(s: &str, n: usize) -> usize {
     offset.min(s.len())
 }
 
-/// Approximate token count using tiktoken (cl100k_base encoding).
+/// Approximate token count using tiktoken (`cl100k_base` encoding).
 ///
 /// Falls back to whitespace counting if tiktoken fails.
 #[must_use]
 pub fn estimate_tokens(text: &str) -> usize {
     let enc = tiktoken_rs::cl100k_base_singleton();
     enc.encode_with_special_tokens(text).len()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_detect_language_rust() {
-        let path = Path::new("src/main.rs");
-        assert_eq!(detect_language(path).as_deref(), Some("rust"));
-    }
-
-    #[test]
-    fn test_detect_language_python() {
-        let path = Path::new("script.py");
-        assert_eq!(detect_language(path).as_deref(), Some("python"));
-    }
-
-    #[test]
-    fn test_detect_language_unknown() {
-        let path = Path::new("file.xyz");
-        assert_eq!(detect_language(path), None);
-    }
-
-    #[test]
-    fn test_prev_char_boundary_ascii() {
-        let s = "hello";
-        assert_eq!(prev_char_boundary(s, 5), 5);
-        assert_eq!(prev_char_boundary(s, 3), 3);
-    }
-
-    #[test]
-    fn test_prev_char_boundary_unicode() {
-        let s = "héllo"; // é is 2 bytes: [0xC3, 0xA9]
-        // byte 0: 'h', byte 1-2: 'é', byte 3: 'l', byte 4: 'l', byte 5: 'o'
-        assert_eq!(prev_char_boundary(s, 5), 5); // 'o' start
-        assert_eq!(prev_char_boundary(s, 4), 4); // second 'l' start
-        assert_eq!(prev_char_boundary(s, 3), 3); // first 'l' start
-        assert_eq!(prev_char_boundary(s, 2), 1); // middle of 'é', recede to byte 1
-    }
-
-    #[test]
-    fn test_nth_line_byte_offset() {
-        let s = "line1\nline2\nline3";
-        assert_eq!(nth_line_byte_offset(s, 0), 0);
-        assert_eq!(nth_line_byte_offset(s, 1), 6);
-        assert_eq!(nth_line_byte_offset(s, 2), 12);
-    }
-
-    #[test]
-    fn test_estimate_tokens() {
-        // tiktoken cl100k_base tokenization
-        assert!(estimate_tokens("hello world") >= 2);
-        assert_eq!(estimate_tokens(""), 0);
-        assert!(estimate_tokens("  spaced  out  ") >= 2);
-    }
 }

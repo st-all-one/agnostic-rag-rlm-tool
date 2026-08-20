@@ -7,9 +7,9 @@
 
 use arlm_search::context::{build_context, build_search_results, load_chunks};
 use arlm_search::types::{HybridResult, OutputFormat};
+use arlm_storage::Storage;
 use arlm_storage::sqlite::buffers::NewBuffer;
 use arlm_storage::sqlite::chunks::NewChunk;
-use arlm_storage::Storage;
 use tempfile::TempDir;
 
 fn setup() -> (Storage, TempDir) {
@@ -55,7 +55,9 @@ fn test_build_context_prompt() {
 
     let results = vec![HybridResult {
         chunk_id,
-        score: 0.85, is_summary: false }];
+        score: 0.85,
+        is_summary: false,
+    }];
 
     let ctx = build_context(&storage, &results, OutputFormat::Prompt, None).unwrap();
     assert!(ctx.contains("## Project Context"));
@@ -71,7 +73,9 @@ fn test_build_context_markdown() {
 
     let results = vec![HybridResult {
         chunk_id,
-        score: 0.90, is_summary: false }];
+        score: 0.90,
+        is_summary: false,
+    }];
 
     let ctx = build_context(&storage, &results, OutputFormat::Markdown, None).unwrap();
     assert!(ctx.contains("# Search Results"));
@@ -85,7 +89,9 @@ fn test_build_context_json() {
 
     let results = vec![HybridResult {
         chunk_id,
-        score: 0.75, is_summary: false }];
+        score: 0.75,
+        is_summary: false,
+    }];
 
     let ctx = build_context(&storage, &results, OutputFormat::Json, None).unwrap();
     assert!(ctx.contains("chunk_id"));
@@ -99,7 +105,9 @@ fn test_build_search_results() {
 
     let results = vec![HybridResult {
         chunk_id,
-        score: 0.95, is_summary: false }];
+        score: 0.95,
+        is_summary: false,
+    }];
 
     let search_results = build_search_results(&storage, &results, None).unwrap();
     assert_eq!(search_results.len(), 1);
@@ -120,7 +128,9 @@ fn test_load_chunks_missing() {
     let (storage, _tmp) = setup();
     let results = vec![HybridResult {
         chunk_id: 999,
-        score: 0.5, is_summary: false }];
+        score: 0.5,
+        is_summary: false,
+    }];
 
     let chunks = load_chunks(&storage, &results).unwrap();
     assert!(chunks.is_empty());

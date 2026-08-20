@@ -131,5 +131,3 @@ impl ConsolidationEngine {
         Ok(u64::try_from(deleted).unwrap_or(0))
     }
 }
-
-

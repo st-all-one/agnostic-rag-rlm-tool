@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 use arlm_core::events::{EventBus, RlmEvent};
-use arlm_core::jsonl_logger::{files, spawn_event_writer, JsonlEventLogger};
+use arlm_core::jsonl_logger::{JsonlEventLogger, files, spawn_event_writer};
 use std::sync::Arc;
 
 fn sample_events() -> Vec<RlmEvent> {
@@ -119,8 +119,7 @@ async fn test_spawn_event_writer_writes_all_events() {
     drop(bus);
     handle.await.expect("writer task should complete");
 
-    let replayed =
-        JsonlEventLogger::replay(dir.path().join("run_run-2.events.jsonl").as_path())
-            .expect("replay");
+    let replayed = JsonlEventLogger::replay(dir.path().join("run_run-2.events.jsonl").as_path())
+        .expect("replay");
     assert_eq!(replayed.len(), count);
 }

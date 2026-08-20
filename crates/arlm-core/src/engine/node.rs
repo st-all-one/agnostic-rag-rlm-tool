@@ -15,7 +15,7 @@ use crate::router::DepthRouter;
 use crate::solver;
 use crate::synthesizer;
 use crate::token_counter::TokenCounter;
-use crate::types::{Action, AbortSignal, NodeStatus, RlmNode, StartRunInput};
+use crate::types::{AbortSignal, Action, NodeStatus, RlmNode, StartRunInput};
 
 /// Parameters for a recursive node run. Uses owned types for Send safety.
 pub struct RunNodeParamsOwned {
@@ -250,9 +250,11 @@ async fn run_node_inner(params: &RunNodeParamsOwned) -> anyhow::Result<RlmNode> 
             )
             .await?;
 
-            Ok(RlmNode::completed(&node_id, params.depth, &params.task, result)
-                .with_decision(decision)
-                .with_children(children))
+            Ok(
+                RlmNode::completed(&node_id, params.depth, &params.task, result)
+                    .with_decision(decision)
+                    .with_children(children),
+            )
         }
     }
 }

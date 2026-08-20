@@ -26,7 +26,9 @@ fn test_search_options_default() {
 fn test_hybrid_result_clone() {
     let r = HybridResult {
         chunk_id: 1,
-        score: 0.5, is_summary: false };
+        score: 0.5,
+        is_summary: false,
+    };
     let r2 = r.clone();
     assert_eq!(r.chunk_id, r2.chunk_id);
     assert_eq!(r.score, r2.score);

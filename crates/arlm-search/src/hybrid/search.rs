@@ -124,8 +124,7 @@ impl HybridSearch {
             match storage.search_summaries(query, buffer_id, k * 3) {
                 Ok(hits) => {
                     for (rank, hit) in hits.iter().enumerate() {
-                        *summary_scores.entry(hit.id).or_insert(0.0) +=
-                            rrf_score(rank, self.rrf_k);
+                        *summary_scores.entry(hit.id).or_insert(0.0) += rrf_score(rank, self.rrf_k);
                     }
                     tracing::debug!(
                         elapsed_ms = tier_start.elapsed().as_millis(),
@@ -158,10 +157,8 @@ impl HybridSearch {
             })
             .collect();
 
-        let mut results: Vec<HybridResult> = chunk_results
-            .into_iter()
-            .chain(summary_results)
-            .collect();
+        let mut results: Vec<HybridResult> =
+            chunk_results.into_iter().chain(summary_results).collect();
 
         results.sort_by(|a, b| {
             b.score
@@ -192,9 +189,7 @@ impl HybridSearch {
                     }
                 }
             } else {
-                tracing::warn!(
-                    "LLM rerank requires storage access, falling back to fused results"
-                );
+                tracing::warn!("LLM rerank requires storage access, falling back to fused results");
             }
         }
 

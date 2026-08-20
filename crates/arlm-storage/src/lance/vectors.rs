@@ -70,8 +70,7 @@ impl VectorStore {
                 ..Default::default()
             };
             tracing::info!(path = %path.display(), dims = VECTOR_DIMS, "creating usearch index");
-            Index::new(&opts)
-                .map_err(|e| anyhow::anyhow!("failed to create vector index: {e}"))?
+            Index::new(&opts).map_err(|e| anyhow::anyhow!("failed to create vector index: {e}"))?
         };
 
         let buffers = if meta_path.exists() {
@@ -169,9 +168,7 @@ impl VectorStore {
             Some(bid) => {
                 let buffers = self.buffers.lock();
                 self.index
-                    .filtered_search(query_vector, limit, |key| {
-                        buffers.get(&key) == Some(&bid)
-                    })
+                    .filtered_search(query_vector, limit, |key| buffers.get(&key) == Some(&bid))
                     .map_err(|e| anyhow::anyhow!("vector search failed: {e}"))?
             }
             None => self
@@ -206,10 +203,7 @@ impl VectorStore {
 
     /// Persist the index and the buffer-mapping metadata.
     fn save_locked(&self, buffers: &HashMap<u64, u64>) -> Result<()> {
-        let path_str = self
-            .index_path
-            .to_str()
-            .context("non-utf8 index path")?;
+        let path_str = self.index_path.to_str().context("non-utf8 index path")?;
         self.index
             .save(path_str)
             .map_err(|e| anyhow::anyhow!("failed to save vector index: {e}"))?;

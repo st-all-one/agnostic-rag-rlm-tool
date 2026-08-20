@@ -9,7 +9,9 @@ use arlm_storage::Storage;
 use crate::context::build_search_results;
 use crate::types::{HybridResult, SearchResult};
 
-use super::{HybridSearch, RERANK_MAX_TOKENS, RERANK_MODEL, RERANK_SNIPPET_LEN, RERANK_SYSTEM_PROMPT};
+use super::{
+    HybridSearch, RERANK_MAX_TOKENS, RERANK_MODEL, RERANK_SNIPPET_LEN, RERANK_SYSTEM_PROMPT,
+};
 
 /// Build the rerank prompt: query + each candidate's id, file path, and a snippet.
 fn build_rerank_prompt(query: &str, candidates: &[SearchResult]) -> String {

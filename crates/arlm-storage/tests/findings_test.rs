@@ -1,4 +1,14 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss, clippy::cast_possible_wrap, clippy::cast_lossless, clippy::float_cmp)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::float_cmp
+)]
 
 use arlm_storage::Storage;
 use rusqlite::params;
@@ -13,11 +23,17 @@ fn setup_storage() -> (Storage, TempDir) {
 fn create_test_task(storage: &Storage) -> i64 {
     let conn = storage.conn();
     let conn = conn.lock();
-    conn.execute("INSERT INTO buffers (name, path) VALUES ('test', '/test')", [])
-        .unwrap();
+    conn.execute(
+        "INSERT INTO buffers (name, path) VALUES ('test', '/test')",
+        [],
+    )
+    .unwrap();
     let buffer_id = conn.last_insert_rowid();
-    conn.execute("INSERT INTO tasks (buffer_id) VALUES (?1)", params![buffer_id])
-        .unwrap();
+    conn.execute(
+        "INSERT INTO tasks (buffer_id) VALUES (?1)",
+        params![buffer_id],
+    )
+    .unwrap();
     conn.last_insert_rowid()
 }
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0] - 2026-08-20
+
+### Changed
+- **Regularização do crate** (processo de 8 etapas):
+  - Testes unitários inline de `src/` extraídos para `tests/`
+    (`chunker_test.rs`, `embedder_test.rs`, `bge_m3_test.rs`, `pipeline_test.rs`) — 78 testes.
+  - Arquivos grandes (>300 linhas) divididos:
+    - `embedder/bge_m3.rs` → `bge_m3/{mod,model,attention,weights,ops,embedder}.rs`.
+    - `pipeline.rs` → `pipeline.rs` + `pipeline/files.rs` (discover/hash/compress/glob).
+    - `chunker/code.rs` → `chunker/code.rs` + `chunker/code/util.rs`.
+  - `crate::Timer` (span + timing) adicionado em pontos quentes (pipeline_new, pipeline_ingest, batch_embed_uncached).
+  - `cargo clippy --all-targets` sem warnings (pedantic limpo).
+
+### Added
+- zstd agora é **efeito no pipeline de ingest**: `ChunkedText::compressed: Option<Vec<u8>>`
+  preenchido por `compress_text` quando `IngestOptions::compress` está ativo (default `true`).
+- Helpers expostos para os testes: `chunker::code::{is_structure_start, merge_small_chunks}`,
+  `pipeline::glob_match`, `bge_m3::{gelu, layer_norm, masked_fill, half_to_f32, apply_matryoshka}`,
+  e `IngestionPipeline::batch_size()`.
+
 ## [0.3.0] - 2026-08-20
 
 ### Added

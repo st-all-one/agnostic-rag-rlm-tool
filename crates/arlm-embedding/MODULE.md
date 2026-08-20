@@ -7,17 +7,24 @@ Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em
 - `src/lib.rs` — API pública (re-exports), `Timer` de profiling.
 - `src/chunker/mod.rs` — `RawChunk` (zero-copy via `Cow`), trait `ChunkingStrategy`.
 - `src/chunker/code.rs` — chunking AST-aware para código (.rs/.py/.js).
+- `src/chunker/code/util.rs` — helpers: `merge_small_chunks`, `is_structure_start`, `byte_start_line`.
 - `src/chunker/text.rs` — chunking por parágrafos/sentenças.
 - `src/chunker/markdown.rs` — chunking por headings.
 - `src/chunker/recursive.rs` — chunking recursivo por tamanho.
 - `src/embedder/mod.rs` — trait `Embedder`, `Embedding`, `EmbeddingError`, `matryoshka_truncate`.
-- `src/embedder/bge_m3.rs` — `BgeM3Embedder` (candle transformer, `Projection` f32/quantizada, matryoshka).
+- `src/embedder/bge_m3/mod.rs` — `BgeM3Embedder`, re-exports.
+- `src/embedder/bge_m3/model.rs` — `BgeM3Model` (transformer BGE-M3: embeddings + camadas).
+- `src/embedder/bge_m3/attention.rs` — `TransformerLayer`, `SelfAttention`.
+- `src/embedder/bge_m3/weights.rs` — carga de pesos (`QMatMul`, `Projection`).
+- `src/embedder/bge_m3/ops.rs` — `gelu`/`layer_norm`/`masked_fill`/`half_to_f32`.
+- `src/embedder/bge_m3/embedder.rs` — `embed`/`embed_batch` + cache matryoshka.
 - `src/embedder/lightweight.rs` — `LightweightEmbedder` (SHA-256→xorshift→f32, sem pesos).
 - `src/embedder/config.rs` — `EmbeddingConfig`, `EmbeddingModel`, `Quantization`, `build_embedder`.
 - `src/embedder/fallback.rs` — `FallbackEmbedder` (hash-based).
 - `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256).
 - `src/embedder/batch.rs` — inferência em lote.
-- `src/pipeline.rs` — `IngestionPipeline` (file→chunks→embeddings), `discover_files`, `IngestOptions`, `from_config`.
+- `src/pipeline.rs` — `IngestionPipeline` (file→chunks→embeddings), `IngestOptions`, `ChunkedText`, `from_config`.
+- `src/pipeline/files.rs` — `discover_files`, `glob_match`, `is_text_file`, `compress_text`, `compute_hash`.
 
 ## Dependências
 - Internas: nenhuma (crate folha de embeddings; consumido por `arlm-search`, `arlm-memory`, `arlm-server`).
@@ -25,8 +32,10 @@ Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em
 
 ## Convenções deste módulo
 - Sem `unwrap`/`expect`/`panic` em `src/`; use `anyhow::Result`+`?`. Sem `unsafe` (exceto `Mmap::map`/`transmute` com `#[allow]`, sob `deny`).
+- Testes unitários residem em `tests/` (extraídos de `src/`), usando helpers expostos (`pub`/`#[doc(hidden)]`) e `EmbeddingConfig::for_tests()` (Lightweight) — nada de pesos/candle em runtime.
+- `crate::Timer` marca pontos quentes (criação de pipeline, ingest, batch embed) com span + timing.
+- zstd é aplicado no ingest via `IngestOptions::compress` (default `true`); `ChunkedText::compressed` guarda o texto comprimido.
 - `Embedder` é a trait central — novos modelos (ex.: `gte-small`, `e5-small`) implementam-na e entram em `EmbeddingModel`.
-- Testes usam `EmbeddingConfig::for_tests()` (Lightweight) para não exigir pesos nem candle em runtime.
 - `matryoshka_truncate(emb, dims)` é a fonte única de truncamento de dimensão.
 
 ## Comandos úteis

@@ -106,11 +106,12 @@ impl TrajectoryEngine {
 
         let mut rows = stmt.query_map(params![task_hash, project_name], |row| {
             let root_json: String = row.get(4)?;
-            let root: DecompositionNode = serde_json::from_str(&root_json).unwrap_or(DecompositionNode {
-                description: String::new(),
-                status: "unknown".to_string(),
-                children: Vec::new(),
-            });
+            let root: DecompositionNode =
+                serde_json::from_str(&root_json).unwrap_or(DecompositionNode {
+                    description: String::new(),
+                    status: "unknown".to_string(),
+                    children: Vec::new(),
+                });
 
             Ok(RunTrajectory {
                 id: row.get(0)?,
@@ -165,11 +166,12 @@ impl TrajectoryEngine {
         let rows: Vec<RunTrajectory> = stmt
             .query_map(params![project_name, search_pattern, limit], |row| {
                 let root_json: String = row.get(4)?;
-                let root: DecompositionNode = serde_json::from_str(&root_json).unwrap_or(DecompositionNode {
-                    description: String::new(),
-                    status: "unknown".to_string(),
-                    children: Vec::new(),
-                });
+                let root: DecompositionNode =
+                    serde_json::from_str(&root_json).unwrap_or(DecompositionNode {
+                        description: String::new(),
+                        status: "unknown".to_string(),
+                        children: Vec::new(),
+                    });
 
                 Ok(RunTrajectory {
                     id: row.get(0)?,
@@ -226,11 +228,12 @@ impl TrajectoryEngine {
         let rows = stmt
             .query_map(params![project_name, limit], |row| {
                 let root_json: String = row.get(4)?;
-                let root: DecompositionNode = serde_json::from_str(&root_json).unwrap_or(DecompositionNode {
-                    description: String::new(),
-                    status: "unknown".to_string(),
-                    children: Vec::new(),
-                });
+                let root: DecompositionNode =
+                    serde_json::from_str(&root_json).unwrap_or(DecompositionNode {
+                        description: String::new(),
+                        status: "unknown".to_string(),
+                        children: Vec::new(),
+                    });
 
                 Ok(RunTrajectory {
                     id: row.get(0)?,

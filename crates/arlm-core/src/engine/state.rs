@@ -41,7 +41,8 @@ impl EngineState {
 
     /// Record output tokens from a node.
     pub fn record_output_tokens(&self, tokens: u32) {
-        self.total_output_tokens.fetch_add(tokens, Ordering::Relaxed);
+        self.total_output_tokens
+            .fetch_add(tokens, Ordering::Relaxed);
     }
 
     /// Check if root-level compaction is needed.

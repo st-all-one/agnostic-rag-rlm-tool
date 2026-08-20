@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use arlm_core::tools::{CodeSearch, ExecutableTool, SearchCodeTool, ToolRegistry};
 use arlm_core::CustomTool;
+use arlm_core::tools::{CodeSearch, ExecutableTool, SearchCodeTool, ToolRegistry};
 
 struct FakeSearch;
 

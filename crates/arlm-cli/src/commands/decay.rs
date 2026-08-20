@@ -24,9 +24,7 @@ pub fn execute(args: DecayArgs<'_>) -> Result<()> {
     let config = DecayConfig::default();
 
     let rows: Vec<(i64, i64, i64)> = stmt
-        .query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
         .filter_map(std::result::Result::ok)
         .collect();
 
@@ -59,7 +57,10 @@ pub fn execute(args: DecayArgs<'_>) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
         _ => {
-            println!("Chunks: {total}, Decayed: {decayed}, Kept: {kept} (dry_run: {})", args.dry_run);
+            println!(
+                "Chunks: {total}, Decayed: {decayed}, Kept: {kept} (dry_run: {})",
+                args.dry_run
+            );
         }
     }
 

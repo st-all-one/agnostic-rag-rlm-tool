@@ -52,11 +52,11 @@ pub const MAX_DEPTH: u32 = 5;
 
 /// Model tiers: expensive at root, cheaper at leaves.
 const MODEL_TIERS: &[&str] = &[
-    "gpt-4o",       // depth 0 — root
-    "gpt-4o-mini",  // depth 1
-    "gpt-4o-mini",  // depth 2
-    "gpt-4o-mini",  // depth 3
-    "gpt-4o-mini",  // depth 4+
+    "gpt-4o",      // depth 0 — root
+    "gpt-4o-mini", // depth 1
+    "gpt-4o-mini", // depth 2
+    "gpt-4o-mini", // depth 3
+    "gpt-4o-mini", // depth 4+
 ];
 
 #[derive(Debug)]
@@ -145,9 +145,7 @@ impl DepthRouter {
     pub fn select_model(&self, depth: u32, custom_model: Option<&str>) -> String {
         let idx = (depth as usize).min(MODEL_TIERS.len() - 1);
         if depth == 0 {
-            custom_model
-                .unwrap_or(MODEL_TIERS[0])
-                .to_string()
+            custom_model.unwrap_or(MODEL_TIERS[0]).to_string()
         } else {
             MODEL_TIERS[idx].to_string()
         }
@@ -253,4 +251,3 @@ impl Default for DepthRouter {
         Self::new()
     }
 }
-

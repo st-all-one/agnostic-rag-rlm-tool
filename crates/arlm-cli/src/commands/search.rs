@@ -69,7 +69,14 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
                 top_k: config.top_k,
             };
             hybrid
-                .search(config.query, None, buffer.id, &options, None, Some(&storage))
+                .search(
+                    config.query,
+                    None,
+                    buffer.id,
+                    &options,
+                    None,
+                    Some(&storage),
+                )
                 .await
                 .context("hybrid search failed")?
         }

@@ -1,4 +1,11 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::all,
+    clippy::pedantic,
+    clippy::nursery
+)]
 
 use arlm_memory::trajectory::*;
 use arlm_storage::Storage;

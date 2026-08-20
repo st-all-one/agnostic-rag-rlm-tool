@@ -31,10 +31,7 @@ pub trait LlmCallback: Send + Sync {
     /// # Returns
     /// List of responses in the same order as input prompts.
     fn query_batched(&self, prompts: &[String], model: Option<&str>) -> Vec<String> {
-        prompts
-            .iter()
-            .map(|p| self.query(p, model))
-            .collect()
+        prompts.iter().map(|p| self.query(p, model)).collect()
     }
 }
 
@@ -105,9 +102,7 @@ impl LlmQueryServer {
     /// Get the port the server is listening on.
     #[must_use]
     pub fn port(&self) -> u16 {
-        self.listener
-            .local_addr()
-            .map_or(0, |addr| addr.port())
+        self.listener.local_addr().map_or(0, |addr| addr.port())
     }
 
     /// Start the server in a background thread.
@@ -124,10 +119,7 @@ impl LlmQueryServer {
             TcpListener::bind("127.0.0.1:0").map_err(|e| format!("failed to bind: {e}"))?,
         );
         let callback = self.callback.clone();
-        let shutdown_rx = self
-            .shutdown_rx
-            .take()
-            .ok_or("server already started")?;
+        let shutdown_rx = self.shutdown_rx.take().ok_or("server already started")?;
 
         thread::spawn(move || {
             Self::run_server(listener, callback, shutdown_rx);
@@ -226,8 +218,9 @@ impl LlmQueryServer {
             };
 
             // Send response
-            let response_json =
-                serde_json::to_vec(&response).map_err(|e| e.to_string()).unwrap_or_default();
+            let response_json = serde_json::to_vec(&response)
+                .map_err(|e| e.to_string())
+                .unwrap_or_default();
             let response_len = u32::try_from(response_json.len()).unwrap_or(u32::MAX);
             if writer.write_all(&response_len.to_be_bytes()).is_err() {
                 break;
@@ -317,7 +310,8 @@ impl CodeExecutor {
     ///
     /// Returns an error if the subprocess cannot be spawned.
     pub fn execute(&self, block: &CodeBlock) -> Result<ReplResult, String> {
-        self.setup().map_err(|e| format!("failed to create work dir: {e}"))?;
+        self.setup()
+            .map_err(|e| format!("failed to create work dir: {e}"))?;
 
         let start = Instant::now();
         let result = match block.language.as_str() {
@@ -555,4 +549,3 @@ pub fn format_repl_result(result: &ReplResult) -> String {
     }
     out
 }
-

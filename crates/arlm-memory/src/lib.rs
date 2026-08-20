@@ -30,7 +30,9 @@ pub use arlm_core::memory::MemoryProvider;
 pub use checkpoint::{CheckpointInfo, CheckpointManager};
 pub use consolidation::{ConsolidateOptions, ConsolidateResult, ConsolidationEngine};
 pub use decay::{DecayConfig, SalienceInput, compute_salience, should_evict};
-pub use engine::{IndexProjectOptions, IndexProjectResult, MemoryEngine, SearchOptions, SearchResult};
+pub use engine::{
+    IndexProjectOptions, IndexProjectResult, MemoryEngine, SearchOptions, SearchResult,
+};
 pub use history::{HistoryManager, QueryRecord};
 pub use knowledge::KnowledgeEngine;
 pub use persist::{
@@ -82,5 +84,3 @@ impl Drop for ScopedTimer {
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
-
-

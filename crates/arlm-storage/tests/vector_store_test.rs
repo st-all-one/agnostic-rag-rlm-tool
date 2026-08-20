@@ -1,7 +1,17 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss, clippy::cast_possible_wrap, clippy::cast_lossless, clippy::float_cmp)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::float_cmp
+)]
 
-use arlm_storage::lance::vectors::VectorEntry;
 use arlm_storage::VectorStore;
+use arlm_storage::lance::vectors::VectorEntry;
 use tempfile::TempDir;
 
 const DIMS: usize = 1024;
@@ -80,7 +90,10 @@ async fn test_search_with_buffer_filter() {
     ];
     store.insert_vectors(&entries).await.unwrap();
 
-    let results = store.search_similar(&vec_of(1.0), Some(1), 10).await.unwrap();
+    let results = store
+        .search_similar(&vec_of(1.0), Some(1), 10)
+        .await
+        .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].chunk_id, 0);
 }

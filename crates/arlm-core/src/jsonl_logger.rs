@@ -137,4 +137,3 @@ pub fn spawn_event_writer(
         }
     })
 }
-

@@ -72,7 +72,8 @@ impl Storage {
 
         // Create the connection manager with pragma application
         let manager = r2d2_sqlite::SqliteConnectionManager::file(&db_path).with_init(|conn| {
-            Self::apply_pragmas(conn, false).map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))
+            Self::apply_pragmas(conn, false)
+                .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))
         });
 
         let pool = r2d2::Pool::builder()

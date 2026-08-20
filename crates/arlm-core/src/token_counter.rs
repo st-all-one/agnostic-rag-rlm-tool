@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Model context window limits (in tokens).
 ///
@@ -107,17 +107,13 @@ impl TokenCounter {
             return 0;
         }
         let chars = text.chars().count();
-        let punctuation = text
-            .chars()
-            .filter(char::is_ascii_punctuation)
-            .count();
+        let punctuation = text.chars().filter(char::is_ascii_punctuation).count();
         #[allow(
             clippy::cast_precision_loss,
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss
         )]
-        let tokens =
-            ((chars as f64 / 4.0) + (punctuation as f64 / 4.0)).ceil() as u32;
+        let tokens = ((chars as f64 / 4.0) + (punctuation as f64 / 4.0)).ceil() as u32;
         tokens.max(1)
     }
 
@@ -181,4 +177,3 @@ impl TokenCounter {
         self.completion.store(0, Ordering::Relaxed);
     }
 }
-

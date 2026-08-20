@@ -1,4 +1,11 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::all,
+    clippy::pedantic,
+    clippy::nursery
+)]
 
 //! Integration tests for knowledge transfer *between* projects using the full
 //! MemoryEngine stack (project lifecycle + knowledge indexing + transfer).

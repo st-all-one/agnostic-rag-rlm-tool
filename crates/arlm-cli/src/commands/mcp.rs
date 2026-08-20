@@ -234,8 +234,9 @@ fn call_rlm_context(state: &McpState, args: Option<&serde_json::Value>) -> Resul
         .search_fts(task, buffer.id, top_k, None)
         .context("FTS search failed")?;
 
-    let context = arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
-        .context("failed to build context")?;
+    let context =
+        arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
+            .context("failed to build context")?;
 
     Ok(format!(
         "Context for task: {task}\nProject: {}\n\n{context}",
@@ -278,8 +279,8 @@ fn call_rlm_search(state: &McpState, args: Option<&serde_json::Value>) -> Result
         .search_fts(query, buffer.id, top_k, None)
         .context("FTS search failed")?;
 
-    let search_results =
-        arlm_search::build_search_results(&storage, &results, None).context("failed to build results")?;
+    let search_results = arlm_search::build_search_results(&storage, &results, None)
+        .context("failed to build results")?;
 
     let items: Vec<serde_json::Value> = search_results
         .iter()

@@ -11,8 +11,8 @@ use arlm_search::bm25::Bm25Search;
 use arlm_search::decay::DecayConfig;
 use arlm_search::hybrid::HybridSearch;
 use arlm_search::types::{HybridResult, SearchOptions, SearchTier};
-use arlm_storage::sqlite::buffers::NewBuffer;
 use arlm_storage::Storage;
+use arlm_storage::sqlite::buffers::NewBuffer;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -29,10 +29,14 @@ fn test_rrf_fuse_single_list() {
     let results = vec![
         HybridResult {
             chunk_id: 1,
-            score: 0.9, is_summary: false },
+            score: 0.9,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 2,
-            score: 0.8, is_summary: false },
+            score: 0.8,
+            is_summary: false,
+        },
     ];
 
     let fused = HybridSearch::rrf_fuse(&[results], 10, 60.0);
@@ -45,25 +49,37 @@ fn test_rrf_fuse_multiple_lists() {
     let list1 = vec![
         HybridResult {
             chunk_id: 1,
-            score: 0.9, is_summary: false },
+            score: 0.9,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 2,
-            score: 0.8, is_summary: false },
+            score: 0.8,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 3,
-            score: 0.7, is_summary: false },
+            score: 0.7,
+            is_summary: false,
+        },
     ];
 
     let list2 = vec![
         HybridResult {
             chunk_id: 2,
-            score: 0.95, is_summary: false },
+            score: 0.95,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 1,
-            score: 0.85, is_summary: false },
+            score: 0.85,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 4,
-            score: 0.75, is_summary: false },
+            score: 0.75,
+            is_summary: false,
+        },
     ];
 
     let fused = HybridSearch::rrf_fuse(&[list1, list2], 10, 60.0);
@@ -86,7 +102,9 @@ fn test_rrf_fuse_top_k_limit() {
     let results: Vec<HybridResult> = (0..20)
         .map(|i| HybridResult {
             chunk_id: i,
-            score: 1.0 - i as f32 * 0.01, is_summary: false })
+            score: 1.0 - i as f32 * 0.01,
+            is_summary: false,
+        })
         .collect();
 
     let fused = HybridSearch::rrf_fuse(&[results], 5, 60.0);
@@ -103,10 +121,14 @@ fn test_rrf_fuse_empty() {
 fn test_rrf_fuse_disjoint_results() {
     let list1 = vec![HybridResult {
         chunk_id: 1,
-        score: 0.9, is_summary: false }];
+        score: 0.9,
+        is_summary: false,
+    }];
     let list2 = vec![HybridResult {
         chunk_id: 2,
-        score: 0.9, is_summary: false }];
+        score: 0.9,
+        is_summary: false,
+    }];
 
     let fused = HybridSearch::rrf_fuse(&[list1, list2], 10, 60.0);
     assert_eq!(fused.len(), 2);
@@ -121,19 +143,27 @@ fn test_rrf_fuse_overlapping_high_rank_wins() {
     let list1 = vec![
         HybridResult {
             chunk_id: 1,
-            score: 0.9, is_summary: false },
+            score: 0.9,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 2,
-            score: 0.8, is_summary: false },
+            score: 0.8,
+            is_summary: false,
+        },
     ];
 
     let list2 = vec![
         HybridResult {
             chunk_id: 1,
-            score: 0.95, is_summary: false },
+            score: 0.95,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 3,
-            score: 0.7, is_summary: false },
+            score: 0.7,
+            is_summary: false,
+        },
     ];
 
     let fused = HybridSearch::rrf_fuse(&[list1, list2], 10, 60.0);
@@ -146,22 +176,32 @@ fn test_rrf_fuse_bm25_entity_fusion() {
     let bm25 = vec![
         HybridResult {
             chunk_id: 1,
-            score: 0.9, is_summary: false },
+            score: 0.9,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 2,
-            score: 0.8, is_summary: false },
+            score: 0.8,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 3,
-            score: 0.7, is_summary: false },
+            score: 0.7,
+            is_summary: false,
+        },
     ];
 
     let entity = vec![
         HybridResult {
             chunk_id: 2,
-            score: 0.95, is_summary: false },
+            score: 0.95,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 4,
-            score: 0.85, is_summary: false },
+            score: 0.85,
+            is_summary: false,
+        },
     ];
 
     let fused = HybridSearch::rrf_fuse(&[bm25, entity], 10, 60.0);
@@ -177,10 +217,14 @@ fn test_apply_decay_no_ages() {
     let results = vec![
         HybridResult {
             chunk_id: 1,
-            score: 1.0, is_summary: false },
+            score: 1.0,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 2,
-            score: 0.5, is_summary: false },
+            score: 0.5,
+            is_summary: false,
+        },
     ];
 
     let decayed = hybrid.apply_decay(results, &HashMap::new());
@@ -196,10 +240,14 @@ fn test_apply_decay_with_ages() {
     let results = vec![
         HybridResult {
             chunk_id: 1,
-            score: 1.0, is_summary: false },
+            score: 1.0,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 2,
-            score: 1.0, is_summary: false },
+            score: 1.0,
+            is_summary: false,
+        },
     ];
 
     let mut ages = HashMap::new();
@@ -221,10 +269,14 @@ fn test_apply_decay_reorders_by_freshness() {
     let results = vec![
         HybridResult {
             chunk_id: 2,
-            score: 0.9, is_summary: false },
+            score: 0.9,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 1,
-            score: 0.5, is_summary: false },
+            score: 0.5,
+            is_summary: false,
+        },
     ];
 
     let mut ages = HashMap::new();
@@ -244,10 +296,14 @@ fn test_apply_decay_disabled() {
     let results = vec![
         HybridResult {
             chunk_id: 1,
-            score: 1.0, is_summary: false },
+            score: 1.0,
+            is_summary: false,
+        },
         HybridResult {
             chunk_id: 2,
-            score: 0.5, is_summary: false },
+            score: 0.5,
+            is_summary: false,
+        },
     ];
 
     let mut ages = HashMap::new();
@@ -307,7 +363,10 @@ async fn test_dual_layer_summaries() {
     assert!(sid > 0);
 
     let direct = storage.search_summaries("zzmodule", buffer, 10).unwrap();
-    assert!(!direct.is_empty(), "search_summaries should find the summary");
+    assert!(
+        !direct.is_empty(),
+        "search_summaries should find the summary"
+    );
 
     let bm25 = Bm25Search::new(&storage).unwrap();
     let hybrid = HybridSearch::new(bm25, None, None);

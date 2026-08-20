@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 use rusqlite::params;
 use tracing::info;
 
-use crate::engine::{MemoryEngine, SearchOptions, SearchResult};
 use crate::ScopedTimer;
+use crate::engine::{MemoryEngine, SearchOptions, SearchResult};
 
 impl MemoryEngine {
     /// Search across indexed knowledge using FTS5 BM25.
@@ -27,9 +27,7 @@ impl MemoryEngine {
                    ORDER BY rank
                    LIMIT ?2";
 
-        let mut stmt = conn
-            .prepare(sql)
-            .context("failed to prepare FTS search")?;
+        let mut stmt = conn.prepare(sql).context("failed to prepare FTS search")?;
 
         let rows: Vec<SearchResult> = stmt
             .query_map(params![query, limit], |row| {

@@ -42,7 +42,8 @@ fn send_llm_request(addr: &str, request: &LlmRequest) -> Result<LlmResponse, Str
         .read_exact(&mut response_buf)
         .map_err(|e| format!("failed to read response: {e}"))?;
 
-    serde_json::from_slice(&response_buf).map_err(|e| format!("failed to deserialize response: {e}"))
+    serde_json::from_slice(&response_buf)
+        .map_err(|e| format!("failed to deserialize response: {e}"))
 }
 
 #[test]
@@ -139,7 +140,8 @@ fn test_code_executor_python_computation() {
     let executor = CodeExecutor::default_executor();
     let block = CodeBlock {
         language: "python".to_string(),
-        code: "import json; print(json.dumps({'status': 'ok', 'sum': sum(range(100))}))".to_string(),
+        code: "import json; print(json.dumps({'status': 'ok', 'sum': sum(range(100))}))"
+            .to_string(),
     };
     let result = executor.execute(&block).unwrap();
     assert_eq!(result.exit_code, 0);
@@ -352,7 +354,9 @@ fn test_llm_query_server_batch_request() {
 
 #[test]
 fn test_code_executor_with_llm_server() {
-    let callback = Arc::new(MockLlmCallback::new(vec!["LLM says: hello world".to_string()]));
+    let callback = Arc::new(MockLlmCallback::new(vec![
+        "LLM says: hello world".to_string(),
+    ]));
     let mut server = LlmQueryServer::new(callback).unwrap();
     let addr = format!("127.0.0.1:{}", server.port());
     let _shutdown_tx = server.start().unwrap();
@@ -467,6 +471,14 @@ print(f"answer after: {answer}")
 
     let result = executor.execute(&block).unwrap();
     assert_eq!(result.exit_code, 0);
-    assert!(result.stdout.contains("answer before: {'content': '', 'ready': False}"));
-    assert!(result.stdout.contains("answer after: {'content': 'final answer', 'ready': True}"));
+    assert!(
+        result
+            .stdout
+            .contains("answer before: {'content': '', 'ready': False}")
+    );
+    assert!(
+        result
+            .stdout
+            .contains("answer after: {'content': 'final answer', 'ready': True}")
+    );
 }

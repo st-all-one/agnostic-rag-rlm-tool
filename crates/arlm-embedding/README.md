@@ -22,20 +22,31 @@ src/
 ├── chunker/
 │   ├── mod.rs              # RawChunk, ChunkingStrategy trait
 │   ├── code.rs             # Chunking AST-aware para código
+│   ├── code/util.rs        # Helpers: merge_small_chunks, is_structure_start
 │   ├── text.rs             # Chunking por parágrafos
 │   ├── markdown.rs         # Chunking por headings
 │   └── recursive.rs        # Chunking recursivo por tamanho
 ├── embedder/
-│   ├── mod.rs              # Embedder trait, EmbeddingError, matryoshka_truncate
-│   ├── mod.rs              # OwnedFile com memmap2 zero-copy
-│   ├── bge_m3.rs           # BGE-M3 via candle (quantização INT8/INT4 + matryoshka)
+│   ├── mod.rs              # Embedder trait, EmbeddingError, matryoshka_truncate, OwnedFile
+│   ├── bge_m3/
+│   │   ├── mod.rs          # BgeM3Embedder, re-exports
+│   │   ├── model.rs        # BgeM3Model (transformer BGE-M3)
+│   │   ├── attention.rs    # TransformerLayer, SelfAttention
+│   │   ├── weights.rs      # Carga de pesos (QMatMul, Projection)
+│   │   ├── ops.rs          # gelu / layer_norm / masked_fill / half_to_f32
+│   │   └── embedder.rs     # embed/embed_batch + cache matryoshka
 │   ├── fallback.rs         # Hash-based determinístico
 │   ├── lightweight.rs      # LightweightEmbedder (sem pesos, p/ testes)
 │   ├── config.rs           # EmbeddingConfig, EmbeddingModel, Quantization, build_embedder
 │   ├── cache.rs            # Cache SQLite com SHA-256
 │   └── batch.rs            # Inferência em lote
-└── pipeline.rs             # Pipeline completo, discover_files()
+└── pipeline.rs             # Pipeline completo (IngestionPipeline, IngestOptions, ChunkedText)
+└── pipeline/
+    └── files.rs            # discover_files, glob_match, is_text_file, compress_text, compute_hash
 ```
+
+> Os testes unitários foram extraídos de `src/` para `tests/` (`chunker_test.rs`,
+> `embedder_test.rs`, `bge_m3_test.rs`, `pipeline_test.rs`).
 
 ## Uso
 
@@ -111,7 +122,7 @@ let embedder = build_embedder(&cfg)?; // Arc<dyn Embedder>
 
 - **Zero-copy**: `OwnedFile` usa `memmap2::Mmap` — arquivos grandes não carregam em RAM
 - **Paralelismo**: Chunking via Rayon (`par_iter`)
-- **Compressão**: zstd para texto em disco
+- **Compressão**: zstd no pipeline de ingest (`IngestOptions::compress`, default `true`); `ChunkedText::compressed` guarda o texto comprimido
 - **Cache**: Embeddings cacheados em SQLite
 
 ## Testes
@@ -120,4 +131,4 @@ let embedder = build_embedder(&cfg)?; // Arc<dyn Embedder>
 cargo test -p arlm-embedding
 ```
 
-77 testes cobrindo: strategies de chunking, embedders (BGE-M3 + Lightweight), cache, pipeline, discover_files, glob_match, matryoshka, quantização e config.
+78 testes cobrindo: strategies de chunking, embedders (BGE-M3 + Lightweight), cache, pipeline, discover_files, glob_match, matryoshka, quantização e config.

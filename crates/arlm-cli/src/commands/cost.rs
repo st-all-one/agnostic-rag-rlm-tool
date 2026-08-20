@@ -5,14 +5,21 @@ use anyhow::{Context, Result};
 use crate::output::{self, Format};
 use crate::util::data_dir;
 
-pub fn execute(run_id: Option<&str>, agent: Option<&str>, _project: &Path, format: Format) -> Result<()> {
+pub fn execute(
+    run_id: Option<&str>,
+    agent: Option<&str>,
+    _project: &Path,
+    format: Format,
+) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_cost");
 
     let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
 
     if let Some(rid) = run_id {
         let run = storage.get_run(rid).context("failed to query run")?;
-        let usage = storage.get_run_model_usage(rid).context("failed to query model usage")?;
+        let usage = storage
+            .get_run_model_usage(rid)
+            .context("failed to query model usage")?;
 
         match run {
             Some(r) => match format {
@@ -29,14 +36,15 @@ pub fn execute(run_id: Option<&str>, agent: Option<&str>, _project: &Path, forma
                             })
                         })
                         .collect();
-                    let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
-                        "run_id": r.id,
-                        "task": r.task,
-                        "agent": r.agent,
-                        "total_cost_usd": r.total_cost,
-                        "total_tokens": r.total_tokens,
-                        "models": models,
-                    }));
+                    let output =
+                        crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+                            "run_id": r.id,
+                            "task": r.task,
+                            "agent": r.agent,
+                            "total_cost_usd": r.total_cost,
+                            "total_tokens": r.total_tokens,
+                            "models": models,
+                        }));
                     output.print();
                 }
                 Format::Tree => {
@@ -70,32 +78,37 @@ pub fn execute(run_id: Option<&str>, agent: Option<&str>, _project: &Path, forma
                         println!("| Model | Calls | Input Tokens | Cost |");
                         println!("|-------|-------|--------------|------|");
                         for u in &usage {
-                            println!("| {} | {} | {} | ${:.4} |", u.model, u.calls, u.input_tokens, u.cost);
+                            println!(
+                                "| {} | {} | {} | ${:.4} |",
+                                u.model, u.calls, u.input_tokens, u.cost
+                            );
                         }
                     }
                 }
                 Format::Prompt => {
-                    println!("Cost for run {}: ${:.4} ({} tokens)", r.id, r.total_cost, r.total_tokens);
+                    println!(
+                        "Cost for run {}: ${:.4} ({} tokens)",
+                        r.id, r.total_cost, r.total_tokens
+                    );
                     for u in &usage {
                         println!("  {} — {} calls, ${:.4}", u.model, u.calls, u.cost);
                     }
                 }
             },
-            None => {
-                match format {
-                    Format::Json => {
-                        let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+            None => match format {
+                Format::Json => {
+                    let output =
+                        crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                             "run_id": rid,
                             "status": "not_found",
                             "message": "Run not found",
                         }));
-                        output.print();
-                    }
-                    _ => {
-                        output::warn(&format!("Run {rid} not found"));
-                    }
+                    output.print();
                 }
-            }
+                _ => {
+                    output::warn(&format!("Run {rid} not found"));
+                }
+            },
         }
         return Ok(());
     }
@@ -105,7 +118,9 @@ pub fn execute(run_id: Option<&str>, agent: Option<&str>, _project: &Path, forma
     let runs = storage.list_runs(50).context("failed to list runs")?;
 
     let filtered_runs: Vec<_> = if let Some(a) = agent {
-        runs.iter().filter(|r| r.agent.as_deref() == Some(a)).collect()
+        runs.iter()
+            .filter(|r| r.agent.as_deref() == Some(a))
+            .collect()
     } else {
         runs.iter().collect()
     };
@@ -142,12 +157,7 @@ pub fn execute(run_id: Option<&str>, agent: Option<&str>, _project: &Path, forma
             println!("  Across {} run(s)\n", filtered_runs.len());
             if !filtered_runs.is_empty() {
                 for r in &filtered_runs {
-                    println!(
-                        "  {} — ${:.4} ({})",
-                        r.id,
-                        r.total_cost,
-                        r.task,
-                    );
+                    println!("  {} — ${:.4} ({})", r.id, r.total_cost, r.task,);
                 }
             }
         }
@@ -156,7 +166,11 @@ pub fn execute(run_id: Option<&str>, agent: Option<&str>, _project: &Path, forma
             if let Some(a) = agent {
                 println!("**Agent:** {a}");
             }
-            println!("**Total:** ${:.4} across {} run(s)\n", total, filtered_runs.len());
+            println!(
+                "**Total:** ${:.4} across {} run(s)\n",
+                total,
+                filtered_runs.len()
+            );
             if !filtered_runs.is_empty() {
                 println!("| Run ID | Task | Agent | Cost | Tokens |");
                 println!("|--------|------|-------|------|--------|");
@@ -167,15 +181,26 @@ pub fn execute(run_id: Option<&str>, agent: Option<&str>, _project: &Path, forma
                         r.task.clone()
                     };
                     let agent_display = r.agent.as_deref().unwrap_or("-");
-                    println!("| {} | {} | {} | ${:.4} | {} |", r.id, task_display, agent_display, r.total_cost, r.total_tokens);
+                    println!(
+                        "| {} | {} | {} | ${:.4} | {} |",
+                        r.id, task_display, agent_display, r.total_cost, r.total_tokens
+                    );
                 }
             }
         }
         Format::Prompt => {
             if let Some(a) = agent {
-                println!("Cost for agent '{a}': ${:.4} across {} run(s)", total, filtered_runs.len());
+                println!(
+                    "Cost for agent '{a}': ${:.4} across {} run(s)",
+                    total,
+                    filtered_runs.len()
+                );
             } else {
-                println!("Total cost: ${:.4} across {} run(s)", total, filtered_runs.len());
+                println!(
+                    "Total cost: ${:.4} across {} run(s)",
+                    total,
+                    filtered_runs.len()
+                );
             }
             for r in &filtered_runs {
                 println!("  {} — ${:.4} ({})", r.id, r.total_cost, r.task);

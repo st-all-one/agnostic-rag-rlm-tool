@@ -1,8 +1,8 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use arlm_core::engine::EngineState;
 use arlm_core::budget::RunBudget;
 use arlm_core::cache::ResultCache;
+use arlm_core::engine::EngineState;
 use arlm_core::router::DepthRouter;
+use criterion::{Criterion, criterion_group, criterion_main};
 
 fn bench_engine_state(c: &mut Criterion) {
     let mut group = c.benchmark_group("engine_state");

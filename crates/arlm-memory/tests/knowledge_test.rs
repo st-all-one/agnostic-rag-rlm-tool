@@ -1,8 +1,15 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::all,
+    clippy::pedantic,
+    clippy::nursery
+)]
 
 use arlm_memory::knowledge::*;
-use arlm_storage::sqlite::buffers::NewBuffer;
 use arlm_storage::Storage;
+use arlm_storage::sqlite::buffers::NewBuffer;
 use std::path::Path;
 use tempfile::TempDir;
 

@@ -12,13 +12,13 @@ use arlm_core::types::{RlmNode, RlmRunResult, StartRunInput};
 use arlm_storage::Storage;
 
 use super::{MemoryEngine, SearchOptions};
+use crate::ScopedTimer;
 use crate::knowledge::KnowledgeEngine;
 use crate::persist::PersistEngine;
 use crate::persist::SearchPersistOptions;
 use crate::project::ProjectManager;
 use crate::session::SessionManager;
 use crate::trajectory::{DecompositionNode, FindSimilarOptions, RunTrajectory, TrajectoryEngine};
-use crate::ScopedTimer;
 
 impl MemoryEngine {
     /// Create a new `MemoryEngine` backed by the given storage path.

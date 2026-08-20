@@ -405,19 +405,17 @@ fn main() -> Result<()> {
                 session: _,
                 repl: _,
             } => {
-                let request = tonic::Request::new(
-                    arlm_proto::proto::RunRequest {
-                        project: project.to_string_lossy().to_string(),
-                        task,
-                        backend: cmd_backend.unwrap_or_default(),
-                        model: cmd_model.unwrap_or_default(),
-                        options: Some(arlm_proto::proto::RunOptions {
-                            max_depth: depth as i32,
-                            max_iterations: max_nodes as i32,
-                            ..Default::default()
-                        }),
-                    },
-                );
+                let request = tonic::Request::new(arlm_proto::proto::RunRequest {
+                    project: project.to_string_lossy().to_string(),
+                    task,
+                    backend: cmd_backend.unwrap_or_default(),
+                    model: cmd_model.unwrap_or_default(),
+                    options: Some(arlm_proto::proto::RunOptions {
+                        max_depth: depth as i32,
+                        max_iterations: max_nodes as i32,
+                        ..Default::default()
+                    }),
+                });
                 let response = rt.block_on(grpc_client.start_run(request))?;
                 println!("Run started: {}", response.into_inner().run_id);
                 Ok(())
@@ -431,14 +429,12 @@ fn main() -> Result<()> {
                 tier: _,
                 max_tokens: _,
             } => {
-                let request = tonic::Request::new(
-                    arlm_proto::proto::SearchRequest {
-                        project: project.to_string_lossy().to_string(),
-                        query,
-                        max_results: top_k as i32,
-                        ..Default::default()
-                    },
-                );
+                let request = tonic::Request::new(arlm_proto::proto::SearchRequest {
+                    project: project.to_string_lossy().to_string(),
+                    query,
+                    max_results: top_k as i32,
+                    ..Default::default()
+                });
                 let response = rt.block_on(grpc_client.search(request))?;
                 let results = response.into_inner().results;
                 for result in &results {
@@ -446,15 +442,19 @@ fn main() -> Result<()> {
                 }
                 Ok(())
             }
-            Commands::Context { task, top_k, all, tier, max_tokens } => {
-                let request = tonic::Request::new(
-                    arlm_proto::proto::ContextRequest {
-                        project: project.to_string_lossy().to_string(),
-                        task,
-                        max_tokens: max_tokens as i32,
-                        ..Default::default()
-                    },
-                );
+            Commands::Context {
+                task,
+                top_k,
+                all,
+                tier,
+                max_tokens,
+            } => {
+                let request = tonic::Request::new(arlm_proto::proto::ContextRequest {
+                    project: project.to_string_lossy().to_string(),
+                    task,
+                    max_tokens: max_tokens as i32,
+                    ..Default::default()
+                });
                 let response = rt.block_on(grpc_client.build_context(request))?;
                 let ctx = response.into_inner();
                 println!("{}", ctx.context);
@@ -470,19 +470,19 @@ fn main() -> Result<()> {
                     let request = tonic::Request::new(());
                     let response = rt.block_on(grpc_client.get_server_status(request))?;
                     let status = response.into_inner();
-                    println!("Server v{} - {} projects, {} chunks",
-                        status.version, status.total_projects, status.total_chunks);
+                    println!(
+                        "Server v{} - {} projects, {} chunks",
+                        status.version, status.total_projects, status.total_chunks
+                    );
                 }
                 Ok(())
             }
             Commands::Session { action } => match action {
                 SessionAction::Create { title } => {
-                    let request = tonic::Request::new(
-                        arlm_proto::proto::CreateSessionRequest {
-                            project: project.to_string_lossy().to_string(),
-                            title,
-                        },
-                    );
+                    let request = tonic::Request::new(arlm_proto::proto::CreateSessionRequest {
+                        project: project.to_string_lossy().to_string(),
+                        title,
+                    });
                     let response = rt.block_on(grpc_client.create_session(request))?;
                     let session = response.into_inner();
                     println!("Session created: {}", session.session_id);
@@ -492,7 +492,10 @@ fn main() -> Result<()> {
                     let request = tonic::Request::new(session_id);
                     let response = rt.block_on(grpc_client.get_session(request))?;
                     let session = response.into_inner();
-                    println!("Session: {} - {} turns", session.session_id, session.turn_count);
+                    println!(
+                        "Session: {} - {} turns",
+                        session.session_id, session.turn_count
+                    );
                     Ok(())
                 }
                 SessionAction::List => {
@@ -537,40 +540,41 @@ fn main() -> Result<()> {
             session: cmd_session,
             repl: cmd_repl,
         } => {
-            let custom_tools: Vec<arlm_core::CustomTool> = cmd_tools
-                .iter()
-                .filter_map(|t| parse_tool_arg(t))
-                .collect();
+            let custom_tools: Vec<arlm_core::CustomTool> =
+                cmd_tools.iter().filter_map(|t| parse_tool_arg(t)).collect();
             rt.block_on(commands::run::execute(commands::run::RunConfig {
-            task: &task,
-            llm,
-            backend: cmd_backend.as_deref().or(backend.as_deref()),
-            model: cmd_model.as_deref().or(model.as_deref()),
-            depth,
-            max_nodes,
-            concurrency,
-            max_budget,
-            project: &project,
-            format,
-            verbose: cli.verbose,
-            live,
-            agent: cmd_agent.as_deref().or(agent_name.as_deref()),
-            custom_tools,
-            session_id: cmd_session.as_deref(),
-            repl: cmd_repl,
-        }))
-        }
-        Commands::Index { path, chunk_size, ignore_patterns, watch } => {
-            commands::index::execute(commands::index::IndexConfig {
-                path: &path,
-                chunk_size,
-                ignore_patterns: &ignore_patterns,
-                watch,
+                task: &task,
+                llm,
+                backend: cmd_backend.as_deref().or(backend.as_deref()),
+                model: cmd_model.as_deref().or(model.as_deref()),
+                depth,
+                max_nodes,
+                concurrency,
+                max_budget,
                 project: &project,
                 format,
                 verbose: cli.verbose,
-            })
+                live,
+                agent: cmd_agent.as_deref().or(agent_name.as_deref()),
+                custom_tools,
+                session_id: cmd_session.as_deref(),
+                repl: cmd_repl,
+            }))
         }
+        Commands::Index {
+            path,
+            chunk_size,
+            ignore_patterns,
+            watch,
+        } => commands::index::execute(commands::index::IndexConfig {
+            path: &path,
+            chunk_size,
+            ignore_patterns: &ignore_patterns,
+            watch,
+            project: &project,
+            format,
+            verbose: cli.verbose,
+        }),
         Commands::Search {
             query,
             top_k,
@@ -586,7 +590,11 @@ fn main() -> Result<()> {
             min_score,
             all,
             tier: &tier,
-            max_tokens: if max_tokens == 0 { cfg.search.max_tokens } else { Some(max_tokens) },
+            max_tokens: if max_tokens == 0 {
+                cfg.search.max_tokens
+            } else {
+                Some(max_tokens)
+            },
             project: &project,
             format,
             verbose: cli.verbose,
@@ -605,18 +613,28 @@ fn main() -> Result<()> {
             verbose: cli.verbose,
             llm,
         })),
-        Commands::Context { task, top_k, all, tier, max_tokens } => {
-            rt.block_on(commands::context::execute(commands::context::ContextConfig {
+        Commands::Context {
+            task,
+            top_k,
+            all,
+            tier,
+            max_tokens,
+        } => rt.block_on(commands::context::execute(
+            commands::context::ContextConfig {
                 task: &task,
                 top_k: cfg.search.top_k.unwrap_or(top_k as u32) as usize,
                 all,
                 tier: &tier,
-                max_tokens: if max_tokens == 0 { cfg.search.max_tokens } else { Some(max_tokens) },
+                max_tokens: if max_tokens == 0 {
+                    cfg.search.max_tokens
+                } else {
+                    Some(max_tokens)
+                },
                 project: &project,
                 format,
                 verbose: cli.verbose,
-            }))
-        }
+            },
+        )),
         Commands::Status { run_id } => {
             commands::status::execute(run_id.as_deref(), &project, format)
         }
@@ -627,9 +645,15 @@ fn main() -> Result<()> {
                 format,
             })
         }
-        Commands::Cost { run_id, agent: cmd_agent } => {
-            commands::cost::execute(run_id.as_deref(), cmd_agent.as_deref().or(agent_name.as_deref()), &project, format)
-        }
+        Commands::Cost {
+            run_id,
+            agent: cmd_agent,
+        } => commands::cost::execute(
+            run_id.as_deref(),
+            cmd_agent.as_deref().or(agent_name.as_deref()),
+            &project,
+            format,
+        ),
         Commands::Session { action } => match action {
             SessionAction::Create { title } => {
                 commands::session::execute_create(&title, &project, format)
@@ -651,21 +675,15 @@ fn main() -> Result<()> {
             project: &project,
             format,
         }),
-        Commands::Cancel { run_id } => {
-            commands::cancel::execute(&run_id, &project, format)
-        }
+        Commands::Cancel { run_id } => commands::cancel::execute(&run_id, &project, format),
         Commands::Checkpoints { run_id } => {
             commands::checkpoints::execute(run_id.as_deref(), format)
         }
         Commands::RestorePage { page_name } => {
             commands::restore_page::execute(&page_name, &project, format)
         }
-        Commands::Wiki { action } => {
-            commands::wiki::execute(&action, &project, format)
-        }
-        Commands::Entities { query } => {
-            commands::entities::execute(&query, &project, format)
-        }
+        Commands::Wiki { action } => commands::wiki::execute(&action, &project, format),
+        Commands::Entities { query } => commands::entities::execute(&query, &project, format),
         Commands::Persist { title, query } => {
             commands::persist::execute(commands::persist::PersistArgs {
                 title,

@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use arlm_core::planner::{build_system_prompt, extract_json, parse_planner_decision};
 use arlm_core::Action;
+use arlm_core::planner::{build_system_prompt, extract_json, parse_planner_decision};
 
 #[test]
 fn test_parse_planner_decision_solve() {

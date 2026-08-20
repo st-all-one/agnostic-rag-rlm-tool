@@ -69,8 +69,13 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
                 output::info(&format!("Recent {} run(s):", runs.len()));
                 for r in &runs {
                     let date = chrono::DateTime::from_timestamp(r.started_at.unwrap_or(0), 0)
-                        .map_or_else(|| "-".to_string(), |dt| dt.format("%Y-%m-%d %H:%M").to_string());
-                    let dur = r.duration_ms.map_or_else(|| "-".to_string(), |d| format!("{d}ms"));
+                        .map_or_else(
+                            || "-".to_string(),
+                            |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
+                        );
+                    let dur = r
+                        .duration_ms
+                        .map_or_else(|| "-".to_string(), |d| format!("{d}ms"));
                     println!(
                         "  {} — {} ({}, {}, ${:.4})",
                         r.id,
@@ -124,7 +129,9 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
                     } else {
                         r.task.clone()
                     };
-                    let dur = r.duration_ms.map_or_else(|| "-".to_string(), |d| format!("{d}ms"));
+                    let dur = r
+                        .duration_ms
+                        .map_or_else(|| "-".to_string(), |d| format!("{d}ms"));
                     println!(
                         "| {} | {} | {} | ${:.4} | {} |",
                         r.id,

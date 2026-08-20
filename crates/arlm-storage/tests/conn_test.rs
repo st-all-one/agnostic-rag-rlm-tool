@@ -1,7 +1,17 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss, clippy::cast_possible_wrap, clippy::cast_lossless, clippy::float_cmp)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::float_cmp
+)]
 
-use arlm_storage::sqlite::buffers::NewBuffer;
 use arlm_storage::Storage;
+use arlm_storage::sqlite::buffers::NewBuffer;
 use rusqlite::Connection;
 use tempfile::TempDir;
 

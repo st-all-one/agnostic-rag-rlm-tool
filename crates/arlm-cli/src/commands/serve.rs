@@ -245,8 +245,9 @@ async fn handle_context(state: &AppState, req: &ContextRequest) -> Result<serde_
         state.metrics.record_agent_request(agent, 0);
     }
 
-    let context = arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
-        .context("failed to build context")?;
+    let context =
+        arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
+            .context("failed to build context")?;
 
     Ok(serde_json::json!({
         "task": req.task,
@@ -305,8 +306,8 @@ async fn handle_search(state: &AppState, req: &SearchRequest) -> Result<serde_js
         .await
         .context("hybrid search failed")?;
 
-    let search_results =
-        arlm_search::build_search_results(&storage, &results, None).context("failed to build results")?;
+    let search_results = arlm_search::build_search_results(&storage, &results, None)
+        .context("failed to build results")?;
 
     let items: Vec<serde_json::Value> = search_results
         .iter()
@@ -419,9 +420,10 @@ async fn handle_run(state: &AppState, req: &RunRequest) -> Result<serde_json::Va
         ..Default::default()
     };
 
-    let result = arlm_core::run_rlm_engine_with_events(input, llm_backend, state.event_bus.clone(), None)
-        .await
-        .context("RLM engine failed")?;
+    let result =
+        arlm_core::run_rlm_engine_with_events(input, llm_backend, state.event_bus.clone(), None)
+            .await
+            .context("RLM engine failed")?;
 
     state.metrics.record_node();
 

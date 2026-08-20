@@ -172,7 +172,10 @@ fn test_select_model_depth_0() {
 #[test]
 fn test_select_model_depth_0_custom() {
     let router = DepthRouter::new();
-    assert_eq!(router.select_model(0, Some("claude-sonnet")), "claude-sonnet");
+    assert_eq!(
+        router.select_model(0, Some("claude-sonnet")),
+        "claude-sonnet"
+    );
 }
 
 #[test]

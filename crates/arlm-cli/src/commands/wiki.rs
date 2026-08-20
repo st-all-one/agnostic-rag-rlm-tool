@@ -31,10 +31,11 @@ pub fn execute(action: &str, project: &Path, format: Format) -> Result<()> {
 
             match format {
                 Format::Json => {
-                    let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
-                        "action": "init",
-                        "wiki_dir": wiki_dir,
-                    }));
+                    let output =
+                        crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+                            "action": "init",
+                            "wiki_dir": wiki_dir,
+                        }));
                     output.print();
                 }
                 _ => {
@@ -64,10 +65,11 @@ pub fn execute(action: &str, project: &Path, format: Format) -> Result<()> {
 
             match format {
                 Format::Json => {
-                    let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
-                        "action": "commit",
-                        "output": String::from_utf8_lossy(&output.stdout),
-                    }));
+                    let output =
+                        crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+                            "action": "commit",
+                            "output": String::from_utf8_lossy(&output.stdout),
+                        }));
                     output.print();
                 }
                 _ => {
@@ -91,10 +93,11 @@ pub fn execute(action: &str, project: &Path, format: Format) -> Result<()> {
 
             match format {
                 Format::Json => {
-                    let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
-                        "action": "log",
-                        "output": String::from_utf8_lossy(&output.stdout),
-                    }));
+                    let output =
+                        crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+                            "action": "log",
+                            "output": String::from_utf8_lossy(&output.stdout),
+                        }));
                     output.print();
                 }
                 _ => {

@@ -3,13 +3,13 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
 
+use crate::ScopedTimer;
+use crate::persist::render_markdown;
 use crate::persist::{
     AnalysisPersistOptions, DecisionPersistOptions, Frontmatter, PersistEngine, PersistResult,
     SearchPersistOptions, SessionPersistOptions, TrajectoryPersistOptions, WikiScope,
     default_salience,
 };
-use crate::persist::render_markdown;
-use crate::ScopedTimer;
 
 impl PersistEngine {
     /// Persist a search result.
@@ -169,7 +169,10 @@ impl PersistEngine {
         let _timer = ScopedTimer::new("persist_session");
 
         let now = Utc::now();
-        let filename = format!("{}.md", crate::persist::sanitize_identifier(&options.session_id));
+        let filename = format!(
+            "{}.md",
+            crate::persist::sanitize_identifier(&options.session_id)
+        );
 
         let frontmatter = Frontmatter {
             title: format!("session {}", options.session_id),
@@ -215,7 +218,10 @@ impl PersistEngine {
         let _timer = ScopedTimer::new("persist_trajectory");
 
         let now = Utc::now();
-        let filename = format!("{}.md", crate::persist::sanitize_identifier(&options.run_id));
+        let filename = format!(
+            "{}.md",
+            crate::persist::sanitize_identifier(&options.run_id)
+        );
 
         let frontmatter = Frontmatter {
             title: format!("run {}", options.run_id),

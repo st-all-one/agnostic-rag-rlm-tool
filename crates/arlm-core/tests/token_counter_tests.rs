@@ -5,7 +5,7 @@
     clippy::manual_range_contains
 )]
 
-use arlm_core::token_counter::{get_context_limit, TokenCounter};
+use arlm_core::token_counter::{TokenCounter, get_context_limit};
 
 #[test]
 fn test_estimate_empty() {

@@ -102,10 +102,7 @@ pub async fn solve_task(
             compaction_count += 1;
             info!(
                 task = task,
-                iteration,
-                current_tokens,
-                threshold_tokens,
-                "compaction triggered"
+                iteration, current_tokens, threshold_tokens, "compaction triggered"
             );
             messages = compact_messages(&messages, &llm, &input.retry_policy.inner, &model).await?;
         }
@@ -414,11 +411,7 @@ impl PersistentSolver {
         // Compact history if needed
         self.compact_if_needed();
 
-        let model = input
-            .model
-            .as_deref()
-            .unwrap_or("gpt-4o")
-            .to_string();
+        let model = input.model.as_deref().unwrap_or("gpt-4o").to_string();
 
         let tools_block = format_tools_for_prompt(&input.custom_tools);
         let system_content = if tools_block.is_empty() {
@@ -438,7 +431,9 @@ impl PersistentSolver {
         // Add current task
         messages.push(Message {
             role: Role::User,
-            content: format!("Task: {task}\n\nSolve this task directly and return a concrete answer."),
+            content: format!(
+                "Task: {task}\n\nSolve this task directly and return a concrete answer."
+            ),
         });
 
         let sampling = crate::sampling::SamplingArgs::for_node_type(Action::Solve);
@@ -490,8 +485,10 @@ impl StateInspector {
     /// Record a completed task.
     pub fn record_task(&mut self, task: &str, result: &str) {
         self.completed_tasks.push(task.to_string());
-        self.current_variables
-            .insert(format!("task_{}", self.completed_tasks.len()), result.to_string());
+        self.current_variables.insert(
+            format!("task_{}", self.completed_tasks.len()),
+            result.to_string(),
+        );
         self.iteration_count += 1;
     }
 
@@ -504,7 +501,9 @@ impl StateInspector {
     /// Get a variable.
     #[must_use]
     pub fn get_variable(&self, name: &str) -> Option<&str> {
-        self.current_variables.get(name).map(std::string::String::as_str)
+        self.current_variables
+            .get(name)
+            .map(std::string::String::as_str)
     }
 
     /// List all variables (equivalent to `SHOW_VARS`).
@@ -611,13 +610,23 @@ pub async fn solve_task_repl(
         },
         Message {
             role: Role::User,
-            content: format!("Task: {task}\n\nWrite code to solve this task. Use ```python or ```bash code blocks."),
+            content: format!(
+                "Task: {task}\n\nWrite code to solve this task. Use ```python or ```bash code blocks."
+            ),
         },
     ];
 
-    let result =
-        run_repl_loop(task, input, &llm, budget, &executor, sampling, &model, &mut messages)
-            .await?;
+    let result = run_repl_loop(
+        task,
+        input,
+        &llm,
+        budget,
+        &executor,
+        sampling,
+        &model,
+        &mut messages,
+    )
+    .await?;
 
     if input.enable_cache {
         cache.put(task, &input.project, &result);
@@ -725,4 +734,3 @@ async fn run_repl_loop(
 
     Ok(final_response.content)
 }
-

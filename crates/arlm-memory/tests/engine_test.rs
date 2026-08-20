@@ -1,4 +1,11 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::all,
+    clippy::pedantic,
+    clippy::nursery
+)]
 
 use arlm_memory::engine::*;
 use arlm_memory::trajectory::DecompositionNode;
@@ -30,9 +37,7 @@ fn test_list_projects_empty() {
 #[test]
 fn test_get_project() {
     let (engine, _tmp) = setup();
-    engine
-        .create_project("my-proj", Path::new("/tmp"))
-        .unwrap();
+    engine.create_project("my-proj", Path::new("/tmp")).unwrap();
     let proj = engine.get_project("my-proj").unwrap();
     assert!(proj.is_some());
     assert_eq!(proj.unwrap().name, "my-proj");
@@ -66,6 +71,8 @@ fn test_store_and_find_trajectory() {
         .unwrap();
     assert!(id > 0);
 
-    let similar = engine.find_similar_trajectories("test task", "proj").unwrap();
+    let similar = engine
+        .find_similar_trajectories("test task", "proj")
+        .unwrap();
     assert!(!similar.is_empty());
 }

@@ -26,7 +26,9 @@ impl ClientConfig {
             if local_config.exists() {
                 if let Ok(contents) = std::fs::read_to_string(&local_config) {
                     if let Ok(config) = toml::from_str::<ServerConfig>(&contents) {
-                        return Self { addr: config.server.addr };
+                        return Self {
+                            addr: config.server.addr,
+                        };
                     }
                 }
             }
@@ -38,7 +40,9 @@ impl ClientConfig {
             if global_config.exists() {
                 if let Ok(contents) = std::fs::read_to_string(&global_config) {
                     if let Ok(config) = toml::from_str::<ServerConfig>(&contents) {
-                        return Self { addr: config.server.addr };
+                        return Self {
+                            addr: config.server.addr,
+                        };
                     }
                 }
             }

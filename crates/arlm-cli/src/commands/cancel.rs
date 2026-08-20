@@ -14,16 +14,15 @@ pub fn execute(run_id: &str, project: &Path, format: Format) -> Result<()> {
     match run {
         Some(_run) => {
             // Mark run as cancelled in DB
-            storage
-                .cancel_run(run_id)
-                .context("failed to cancel run")?;
+            storage.cancel_run(run_id).context("failed to cancel run")?;
 
             match format {
                 Format::Json => {
-                    let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
-                        "run_id": run_id,
-                        "status": "cancelled",
-                    }));
+                    let output =
+                        crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+                            "run_id": run_id,
+                            "status": "cancelled",
+                        }));
                     output.print();
                 }
                 _ => {

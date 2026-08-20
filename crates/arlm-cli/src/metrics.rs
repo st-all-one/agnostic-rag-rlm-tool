@@ -89,19 +89,16 @@ impl ArlmMetrics {
         let agent_tokens = self.inner.agent_tokens.lock();
 
         if !agent_requests.is_empty() {
-            let _ = writeln!(
-                out,
-                "# HELP arlm_agent_requests_total Requests per agent"
-            );
+            let _ = writeln!(out, "# HELP arlm_agent_requests_total Requests per agent");
             let _ = writeln!(out, "# TYPE arlm_agent_requests_total counter");
             for (agent, count) in agent_requests.iter() {
-                let _ = writeln!(out, "arlm_agent_requests_total{{agent=\"{agent}\"}} {count}");
+                let _ = writeln!(
+                    out,
+                    "arlm_agent_requests_total{{agent=\"{agent}\"}} {count}"
+                );
             }
 
-            let _ = writeln!(
-                out,
-                "# HELP arlm_agent_tokens_total Tokens per agent"
-            );
+            let _ = writeln!(out, "# HELP arlm_agent_tokens_total Tokens per agent");
             let _ = writeln!(out, "# TYPE arlm_agent_tokens_total counter");
             for (agent, tokens) in agent_tokens.iter() {
                 let _ = writeln!(out, "arlm_agent_tokens_total{{agent=\"{agent}\"}} {tokens}");

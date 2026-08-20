@@ -203,7 +203,10 @@ async fn compact_children_if_needed(
         summary,
     );
     kept.push(summarized);
-    info!(compacted = to_compact.len(), "compacted oldest children outputs");
+    info!(
+        compacted = to_compact.len(),
+        "compacted oldest children outputs"
+    );
     Ok(kept)
 }
 
@@ -221,7 +224,12 @@ async fn summarize_children(
             .as_deref()
             .or(child.partial_answer.as_deref())
             .unwrap_or("[no result]");
-        let _ = writeln!(body, "--- Child {} (status: {}) ---\n{text}", i + 1, child.status);
+        let _ = writeln!(
+            body,
+            "--- Child {} (status: {}) ---\n{text}",
+            i + 1,
+            child.status
+        );
     }
 
     let prompt = format!(
@@ -256,4 +264,3 @@ async fn summarize_children(
     budget.record_call(model, &response.usage);
     Ok(response.content)
 }
-

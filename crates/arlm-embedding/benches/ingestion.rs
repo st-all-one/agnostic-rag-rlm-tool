@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use criterion::{criterion_group, criterion_main, Criterion};
 use arlm_embedding::embedder::fallback::FallbackEmbedder;
-use arlm_embedding::pipeline::{IngestionPipeline, IngestOptions, discover_files};
+use arlm_embedding::pipeline::{IngestOptions, IngestionPipeline, discover_files};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 fn bench_ingestion(c: &mut Criterion) {
     let mut group = c.benchmark_group("ingestion");

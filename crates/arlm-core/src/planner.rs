@@ -191,4 +191,3 @@ pub fn extract_json(text: &str) -> &str {
     }
     text.trim()
 }
-

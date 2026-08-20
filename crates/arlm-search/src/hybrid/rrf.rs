@@ -18,11 +18,7 @@ impl HybridSearch {
     /// `1 / (k + rank + 1)` added to its aggregated score, and the merged
     /// results are sorted by descending score and truncated to `top_k`.
     #[must_use]
-    pub fn rrf_fuse(
-        results_list: &[Vec<HybridResult>],
-        top_k: usize,
-        k: f32,
-    ) -> Vec<HybridResult> {
+    pub fn rrf_fuse(results_list: &[Vec<HybridResult>], top_k: usize, k: f32) -> Vec<HybridResult> {
         let start = Instant::now();
 
         let mut scores: HashMap<i64, f32> = HashMap::with_capacity(results_list.len() * top_k);

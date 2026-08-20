@@ -97,8 +97,7 @@ fn test_enum_variants_present() {
 fn test_service_modules_resolve() {
     // Ensure the generated tonic service plumbing exists for downstream use.
     // `ArlmServiceClient` is the concrete client referenced by `arlm-cli`.
-    let client_type = std::any::type_name::<
-        arlm_service_client::ArlmServiceClient<tonic::transport::Channel>,
-    >();
+    let client_type =
+        std::any::type_name::<arlm_service_client::ArlmServiceClient<tonic::transport::Channel>>();
     assert!(client_type.contains("ArlmServiceClient"));
 }

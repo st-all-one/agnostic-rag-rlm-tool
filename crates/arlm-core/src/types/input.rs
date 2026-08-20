@@ -1,6 +1,4 @@
-use super::enums::{
-    AbortSignal, CompactionPolicy, RetryPolicy, RlmBackend, RlmMode, ToolsProfile,
-};
+use super::enums::{AbortSignal, CompactionPolicy, RetryPolicy, RlmBackend, RlmMode, ToolsProfile};
 
 /// Input for starting an RLM run.
 #[derive(Debug, Clone)]

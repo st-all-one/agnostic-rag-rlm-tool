@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use arlm_search::entity::EntitySearch;
+use arlm_storage::Storage;
 use arlm_storage::sqlite::buffers::NewBuffer;
 use arlm_storage::sqlite::chunks::NewChunk;
-use arlm_storage::Storage;
 use tempfile::TempDir;
 
 fn setup() -> (EntitySearch, Storage, TempDir) {

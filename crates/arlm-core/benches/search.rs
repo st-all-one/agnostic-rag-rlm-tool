@@ -1,6 +1,6 @@
-use criterion::{criterion_group, criterion_main, Criterion};
 use arlm_core::compaction::{Compaction, SearchResult};
 use arlm_core::token_counter::{TokenCounter, get_context_limit};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 fn bench_token_counter(c: &mut Criterion) {
     let mut group = c.benchmark_group("token_counter");

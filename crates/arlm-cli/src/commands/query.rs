@@ -37,7 +37,14 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
             top_k: 10,
         };
         let results = hybrid
-            .search(config.question, None, buffer.id, &options, None, Some(&storage))
+            .search(
+                config.question,
+                None,
+                buffer.id,
+                &options,
+                None,
+                Some(&storage),
+            )
             .await
             .unwrap_or_default();
         arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)

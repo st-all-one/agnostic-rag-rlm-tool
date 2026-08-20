@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::enums::{NodeStatus, PlannerDecision, NodeUsage, now_ms};
+use super::enums::{NodeStatus, NodeUsage, PlannerDecision, now_ms};
 
 /// A node in the RLM decision tree.
 #[derive(Debug, Clone, Serialize, Deserialize)]

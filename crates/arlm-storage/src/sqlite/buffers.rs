@@ -25,8 +25,7 @@ pub struct NewBuffer {
     pub path: String,
 }
 
-const BUFFER_COLUMNS: &str =
-    "id, uuid, name, path, total_chunks, total_files, embedding_model, embedding_dims, last_indexed_at, created_at";
+const BUFFER_COLUMNS: &str = "id, uuid, name, path, total_chunks, total_files, embedding_model, embedding_dims, last_indexed_at, created_at";
 
 fn row_to_buffer(row: &rusqlite::Row<'_>) -> rusqlite::Result<Buffer> {
     Ok(Buffer {

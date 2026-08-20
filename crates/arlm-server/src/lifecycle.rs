@@ -122,7 +122,8 @@ pub async fn status_check() -> anyhow::Result<()> {
 }
 
 /// Wait for a shutdown signal (SIGINT or SIGTERM).
-async fn shutdown_signal() {    let ctrl_c = tokio::signal::ctrl_c();
+async fn shutdown_signal() {
+    let ctrl_c = tokio::signal::ctrl_c();
 
     #[cfg(unix)]
     {

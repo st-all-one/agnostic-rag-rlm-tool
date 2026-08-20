@@ -6,9 +6,9 @@
 )]
 
 use arlm_search::bm25::Bm25Search;
+use arlm_storage::Storage;
 use arlm_storage::sqlite::buffers::NewBuffer;
 use arlm_storage::sqlite::chunks::NewChunk;
-use arlm_storage::Storage;
 use tempfile::TempDir;
 
 fn setup() -> (Bm25Search, Storage, TempDir) {

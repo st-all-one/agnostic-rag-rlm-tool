@@ -61,10 +61,7 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
 
     // Load session context if --session is provided
     let effective_task = if let Some(sid) = config.session_id {
-        let storage = data_dir()
-            .join("..")
-            .join("..")
-            .join("storage");
+        let storage = data_dir().join("..").join("..").join("storage");
         // Try to load session context
         if let Ok(stor) = arlm_storage::Storage::open(&crate::util::data_dir()) {
             if let Ok(mgr) = arlm_memory::SessionManager::new(stor) {

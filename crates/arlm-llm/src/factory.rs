@@ -174,10 +174,7 @@ mod tests {
             BackendKind::DeepSeek
         );
         assert_eq!("ds".parse::<BackendKind>().unwrap(), BackendKind::DeepSeek);
-        assert_eq!(
-            "mimo".parse::<BackendKind>().unwrap(),
-            BackendKind::MiMo
-        );
+        assert_eq!("mimo".parse::<BackendKind>().unwrap(), BackendKind::MiMo);
     }
 
     #[test]

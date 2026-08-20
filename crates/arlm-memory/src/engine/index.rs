@@ -6,11 +6,11 @@ use anyhow::{Context, Result};
 use tracing::info;
 
 use arlm_embedding::embedder::Embedder;
-use arlm_embedding::pipeline::{discover_files, IngestionPipeline};
+use arlm_embedding::pipeline::{IngestionPipeline, discover_files};
 
+use crate::ScopedTimer;
 use crate::engine::{IndexProjectOptions, IndexProjectResult, MemoryEngine};
 use crate::knowledge::IndexOptions;
-use crate::ScopedTimer;
 
 impl MemoryEngine {
     /// Index a project directory: discover files, chunk, and store metadata.
@@ -25,10 +25,11 @@ impl MemoryEngine {
 
         // Ensure project exists
         if self.projects.get(&options.project_name)?.is_none() {
-            self.projects.create(&crate::project::CreateProjectOptions {
-                name: options.project_name.clone(),
-                path: options.dir_path.clone(),
-            })?;
+            self.projects
+                .create(&crate::project::CreateProjectOptions {
+                    name: options.project_name.clone(),
+                    path: options.dir_path.clone(),
+                })?;
         }
 
         let index_result = self.knowledge.index_directory(
@@ -74,10 +75,11 @@ impl MemoryEngine {
 
         // Ensure project exists
         if self.projects.get(&options.project_name)?.is_none() {
-            self.projects.create(&crate::project::CreateProjectOptions {
-                name: options.project_name.clone(),
-                path: options.dir_path.clone(),
-            })?;
+            self.projects
+                .create(&crate::project::CreateProjectOptions {
+                    name: options.project_name.clone(),
+                    path: options.dir_path.clone(),
+                })?;
         }
 
         // Discover files

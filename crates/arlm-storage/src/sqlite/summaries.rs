@@ -132,7 +132,9 @@ impl Storage {
             .context("failed to prepare get_project_summary")?;
 
         let mut rows = stmt.query_map(params![buffer_id], row_to_summary)?;
-        rows.next().transpose().context("failed to read project summary")
+        rows.next()
+            .transpose()
+            .context("failed to read project summary")
     }
 
     /// Get a summary by its source hash (used for incremental refresh).
@@ -153,8 +155,7 @@ impl Storage {
             ))
             .context("failed to prepare get_summary_by_source_hash")?;
 
-        let mut rows = stmt
-            .query_map(params![buffer_id, source_hash], row_to_summary)?;
+        let mut rows = stmt.query_map(params![buffer_id, source_hash], row_to_summary)?;
         rows.next()
             .transpose()
             .context("failed to read summary by source hash")
@@ -271,8 +272,7 @@ impl Storage {
             ))
             .context("failed to prepare get_summary")?;
 
-        let mut rows = stmt
-            .query_map(params![id], row_to_summary)?;
+        let mut rows = stmt.query_map(params![id], row_to_summary)?;
         rows.next()
             .transpose()
             .context("failed to read summary by id")

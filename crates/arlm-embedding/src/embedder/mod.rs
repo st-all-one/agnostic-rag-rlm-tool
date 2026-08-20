@@ -11,7 +11,7 @@ pub mod config;
 pub mod fallback;
 pub mod lightweight;
 
-pub use config::{build_embedder, EmbeddingConfig, EmbeddingModel, Quantization};
+pub use config::{EmbeddingConfig, EmbeddingModel, Quantization, build_embedder};
 pub use lightweight::LightweightEmbedder;
 
 /// Errors specific to the embedding subsystem.
@@ -113,7 +113,8 @@ impl OwnedFile {
         // writes to source files. The mmap is kept alive by OwnedFile.
         let mmap = unsafe { Mmap::map(&file)? };
 
-        let content = std::str::from_utf8(&mmap).map_err(|_| EmbeddingError::NotUtf8(path.to_path_buf()))?;
+        let content =
+            std::str::from_utf8(&mmap).map_err(|_| EmbeddingError::NotUtf8(path.to_path_buf()))?;
 
         let language = crate::chunker::detect_language(path);
 
@@ -153,39 +154,5 @@ impl OwnedFile {
     #[must_use]
     pub fn language_hint(&self) -> &str {
         self.language.as_deref().unwrap_or("text")
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_owned_file_read() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let file_path = dir.path().join("test.rs");
-        std::fs::write(&file_path, "fn main() {}").expect("write");
-
-        let owned = OwnedFile::new(&file_path).expect("OwnedFile::new");
-        assert_eq!(owned.content(), "fn main() {}");
-        assert_eq!(owned.language_hint(), "rust");
-        assert_eq!(owned.path(), file_path.as_path());
-    }
-
-    #[test]
-    fn test_owned_file_not_utf8() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let file_path = dir.path().join("binary.bin");
-        std::fs::write(&file_path, [0xFF, 0xFE, 0x00]).expect("write");
-
-        let result = OwnedFile::new(&file_path);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_embedder_trait_name() {
-        let embedder = fallback::FallbackEmbedder::new(128);
-        assert_eq!(embedder.name(), "fallback-hash");
     }
 }

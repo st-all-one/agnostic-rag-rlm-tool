@@ -170,13 +170,14 @@ impl LlmBackend for MiMoBackend {
                     .first()
                     .map_or_else(String::new, |c| c.message.content.clone());
 
-                let usage = mimo_response
-                    .usage
-                    .map_or_else(UsageSummary::default, |u| UsageSummary {
-                        prompt_tokens: u.prompt_tokens,
-                        completion_tokens: u.completion_tokens,
-                        total_tokens: u.total_tokens,
-                    });
+                let usage =
+                    mimo_response
+                        .usage
+                        .map_or_else(UsageSummary::default, |u| UsageSummary {
+                            prompt_tokens: u.prompt_tokens,
+                            completion_tokens: u.completion_tokens,
+                            total_tokens: u.total_tokens,
+                        });
 
                 Ok(CompletionResponse {
                     content,

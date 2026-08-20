@@ -127,4 +127,3 @@ pub fn log_metric_verbose(name: &str, value: f64, unit: &str) {
         log_metric(name, value, unit);
     }
 }
-

@@ -104,11 +104,7 @@ impl DockerExecutor {
     ///
     /// Returns an error if the container fails to run.
     pub fn execute_bash(&self, command: &str) -> Result<DockerResult> {
-        self.run_container(
-            &self.config.image,
-            &["bash", "-c", command],
-            None,
-        )
+        self.run_container(&self.config.image, &["bash", "-c", command], None)
     }
 
     /// Run a Docker container with the given command.
@@ -263,4 +259,3 @@ impl DockerComposeConfig {
         fragment
     }
 }
-

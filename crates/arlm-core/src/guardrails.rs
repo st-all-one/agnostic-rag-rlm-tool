@@ -29,4 +29,3 @@ pub fn sanitize_subtasks(subtasks: &[String], parent_task: &str) -> Vec<String> 
         .filter(|s| seen.insert(normalize_task(s)))
         .collect()
 }
-

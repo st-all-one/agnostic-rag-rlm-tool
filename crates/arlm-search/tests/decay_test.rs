@@ -102,7 +102,10 @@ fn test_age_hours_future_timestamp() {
         .unwrap()
         .as_secs() as i64;
     let age = DecayConfig::age_hours(now + 1000);
-    assert!(age < 0.001, "future timestamp should yield ~0 age, got {age}");
+    assert!(
+        age < 0.001,
+        "future timestamp should yield ~0 age, got {age}"
+    );
 }
 
 #[test]

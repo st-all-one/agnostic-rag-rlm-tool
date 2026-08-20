@@ -18,7 +18,9 @@ fn main() -> Result<()> {
 
     // Generated code is external (prost/tonic output); the `proto` module in
     // lib.rs carries `#![allow(...)]` so workspace pedantic lints stay clean.
-    let cfg = tonic_build::configure().build_server(true).build_client(true);
+    let cfg = tonic_build::configure()
+        .build_server(true)
+        .build_client(true);
 
     let stage_start = Instant::now();
     cfg.compile_protos(&proto_files, &[proto_root])?;

@@ -202,9 +202,7 @@ impl Storage {
         let conn = conn.lock();
 
         let mut stmt = conn
-            .prepare(&format!(
-                "SELECT {RUN_COLUMNS} FROM runs WHERE id = ?1"
-            ))
+            .prepare(&format!("SELECT {RUN_COLUMNS} FROM runs WHERE id = ?1"))
             .context("failed to prepare get_run query")?;
 
         let mut rows = stmt.query_map(params![run_id], row_to_run)?;
@@ -277,9 +275,11 @@ impl Storage {
         let conn = conn.lock();
 
         let result: f64 = conn
-            .query_row("SELECT COALESCE(SUM(total_cost), 0.0) FROM runs", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COALESCE(SUM(total_cost), 0.0) FROM runs",
+                [],
+                |row| row.get(0),
+            )
             .context("failed to get total cost")?;
 
         Ok(result)

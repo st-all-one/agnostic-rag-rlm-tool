@@ -1,0 +1,118 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::float_cmp,
+    clippy::useless_vec
+)]
+
+use std::path::Path;
+use std::sync::Arc;
+
+use arlm_embedding::embedder::config::EmbeddingConfig;
+use arlm_embedding::embedder::fallback::FallbackEmbedder;
+use arlm_embedding::pipeline::{
+    IngestOptions, IngestionPipeline, compress_text, compute_hash, discover_files, glob_match,
+    is_text_file,
+};
+
+#[test]
+fn test_compress_and_hash() {
+    let text = "hello world, this is a test of compression";
+    let compressed = compress_text(text);
+    assert!(compressed.len() <= text.len() + 10);
+
+    let hash = compute_hash(text);
+    assert_eq!(hash.len(), 64); // SHA-256 hex
+}
+
+#[test]
+fn test_compute_hash_deterministic() {
+    let h1 = compute_hash("test");
+    let h2 = compute_hash("test");
+    assert_eq!(h1, h2);
+}
+
+#[test]
+fn test_is_text_file() {
+    assert!(is_text_file(Path::new("main.rs")));
+    assert!(is_text_file(Path::new("README.md")));
+    assert!(is_text_file(Path::new("config.json")));
+    assert!(!is_text_file(Path::new("image.png")));
+    assert!(!is_text_file(Path::new("binary")));
+}
+
+#[test]
+fn test_discover_files() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("a.rs"), "fn main() {}").expect("write");
+    std::fs::write(dir.path().join("b.py"), "print('hello')").expect("write");
+    std::fs::write(dir.path().join("c.png"), b"binary").expect("write");
+    std::fs::write(dir.path().join(".env"), "SECRET=1").expect("write");
+    std::fs::write(dir.path().join("key.pem"), "-----").expect("write");
+
+    let sub = dir.path().join("sub");
+    std::fs::create_dir(&sub).expect("mkdir");
+    std::fs::write(sub.join("d.txt"), "text").expect("write");
+
+    let files = discover_files(dir.path(), &[]).expect("discover");
+    assert_eq!(files.len(), 3); // a.rs, b.py, sub/d.txt (filtered: .env, key.pem, c.png)
+}
+
+#[test]
+fn test_discover_files_custom_ignore() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("a.rs"), "fn main() {}").expect("write");
+    std::fs::write(dir.path().join("b.log"), "log entry").expect("write");
+    std::fs::write(dir.path().join("c.rs"), "fn foo() {}").expect("write");
+
+    let ignores = vec!["*.log".to_string()];
+    let files = discover_files(dir.path(), &ignores).expect("discover");
+    assert_eq!(files.len(), 2); // a.rs, c.rs (filtered: b.log)
+}
+
+#[test]
+fn test_glob_match() {
+    assert!(glob_match("*.pem", "server.pem"));
+    assert!(glob_match("*.pem", "key.pem"));
+    assert!(!glob_match("*.pem", "pem.txt"));
+    assert!(glob_match(".env.*", ".env.local"));
+    assert!(!glob_match(".env.*", ".env"));
+    assert!(glob_match(".env", ".env"));
+    assert!(!glob_match(".env", ".env.local"));
+}
+
+#[test]
+fn test_pipeline_new() {
+    let embedder = Arc::new(FallbackEmbedder::new(128));
+    let pipeline = IngestionPipeline::new(embedder, None);
+    assert_eq!(pipeline.batch_size(), 64);
+}
+
+#[test]
+fn test_pipeline_from_config_lightweight() {
+    let config = EmbeddingConfig::for_tests();
+    let pipeline = IngestionPipeline::from_config(&config, None).expect("pipeline");
+    assert_eq!(pipeline.batch_size(), 64);
+}
+
+#[test]
+fn test_pipeline_ingest() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let file_path = dir.path().join("test.rs");
+    std::fs::write(&file_path, "fn main() {\n    println!(\"hello\");\n}").expect("write");
+
+    let embedder = Arc::new(FallbackEmbedder::new(128));
+    let pipeline = IngestionPipeline::new(embedder, None);
+    let options = IngestOptions::default();
+    let result = pipeline.ingest(&[file_path], &options).expect("ingest");
+
+    assert_eq!(result.total_files, 1);
+    assert!(result.total_chunks >= 1);
+    assert!(result.total_embedded >= 1);
+}

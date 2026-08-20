@@ -257,7 +257,10 @@ impl Storage {
         let conn = conn.lock();
 
         let deleted = conn
-            .execute("DELETE FROM chunks WHERE file_path = ?1", params![file_path])
+            .execute(
+                "DELETE FROM chunks WHERE file_path = ?1",
+                params![file_path],
+            )
             .context("failed to delete chunks")?;
 
         Ok(deleted)

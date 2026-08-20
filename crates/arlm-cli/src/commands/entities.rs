@@ -16,8 +16,7 @@ pub fn execute(query: &str, project: &Path, format: Format) -> Result<()> {
         .context("failed to get buffer")?
         .context("project not found, run 'arlm index' first")?;
 
-    let bm25 =
-        arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
+    let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
     let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
     let results = hybrid
         .search_fts(query, buffer.id, 10, None)
@@ -32,10 +31,12 @@ pub fn execute(query: &str, project: &Path, format: Format) -> Result<()> {
                         .get_chunk_entities(r.chunk_id)
                         .ok()
                         .flatten()
-                        .map(|e| serde_json::json!({
-                            "chunk_id": r.chunk_id,
-                            "entities": e,
-                        }))
+                        .map(|e| {
+                            serde_json::json!({
+                                "chunk_id": r.chunk_id,
+                                "entities": e,
+                            })
+                        })
                 })
                 .collect();
             let output = crate::output::json::JsonOutput::ok()

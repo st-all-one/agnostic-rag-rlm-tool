@@ -189,8 +189,7 @@ fn test_custom_tool_function() {
 
 #[test]
 fn test_custom_tool_with_parameters() {
-    let tool = CustomTool::function("read_file", "Read a file")
-        .with_parameters("path: str");
+    let tool = CustomTool::function("read_file", "Read a file").with_parameters("path: str");
     assert_eq!(tool.parameters.as_deref(), Some("path: str"));
 }
 
@@ -220,9 +219,7 @@ fn test_format_tools_for_prompt_with_tools() {
 
 #[test]
 fn test_format_tools_for_prompt_with_parameters() {
-    let tools = vec![
-        CustomTool::function("read", "Read file").with_parameters("path: str"),
-    ];
+    let tools = vec![CustomTool::function("read", "Read file").with_parameters("path: str")];
     let result = format_tools_for_prompt(&tools);
     assert!(result.contains("- read(path: str) → Read file [function]"));
 }
