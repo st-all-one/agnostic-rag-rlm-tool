@@ -12,7 +12,8 @@ use crate::chunker::recursive::RecursiveChunker;
 use crate::chunker::text::TextChunker;
 use crate::chunker::{ChunkingStrategy, RawChunk};
 use crate::embedder::cache::EmbeddingCache;
-use crate::embedder::{Embedder, Embedding, EmbeddingError, EmbeddingResult, OwnedFile};
+use crate::embedder::config::EmbeddingConfig;
+use crate::embedder::{build_embedder, Embedder, Embedding, EmbeddingError, EmbeddingResult, OwnedFile};
 
 /// A chunk ready for embedding, with owned data.
 pub struct ChunkedText {
@@ -94,6 +95,17 @@ impl IngestionPipeline {
     pub fn with_batch_size(mut self, batch_size: usize) -> Self {
         self.batch_size = batch_size;
         self
+    }
+
+    /// Create a pipeline from an [`EmbeddingConfig`], building the embedder
+    /// (BGE-M3 or lightweight) accordingly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configured embedder cannot be built.
+    pub fn from_config(config: &EmbeddingConfig, cache: Option<EmbeddingCache>) -> anyhow::Result<Self> {
+        let embedder = build_embedder(config)?;
+        Ok(Self::new(embedder, cache))
     }
 
     /// Process a list of files through the chunking and embedding pipeline.
@@ -448,6 +460,14 @@ mod tests {
         use crate::embedder::fallback::FallbackEmbedder;
         let embedder = Arc::new(FallbackEmbedder::new(128));
         let pipeline = IngestionPipeline::new(embedder, None);
+        assert_eq!(pipeline.batch_size, 64);
+    }
+
+    #[test]
+    fn test_pipeline_from_config_lightweight() {
+        use crate::embedder::config::EmbeddingConfig;
+        let config = EmbeddingConfig::for_tests();
+        let pipeline = IngestionPipeline::from_config(&config, None).expect("pipeline");
         assert_eq!(pipeline.batch_size, 64);
     }
 

@@ -1,14 +1,19 @@
+//! Knowledge indexing engine: file discovery, chunking, and chunk retrieval.
+
+pub mod helpers;
+
+pub use helpers::{compute_hash, detect_language, estimate_tokens, find_line_boundary};
+
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use sha2::{Digest, Sha256};
 
 use arlm_storage::Storage;
 use arlm_storage::sqlite::chunks::NewChunk;
 
-use crate::ScopedTimer;
-
 use arlm_embedding::pipeline::discover_files;
+
+use crate::ScopedTimer;
 
 /// Options for indexing knowledge into a project.
 #[derive(Debug, Clone)]
@@ -37,8 +42,11 @@ impl Default for IndexOptions {
 /// Result of an indexing operation.
 #[derive(Debug, Clone)]
 pub struct IndexResult {
+    /// Files processed during indexing.
     pub files_processed: u64,
+    /// Chunks created during indexing.
     pub chunks_created: u64,
+    /// Duration of the operation in milliseconds.
     pub duration_ms: u128,
 }
 
@@ -172,7 +180,7 @@ impl KnowledgeEngine {
 
             // Find a line boundary near the end to avoid splitting mid-line
             let chunk_end = if end < bytes.len() {
-                find_line_boundary(bytes, end)
+                crate::knowledge::helpers::find_line_boundary(bytes, end)
             } else {
                 bytes.len()
             };
@@ -260,151 +268,5 @@ impl KnowledgeEngine {
                 ((len - 1) / max_chunk_bytes + 1) as u64
             }
         })
-    }
-}
-
-fn find_line_boundary(bytes: &[u8], near: usize) -> usize {
-    // Search backwards from `near` for a newline
-    let search_start = near.saturating_sub(100);
-    for i in (search_start..near).rev() {
-        if bytes[i] == b'\n' {
-            return i + 1;
-        }
-    }
-    near
-}
-
-fn compute_hash(data: &[u8]) -> Vec<u8> {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    hasher.finalize().to_vec()
-}
-
-fn detect_language(path: &Path) -> Option<String> {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| match ext {
-            "rs" => "rust",
-            "py" => "python",
-            "js" => "javascript",
-            "ts" => "typescript",
-            "tsx" => "typescriptreact",
-            "jsx" => "javascriptreact",
-            "go" => "go",
-            "java" => "java",
-            "c" | "h" | "hpp" => "c",
-            "cpp" | "cc" | "cxx" => "cpp",
-            "rb" => "ruby",
-            "sh" | "bash" => "shell",
-            "sql" => "sql",
-            "md" => "markdown",
-            "json" => "json",
-            "yaml" | "yml" => "yaml",
-            "toml" => "toml",
-            "html" => "html",
-            "css" => "css",
-            _ => "",
-        })
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-}
-
-fn estimate_tokens(text: &str) -> i64 {
-    // Rough estimate: ~4 chars per token
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-    {
-        ((text.len() as f64 / 4.0).ceil() as i64).max(1)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use arlm_storage::sqlite::buffers::NewBuffer;
-    use tempfile::TempDir;
-
-    fn setup() -> (KnowledgeEngine, TempDir) {
-        let tmp = TempDir::new().unwrap();
-        let storage = Storage::open(tmp.path()).unwrap();
-        (KnowledgeEngine::new(storage), tmp)
-    }
-
-    fn create_project(engine: &KnowledgeEngine, name: &str) -> i64 {
-        engine
-            .storage()
-            .insert_buffer(&NewBuffer {
-                name: name.to_string(),
-                path: "/tmp/test".to_string(),
-            })
-            .unwrap()
-    }
-
-    #[test]
-    fn test_index_file() {
-        let (engine, tmp) = setup();
-        let buffer_id = create_project(&engine, "test");
-
-        let file_path = tmp.path().join("test.rs");
-        std::fs::write(&file_path, "fn main() {\n    println!(\"hello\");\n}").unwrap();
-
-        let opts = IndexOptions::default();
-        let ids = engine.index_file(buffer_id, &file_path, &opts).unwrap();
-        assert!(!ids.is_empty());
-
-        let content = engine.get_chunk_content(ids[0]).unwrap().unwrap();
-        assert!(content.contains("fn main"));
-    }
-
-    #[test]
-    fn test_index_directory() {
-        let (engine, tmp) = setup();
-        create_project(&engine, "test");
-
-        // Use a subdirectory for test files to avoid SQLite internals
-        let src_dir = tmp.path().join("src");
-        std::fs::create_dir_all(&src_dir).unwrap();
-
-        let file1 = src_dir.join("a.rs");
-        let file2 = src_dir.join("b.py");
-        std::fs::write(&file1, "fn main() {}").unwrap();
-        std::fs::write(&file2, "print('hello')").unwrap();
-
-        let opts = IndexOptions::default();
-        let result = engine.index_directory("test", &src_dir, &opts).unwrap();
-
-        assert_eq!(result.files_processed, 2);
-        assert!(result.chunks_created >= 2);
-    }
-
-    #[test]
-    fn test_detect_language() {
-        assert_eq!(
-            detect_language(Path::new("main.rs")),
-            Some("rust".to_string())
-        );
-        assert_eq!(
-            detect_language(Path::new("app.py")),
-            Some("python".to_string())
-        );
-        assert_eq!(
-            detect_language(Path::new("index.html")),
-            Some("html".to_string())
-        );
-        assert_eq!(detect_language(Path::new("unknown")), None);
-    }
-
-    #[test]
-    fn test_compute_hash() {
-        let h1 = compute_hash(b"hello");
-        let h2 = compute_hash(b"hello");
-        let h3 = compute_hash(b"world");
-        assert_eq!(h1, h2);
-        assert_ne!(h1, h3);
-    }
-
-    #[test]
-    fn test_estimate_tokens() {
-        assert!(estimate_tokens("hello world") > 0);
-        assert!(estimate_tokens("") >= 1);
     }
 }

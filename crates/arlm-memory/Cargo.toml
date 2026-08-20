@@ -12,6 +12,7 @@ workspace = true
 arlm-storage.workspace = true
 arlm-embedding.workspace = true
 arlm-search.workspace = true
+arlm-core.workspace = true
 rusqlite.workspace = true
 chrono.workspace = true
 serde.workspace = true

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0] - 2026-08-20
+
+### Added
+- `EmbeddingConfig` (`embedder/config.rs`): seleção de modelo, quantização e dimensões matryoshka.
+- `EmbeddingModel` (variantes `BgeM3` | `Lightweight`) e `Quantization` (`None` | `Int8` | `Int4`).
+- `LightweightEmbedder` (`embedder/lightweight.rs`): embedder determinístico sem pesos nem candle
+  (SHA-256 → xorshift → `f32`, L2-normalizado) — padrão em testes, compila/roda instantâneo.
+- Quantização INT8/INT4 no `BgeM3Embedder` via `QMatMul` (candle), com caminho f32 como fallback.
+- Truncamento matryoshka (`matryoshka_truncate`): reduz o vetor para `matryoshka_dims` configuráveis.
+- `EmbeddingConfig::for_tests()` (Lightweight, matryoshka 256) e `build_embedder()`.
+
+### Changed
+- `BgeM3Embedder::new_with_config` aplica quantização + matryoshka; `IngestionPipeline::from_config`
+  aceita `EmbeddingConfig` (construtor `new` preservado p/ compatibilidade).
+- Padrão de uso real: `EmbeddingConfig::default()` → `BgeM3`, f32, matryoshka **512**.
+- Padrão de testes: `EmbeddingConfig::for_tests()` → `Lightweight`, matryoshka **256**.
+
 ## [0.2.0] - 2026-08-19
 
 ### Changed

@@ -1,11 +1,13 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use candle_core::quantized::{GgmlDType, QMatMul, QTensor};
 use candle_core::{Device, Tensor};
 use candle_nn::{Linear, Module, ops};
 use tokenizers::Tokenizer;
 
-use super::{Embedder, Embedding, EmbeddingError, EmbeddingResult};
+use super::config::EmbeddingConfig;
+use super::{matryoshka_truncate, Embedder, Embedding, EmbeddingError, EmbeddingResult};
 
 #[allow(dead_code)]
 const DEFAULT_DIMS: usize = 1024;
@@ -20,18 +22,50 @@ pub struct BgeM3Embedder {
     tokenizer: Arc<Tokenizer>,
     device: Device,
     dims: usize,
+    matryoshka_dims: Option<usize>,
+}
+
+/// A linear projection that may run with full-precision weights or as a
+/// quantized matmul (`QMatMul`). Both variants apply the optional bias.
+enum Projection {
+    /// Full-precision f32 linear (candle_nn::Linear, includes bias).
+    F32 { linear: Linear },
+    /// Quantized matmul (`QMatMul`) plus separately-stored bias.
+    Quantized { qmatmul: QMatMul, bias: Option<Tensor> },
+}
+
+impl Projection {
+    /// Forward pass: returns `x @ W^T + b`.
+    fn forward(&self, x: &Tensor) -> EmbeddingResult<Tensor> {
+        match self {
+            Projection::F32 { linear } => linear
+                .forward(x)
+                .map_err(|e| EmbeddingError::Candle(e.to_string())),
+            Projection::Quantized { qmatmul, bias } => {
+                let out = qmatmul
+                    .forward(x)
+                    .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
+                match bias {
+                    Some(b) => out
+                        .broadcast_add(b)
+                        .map_err(|e| EmbeddingError::Candle(e.to_string())),
+                    None => Ok(out),
+                }
+            }
+        }
+    }
 }
 
 /// A single transformer layer (self-attention + FFN with pre-norm).
 struct TransformerLayer {
-    attn_q: Linear,
-    attn_k: Linear,
-    attn_v: Linear,
-    attn_o: Linear,
+    attn_q: Projection,
+    attn_k: Projection,
+    attn_v: Projection,
+    attn_o: Projection,
     attn_norm_w: Tensor,
     attn_norm_b: Tensor,
-    ffn_dense_h: Linear,
-    ffn_dense_o: Linear,
+    ffn_dense_h: Projection,
+    ffn_dense_o: Projection,
     ffn_norm_w: Tensor,
     ffn_norm_b: Tensor,
     num_heads: usize,
@@ -55,7 +89,12 @@ impl BgeM3Model {
     /// # Errors
     ///
     /// Returns an error if the file cannot be read or tensors are missing/malformed.
-    fn load(model_dir: &Path, dims: usize, device: &Device) -> EmbeddingResult<Self> {
+    fn load(
+        model_dir: &Path,
+        dims: usize,
+        device: &Device,
+        quant: Option<GgmlDType>,
+    ) -> EmbeddingResult<Self> {
         let model_path = model_dir.join("model.safetensors");
         let tokenizer_path = model_dir.join("tokenizer.json");
 
@@ -125,20 +164,20 @@ impl BgeM3Model {
         for i in 0..24 {
             let prefix = format!("encoder.layers.{i}");
             let attn_q =
-                linear_from_weights(&format!("{prefix}.self_attn.q_proj"), &tensors, device)?;
+                build_projection(&format!("{prefix}.self_attn.q_proj"), &tensors, device, quant)?;
             let attn_k =
-                linear_from_weights(&format!("{prefix}.self_attn.k_proj"), &tensors, device)?;
+                build_projection(&format!("{prefix}.self_attn.k_proj"), &tensors, device, quant)?;
             let attn_v =
-                linear_from_weights(&format!("{prefix}.self_attn.v_proj"), &tensors, device)?;
+                build_projection(&format!("{prefix}.self_attn.v_proj"), &tensors, device, quant)?;
             let attn_o =
-                linear_from_weights(&format!("{prefix}.self_attn.o_proj"), &tensors, device)?;
+                build_projection(&format!("{prefix}.self_attn.o_proj"), &tensors, device, quant)?;
             let attn_norm_w = get(&format!("{prefix}.self_attn_layer_norm.weight"))?;
             let attn_norm_b = get(&format!("{prefix}.self_attn_layer_norm.bias"))?;
 
             let ffn_dense_h =
-                linear_from_weights(&format!("{prefix}.mlp.dense.h_to_4h"), &tensors, device)?;
+                build_projection(&format!("{prefix}.mlp.dense.h_to_4h"), &tensors, device, quant)?;
             let ffn_dense_o =
-                linear_from_weights(&format!("{prefix}.mlp.dense.4h_to_h"), &tensors, device)?;
+                build_projection(&format!("{prefix}.mlp.dense.4h_to_h"), &tensors, device, quant)?;
             let ffn_norm_w = get(&format!("{prefix}.mlp_layer_norm.weight"))?;
             let ffn_norm_b = get(&format!("{prefix}.mlp_layer_norm.bias"))?;
 
@@ -223,19 +262,10 @@ impl TransformerLayer {
 
         let seq_len = normed.dim(1).map_err(|e| EmbeddingError::Candle(e.to_string()))?;
 
-        // Project Q, K, V using Module::forward
-        let q = self
-            .attn_q
-            .forward(&normed)
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
-        let k = self
-            .attn_k
-            .forward(&normed)
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
-        let v = self
-            .attn_v
-            .forward(&normed)
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
+        // Project Q, K, V using Projection::forward
+        let q = self.attn_q.forward(&normed)?;
+        let k = self.attn_k.forward(&normed)?;
+        let v = self.attn_v.forward(&normed)?;
 
         // Reshape to (batch=1, seq, heads, head_dim) -> (batch=1, heads, seq, head_dim)
         let q = q
@@ -273,7 +303,7 @@ impl TransformerLayer {
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
 
         // masked_fill: where mask==0, set to -inf
-        let neg_inf = Tensor::new(f32::NEG_INFINITY, &self.attn_q.weight().device())
+        let neg_inf = Tensor::new(f32::NEG_INFINITY, &attention_mask.device())
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
         let filled = neg_inf
             .broadcast_as(attn_weights.shape())
@@ -299,25 +329,16 @@ impl TransformerLayer {
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
 
         // Output projection + residual
-        let attn_out = self
-            .attn_o
-            .forward(&attn_out)
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
+        let attn_out = self.attn_o.forward(&attn_out)?;
         let hidden = hidden
             .broadcast_add(&attn_out)
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
 
         // Pre-norm FFN
         let normed = layer_norm(&hidden, &self.ffn_norm_w, &self.ffn_norm_b)?;
-        let ffn = self
-            .ffn_dense_h
-            .forward(&normed)
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
+        let ffn = self.ffn_dense_h.forward(&normed)?;
         let ffn = gelu(&ffn)?;
-        let ffn = self
-            .ffn_dense_o
-            .forward(&ffn)
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
+        let ffn = self.ffn_dense_o.forward(&ffn)?;
 
         // Residual
         let hidden = hidden
@@ -447,15 +468,36 @@ fn half_to_f32(h: u16) -> f32 {
     }
 }
 
-/// Create a `candle_nn::Linear` from safetensors weights.
-fn linear_from_weights(
+/// Create a [`Projection`] from safetensors weights.
+///
+/// When `quant` is `None`, a full-precision `Linear` is built. When a GGML
+/// dtype is supplied, the weight tensor is quantized via [`QTensor::quantize`]
+/// and wrapped in a [`QMatMul`] (the bias is stored separately and applied
+/// after the matmul in [`Projection::forward`]).
+fn build_projection(
     prefix: &str,
     tensors: &safetensors::SafeTensors<'_>,
     device: &Device,
-) -> EmbeddingResult<Linear> {
+    quant: Option<GgmlDType>,
+) -> EmbeddingResult<Projection> {
     let w = load_tensor(tensors, &format!("{prefix}.weight"), device)?;
     let b = load_tensor(tensors, &format!("{prefix}.bias"), device)?;
-    Ok(Linear::new(w, Some(b)))
+
+    match quant {
+        None => Ok(Projection::F32 {
+            linear: Linear::new(w, Some(b)),
+        }),
+        Some(dtype) => {
+            let qtensor = QTensor::quantize(&w, dtype)
+                .map_err(|e| EmbeddingError::Candle(format!("quantize {prefix}: {e}")))?;
+            let qmatmul = QMatMul::from_arc(Arc::new(qtensor))
+                .map_err(|e| EmbeddingError::Candle(format!("qmatmul {prefix}: {e}")))?;
+            Ok(Projection::Quantized {
+                qmatmul,
+                bias: Some(b),
+            })
+        }
+    }
 }
 
 /// Load a single tensor from safetensors by name.
@@ -514,7 +556,7 @@ impl BgeM3Embedder {
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| EmbeddingError::Tokenizer(format!("failed to load tokenizer: {e}")))?;
 
-        let model = BgeM3Model::load(model_dir, dims, &device)?;
+        let model = BgeM3Model::load(model_dir, dims, &device, None)?;
 
         tracing::info!(
             model_dir = %model_dir.display(),
@@ -527,6 +569,42 @@ impl BgeM3Embedder {
             tokenizer: Arc::new(tokenizer),
             device,
             dims,
+            matryoshka_dims: None,
+        })
+    }
+
+    /// Create a BGE-M3 embedder driven by an [`EmbeddingConfig`].
+    ///
+    /// Applies the configured quantization (INT8/INT4 via `QMatMul`, or f32 by
+    /// default) and Matryoshka truncation (`matryoshka_dims`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the model or tokenizer cannot be loaded.
+    pub fn new_with_config(model_dir: &Path, config: &EmbeddingConfig) -> EmbeddingResult<Self> {
+        let device = Device::Cpu;
+
+        let tokenizer_path = model_dir.join("tokenizer.json");
+        let tokenizer = Tokenizer::from_file(&tokenizer_path)
+            .map_err(|e| EmbeddingError::Tokenizer(format!("failed to load tokenizer: {e}")))?;
+
+        let model =
+            BgeM3Model::load(model_dir, config.dims, &device, config.quantization.ggml_dtype())?;
+
+        tracing::info!(
+            model_dir = %model_dir.display(),
+            dims = config.dims,
+            quantization = ?config.quantization,
+            matryoshka_dims = ?config.matryoshka_dims,
+            "loaded BGE-M3 embedder (config)"
+        );
+
+        Ok(Self {
+            model: Arc::new(model),
+            tokenizer: Arc::new(tokenizer),
+            device,
+            dims: config.dims,
+            matryoshka_dims: config.matryoshka_dims,
         })
     }
 
@@ -625,9 +703,10 @@ impl Embedder for BgeM3Embedder {
         let (input_ids, attention_mask) = self.prepare_inputs(&[text])?;
         let output = self.model.forward(&input_ids, &attention_mask)?;
         let embedding = Self::mean_pool(&output, &attention_mask)?;
-        embedding
+        let vec = embedding
             .to_vec1::<f32>()
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))
+            .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
+        Ok(apply_matryoshka(vec, self.matryoshka_dims))
     }
 
     /// # Errors
@@ -647,17 +726,25 @@ impl Embedder for BgeM3Embedder {
             let vec = emb
                 .to_vec1::<f32>()
                 .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
-            result.push(vec);
+            result.push(apply_matryoshka(vec, self.matryoshka_dims));
         }
         Ok(result)
     }
 
     fn dimensions(&self) -> usize {
-        self.dims
+        self.matryoshka_dims.unwrap_or(self.dims)
     }
 
     fn name(&self) -> &'static str {
         "bge-m3"
+    }
+}
+
+/// Apply Matryoshka truncation if `dims` is `Some`, otherwise pass through.
+fn apply_matryoshka(emb: Embedding, dims: Option<usize>) -> Embedding {
+    match dims {
+        Some(d) => matryoshka_truncate(&emb, d),
+        None => emb,
     }
 }
 
@@ -741,6 +828,36 @@ mod tests {
         // f16 2.0 = 0x4000
         let val = half_to_f32(0x4000);
         assert!((val - 2.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_matryoshka_truncate_shorter() {
+        let emb = vec![1.0_f32, 2.0, 3.0];
+        let out = matryoshka_truncate(&emb, 5);
+        assert_eq!(out.len(), 5);
+        assert_eq!(out[..3], [1.0, 2.0, 3.0]);
+        assert_eq!(out[3], 0.0);
+        assert_eq!(out[4], 0.0);
+    }
+
+    #[test]
+    fn test_matryoshka_truncate_equal() {
+        let emb = vec![1.0_f32, 2.0, 3.0];
+        let out = matryoshka_truncate(&emb, 3);
+        assert_eq!(out, emb);
+    }
+
+    #[test]
+    fn test_matryoshka_truncate_longer() {
+        let emb = vec![1.0_f32, 2.0, 3.0, 4.0, 5.0];
+        let out = matryoshka_truncate(&emb, 2);
+        assert_eq!(out, vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_apply_matryoshka_none_passthrough() {
+        let emb = vec![1.0_f32, 2.0, 3.0];
+        assert_eq!(apply_matryoshka(emb.clone(), None), emb);
     }
 
     #[test]

@@ -222,6 +222,7 @@ name = "arlm-memory"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arlm-core",
  "arlm-embedding",
  "arlm-search",
  "arlm-storage",

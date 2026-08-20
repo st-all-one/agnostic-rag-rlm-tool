@@ -7,7 +7,12 @@ use thiserror::Error;
 pub mod batch;
 pub mod bge_m3;
 pub mod cache;
+pub mod config;
 pub mod fallback;
+pub mod lightweight;
+
+pub use config::{build_embedder, EmbeddingConfig, EmbeddingModel, Quantization};
+pub use lightweight::LightweightEmbedder;
 
 /// Errors specific to the embedding subsystem.
 #[derive(Debug, Error)]
@@ -42,6 +47,22 @@ pub type EmbeddingResult<T> = Result<T, EmbeddingError>;
 
 /// An embedding vector.
 pub type Embedding = Vec<f32>;
+
+/// Truncate (or zero-pad) an embedding to `dims` dimensions.
+///
+/// Implements Matryoshka representation truncation: keeps the first `dims`
+/// components, or zero-pads if the input is shorter. This is a pure function
+/// with no model dependency.
+#[must_use]
+pub fn matryoshka_truncate(emb: &[f32], dims: usize) -> Vec<f32> {
+    if emb.len() >= dims {
+        emb[..dims].to_vec()
+    } else {
+        let mut out = vec![0.0_f32; dims];
+        out[..emb.len()].copy_from_slice(emb);
+        out
+    }
+}
 
 /// Trait for text embedding models.
 pub trait Embedder: Send + Sync {
