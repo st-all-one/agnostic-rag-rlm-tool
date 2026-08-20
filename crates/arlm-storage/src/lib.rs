@@ -16,8 +16,7 @@
 pub mod lance;
 pub mod sqlite;
 
-pub use lance::SearchResult;
-pub use lance::VectorStore;
+pub use lance::{SearchResult, VectorEntry, VectorStore};
 pub use sqlite::Storage;
 
 #[must_use]

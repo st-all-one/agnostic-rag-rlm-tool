@@ -74,7 +74,7 @@ tiktoken-rs = "0.12"
 toml = "0.8"
 
 # gRPC / Protobuf
-tonic = "0.13"
+tonic = { version = "0.13", features = ["tls-native-roots"] }
 prost = "0.13"
 prost-types = "0.13"
 

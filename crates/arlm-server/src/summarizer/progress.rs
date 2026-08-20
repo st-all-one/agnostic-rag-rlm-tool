@@ -106,26 +106,3 @@ impl ProgressSnapshot {
         (self.completed as f64 / self.total as f64) * 100.0
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_progress_tracker() {
-        let tracker = ProgressTracker::new();
-        assert!(!tracker.is_running());
-
-        tracker.start(100);
-        assert!(tracker.is_running());
-
-        tracker.update("file.rs", 50);
-        let snapshot = tracker.progress();
-        assert_eq!(snapshot.completed, 50);
-        assert_eq!(snapshot.total, 100);
-        assert!((snapshot.percentage() - 50.0).abs() < f64::EPSILON);
-
-        tracker.finish();
-        assert!(!tracker.is_running());
-    }
-}

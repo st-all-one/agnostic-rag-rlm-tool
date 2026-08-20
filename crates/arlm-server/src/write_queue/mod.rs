@@ -6,6 +6,8 @@ use anyhow::Result;
 use arlm_storage::Storage;
 use tokio::sync::mpsc;
 
+use crate::timing::Timer;
+
 /// Statistics for the write queue.
 #[derive(Debug, Clone, Default)]
 pub struct WriteQueueStats {
@@ -16,9 +18,8 @@ pub struct WriteQueueStats {
 
 /// Operations that can be queued for batch writing.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub enum WriteOp {
-    /// Insert a chunk.
+    /// Insert a chunk plus its text and FTS row.
     InsertChunk {
         buffer_id: i64,
         content: String,
@@ -40,7 +41,8 @@ pub enum WriteOp {
 /// Batched write queue for SQLite operations.
 ///
 /// Collects write operations and flushes them periodically to avoid
-/// contention on the single SQLite writer.
+/// contention on the single SQLite writer. Safe to use with the pooled
+/// storage backend (server deployment).
 #[derive(Clone)]
 pub struct WriteQueue {
     sender: Arc<mpsc::UnboundedSender<WriteOp>>,
@@ -56,7 +58,7 @@ struct WriteQueueStatsInner {
 impl WriteQueue {
     /// Create a new write queue.
     ///
-    /// Spawns a background task that drains the queue.
+    /// Spawns a background task that drains the queue on the blocking pool.
     pub fn new(storage: Storage, flush_interval: Duration, max_batch_size: usize) -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
 
@@ -84,10 +86,14 @@ impl WriteQueue {
     /// Enqueue a write operation.
     pub fn enqueue(&self, op: WriteOp) {
         self.stats.pending.fetch_add(1, Ordering::Relaxed);
-        let _ = self.sender.send(op);
+        if self.sender.send(op).is_err() {
+            self.stats.failed.fetch_add(1, Ordering::Relaxed);
+            tracing::error!("write queue channel closed");
+        }
     }
 
     /// Get write queue statistics.
+    #[must_use]
     pub fn stats(&self) -> WriteQueueStats {
         WriteQueueStats {
             pending: self.stats.pending.load(Ordering::Relaxed),
@@ -114,15 +120,7 @@ impl WriteQueue {
                             stats.pending.fetch_sub(1, Ordering::Relaxed);
                             buffer.push(op);
                             if buffer.len() >= max_batch_size {
-                                match Self::flush(&storage, &mut buffer).await {
-                                    Ok(()) => {
-                                        stats.flushed.fetch_add(1, Ordering::Relaxed);
-                                    }
-                                    Err(e) => {
-                                        stats.failed.fetch_add(1, Ordering::Relaxed);
-                                        tracing::error!("write queue flush error: {e}");
-                                    }
-                                }
+                                Self::flush_and_track(&storage, &mut buffer, &stats).await;
                             }
                         }
                         None => break, // Channel closed
@@ -130,15 +128,7 @@ impl WriteQueue {
                 }
                 _ = interval.tick() => {
                     if !buffer.is_empty() {
-                        match Self::flush(&storage, &mut buffer).await {
-                            Ok(()) => {
-                                stats.flushed.fetch_add(1, Ordering::Relaxed);
-                            }
-                            Err(e) => {
-                                stats.failed.fetch_add(1, Ordering::Relaxed);
-                                tracing::error!("write queue flush error: {e}");
-                            }
-                        }
+                        Self::flush_and_track(&storage, &mut buffer, &stats).await;
                     }
                 }
             }
@@ -146,11 +136,26 @@ impl WriteQueue {
 
         // Final flush
         if !buffer.is_empty() {
-            if let Err(e) = Self::flush(&storage, &mut buffer).await {
+            Self::flush_and_track(&storage, &mut buffer, &stats).await;
+        }
+    }
+
+    async fn flush_and_track(
+        storage: &Storage,
+        buffer: &mut Vec<WriteOp>,
+        stats: &Arc<WriteQueueStatsInner>,
+    ) {
+        let timer = Timer::new("write_queue_flush");
+        match Self::flush(storage, buffer).await {
+            Ok(()) => {
+                stats.flushed.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(e) => {
                 stats.failed.fetch_add(1, Ordering::Relaxed);
-                tracing::error!("write queue final flush error: {e}");
+                tracing::error!(error = %e, "write queue flush error");
             }
         }
+        drop(timer);
     }
 
     async fn flush(storage: &Storage, buffer: &mut Vec<WriteOp>) -> Result<()> {
@@ -158,42 +163,54 @@ impl WriteQueue {
             return Ok(());
         }
 
-        let conn = storage.conn();
-        let conn = conn.lock();
+        let conn = storage.connection()?;
+        conn.execute(|conn| {
+            let tx = conn.unchecked_transaction()?;
 
-        let tx = conn.unchecked_transaction()?;
-
-        for op in buffer.drain(..) {
-            match op {
-                WriteOp::InsertChunk {
-                    buffer_id,
-                    content,
-                    file_path,
-                    start_line,
-                    end_line,
-                } => {
-                    tx.execute(
-                        "INSERT INTO chunks (buffer_id, content, file_path, start_line, end_line) VALUES (?1, ?2, ?3, ?4, ?5)",
-                        rusqlite::params![buffer_id, content, file_path, start_line, end_line],
-                    )?;
-                }
-                WriteOp::InsertSummary {
-                    buffer_id,
-                    content,
-                    scope,
-                    source_chunk_ids,
-                    source_hash,
-                    confidence,
-                } => {
-                    tx.execute(
-                        "INSERT INTO summaries (buffer_id, content, scope, source_chunk_ids, source_hash, confidence) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                        rusqlite::params![buffer_id, content, scope, source_chunk_ids, source_hash, confidence],
-                    )?;
+            for op in buffer.drain(..) {
+                match op {
+                    WriteOp::InsertChunk {
+                        buffer_id,
+                        content,
+                        file_path,
+                        start_line,
+                        end_line,
+                    } => {
+                        tx.execute(
+                            "INSERT INTO chunks (buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count) \
+                             VALUES (?1, ?2, 0, 0, ?3, ?4, x'00', NULL, NULL, NULL)",
+                            rusqlite::params![buffer_id, file_path, start_line, end_line],
+                        )?;
+                        let chunk_id = tx.last_insert_rowid();
+                        tx.execute(
+                            "INSERT INTO chunk_texts (chunk_id, content) VALUES (?1, ?2)",
+                            rusqlite::params![chunk_id, content],
+                        )?;
+                        tx.execute(
+                            "INSERT INTO chunks_fts(rowid, content) VALUES (?1, ?2)",
+                            rusqlite::params![chunk_id, content],
+                        )?;
+                    }
+                    WriteOp::InsertSummary {
+                        buffer_id,
+                        content,
+                        scope,
+                        source_chunk_ids,
+                        source_hash,
+                        confidence,
+                    } => {
+                        tx.execute(
+                            "INSERT INTO summaries (buffer_id, content, scope, source_chunk_ids, source_hash, confidence) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                            rusqlite::params![buffer_id, content, scope, source_chunk_ids, source_hash, confidence],
+                        )?;
+                    }
                 }
             }
-        }
 
-        tx.commit()?;
+            tx.commit()?;
+            Ok(())
+        })?;
+
         Ok(())
     }
 }

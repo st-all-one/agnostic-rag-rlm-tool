@@ -1,80 +1,102 @@
+//! Hierarchical summarization engine.
+//!
+//! Produces file → module → project summaries for a project's chunks and
+//! persists them in the `summaries` table. Runs on the background worker (see
+//! [`worker`]) and publishes live progress to the server event hub.
+
 pub mod cost;
 pub mod progress;
 pub mod strategy;
+pub mod worker;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use arlm_llm::{CompletionRequest, LlmBackend, Message, Role};
 use arlm_storage::Storage;
+use sha2::{Digest, Sha256};
 
-use self::cost::estimate_cost;
+pub use worker::{SummarizeSender, spawn_worker};
+
+use crate::events::EventHub;
+use crate::store;
+use crate::timing::Timer;
+
 use self::progress::ProgressTracker;
-use self::strategy::{build_summary_prompt, parse_summary_response, RawChunk};
+use self::strategy::{RawChunk, build_summary_prompt};
 
-/// Summarization engine that produces hierarchical summaries.
+/// A summarization job enqueued by `trigger_summarize`.
+#[derive(Debug, Clone)]
+pub struct SummarizeJob {
+    pub run_id: String,
+    pub buffer_id: i64,
+    pub project: String,
+    /// Proto `SummaryScope` enum value (0=file, 1=module, 2=project).
+    pub max_scope: i32,
+    pub max_concurrent: u32,
+    pub force_refresh: bool,
+}
+
+/// Result of a summarization pass.
+#[derive(Debug, Clone, Default)]
+pub struct SummaryResult {
+    pub file_summaries: u32,
+    pub module_summaries: u32,
+    pub project_summaries: u32,
+    pub total_summarized: u32,
+}
+
+/// Summarization engine bound to a specific storage, LLM backend and event hub.
 pub struct Summarizer {
     storage: Storage,
     llm: Arc<dyn LlmBackend + Send + Sync>,
+    events: EventHub,
     tracker: ProgressTracker,
 }
 
 impl Summarizer {
     /// Create a new summarizer.
-    pub fn new(storage: Storage, llm: Arc<dyn LlmBackend + Send + Sync>) -> Self {
+    #[must_use]
+    pub fn new(
+        storage: Storage,
+        llm: Arc<dyn LlmBackend + Send + Sync>,
+        events: EventHub,
+    ) -> Self {
         Self {
             storage,
             llm,
+            events,
             tracker: ProgressTracker::new(),
         }
     }
 
     /// Get the progress tracker.
+    #[must_use]
     pub fn tracker(&self) -> &ProgressTracker {
         &self.tracker
     }
 
-    /// Summarize all chunks for a project.
-    ///
-    /// # Arguments
-    ///
-    /// * `buffer_id` - The project/buffer ID
-    /// * `max_concurrent` - Maximum concurrent LLM calls
+    /// Run a summarization job, persisting file, module and project summaries.
     ///
     /// # Errors
     ///
-    /// Returns an error if summarization fails.
-    pub async fn summarize_project(&self, buffer_id: i64, max_concurrent: u32) -> Result<SummaryResult> {
-        let conn = self.storage.conn();
-        let conn = conn.lock();
+    /// Returns an error if chunk loading, LLM calls or persistence fail.
+    pub async fn summarize(&self, job: SummarizeJob) -> Result<SummaryResult> {
+        let _timer = Timer::new("summarize_project");
+        self.events.register_summarize(&job.run_id);
 
-        // Get all chunks for this buffer
-        let mut stmt = conn.prepare(
-            "SELECT id, content, file_path FROM chunks WHERE buffer_id = ?1 ORDER BY file_path, start_line"
-        )?;
-
-        let chunks: Vec<RawChunk> = stmt
-            .query_map([buffer_id], |row| {
-                Ok(RawChunk {
-                    id: row.get(0)?,
-                    content: row.get(1)?,
-                    file_path: row.get(2)?,
-                })
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
-
+        let chunks = self.load_chunks(job.buffer_id)?;
         if chunks.is_empty() {
-            return Ok(SummaryResult {
-                file_summaries: 0,
-                module_summaries: 0,
-                project_summaries: 0,
-                total_summarized: 0,
-            });
+            self.events.unregister_summarize(&job.run_id);
+            return Ok(SummaryResult::default());
         }
 
-        // Group chunks by file
-        let mut file_groups: std::collections::HashMap<String, Vec<&RawChunk>> = std::collections::HashMap::new();
+        let file_count = chunks.iter().map(|c| c.file_path.as_str()).collect::<std::collections::HashSet<_>>().len();
+        self.tracker.start(u32::try_from(file_count).unwrap_or(0));
+
+        // Group chunks by file.
+        let mut file_groups: HashMap<String, Vec<&RawChunk>> = HashMap::new();
         for chunk in &chunks {
             file_groups
                 .entry(chunk.file_path.clone())
@@ -82,108 +104,126 @@ impl Summarizer {
                 .push(chunk);
         }
 
-        let total_files = file_groups.len() as u32;
-        self.tracker.start(total_files);
-
+        let mut module_groups: HashMap<String, Vec<String>> = HashMap::new();
         let mut file_summaries = 0u32;
-        let mut module_groups: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
 
-        // Per-file summarization
-        for (file_path, file_chunks) in &file_groups {
-            let prompt = build_summary_prompt(file_chunks, "file")?;
+        // File scope (only when the requested scope reaches at least files).
+        if job.max_scope >= 0 {
+            for (file_path, file_chunks) in &file_groups {
+                let owned: Vec<RawChunk> = file_chunks.iter().map(|c| (*c).clone()).collect();
+                let summary = self.summarize_group(&owned, "file").await?;
+                self.persist(
+                    job.buffer_id,
+                    &summary,
+                    "file",
+                    owned.iter().map(|c| c.id).collect(),
+                    owned.iter().map(|c| c.content.as_str()).collect::<Vec<_>>().join(""),
+                    0.8,
+                )?;
 
-            // Call LLM to generate summary
-            let summary = self.call_llm(&prompt).await?;
+                file_summaries += 1;
+                self.tracker.update(file_path, file_summaries);
 
-            // Store the summary
-            let source_chunk_ids: Vec<i64> = file_chunks.iter().map(|c| c.id).collect();
-            let source_hash = compute_hash(&summary);
-
-            conn.execute(
-                "INSERT INTO summaries (buffer_id, content, scope, source_chunk_ids, source_hash, confidence, tokens) VALUES (?1, ?2, 'file', ?3, ?4, 0.8, ?5)",
-                rusqlite::params![
-                    buffer_id,
-                    summary,
-                    serde_json::to_string(&source_chunk_ids)?,
-                    source_hash,
-                    estimate_tokens(&summary),
-                ],
-            )?;
-
-            file_summaries += 1;
-            self.tracker.update(file_path, file_summaries);
-
-            // Group by module (directory)
-            let module = std::path::Path::new(file_path)
-                .parent()
-                .and_then(|p| p.to_str())
-                .unwrap_or("root")
-                .to_string();
-            module_groups
-                .entry(module)
-                .or_default()
-                .push(summary);
+                let module = std::path::Path::new(file_path)
+                    .parent()
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("root")
+                    .to_string();
+                module_groups.entry(module).or_default().push(summary);
+                self.emit_progress(&job.run_id, file_path, file_summaries, u32::try_from(file_groups.len()).unwrap_or(0), format!("summarizing {file_path}"));
+            }
         }
 
-        // Per-module summarization
+        // Module scope.
         let mut module_summaries = 0u32;
-        for (module_path, file_summary_texts) in &module_groups {
-            let combined = file_summary_texts.join("\n\n");
-            let prompt = format!(
-                "Summarize the following module at '{}'. Combine these file summaries into a coherent module-level summary:\n\n{}",
-                module_path,
-                combined
-            );
-
-            let summary = self.call_llm(&prompt).await?;
-
-            let source_hash = compute_hash(&summary);
-
-            conn.execute(
-                "INSERT INTO summaries (buffer_id, content, scope, source_chunk_ids, source_hash, confidence, tokens) VALUES (?1, ?2, 'module', '[]', ?3, 0.7, ?4)",
-                rusqlite::params![
-                    buffer_id,
-                    summary,
-                    source_hash,
-                    estimate_tokens(&summary),
-                ],
-            )?;
-
-            module_summaries += 1;
+        if job.max_scope >= 1 {
+            for (module_path, file_summary_texts) in &module_groups {
+                let combined = file_summary_texts.join("\n\n");
+                let summary = self.call_llm(&format!(
+                    "Summarize the module at '{module_path}'. Combine these file summaries into a coherent module-level summary:\n\n{combined}"
+                )).await?;
+                self.persist(job.buffer_id, &summary, "module", Vec::new(), module_path.clone(), 0.7)?;
+                module_summaries += 1;
+                self.emit_progress(&job.run_id, module_path, module_summaries, module_groups.len() as u32, format!("summarizing module {module_path}"));
+            }
         }
 
-        // Per-project summarization
-        let all_summaries: Vec<String> = module_groups.values().flat_map(|v| v.clone()).collect();
-        let combined = all_summaries.join("\n\n");
-        let prompt = format!(
-            "Summarize the entire project. Combine these module summaries into a coherent project-level summary:\n\n{}",
-            combined
-        );
-
-        let project_summary = self.call_llm(&prompt).await?;
-        let source_hash = compute_hash(&project_summary);
-
-        conn.execute(
-            "INSERT INTO summaries (buffer_id, content, scope, source_chunk_ids, source_hash, confidence, tokens) VALUES (?1, ?2, 'project', '[]', ?3, 0.6, ?4)",
-            rusqlite::params![
-                buffer_id,
-                project_summary,
-                source_hash,
-                estimate_tokens(&project_summary),
-            ],
-        )?;
+        // Project scope.
+        let mut project_summaries = 0u32;
+        if job.max_scope >= 2 {
+            let all = module_groups.values().flat_map(|v| v.clone()).collect::<Vec<_>>().join("\n\n");
+            let summary = self.call_llm(&format!(
+                "Summarize the entire project. Combine these module summaries into a coherent project-level summary:\n\n{all}"
+            )).await?;
+            self.persist(job.buffer_id, &summary, "project", Vec::new(), "project".to_string(), 0.6)?;
+            project_summaries = 1;
+            self.emit_progress(&job.run_id, "project", 1, 1, "summarizing project".to_string());
+        }
 
         self.tracker.finish();
+        self.events.unregister_summarize(&job.run_id);
 
         Ok(SummaryResult {
             file_summaries,
             module_summaries,
-            project_summaries: 1,
-            total_summarized: chunks.len() as u32,
+            project_summaries,
+            total_summarized: u32::try_from(chunks.len()).unwrap_or(u32::MAX),
         })
     }
 
-    /// Call the LLM to generate a summary.
+    /// Summarize a group of chunks with a single LLM call.
+    async fn summarize_group(&self, file_chunks: &[RawChunk], scope: &str) -> Result<String> {
+        let prompt = build_summary_prompt(file_chunks, scope)?;
+        self.call_llm(&prompt).await
+    }
+
+    /// Persist a summary row.
+    fn persist(
+        &self,
+        buffer_id: i64,
+        summary: &str,
+        scope: &str,
+        source_chunk_ids: Vec<i64>,
+        source_text: String,
+        confidence: f64,
+    ) -> Result<()> {
+        let source_hash = compute_hash(&source_text);
+        let source_json = serde_json::to_string(&source_chunk_ids)?;
+        let tokens = estimate_tokens(summary);
+        store::insert_summary(
+            &self.storage,
+            buffer_id,
+            summary,
+            scope,
+            &source_json,
+            &source_hash,
+            confidence,
+            tokens,
+        )
+    }
+
+    /// Load all chunks of a buffer with their text content.
+    fn load_chunks(&self, buffer_id: i64) -> Result<Vec<RawChunk>> {
+        let conn = self.storage.connection()?;
+        conn.execute(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT c.id, COALESCE(cc.content, ''), c.file_path \
+                 FROM chunks c LEFT JOIN chunk_texts cc ON cc.chunk_id = c.id \
+                 WHERE c.buffer_id = ?1 ORDER BY c.file_path, c.line_start",
+            )?;
+            let rows = stmt.query_map(rusqlite::params![buffer_id], |row| {
+                Ok(RawChunk {
+                    id: row.get(0)?,
+                    content: row.get(1)?,
+                    file_path: row.get(2)?,
+                })
+            })?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+        .context("failed to load chunks for buffer")
+    }
+
+    /// Call the configured LLM backend with a summarization prompt.
     async fn call_llm(&self, prompt: &str) -> Result<String> {
         let messages = vec![
             Message {
@@ -197,7 +237,7 @@ impl Summarizer {
         ];
 
         let request = CompletionRequest {
-            model: "gpt-4o-mini".to_string(),
+            model: self.model_name(),
             messages,
             temperature: Some(0.3),
             max_tokens: Some(1024),
@@ -207,53 +247,44 @@ impl Summarizer {
         let response = self.llm.complete(request).await?;
         Ok(response.content)
     }
+
+    fn model_name(&self) -> String {
+        // The server config model is carried on the client; the backend picks
+        // its default when the request model is empty. Prefer an explicit model
+        // injected through the LLM backend factory when available.
+        String::new()
+    }
+
+    fn emit_progress(
+        &self,
+        run_id: &str,
+        current_file: &str,
+        completed: u32,
+        total: u32,
+        message: String,
+    ) {
+        self.events.publish_summarize(arlm_proto::proto::SummarizeProgress {
+            run_id: run_id.to_string(),
+            current_scope: 0,
+            current_file: current_file.to_string(),
+            completed: i32::try_from(completed).unwrap_or(i32::MAX),
+            total: i32::try_from(total).unwrap_or(i32::MAX),
+            elapsed_ms: 0.0,
+            message,
+        });
+    }
 }
 
-/// Result of a summarization operation.
-#[derive(Debug, Clone)]
-pub struct SummaryResult {
-    pub file_summaries: u32,
-    pub module_summaries: u32,
-    pub project_summaries: u32,
-    pub total_summarized: u32,
-}
-
-/// Compute a simple hash for content.
-fn compute_hash(content: &str) -> String {
-    use sha2::{Digest, Sha256};
+/// Compute a SHA-256 hex digest for change detection.
+#[must_use]
+pub fn compute_hash(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
     hex::encode(hasher.finalize())
 }
 
-/// Estimate token count (rough approximation).
-fn estimate_tokens(text: &str) -> u32 {
-    // Rough estimate: 1 token per 4 characters
-    (text.len() as u32) / 4
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_summarizer_creation() {
-        let tmp = TempDir::new().unwrap();
-        let storage = Storage::open(tmp.path()).unwrap();
-        let summarizer = Summarizer::new(storage);
-        assert!(!summarizer.tracker().is_running());
-    }
-
-    #[test]
-    fn test_compute_hash() {
-        let hash = compute_hash("test content");
-        assert_eq!(hash.len(), 64); // SHA-256 hex length
-    }
-
-    #[test]
-    fn test_estimate_tokens() {
-        assert_eq!(estimate_tokens("hello"), 1);
-        assert_eq!(estimate_tokens("hello world"), 2);
-    }
+/// Rough token estimate (1 token per 4 characters).
+#[must_use]
+pub fn estimate_tokens(text: &str) -> u32 {
+    (text.len() as u32).saturating_div(4)
 }

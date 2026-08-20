@@ -1,36 +1,91 @@
-use anyhow::Result;
-use arlm_storage::Storage;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use anyhow::{Context, Result};
 use arlm_proto::proto::arlm_service_server::ArlmServiceServer;
-use tonic::transport::Server;
+use arlm_storage::{Storage, VectorStore};
+use tonic::transport::{Identity, Server, ServerTlsConfig};
 use tracing::info;
 
 use crate::config::ServerConfig;
 use crate::grpc::ArlmGrpcService;
 use crate::state::AppState;
+use crate::timing::Timer;
 
-/// Run the gRPC server.
+/// Load config, open storage, wire the service and run the gRPC server.
 ///
-/// This function blocks until the server is shut down.
+/// Blocks until a shutdown signal is received.
 ///
 /// # Errors
 ///
-/// Returns an error if the server cannot be started.
-pub async fn run_server(config: &ServerConfig, storage: Storage) -> Result<()> {
-    let state = AppState::new(storage, config.clone())?;
+/// Returns an error if configuration, storage, the LLM backend or the server
+/// setup fails.
+pub async fn run() -> Result<()> {
+    let _timer = Timer::new("server_startup");
+
+    let config = ServerConfig::load().context("failed to load server config")?;
+
+    info!(addr = %config.listen_addr, backend = %config.llm.backend, model = %config.llm.model, "starting arlm-server");
+
+    let storage =
+        Storage::open_pooled(&config.data_dir, config.pool_size).context("failed to open storage")?;
+
+    let llm = AppState::build_llm(&config).context("failed to configure LLM backend")?;
+
+    let vector_store = match VectorStore::open(&config.data_dir).await {
+        Ok(store) => Some(Arc::new(store)),
+        Err(e) => {
+            tracing::warn!(error = %e, "vector store unavailable, continuing without semantic search");
+            None
+        }
+    };
+
+    run_server(config, storage, llm, vector_store).await
+}
+
+/// Run the gRPC server with graceful shutdown.
+///
+/// # Errors
+///
+/// Returns an error if the server cannot be started or terminates uncleanly.
+pub async fn run_server(
+    config: ServerConfig,
+    storage: Storage,
+    llm: Arc<dyn arlm_llm::LlmBackend + Send + Sync>,
+    vector_store: Option<Arc<VectorStore>>,
+) -> Result<()> {
+    let state = AppState::new(storage, config.clone(), llm, vector_store)?;
 
     let grpc_service = ArlmGrpcService::new(state);
-    let addr = config.listen_addr.parse()?;
+    let addr = config
+        .listen_addr
+        .parse()
+        .context("failed to parse listen address")?;
+
+    let mut builder = Server::builder();
+
+    if let (Some(cert), Some(key)) = (config.tls_cert(), config.tls_key()) {
+        let identity = Identity::from_pem(&load_file(&cert)?, &load_file(&key)?);
+        builder = builder.tls_config(ServerTlsConfig::new().identity(identity))?;
+        info!(cert = %cert.display(), "gRPC server TLS enabled");
+    } else {
+        info!("gRPC server running without TLS (dev mode)");
+    }
 
     info!(addr = %addr, "arlm-server listening");
 
-    // Build the gRPC server with graceful shutdown
-    Server::builder()
+    builder
         .add_service(ArlmServiceServer::new(grpc_service))
         .serve_with_shutdown(addr, shutdown_signal())
         .await?;
 
     info!("arlm-server shut down gracefully");
     Ok(())
+}
+
+fn load_file(path: &PathBuf) -> Result<Vec<u8>> {
+    std::fs::read(path)
+        .with_context(|| format!("failed to read TLS file {}", path.display()))
 }
 
 /// Wait for a shutdown signal (SIGINT or SIGTERM).

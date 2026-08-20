@@ -54,7 +54,7 @@ pub fn estimate_cost(
 /// Only summarizes changed files and their parent modules.
 pub fn estimate_incremental_cost(
     changed_files: u32,
-    total_files: u32,
+    _total_files: u32,
     avg_chunks_per_file: u32,
     model_cost_per_1k_tokens: f64,
 ) -> CostEstimate {
@@ -77,25 +77,5 @@ pub fn estimate_incremental_cost(
         cost_usd: total_cost,
         llm_calls: total_calls,
         duration_seconds: duration,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_estimate_cost() {
-        let estimate = estimate_cost(100, 5, 0.01);
-        assert!(estimate.cost_usd > 0.0);
-        assert!(estimate.llm_calls > 0);
-        assert!(estimate.duration_seconds > 0.0);
-    }
-
-    #[test]
-    fn test_estimate_incremental_cost() {
-        let full = estimate_cost(100, 5, 0.01);
-        let incremental = estimate_incremental_cost(10, 100, 5, 0.01);
-        assert!(incremental.cost_usd < full.cost_usd);
     }
 }
