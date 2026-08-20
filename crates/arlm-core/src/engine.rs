@@ -18,8 +18,12 @@ use crate::router::DepthRouter;
 use crate::solver;
 use crate::synthesizer;
 use crate::token_counter::TokenCounter;
+use crate::token_counter::get_context_limit;
 use crate::types::{Action, NodeStatus, RlmNode, RlmRunResult, RunStats, StartRunInput, now_ms};
 use crate::types::AbortSignal;
+
+/// Root-level compaction threshold: trigger when context reaches 60% of model limit.
+const ROOT_COMPACTION_THRESHOLD: f64 = 0.60;
 
 /// Shared engine state with atomic counters.
 #[derive(Debug)]
@@ -27,6 +31,7 @@ pub struct EngineState {
     nodes_visited: AtomicU32,
     max_depth_seen: AtomicU32,
     next_id: AtomicU64,
+    total_output_tokens: AtomicU32,
 }
 
 impl EngineState {
@@ -36,6 +41,7 @@ impl EngineState {
             nodes_visited: AtomicU32::new(0),
             max_depth_seen: AtomicU32::new(0),
             next_id: AtomicU64::new(1),
+            total_output_tokens: AtomicU32::new(0),
         }
     }
 
@@ -50,6 +56,19 @@ impl EngineState {
         self.max_depth_seen.fetch_max(depth, Ordering::Relaxed);
     }
 
+    /// Record output tokens from a node.
+    pub fn record_output_tokens(&self, tokens: u32) {
+        self.total_output_tokens.fetch_add(tokens, Ordering::Relaxed);
+    }
+
+    /// Check if root-level compaction is needed.
+    pub fn needs_root_compaction(&self, model: &str) -> bool {
+        let model_limit = get_context_limit(model);
+        let threshold = (model_limit as f64 * ROOT_COMPACTION_THRESHOLD) as u32;
+        let total = self.total_output_tokens.load(Ordering::Relaxed);
+        total >= threshold
+    }
+
     #[must_use]
     pub fn nodes_visited(&self) -> u32 {
         self.nodes_visited.load(Ordering::Relaxed)
@@ -59,9 +78,83 @@ impl EngineState {
     pub fn max_depth_seen(&self) -> u32 {
         self.max_depth_seen.load(Ordering::Relaxed)
     }
+
+    #[must_use]
+    pub fn total_output_tokens(&self) -> u32 {
+        self.total_output_tokens.load(Ordering::Relaxed)
+    }
 }
 
 impl Default for EngineState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Root-level compactor that summarizes accumulated output when context gets too large.
+pub struct RootCompactor {
+    /// Accumulated output summaries.
+    summaries: Vec<String>,
+    /// Maximum summaries to keep.
+    max_summaries: usize,
+}
+
+impl RootCompactor {
+    /// Create a new root compactor.
+    pub fn new() -> Self {
+        Self {
+            summaries: Vec::new(),
+            max_summaries: 10,
+        }
+    }
+
+    /// Add an output to the compactor.
+    pub fn add_output(&mut self, output: &str) {
+        // Truncate long outputs
+        let truncated = if output.len() > 1000 {
+            format!("{}...", &output[..1000])
+        } else {
+            output.to_string()
+        };
+        self.summaries.push(truncated);
+
+        // Keep only the most recent summaries
+        if self.summaries.len() > self.max_summaries {
+            let drain = self.summaries.len() - self.max_summaries;
+            self.summaries.drain(..drain);
+        }
+    }
+
+    /// Get a summary of all accumulated outputs.
+    pub fn get_summary(&self) -> String {
+        if self.summaries.is_empty() {
+            return "No outputs accumulated.".to_string();
+        }
+
+        format!(
+            "Accumulated outputs ({}):\n{}",
+            self.summaries.len(),
+            self.summaries.join("\n---\n")
+        )
+    }
+
+    /// Clear the summaries.
+    pub fn clear(&mut self) {
+        self.summaries.clear();
+    }
+
+    /// Get the number of accumulated outputs.
+    pub fn len(&self) -> usize {
+        self.summaries.len()
+    }
+
+    /// Check if the compactor is empty.
+    pub fn is_empty(&self) -> bool {
+        self.summaries.is_empty()
+    }
+}
+
+impl Default for RootCompactor {
     fn default() -> Self {
         Self::new()
     }
@@ -417,16 +510,28 @@ async fn solve_node_owned(
         forced_reason: forced_reason.map(String::from),
     });
 
-    let result = solver::solve_task(
-        &params.task,
-        &params.input,
-        params.llm.clone(),
-        &params.budget,
-        &params.cache,
-        forced_reason,
-        Some(model),
-    )
-    .await?;
+    let result = if params.input.mode == crate::types::RlmMode::Repl {
+        solver::solve_task_repl(
+            &params.task,
+            &params.input,
+            params.llm.clone(),
+            &params.budget,
+            &params.cache,
+            Some(model),
+        )
+        .await?
+    } else {
+        solver::solve_task(
+            &params.task,
+            &params.input,
+            params.llm.clone(),
+            &params.budget,
+            &params.cache,
+            forced_reason,
+            Some(model),
+        )
+        .await?
+    };
 
     Ok(RlmNode::completed(
         node_id,

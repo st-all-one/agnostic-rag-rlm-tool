@@ -11,6 +11,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/009_add_entities.sql"),
     include_str!("../../migrations/010_add_last_accessed_at.sql"),
     include_str!("../../migrations/011_add_uuid_to_buffers.sql"),
+    include_str!("../../migrations/012_add_summaries.sql"),
 ];
 
 /// Run all pending migrations.
@@ -100,6 +101,7 @@ mod tests {
         assert!(tables.contains(&"session_history".to_string()));
         assert!(tables.contains(&"result_cache".to_string()));
         assert!(tables.contains(&"events".to_string()));
+        assert!(tables.contains(&"summaries".to_string()));
     }
 
     #[test]
@@ -116,6 +118,6 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
     }
 }

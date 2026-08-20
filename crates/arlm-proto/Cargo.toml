@@ -1,0 +1,20 @@
+[package]
+name = "arlm-proto"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Protobuf definitions and generated types for arlm gRPC communication"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+prost = "0.13"
+prost-types = "0.13"
+tonic = "0.13"
+http = "1"
+
+[build-dependencies]
+prost-build = "0.13"
+tonic-build = "0.13"
+
+[lints]
+workspace = true

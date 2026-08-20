@@ -6,9 +6,39 @@ use tracing::info;
 
 use crate::budget::RunBudget;
 use crate::logging::ScopedTimer;
-use crate::types::{Action, PlannerDecision, StartRunInput};
+use crate::types::{Action, PlannerDecision, StartRunInput, format_tools_for_prompt};
 
 const PLANNER_SYSTEM: &str = "You are a recursion controller for an RLM system. Analyze the task and decide whether to solve it directly or decompose it into subtasks.";
+
+const ORCHESTRATOR_ADDENDUM: &str = "\
+You are an orchestrator, NOT a solver. Your role:
+1. Analyze the task and plan a decomposition strategy
+2. Break complex tasks into focused subtasks (each with clear, self-contained scope)
+3. Respect budget constraints — prefer fewer, well-scoped subtasks over many small ones
+4. Reserve your own tokens for high-level decisions, not detailed implementation
+5. Delegate detailed work to child nodes via decompose action
+6. When choosing solve, ensure you can complete the task in a single response";
+
+/// Build the system prompt, optionally including the orchestrator addendum and custom tools.
+#[must_use]
+fn build_system_prompt(
+    include_orchestrator: bool,
+    custom_tools: &[crate::types::CustomTool],
+) -> String {
+    let mut parts = Vec::new();
+    parts.push(PLANNER_SYSTEM.to_string());
+
+    if include_orchestrator {
+        parts.push(ORCHESTRATOR_ADDENDUM.to_string());
+    }
+
+    let tools_block = format_tools_for_prompt(custom_tools);
+    if !tools_block.is_empty() {
+        parts.push(tools_block);
+    }
+
+    parts.join("\n\n")
+}
 
 /// Plan a node: call LLM to decide solve vs decompose.
 ///
@@ -58,10 +88,13 @@ Decomposition multiplies cost — only decompose when it clearly helps."#,
         .unwrap_or("gpt-4o")
         .to_string();
 
+    let include_orchestrator = input.mode == crate::types::RlmMode::Auto;
+    let system_content = build_system_prompt(include_orchestrator, &input.custom_tools);
+
     let messages = vec![
         Message {
             role: Role::System,
-            content: PLANNER_SYSTEM.to_string(),
+            content: system_content,
         },
         Message {
             role: Role::User,
@@ -207,5 +240,41 @@ mod tests {
         let text = "```json\n{\"action\": \"solve\"}\n```";
         let json = extract_json(text);
         assert!(json.contains("solve"));
+    }
+
+    #[test]
+    fn test_build_system_prompt_orchestrator() {
+        let prompt = build_system_prompt(true, &[]);
+        assert!(prompt.contains("orchestrator"));
+        assert!(prompt.contains("NOT a solver"));
+        assert!(prompt.contains("recursion controller"));
+    }
+
+    #[test]
+    fn test_build_system_prompt_no_orchestrator() {
+        let prompt = build_system_prompt(false, &[]);
+        assert!(prompt.contains("recursion controller"));
+        assert!(!prompt.contains("orchestrator"));
+    }
+
+    #[test]
+    fn test_build_system_prompt_with_tools() {
+        let tools = vec![
+            crate::types::CustomTool::function("search", "Search code"),
+        ];
+        let prompt = build_system_prompt(false, &tools);
+        assert!(prompt.contains("Available tools:"));
+        assert!(prompt.contains("search"));
+    }
+
+    #[test]
+    fn test_build_system_prompt_orchestrator_with_tools() {
+        let tools = vec![
+            crate::types::CustomTool::function("read", "Read file"),
+        ];
+        let prompt = build_system_prompt(true, &tools);
+        assert!(prompt.contains("orchestrator"));
+        assert!(prompt.contains("Available tools:"));
+        assert!(prompt.contains("read"));
     }
 }

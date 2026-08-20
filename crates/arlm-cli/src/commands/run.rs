@@ -20,6 +20,9 @@ pub struct RunConfig<'a> {
     pub verbose: bool,
     pub live: bool,
     pub agent: Option<&'a str>,
+    pub custom_tools: Vec<arlm_core::CustomTool>,
+    pub session_id: Option<&'a str>,
+    pub repl: bool,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -56,6 +59,33 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
 
     let run_id = format!("run-{}", uuid::Uuid::now_v7().as_simple());
 
+    // Load session context if --session is provided
+    let effective_task = if let Some(sid) = config.session_id {
+        let storage = data_dir()
+            .join("..")
+            .join("..")
+            .join("storage");
+        // Try to load session context
+        if let Ok(stor) = arlm_storage::Storage::open(&crate::util::data_dir()) {
+            if let Ok(mgr) = arlm_memory::SessionManager::new(stor) {
+                if let Ok(Some(ctx)) = mgr.get_latest_context(sid) {
+                    format!(
+                        "Previous context (session {sid}, version {}):\n{}\n\n---\n\nCurrent task: {}",
+                        ctx.version, ctx.payload, config.task
+                    )
+                } else {
+                    config.task.to_string()
+                }
+            } else {
+                config.task.to_string()
+            }
+        } else {
+            config.task.to_string()
+        }
+    } else {
+        config.task.to_string()
+    };
+
     if config.verbose {
         output::info(&format!(
             "Starting RLM run {run_id} (backend={backend_name}, depth={}, max_nodes={})",
@@ -90,7 +120,7 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
 
     let input = arlm_core::StartRunInput {
         run_id: Arc::from(run_id.as_str()),
-        task: config.task.to_string(),
+        task: effective_task,
         backend: match kind {
             arlm_llm::BackendKind::OpenAI => arlm_core::RlmBackend::OpenAi,
             arlm_llm::BackendKind::Anthropic => arlm_core::RlmBackend::Anthropic,
@@ -98,6 +128,11 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
             arlm_llm::BackendKind::Ollama => arlm_core::RlmBackend::Ollama,
             arlm_llm::BackendKind::DeepSeek => arlm_core::RlmBackend::DeepSeek,
             arlm_llm::BackendKind::MiMo => arlm_core::RlmBackend::MiMo,
+        },
+        mode: if config.repl {
+            arlm_core::RlmMode::Repl
+        } else {
+            arlm_core::RlmMode::Auto
         },
         model: config.model.map(String::from),
         project: project_name.to_string(),
@@ -107,6 +142,7 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
         max_budget: config.max_budget,
         agent: config.agent.unwrap_or("arlm").to_string(),
         abort,
+        custom_tools: config.custom_tools,
         ..Default::default()
     };
 
@@ -219,6 +255,16 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
         )?;
     }
 
+    // Save result to session if --session was provided
+    if let Some(sid) = config.session_id {
+        if let Ok(stor) = arlm_storage::Storage::open(&crate::util::data_dir()) {
+            if let Ok(mgr) = arlm_memory::SessionManager::new(stor) {
+                let _ = mgr.add_context(sid, &result.final_output);
+                let _ = mgr.record_query(sid, config.task, Some(&result.final_output));
+            }
+        }
+    }
+
     match config.format {
         Format::Json => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
@@ -281,6 +327,9 @@ mod tests {
             verbose: false,
             live: false,
             agent: None,
+            custom_tools: Vec::new(),
+            session_id: None,
+            repl: false,
         };
         let result = execute(config).await;
         assert!(result.is_err());

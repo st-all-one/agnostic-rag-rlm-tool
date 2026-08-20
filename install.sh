@@ -1,216 +1,294 @@
-#!/usr/bin/env bash
-# arlm installer — estilo `curl | sh` (como o rustup).
-#
-# Baixa o binário pré-compilado do GitHub Release (latest por padrão, ou
-# VERSION=vX.Y.Z), verifica o checksum SHA-256 e instala em ~/.local/bin.
-#
-# Uso:
-#   curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/install.sh | sh
-#   curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/install.sh | VERSION=v0.1.0 sh
-#   curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/install.sh | INSTALL_DIR=/usr/local/bin sh
-#
-# Variáveis de ambiente:
-#   VERSION       tag a instalar (default: latest)
-#   INSTALL_DIR   diretório de destino (default: ~/.local/bin)
-#   ARLM_TARGET   sobrescreve o target triple detectado (ex.: x86_64-unknown-linux-gnu)
-#   ARLM_REPO     owner/repo do GitHub (default: st-all-one/agnostic-rlm-rs; útil para testar)
-#   ARLM_BASE_URL base URL para download (default: https://github.com; útil para testar)
+#!/bin/bash
 set -euo pipefail
 
-REPO="${ARLM_REPO:-st-all-one/agnostic-rlm-rs}"
-BASE_URL_ROOT="${ARLM_BASE_URL:-https://github.com}"
-INSTALL_DIR="${INSTALL_DIR:-${HOME}/.local/bin}"
-VERSION="${VERSION:-latest}"
+# arlm installer script
+# Installs the arlm CLI and optionally the Docker server
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+ARLM_VERSION="${ARLM_VERSION:-latest}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+DATA_DIR="${DATA_DIR:-$HOME/.arlm}"
+DOCKER_IMAGE="arlm/arlm-server"
 
-info() { printf "\e[34m==>\e[0m %s\n" "$*"; }
-ok()   { printf "\e[32m  ✓\e[0m %s\n" "$*"; }
-warn() { printf "\e[33m  !\e[0m %s\n" "$*"; }
-err()  { printf "\e[31m  ✗\e[0m %s\n" "$*" >&2; exit 1; }
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-require() {
-    command -v "$1" >/dev/null 2>&1 || err "Ferramenta necessária não encontrada: $1"
+info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
 }
 
-# ── detecção de OS/arquitetura → target triple ──────────────────────────────
+success() {
+    echo -e "${GREEN}[OK]${NC} $1"
+}
 
-detect_target() {
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+    exit 1
+}
+
+# Detect platform
+detect_platform() {
     local os arch
-    os="$(uname -s)"
-    arch="$(uname -m)"
 
-    case "$os" in
-        Linux)  os="linux" ;;
-        Darwin) os="darwin" ;;
-        MINGW*|MSYS*|CYGWIN*) os="windows" ;;
-        *) err "Sistema operacional não suportado: $os" ;;
+    case "$(uname -s)" in
+        Linux*)     os="linux" ;;
+        Darwin*)    os="macos" ;;
+        CYGWIN*|MINGW*|MSYS*) os="windows" ;;
+        *)          error "Unsupported OS: $(uname -s)" ;;
     esac
 
-    case "$arch" in
-        x86_64|amd64)         arch="x86_64" ;;
-        aarch64|arm64)        arch="aarch64" ;;
-        *) err "Arquitetura não suportada: $arch" ;;
+    case "$(uname -m)" in
+        x86_64|amd64)   arch="amd64" ;;
+        aarch64|arm64)  arch="arm64" ;;
+        *)              error "Unsupported architecture: $(uname -m)" ;;
     esac
 
-    case "$os-$arch" in
-        linux-x86_64)    echo "x86_64-unknown-linux-musl" ;;
-        linux-aarch64)   echo "aarch64-unknown-linux-musl" ;;
-        darwin-aarch64)  echo "aarch64-apple-darwin" ;;
-        darwin-x86_64)   err "Mac Intel não suportado: só é publicado o binário macOS (Apple Silicon / aarch64)" ;;
-        windows-x86_64)  echo "x86_64-pc-windows-msvc" ;;
-        windows-aarch64) err "Windows ARM64 não suportado ainda" ;;
-        *) err "Sem binário publicado para $os/$arch" ;;
-    esac
+    echo "${os}-${arch}"
 }
 
-# ── resolução da versão ──────────────────────────────────────────────────────
+# Check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
 
-resolve_version() {
-    if [[ "$VERSION" != "latest" ]]; then
-        echo "$VERSION"
+# Check dependencies
+check_dependencies() {
+    info "Checking dependencies..."
+
+    # Check for required tools
+    if ! command_exists curl && ! command_exists wget; then
+        error "curl or wget is required. Please install one."
+    fi
+
+    # Check for Docker (optional)
+    if command_exists docker; then
+        success "Docker found: $(docker --version)"
+    else
+        warn "Docker not found. Server installation will be skipped."
+        warn "Install Docker: https://docs.docker.com/get-docker/"
+    fi
+}
+
+# Download file
+download() {
+    local url="$1"
+    local output="$2"
+
+    if command_exists curl; then
+        curl -sL "$url" -o "$output"
+    elif command_exists wget; then
+        wget -q "$url" -O "$output"
+    else
+        error "No download tool available"
+    fi
+}
+
+# Install CLI
+install_cli() {
+    local platform
+    platform=$(detect_platform)
+
+    info "Detected platform: $platform"
+
+    # Create install directory
+    mkdir -p "$INSTALL_DIR"
+
+    # Determine download URL
+    local base_url="https://github.com/st-all-one/agnostic-rlm-rs/releases"
+    if [ "$ARLM_VERSION" = "latest" ]; then
+        base_url="${base_url}/latest/download"
+    else
+        base_url="${base_url}/download/${ARLM_VERSION}"
+    fi
+
+    local binary_name="arlm"
+    if [[ "$platform" == *"windows"* ]]; then
+        binary_name="arlm.exe"
+    fi
+
+    local download_url="${base_url}/arlm-${platform}"
+    if [[ "$platform" == *"windows"* ]]; then
+        download_url="${base_url}/arlm-windows-amd64.exe"
+    fi
+
+    info "Downloading arlm CLI from: $download_url"
+    download "$download_url" "${INSTALL_DIR}/arlm"
+    chmod +x "${INSTALL_DIR}/arlm"
+
+    success "arlm CLI installed to ${INSTALL_DIR}/arlm"
+
+    # Check if install dir is in PATH
+    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+        warn "Add $INSTALL_DIR to your PATH:"
+        echo ""
+        echo "  # Add to ~/.bashrc or ~/.zshrc:"
+        echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+        echo ""
+    fi
+
+    # Create config directory
+    mkdir -p "$DATA_DIR"
+
+    success "Configuration directory: $DATA_DIR"
+}
+
+# Install server via Docker
+install_server_docker() {
+    if ! command_exists docker; then
+        warn "Docker is not installed. Skipping server installation."
         return
     fi
-    # Segue o redirect de /releases/latest e extrai a tag do caminho final.
-    local effective
-    effective="$(curl -fsSL -I -o /dev/null -w '%{url_effective}' "${BASE_URL_ROOT}/${REPO}/releases/latest")"
-    effective="${effective##*/tag/}"
-    [[ -n "$effective" && "$effective" != "https://github.com/" ]] || err "Falha ao resolver a versão latest"
-    echo "$effective"
+
+    info "Pulling arlm-server Docker image..."
+    docker pull "${DOCKER_IMAGE}:latest"
+
+    success "Docker image pulled: ${DOCKER_IMAGE}:latest"
+
+    # Create data volume
+    docker volume create arlm-data 2>/dev/null || true
+
+    success "Docker volume created: arlm-data"
+
+    echo ""
+    info "To start the server:"
+    echo ""
+    echo "  docker run -d \\"
+    echo "    --name arlm-server \\"
+    echo "    -p 50051:50051 \\"
+    echo "    -v arlm-data:/data \\"
+    echo "    ${DOCKER_IMAGE}:latest"
+    echo ""
+    info "Or use docker-compose:"
+    echo ""
+    echo "  docker compose up -d"
+    echo ""
 }
 
-# ── versão instalada / upgrade ───────────────────────────────────────────────
+# Create docker-compose.yml
+create_docker_compose() {
+    local compose_file="${DATA_DIR}/docker-compose.yml"
 
-current_version() {
-    local bin="$INSTALL_DIR/arlm"
-    [[ -x "$bin" ]] || return 0
-    "$bin" --version 2>/dev/null | awk '{print $NF}'
+    info "Creating docker-compose.yml at ${compose_file}..."
+
+    cat > "$compose_file" << 'EOF'
+version: '3.8'
+
+services:
+  arlm-server:
+    image: arlm/arlm-server:latest
+    container_name: arlm-server
+    ports:
+      - "50051:50051"
+    volumes:
+      - arlm-data:/data
+    environment:
+      - RUST_LOG=info,arlm_server=debug
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "arlm-server", "status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  arlm-data:
+    driver: local
+EOF
+
+    success "Created ${compose_file}"
 }
 
-# Comparação semver simples (X.Y.Z); retorna 0 quando $1 > $2.
-version_gt() {
-    [[ "$1" == "$2" ]] && return 1
-    local IFS=. i
-    local a=($1) b=($2)
-    for i in 0 1 2; do
-        [[ "${a[$i]:-0}" -gt "${b[$i]:-0}" ]] && return 0
-        [[ "${a[$i]:-0}" -lt "${b[$i]:-0}" ]] && return 1
+# Print usage
+usage() {
+    echo "arlm installer"
+    echo ""
+    echo "Usage: install.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --cli-only         Install only the CLI"
+    echo "  --server-only      Install only the Docker server"
+    echo "  --docker-compose   Create docker-compose.yml"
+    echo "  --version VERSION  Install specific version (default: latest)"
+    echo "  --help             Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  curl -sSL https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/install.sh | bash"
+    echo "  ./install.sh --cli-only"
+    echo "  ./install.sh --docker-compose"
+    echo ""
+}
+
+# Main
+main() {
+    local install_cli=true
+    local install_server=true
+    local create_compose=false
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --cli-only)
+                install_server=false
+                shift
+                ;;
+            --server-only)
+                install_cli=false
+                shift
+                ;;
+            --docker-compose)
+                create_compose=true
+                shift
+                ;;
+            --version)
+                ARLM_VERSION="$2"
+                shift 2
+                ;;
+            --help)
+                usage
+                exit 0
+                ;;
+            *)
+                error "Unknown option: $1"
+                ;;
+        esac
     done
-    return 1
+
+    echo ""
+    echo "╔════════════════════════════════════════════════════════════╗"
+    echo "║                    arlm installer                         ║"
+    echo "║         Agnostic RLM - Recursive Language Model           ║"
+    echo "╚════════════════════════════════════════════════════════════╝"
+    echo ""
+
+    check_dependencies
+
+    if [ "$install_cli" = true ]; then
+        install_cli
+    fi
+
+    if [ "$install_server" = true ]; then
+        install_server_docker
+    fi
+
+    if [ "$create_compose" = true ]; then
+        create_docker_compose
+    fi
+
+    echo ""
+    success "Installation complete!"
+    echo ""
+    echo "Quick start:"
+    echo "  arlm --help                    # Show CLI help"
+    echo "  arlm-server up                 # Start server (if Docker installed)"
+    echo "  arlm index .                   # Index current directory"
+    echo ""
 }
 
-check_upgrade() {
-    local installed
-    installed="$(current_version)"
-    [[ -n "$installed" ]] || return 0
-
-    if [[ "$installed" == "${VERSION#v}" ]]; then
-        ok "arlm ${VERSION} já instalado em ${INSTALL_DIR} — nada a fazer."
-        exit 0
-    fi
-    if version_gt "${VERSION#v}" "$installed"; then
-        info "Atualizando arlm v${installed} → v${VERSION#v}"
-    else
-        warn "Versão mais nova instalada (v${installed}); instalando v${VERSION#v} (downgrade)."
-    fi
-}
-
-# ── PATH ─────────────────────────────────────────────────────────────────────
-
-add_path_line() {
-    local file="$1"
-    local line='export PATH="${HOME}/.local/bin:${PATH}"'
-    local marker="# --- arlm path ---"
-
-    [[ -f "$file" ]] || return 0
-    grep -qxF "$line" "$file" 2>/dev/null && return 0
-    grep -qxF "$marker" "$file" 2>/dev/null && return 0
-
-    if [[ -s "$file" && "$(tail -c1 "$file" | wc -l)" -eq 0 ]]; then
-        echo "" >> "$file"
-    fi
-    {
-        echo "$marker"
-        echo "$line"
-    } >> "$file"
-    ok "PATH adicionado a ${file/$HOME/\~}"
-}
-
-setup_path() {
-    info "Verificando PATH..."
-    if echo "$PATH" | tr ':' '\n' | grep -qxF "$INSTALL_DIR"; then
-        ok "${INSTALL_DIR} já está no PATH"
-        return 0
-    fi
-    add_path_line "${HOME}/.profile"
-    add_path_line "${HOME}/.bashrc"
-    add_path_line "${HOME}/.zshrc"
-    add_path_line "${ZDOTDIR:-${HOME}}/.zshenv"
-    add_path_line "${ZDOTDIR:-${HOME}}/.zshrc"
-    warn "${INSTALL_DIR} foi adicionado aos rc files."
-    warn "Reinicie o shell ou execute: export PATH=\"\${HOME}/.local/bin:\${PATH}\""
-}
-
-# ── main ─────────────────────────────────────────────────────────────────────
-
-require curl
-require tar
-
-TARGET="${ARLM_TARGET:-$(detect_target)}"
-info "Detectado: ${TARGET}"
-
-VERSION="$(resolve_version)"
-VERSION_NO_V="${VERSION#v}"
-info "Instalando arlm ${VERSION} (${TARGET}) em ${INSTALL_DIR}/..."
-
-check_upgrade
-
-EXT="tar.gz"
-if [[ "$TARGET" == *-pc-windows-* ]]; then
-    EXT="zip"
-    require unzip
-fi
-
-ASSET="arlm-${VERSION_NO_V}-${TARGET}.${EXT}"
-BASE_URL="${BASE_URL_ROOT}/${REPO}/releases/download/${VERSION}"
-DOWNLOAD_URL="${BASE_URL}/${ASSET}"
-CHECKSUM_URL="${BASE_URL}/sha256sums.txt"
-
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-
-info "Baixando ${ASSET}..."
-curl -fsSL -o "${TMP}/${ASSET}" "$DOWNLOAD_URL" || err "Falha no download: ${DOWNLOAD_URL}"
-
-info "Verificando checksum SHA-256..."
-curl -fsSL -o "${TMP}/sha256sums.txt" "$CHECKSUM_URL" || err "Falha no download do checksum: ${CHECKSUM_URL}"
-(
-    cd "$TMP"
-    grep -F "  ${ASSET}" sha256sums.txt > "checksum.one" || err "Checksum para ${ASSET} não encontrado em sha256sums.txt"
-    sha256sum -c "checksum.one" >/dev/null 2>&1 \
-        || shasum -a 256 -c "checksum.one" >/dev/null 2>&1 \
-        || err "Verificação de checksum falhou. Abortando por segurança."
-)
-ok "Checksum OK"
-
-info "Extraindo binário..."
-if [[ "$EXT" == "zip" ]]; then
-    unzip -o -q "${TMP}/${ASSET}" -d "$TMP/out"
-else
-    mkdir -p "$TMP/out"
-    tar -xzf "${TMP}/${ASSET}" -C "$TMP/out"
-fi
-
-mkdir -p "$INSTALL_DIR"
-src="$TMP/out/arlm"
-[[ "$EXT" == "zip" ]] && src="$TMP/out/arlm.exe"
-[[ -f "$src" ]] || err "Binário não encontrado no pacote: arlm"
-install -m 0755 "$src" "$INSTALL_DIR/arlm"
-ok "Instalado: ${INSTALL_DIR}/arlm"
-
-setup_path
-echo ""
-info "Pronto! Execute no terminal:"
-echo "  arlm --help"
-echo ""
-info "Docs: https://github.com/${REPO}"
+main "$@"

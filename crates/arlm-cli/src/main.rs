@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+mod client;
 mod commands;
 mod config;
 mod metrics;
@@ -65,6 +66,10 @@ struct Cli {
     /// Agent name (overrides config)
     #[arg(long, global = true)]
     agent: Option<String>,
+
+    /// Connect to a running arlm-server instead of running locally
+    #[arg(long, global = true)]
+    server: Option<String>,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]
@@ -117,6 +122,19 @@ enum Commands {
         /// Agent identifier for cost attribution (or set ARLM_AGENT env var)
         #[arg(long, env = "ARLM_AGENT")]
         agent: Option<String>,
+
+        /// Custom tool available to the solver. Format: "name:description" or "name:param1,param2:description"
+        /// Can be specified multiple times.
+        #[arg(long = "tool", action = clap::ArgAction::Append)]
+        tools: Vec<String>,
+
+        /// Session ID for persistent multi-turn context
+        #[arg(long)]
+        session: Option<String>,
+
+        /// Run in REPL mode: LLM generates code blocks that are executed in a loop
+        #[arg(long)]
+        repl: bool,
     },
 
     /// Index a project directory
@@ -363,6 +381,146 @@ fn main() -> Result<()> {
 
     let rt = tokio::runtime::Runtime::new()?;
 
+    // If server address is provided, use gRPC client mode
+    if let Some(ref server_addr) = cli.server {
+        let client_config = client::ClientConfig {
+            addr: server_addr.clone(),
+        };
+        let mut grpc_client = rt.block_on(client::create_client(&client_config))?;
+
+        // Route to appropriate client command
+        return match cli.command {
+            Commands::Run {
+                task,
+                llm: _,
+                backend: cmd_backend,
+                model: cmd_model,
+                depth,
+                max_nodes,
+                concurrency: _,
+                max_budget,
+                live: _,
+                agent: _,
+                tools: _,
+                session: _,
+                repl: _,
+            } => {
+                let request = tonic::Request::new(
+                    arlm_proto::proto::RunRequest {
+                        project: project.to_string_lossy().to_string(),
+                        task,
+                        backend: cmd_backend.unwrap_or_default(),
+                        model: cmd_model.unwrap_or_default(),
+                        options: Some(arlm_proto::proto::RunOptions {
+                            max_depth: depth as i32,
+                            max_iterations: max_nodes as i32,
+                            ..Default::default()
+                        }),
+                    },
+                );
+                let response = rt.block_on(grpc_client.start_run(request))?;
+                println!("Run started: {}", response.into_inner().run_id);
+                Ok(())
+            }
+            Commands::Search {
+                query,
+                top_k,
+                file_pattern: _,
+                min_score: _,
+                all: _,
+                tier: _,
+                max_tokens: _,
+            } => {
+                let request = tonic::Request::new(
+                    arlm_proto::proto::SearchRequest {
+                        project: project.to_string_lossy().to_string(),
+                        query,
+                        max_results: top_k as i32,
+                        ..Default::default()
+                    },
+                );
+                let response = rt.block_on(grpc_client.search(request))?;
+                let results = response.into_inner().results;
+                for result in &results {
+                    println!("{}: {}", result.file_path, result.text);
+                }
+                Ok(())
+            }
+            Commands::Context { task, top_k, all, tier, max_tokens } => {
+                let request = tonic::Request::new(
+                    arlm_proto::proto::ContextRequest {
+                        project: project.to_string_lossy().to_string(),
+                        task,
+                        max_tokens,
+                        ..Default::default()
+                    },
+                );
+                let response = rt.block_on(grpc_client.build_context(request))?;
+                let ctx = response.into_inner();
+                println!("{}", ctx.context);
+                Ok(())
+            }
+            Commands::Status { run_id } => {
+                if let Some(rid) = run_id {
+                    let request = tonic::Request::new(rid);
+                    let response = rt.block_on(grpc_client.get_run(request))?;
+                    let run = response.into_inner();
+                    println!("Run {}: {} - {}", run.id, run.status, run.task);
+                } else {
+                    let request = tonic::Request::new(());
+                    let response = rt.block_on(grpc_client.get_server_status(request))?;
+                    let status = response.into_inner();
+                    println!("Server v{} - {} projects, {} chunks",
+                        status.version, status.total_projects, status.total_chunks);
+                }
+                Ok(())
+            }
+            Commands::Session { action } => match action {
+                SessionAction::Create { title } => {
+                    let request = tonic::Request::new(
+                        arlm_proto::proto::CreateSessionRequest {
+                            project: project.to_string_lossy().to_string(),
+                            title,
+                        },
+                    );
+                    let response = rt.block_on(grpc_client.create_session(request))?;
+                    let session = response.into_inner();
+                    println!("Session created: {}", session.id);
+                    Ok(())
+                }
+                SessionAction::Resume { session_id } => {
+                    let request = tonic::Request::new(session_id);
+                    let response = rt.block_on(grpc_client.get_session(request))?;
+                    let session = response.into_inner();
+                    println!("Session: {} - {} turns", session.id, session.turn_count);
+                    Ok(())
+                }
+                SessionAction::List => {
+                    let request = tonic::Request::new(project.to_string_lossy().to_string());
+                    let response = rt.block_on(grpc_client.list_sessions(request))?;
+                    let sessions = response.into_inner().sessions;
+                    for session in &sessions {
+                        println!("{}: {}", session.id, session.title);
+                    }
+                    Ok(())
+                }
+            },
+            Commands::Cost { run_id, agent: _ } => {
+                if let Some(rid) = run_id {
+                    let request = tonic::Request::new(rid);
+                    let response = rt.block_on(grpc_client.get_run(request))?;
+                    let run = response.into_inner();
+                    println!("Run {} cost: ${:.6}", run.id, run.total_cost);
+                }
+                Ok(())
+            }
+            _ => {
+                eprintln!("Server mode does not support this command yet");
+                std::process::exit(1);
+            }
+        };
+    }
+
     match cli.command {
         Commands::Run {
             task,
@@ -375,7 +533,15 @@ fn main() -> Result<()> {
             max_budget,
             live,
             agent: cmd_agent,
-        } => rt.block_on(commands::run::execute(commands::run::RunConfig {
+            tools: cmd_tools,
+            session: cmd_session,
+            repl: cmd_repl,
+        } => {
+            let custom_tools: Vec<arlm_core::CustomTool> = cmd_tools
+                .iter()
+                .filter_map(|t| parse_tool_arg(t))
+                .collect();
+            rt.block_on(commands::run::execute(commands::run::RunConfig {
             task: &task,
             llm,
             backend: cmd_backend.as_deref().or(backend.as_deref()),
@@ -389,7 +555,11 @@ fn main() -> Result<()> {
             verbose: cli.verbose,
             live,
             agent: cmd_agent.as_deref().or(agent_name.as_deref()),
-        })),
+            custom_tools,
+            session_id: cmd_session.as_deref(),
+            repl: cmd_repl,
+        }))
+        }
         Commands::Index { path, chunk_size, ignore_patterns, watch } => {
             commands::index::execute(commands::index::IndexConfig {
                 path: &path,
@@ -514,4 +684,15 @@ fn main() -> Result<()> {
             }))
         }
     }
+}
+
+/// Parse a `--tool` argument in format "name:description" or "name:param1,param2:description".
+fn parse_tool_arg(arg: &str) -> Option<arlm_core::CustomTool> {
+    let (name_part, description) = arg.split_once(':')?;
+    let name = name_part.trim().to_string();
+    let description = description.trim().to_string();
+    if name.is_empty() {
+        return None;
+    }
+    Some(arlm_core::CustomTool::function(&name, &description))
 }

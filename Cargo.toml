@@ -28,6 +28,8 @@ rusqlite = { version = "0.32", features = ["bundled", "vtab"] }
 lancedb = "0.37"
 arrow = "58"
 arrow-array = "58"
+r2d2 = "0.8"
+r2d2_sqlite = "0.25"
 
 # Embedding
 candle-core = { version = "0.11", features = [] }
@@ -71,6 +73,11 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 tiktoken-rs = "0.12"
 toml = "0.8"
 
+# gRPC / Protobuf
+tonic = "0.13"
+prost = "0.13"
+prost-types = "0.13"
+
 # Internal crates
 arlm-storage = { path = "crates/arlm-storage" }
 arlm-embedding = { path = "crates/arlm-embedding" }
@@ -78,6 +85,7 @@ arlm-search = { path = "crates/arlm-search" }
 arlm-llm = { path = "crates/arlm-llm" }
 arlm-memory = { path = "crates/arlm-memory" }
 arlm-core = { path = "crates/arlm-core" }
+arlm-proto = { path = "crates/arlm-proto" }
 
 # Testing
 tempfile = "3"

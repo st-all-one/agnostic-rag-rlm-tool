@@ -7,6 +7,7 @@ use tokenizers::Tokenizer;
 
 use super::{Embedder, Embedding, EmbeddingError, EmbeddingResult};
 
+#[allow(dead_code)]
 const DEFAULT_DIMS: usize = 1024;
 const DEFAULT_MAX_LEN: usize = 512;
 

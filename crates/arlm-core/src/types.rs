@@ -39,6 +39,8 @@ pub enum RlmMode {
     Auto,
     Solve,
     Decompose,
+    /// REPL mode: LLM generates code blocks that are executed in a subprocess loop.
+    Repl,
 }
 
 /// Tools profile to pass to the LLM.
@@ -54,6 +56,259 @@ impl Default for ToolsProfile {
             name: "default".to_string(),
             tools: Vec::new(),
         }
+    }
+}
+
+/// A custom tool available to the RLM solver/planner.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CustomTool {
+    /// Tool name (e.g., "search_code", "read_file").
+    pub name: String,
+    /// Human-readable description of what the tool does.
+    pub description: String,
+    /// Optional parameter schema description (e.g., "query: str, limit: int = 10").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<String>,
+    /// Whether this tool is callable (function) or a data constant.
+    #[serde(default = "default_true")]
+    pub callable: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl CustomTool {
+    #[must_use]
+    pub fn function(name: &str, description: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            description: description.to_string(),
+            parameters: None,
+            callable: true,
+        }
+    }
+
+    #[must_use]
+    pub fn with_parameters(mut self, parameters: &str) -> Self {
+        self.parameters = Some(parameters.to_string());
+        self
+    }
+
+    #[must_use]
+    pub fn data(name: &str, description: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            description: description.to_string(),
+            parameters: None,
+            callable: false,
+        }
+    }
+}
+
+/// Format custom tools into a bullet-point string for system prompt injection.
+#[must_use]
+pub fn format_tools_for_prompt(tools: &[CustomTool]) -> String {
+    if tools.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("Available tools:\n");
+    for tool in tools {
+        let kind = if tool.callable { "function" } else { "data" };
+        if let Some(ref params) = tool.parameters {
+            out.push_str(&format!(
+                "- {}({}) → {} [{}]\n",
+                tool.name, params, tool.description, kind
+            ));
+        } else {
+            out.push_str(&format!(
+                "- {} → {} [{}]\n",
+                tool.name, tool.description, kind
+            ));
+        }
+    }
+    out
+}
+
+/// Trait for executable tools that can be called by the solver.
+///
+/// Implementations should be thread-safe and handle errors gracefully.
+pub trait ExecutableTool: Send + Sync {
+    /// Execute the tool with the given arguments.
+    ///
+    /// # Arguments
+    /// * `args` - JSON string containing the tool arguments
+    ///
+    /// # Returns
+    /// The tool result as a string, or an error message.
+    fn execute(&self, args: &str) -> Result<String, String>;
+
+    /// Get the tool's name.
+    fn name(&self) -> &str;
+
+    /// Get the tool's description.
+    fn description(&self) -> &str;
+
+    /// Get the tool's parameter schema (optional).
+    fn parameters(&self) -> Option<&str> {
+        None
+    }
+}
+
+/// Registry of executable tools.
+pub struct ToolRegistry {
+    tools: std::collections::HashMap<String, Box<dyn ExecutableTool>>,
+}
+
+impl ToolRegistry {
+    /// Create a new empty tool registry.
+    pub fn new() -> Self {
+        Self {
+            tools: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Register a tool.
+    pub fn register(&mut self, tool: Box<dyn ExecutableTool>) {
+        self.tools.insert(tool.name().to_string(), tool);
+    }
+
+    /// Execute a tool by name.
+    pub fn execute(&self, name: &str, args: &str) -> Result<String, String> {
+        self.tools
+            .get(name)
+            .ok_or_else(|| format!("tool '{name}' not found"))?
+            .execute(args)
+    }
+
+    /// Check if a tool exists.
+    pub fn has_tool(&self, name: &str) -> bool {
+        self.tools.contains_key(name)
+    }
+
+    /// Get all tool names.
+    pub fn tool_names(&self) -> Vec<&str> {
+        self.tools.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// Convert to CustomTool list for prompt injection.
+    pub fn to_custom_tools(&self) -> Vec<CustomTool> {
+        self.tools
+            .values()
+            .map(|tool| {
+                let mut ct = CustomTool::function(tool.name(), tool.description());
+                if let Some(params) = tool.parameters() {
+                    ct = ct.with_parameters(params);
+                }
+                ct
+            })
+            .collect()
+    }
+}
+
+impl Default for ToolRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Built-in tool: search codebase.
+pub struct SearchCodeTool;
+
+impl ExecutableTool for SearchCodeTool {
+    fn execute(&self, args: &str) -> Result<String, String> {
+        let parsed: serde_json::Value = serde_json::from_str(args)
+            .map_err(|e| format!("invalid JSON args: {e}"))?;
+        let query = parsed["query"]
+            .as_str()
+            .ok_or("missing 'query' argument")?;
+        let limit = parsed["limit"].as_u64().unwrap_or(10);
+
+        // Placeholder: in real implementation, this would call arlm-search
+        Ok(format!(
+            "Search results for '{query}' (limit {limit}):\n[placeholder - search not integrated]"
+        ))
+    }
+
+    fn name(&self) -> &str {
+        "search_code"
+    }
+
+    fn description(&self) -> &str {
+        "Search the codebase for code matching a query"
+    }
+
+    fn parameters(&self) -> Option<&str> {
+        Some("query: str, limit: int = 10")
+    }
+}
+
+/// Built-in tool: read file.
+pub struct ReadFileTool;
+
+impl ExecutableTool for ReadFileTool {
+    fn execute(&self, args: &str) -> Result<String, String> {
+        let parsed: serde_json::Value = serde_json::from_str(args)
+            .map_err(|e| format!("invalid JSON args: {e}"))?;
+        let path = parsed["path"]
+            .as_str()
+            .ok_or("missing 'path' argument")?;
+
+        std::fs::read_to_string(path)
+            .map_err(|e| format!("failed to read file: {e}"))
+    }
+
+    fn name(&self) -> &str {
+        "read_file"
+    }
+
+    fn description(&self) -> &str {
+        "Read the contents of a file"
+    }
+
+    fn parameters(&self) -> Option<&str> {
+        Some("path: str")
+    }
+}
+
+/// Built-in tool: list files.
+pub struct ListFilesTool;
+
+impl ExecutableTool for ListFilesTool {
+    fn execute(&self, args: &str) -> Result<String, String> {
+        let parsed: serde_json::Value = serde_json::from_str(args)
+            .map_err(|e| format!("invalid JSON args: {e}"))?;
+        let path = parsed["path"]
+            .as_str()
+            .unwrap_or(".");
+
+        let entries = std::fs::read_dir(path)
+            .map_err(|e| format!("failed to read directory: {e}"))?;
+
+        let mut result = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("failed to read entry: {e}"))?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            let file_type = entry
+                .file_type()
+                .map_err(|e| format!("failed to get type: {e}"))?;
+            let prefix = if file_type.is_dir() { "d " } else { "f " };
+            result.push(format!("{prefix}{name}"));
+        }
+
+        Ok(result.join("\n"))
+    }
+
+    fn name(&self) -> &str {
+        "list_files"
+    }
+
+    fn description(&self) -> &str {
+        "List files and directories in a path"
+    }
+
+    fn parameters(&self) -> Option<&str> {
+        Some("path: str = '.'")
     }
 }
 
@@ -98,6 +353,7 @@ pub struct StartRunInput {
     pub enable_cache: bool,
     pub compaction: CompactionPolicy,
     pub abort: AbortSignal,
+    pub custom_tools: Vec<CustomTool>,
 }
 
 impl Default for StartRunInput {
@@ -123,6 +379,7 @@ impl Default for StartRunInput {
             enable_cache: true,
             compaction: CompactionPolicy::default(),
             abort: AbortSignal::new(),
+            custom_tools: Vec::new(),
         }
     }
 }
@@ -626,5 +883,59 @@ mod tests {
         };
         let json = serde_json::to_string(&result).expect("serialize");
         assert!(json.contains("test"));
+    }
+
+    #[test]
+    fn test_custom_tool_function() {
+        let tool = CustomTool::function("search_code", "Search the codebase");
+        assert_eq!(tool.name, "search_code");
+        assert!(tool.callable);
+        assert!(tool.parameters.is_none());
+    }
+
+    #[test]
+    fn test_custom_tool_with_parameters() {
+        let tool = CustomTool::function("read_file", "Read a file")
+            .with_parameters("path: str");
+        assert_eq!(tool.parameters.as_deref(), Some("path: str"));
+    }
+
+    #[test]
+    fn test_custom_tool_data() {
+        let tool = CustomTool::data("api_url", "The API base URL");
+        assert!(!tool.callable);
+    }
+
+    #[test]
+    fn test_format_tools_for_prompt_empty() {
+        let result = format_tools_for_prompt(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_format_tools_for_prompt_with_tools() {
+        let tools = vec![
+            CustomTool::function("search", "Search code"),
+            CustomTool::data("config", "App config"),
+        ];
+        let result = format_tools_for_prompt(&tools);
+        assert!(result.contains("Available tools:"));
+        assert!(result.contains("- search → Search code [function]"));
+        assert!(result.contains("- config → App config [data]"));
+    }
+
+    #[test]
+    fn test_format_tools_for_prompt_with_parameters() {
+        let tools = vec![
+            CustomTool::function("read", "Read file").with_parameters("path: str"),
+        ];
+        let result = format_tools_for_prompt(&tools);
+        assert!(result.contains("- read(path: str) → Read file [function]"));
+    }
+
+    #[test]
+    fn test_start_run_input_default_has_empty_custom_tools() {
+        let input = StartRunInput::default();
+        assert!(input.custom_tools.is_empty());
     }
 }

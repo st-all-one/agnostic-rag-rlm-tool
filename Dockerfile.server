@@ -1,0 +1,69 @@
+# Multi-stage build for arlm-server
+# Stage 1: Build the binary
+FROM rust:1.85-alpine AS builder
+
+RUN apk add --no-cache musl-dev protobuf-dev
+
+WORKDIR /app
+
+# Copy manifests first for better caching
+COPY Cargo.toml Cargo.lock ./
+COPY crates/arlm-proto/Cargo.toml crates/arlm-proto/
+COPY crates/arlm-core/Cargo.toml crates/arlm-core/
+COPY crates/arlm-storage/Cargo.toml crates/arlm-storage/
+COPY crates/arlm-embedding/Cargo.toml crates/arlm-embedding/
+COPY crates/arlm-search/Cargo.toml crates/arlm-search/
+COPY crates/arlm-llm/Cargo.toml crates/arlm-llm/
+COPY crates/arlm-memory/Cargo.toml crates/arlm-memory/
+COPY crates/arlm-server/Cargo.toml crates/arlm-server/
+
+# Create dummy source files for dependency caching
+RUN mkdir -p crates/arlm-proto/src crates/arlm-core/src crates/arlm-storage/src crates/arlm-embedding/src crates/arlm-search/src crates/arlm-llm/src crates/arlm-memory/src crates/arlm-server/src && \
+    echo "pub fn dummy() {}" > crates/arlm-proto/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arlm-core/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arlm-storage/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arlm-embedding/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arlm-search/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arlm-llm/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arlm-memory/src/lib.rs && \
+    echo "fn main() {}" > crates/arlm-server/src/main.rs
+
+# Build dependencies (cached)
+RUN cargo build --release --bin arlm-server 2>/dev/null || true
+
+# Copy actual source
+COPY crates/ crates/
+
+# Build the actual binary
+RUN cargo build --release --bin arlm-server
+
+# Stage 2: Runtime image (minimal)
+FROM alpine:3.19 AS runtime
+
+# Install necessary runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    openssl \
+    libgcc \
+    && adduser -D -u 1000 arlm
+
+# Copy the binary from builder
+COPY --from=builder /app/target/release/arlm-server /usr/local/bin/arlm-server
+
+# Create data directory
+RUN mkdir -p /data && chown arlm:arlm /data
+
+USER arlm
+
+# Expose gRPC port
+EXPOSE 50051
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD arlm-server status || exit 1
+
+# Default environment
+ENV RUST_LOG=info,arlm_server=debug
+
+ENTRYPOINT ["arlm-server"]
+CMD ["up"]

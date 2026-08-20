@@ -62,6 +62,7 @@ const MODEL_TIERS: &[&str] = &[
 pub struct DepthRouter {
     depth_successes: HashMap<u32, u32>,
     depth_attempts: HashMap<u32, u32>,
+    #[allow(dead_code)]
     default_depth: u32,
 }
 
