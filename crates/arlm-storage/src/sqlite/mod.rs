@@ -5,9 +5,11 @@ pub mod conn;
 pub mod entities;
 pub mod findings;
 pub mod history;
+pub mod nodes;
 pub mod patterns;
 pub mod runs;
 pub mod schema;
+pub mod summaries;
 pub mod tasks;
 
 pub use conn::Storage;

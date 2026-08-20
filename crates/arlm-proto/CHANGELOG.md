@@ -27,7 +27,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   `arlm_proto::proto::arlm_service_client::ArlmServiceClient`) remain valid —
   `lib.rs` `include!`s the generated `arlm.v1.rs` inside `mod proto`, and the
   generated service module names are unchanged (`arlm_service_*`).
-- `proto/run.proto` — `RunResult.total_cost`.
 
 ### Investigated / No-change (TODO gap #1.b, #1.c)
 - `SessionInfo.updated_at`: server does not set it and there is no compile

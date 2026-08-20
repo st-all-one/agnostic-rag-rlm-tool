@@ -1,24 +1,18 @@
-use std::path::Path;
-use std::sync::Arc;
+#![allow(clippy::unused_async)]
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
-use arrow::array::{ArrayRef, Float32Array, UInt64Array};
-use arrow::datatypes::{DataType, Field, Schema};
-use arrow::record_batch::RecordBatch;
-use arrow_array::FixedSizeListArray;
-use futures::TryStreamExt;
-use lancedb::connection::Connection;
-use lancedb::query::{ExecutableQuery, QueryBase};
-use lancedb::table::Table;
-use tracing::info;
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
+use usearch::{Index, IndexOptions, MetricKind, ScalarKind};
 
-const VECTOR_DIMS: i32 = 1024;
-
-/// Vector store using `LanceDB`.
-pub struct VectorStore {
-    _conn: Connection,
-    pub(crate) table: Table,
-}
+/// Embedding dimensionality for the stored vectors (BGE-M3).
+const VECTOR_DIMS: usize = 1024;
+const INDEX_FILE: &str = "vectors.usearch";
+const META_FILE: &str = "vectors.meta";
 
 /// Vector entry for insertion.
 #[derive(Debug)]
@@ -28,245 +22,216 @@ pub struct VectorEntry {
     pub vector: Vec<f32>,
 }
 
+/// Search result with distance.
+#[derive(Debug, Clone)]
+pub struct SearchResult {
+    pub chunk_id: u64,
+    pub distance: f32,
+}
+
+/// Vector store backed by `usearch` (single-file HNSW, L2 metric).
+///
+/// `usearch` has no native metadata, so the `chunk_id -> buffer_id` mapping
+/// required for buffer-scoped search is kept in an in-memory map and mirrored
+/// to a side `vectors.meta` file next to the index.
+pub struct VectorStore {
+    index: Index,
+    buffers: Mutex<HashMap<u64, u64>>,
+    index_path: PathBuf,
+    meta_path: PathBuf,
+}
+
 impl VectorStore {
-    /// Open or create a vector store at the given path.
+    /// Open or create a vector store at the given directory.
     ///
     /// # Errors
     ///
-    /// Returns an error if the `LanceDB` connection or table creation fails.
+    /// Returns an error if the `usearch` index cannot be created or restored,
+    /// or if the side metadata file is present but unreadable.
     pub async fn open(path: &Path) -> Result<Self> {
-        let db_path = path.join("vectors.lance");
-        let db_path_str = db_path.to_string_lossy();
+        std::fs::create_dir_all(path).context("failed to create vector store directory")?;
 
-        info!("opening LanceDB at {}", db_path.display());
+        let index_path = path.join(INDEX_FILE);
+        let meta_path = path.join(META_FILE);
 
-        let conn = lancedb::connect(&db_path_str)
-            .execute()
-            .await
-            .context("failed to connect to LanceDB")?;
-
-        let table = if let Ok(t) = conn.open_table("vectors").execute().await {
-            t
+        let index = if index_path.exists() {
+            let path_str = index_path.to_str().context("non-utf8 index path")?;
+            tracing::info!(path = %index_path.display(), "restoring usearch index");
+            Index::restore(path_str)
+                .map_err(|e| anyhow::anyhow!("failed to restore vector index: {e}"))?
         } else {
-            info!("creating vectors table");
-            let schema = Self::arrow_schema();
-            conn.create_empty_table("vectors", schema)
-                .execute()
-                .await
-                .context("failed to create vectors table")?
+            let opts = IndexOptions {
+                dimensions: VECTOR_DIMS,
+                metric: MetricKind::L2sq,
+                quantization: ScalarKind::F32,
+                connectivity: 0,
+                expansion_add: 0,
+                expansion_search: 0,
+                ..Default::default()
+            };
+            tracing::info!(path = %path.display(), dims = VECTOR_DIMS, "creating usearch index");
+            Index::new(&opts)
+                .map_err(|e| anyhow::anyhow!("failed to create vector index: {e}"))?
         };
 
-        Ok(Self { _conn: conn, table })
+        let buffers = if meta_path.exists() {
+            read_meta(&meta_path)?
+        } else {
+            HashMap::new()
+        };
+
+        tracing::info!(path = %path.display(), vectors = index.size(), "opened vector store");
+
+        Ok(Self {
+            index,
+            buffers: Mutex::new(buffers),
+            index_path,
+            meta_path,
+        })
     }
 
-    /// `LanceDB` schema for vectors.
-    fn arrow_schema() -> Arc<Schema> {
-        Arc::new(Schema::new(vec![
-            Field::new("chunk_id", DataType::UInt64, false),
-            Field::new("buffer_id", DataType::UInt64, false),
-            Field::new(
-                "vector",
-                DataType::FixedSizeList(
-                    Arc::new(Field::new("item", DataType::Float32, true)),
-                    VECTOR_DIMS,
-                ),
-                false,
-            ),
-        ]))
-    }
-
-    /// Insert vectors into the store.
+    /// Insert vectors into the store and persist the index + buffer mapping.
     ///
     /// # Errors
     ///
-    /// Returns an error if the arrow batch construction or `LanceDB` insert fails.
+    /// Returns an error if a vector has the wrong dimensionality, the `usearch`
+    /// add fails, or persisting the index/metadata fails.
     pub async fn insert_vectors(&self, entries: &[VectorEntry]) -> Result<()> {
         if entries.is_empty() {
             return Ok(());
         }
 
-        info!("inserting {} vectors", entries.len());
+        // usearch requires capacity to be reserved before insertions.
+        let needed = self.index.size() + entries.len();
+        self.index
+            .reserve(needed)
+            .map_err(|e| anyhow::anyhow!("failed to reserve vector capacity: {e}"))?;
 
-        let chunk_ids: UInt64Array = entries.iter().map(|e| Some(e.chunk_id)).collect();
-        let buffer_ids: UInt64Array = entries.iter().map(|e| Some(e.buffer_id)).collect();
+        let started = Instant::now();
+        let dims = self.index.dimensions();
+        let mut buffers = self.buffers.lock();
 
-        let flat_values: Vec<f32> = entries
-            .iter()
-            .flat_map(|e| e.vector.iter().copied())
-            .collect();
+        for entry in entries {
+            if entry.vector.len() != dims {
+                anyhow::bail!(
+                    "vector dimension mismatch: expected {dims}, got {}",
+                    entry.vector.len()
+                );
+            }
+            self.index
+                .add(entry.chunk_id, &entry.vector)
+                .map_err(|e| anyhow::anyhow!("failed to add vector {}: {e}", entry.chunk_id))?;
+            buffers.insert(entry.chunk_id, entry.buffer_id);
+        }
 
-        let values_array: ArrayRef = Arc::new(Float32Array::from(flat_values));
-        let vector_list = FixedSizeListArray::try_new(
-            Arc::new(Field::new("item", DataType::Float32, true)),
-            VECTOR_DIMS,
-            values_array,
-            None,
-        )
-        .context("failed to create FixedSizeListArray for vectors")?;
+        self.save_locked(&buffers)?;
 
-        let batch = RecordBatch::try_new(
-            Self::arrow_schema(),
-            vec![
-                Arc::new(chunk_ids) as ArrayRef,
-                Arc::new(buffer_ids) as ArrayRef,
-                Arc::new(vector_list) as ArrayRef,
-            ],
-        )
-        .context("failed to create record batch")?;
-
-        self.table
-            .add(batch)
-            .execute()
-            .await
-            .context("failed to insert vectors")?;
-
+        tracing::info!(
+            inserted = entries.len(),
+            total = self.index.size(),
+            elapsed_ms = started.elapsed().as_millis(),
+            "inserted vectors"
+        );
         Ok(())
     }
 
-    /// Search for similar vectors.
+    /// Search for similar vectors and return structured results.
+    ///
+    /// When `buffer_id` is set, only vectors belonging to that buffer are
+    /// considered (evaluated as a predicate during graph traversal).
     ///
     /// # Errors
     ///
-    /// Returns an error if the vector search query or result collection fails.
-    pub async fn search(
+    /// Returns an error if the underlying vector search fails.
+    pub async fn search_similar(
+        &self,
+        query_vector: &[f32],
+        buffer_id: Option<u64>,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>> {
+        let raw = self.search(query_vector, buffer_id, limit).await?;
+        Ok(raw
+            .into_iter()
+            .map(|(chunk_id, distance)| SearchResult { chunk_id, distance })
+            .collect())
+    }
+
+    /// Core search, returning `(chunk_id, distance)` pairs.
+    async fn search(
         &self,
         query_vector: &[f32],
         buffer_id: Option<u64>,
         limit: usize,
     ) -> Result<Vec<(u64, f32)>> {
-        let mut search_query = self
-            .table
-            .vector_search(query_vector)
-            .context("failed to build vector search query")?;
+        let started = Instant::now();
 
-        if let Some(bid) = buffer_id {
-            search_query = search_query.only_if(format!("buffer_id = {bid}"));
-        }
-
-        let results = search_query
-            .limit(limit)
-            .execute()
-            .await
-            .context("failed to execute vector search")?;
-
-        let batches: Vec<RecordBatch> = results
-            .try_collect()
-            .await
-            .context("failed to collect search results")?;
-
-        let mut entries = Vec::new();
-        for batch in &batches {
-            let chunk_ids = batch
-                .column_by_name("chunk_id")
-                .and_then(|c| c.as_any().downcast_ref::<UInt64Array>())
-                .context("missing chunk_id column")?;
-            let distances = batch
-                .column_by_name("_distance")
-                .and_then(|c| c.as_any().downcast_ref::<Float32Array>())
-                .context("missing _distance column")?;
-
-            for i in 0..batch.num_rows() {
-                entries.push((chunk_ids.value(i), distances.value(i)));
+        let matches = match buffer_id {
+            Some(bid) => {
+                let buffers = self.buffers.lock();
+                self.index
+                    .filtered_search(query_vector, limit, |key| {
+                        buffers.get(&key) == Some(&bid)
+                    })
+                    .map_err(|e| anyhow::anyhow!("vector search failed: {e}"))?
             }
-        }
+            None => self
+                .index
+                .search(query_vector, limit)
+                .map_err(|e| anyhow::anyhow!("vector search failed: {e}"))?,
+        };
 
-        Ok(entries)
+        let results = matches
+            .keys
+            .iter()
+            .copied()
+            .zip(matches.distances.iter().copied())
+            .collect::<Vec<_>>();
+
+        tracing::debug!(
+            limit,
+            returned = results.len(),
+            buffer_id,
+            elapsed_ms = started.elapsed().as_millis(),
+            "vector search"
+        );
+
+        Ok(results)
     }
 
     /// Return the number of vectors in the store.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the row count query fails.
-    pub async fn count(&self) -> Result<usize> {
-        self.table
-            .count_rows(None)
-            .await
-            .context("failed to count vectors")
+    #[must_use]
+    pub async fn count(&self) -> usize {
+        self.index.size()
+    }
+
+    /// Persist the index and the buffer-mapping metadata.
+    fn save_locked(&self, buffers: &HashMap<u64, u64>) -> Result<()> {
+        let path_str = self
+            .index_path
+            .to_str()
+            .context("non-utf8 index path")?;
+        self.index
+            .save(path_str)
+            .map_err(|e| anyhow::anyhow!("failed to save vector index: {e}"))?;
+        write_meta(&self.meta_path, buffers)?;
+        Ok(())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
+#[derive(Serialize, Deserialize, Default)]
+struct BufferMeta(HashMap<u64, u64>);
 
-    #[tokio::test]
-    async fn test_vector_store_open() {
-        let tmp = TempDir::new().unwrap();
-        let store = VectorStore::open(tmp.path()).await.unwrap();
-        assert!(store.count().await.unwrap() == 0);
-    }
+fn read_meta(path: &Path) -> Result<HashMap<u64, u64>> {
+    let data = std::fs::read(path)
+        .with_context(|| format!("failed to read vector metadata {}", path.display()))?;
+    let meta: BufferMeta = serde_json::from_slice(&data).unwrap_or_default();
+    Ok(meta.0)
+}
 
-    #[tokio::test]
-    async fn test_insert_vectors() {
-        let tmp = TempDir::new().unwrap();
-        let store = VectorStore::open(tmp.path()).await.unwrap();
-
-        let entries: Vec<VectorEntry> = (0..5)
-            .map(|i| VectorEntry {
-                chunk_id: i,
-                buffer_id: 0,
-                vector: vec![i as f32; VECTOR_DIMS as usize],
-            })
-            .collect();
-
-        store.insert_vectors(&entries).await.unwrap();
-        assert!(store.count().await.unwrap() == 5);
-    }
-
-    #[tokio::test]
-    async fn test_insert_empty() {
-        let tmp = TempDir::new().unwrap();
-        let store = VectorStore::open(tmp.path()).await.unwrap();
-        store.insert_vectors(&[]).await.unwrap();
-        assert!(store.count().await.unwrap() == 0);
-    }
-
-    #[tokio::test]
-    async fn test_search_vectors() {
-        let tmp = TempDir::new().unwrap();
-        let store = VectorStore::open(tmp.path()).await.unwrap();
-
-        let entries: Vec<VectorEntry> = (0..3)
-            .map(|i| VectorEntry {
-                chunk_id: i,
-                buffer_id: 0,
-                vector: vec![i as f32; VECTOR_DIMS as usize],
-            })
-            .collect();
-
-        store.insert_vectors(&entries).await.unwrap();
-
-        let query = vec![0.0_f32; VECTOR_DIMS as usize];
-        let results = store.search(&query, None, 10).await.unwrap();
-        assert!(!results.is_empty());
-        assert_eq!(results[0].0, 0);
-    }
-
-    #[tokio::test]
-    async fn test_search_with_buffer_filter() {
-        let tmp = TempDir::new().unwrap();
-        let store = VectorStore::open(tmp.path()).await.unwrap();
-
-        let entries = vec![
-            VectorEntry {
-                chunk_id: 0,
-                buffer_id: 1,
-                vector: vec![1.0; VECTOR_DIMS as usize],
-            },
-            VectorEntry {
-                chunk_id: 1,
-                buffer_id: 2,
-                vector: vec![2.0; VECTOR_DIMS as usize],
-            },
-        ];
-
-        store.insert_vectors(&entries).await.unwrap();
-
-        let query = vec![1.0_f32; VECTOR_DIMS as usize];
-        let results = store.search(&query, Some(1), 10).await.unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].0, 0);
-    }
+fn write_meta(path: &Path, map: &HashMap<u64, u64>) -> Result<()> {
+    let data = serde_json::to_vec(&BufferMeta(map.clone()))
+        .context("failed to serialize vector metadata")?;
+    std::fs::write(path, data)
+        .with_context(|| format!("failed to write vector metadata {}", path.display()))?;
+    Ok(())
 }

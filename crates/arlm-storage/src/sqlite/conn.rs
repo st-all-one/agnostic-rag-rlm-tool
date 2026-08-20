@@ -149,6 +149,7 @@ impl Storage {
     ///
     /// Panics if called in pooled mode.
     #[must_use]
+    #[allow(clippy::expect_used)]
     pub fn conn(&self) -> Arc<Mutex<Connection>> {
         self.sqlite
             .as_ref()
@@ -199,6 +200,68 @@ impl Storage {
             min_idle: pool.min_idle().unwrap_or(0),
             idle_connections: pool.state().idle_connections,
             connections: pool.state().connections,
+        })
+    }
+
+    /// Create a point-in-time backup of the database via `VACUUM INTO`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the destination path is not valid UTF-8 or the
+    /// backup fails (the destination file must not already exist).
+    pub fn backup(&self, dest: &Path) -> Result<()> {
+        let dest_str = dest.to_str().context("non-utf8 backup path")?;
+        self.connection()?.execute(|conn| {
+            conn.execute_batch(&format!("VACUUM INTO '{dest_str}'"))
+                .with_context(|| format!("failed to backup database to {}", dest.display()))
+        })
+    }
+
+    /// Verify database integrity via `PRAGMA integrity_check`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the check cannot run or reports anything other than
+    /// `"ok"`.
+    pub fn verify(&self) -> Result<()> {
+        self.connection()?.execute(|conn| {
+            let mut stmt = conn
+                .prepare("PRAGMA integrity_check(1)")
+                .context("failed to prepare integrity_check")?;
+            let result: String = stmt
+                .query_row([], |row| row.get(0))
+                .context("failed to run integrity_check")?;
+            if result != "ok" {
+                anyhow::bail!("database integrity check failed: {result}");
+            }
+            Ok(())
+        })
+    }
+
+    /// Ensure the FTS5 extension is available in this SQLite build.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if creating an FTS5 virtual table fails.
+    pub fn ensure_fts5_available(&self) -> Result<()> {
+        self.connection()?.execute(|conn| {
+            conn.execute_batch(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS _arlm_fts5_probe USING fts5(content); \
+                 DROP TABLE _arlm_fts5_probe;",
+            )
+            .context("FTS5 extension is not available in this SQLite build")
+        })
+    }
+
+    /// Run `ANALYZE` to refresh query planner statistics.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the statement fails.
+    pub fn analyze(&self) -> Result<()> {
+        self.connection()?.execute(|conn| {
+            conn.execute_batch("ANALYZE;")
+                .context("failed to run ANALYZE")
         })
     }
 }

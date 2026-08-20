@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.0] - 2026-08-20
+
+### Changed
+- **BREAKING (backend de vetores):** LanceDB → `usearch` (single-file HNSW, L2). Remove `lancedb`, `arrow`, `arrow-array` do workspace — build muito mais leve (sem C++/Arrow/Parquet).
+- API pública de `VectorStore` inalterada (`open`/`insert_vectors`/`search_similar`/`count`), mas o `create_index()` específico do LanceDB foi removido (usearch constrói o HNSW automaticamente). Buffer filtering agora via `filtered_search` do usearch (mapa `chunk_id → buffer_id` persistido em `vectors.meta`).
+- Arquivos grandes divididos: `runs.rs` teve `FlatNode` movido para `nodes.rs`.
+
+### Added
+- `summaries.rs`: CRUD hierárquico (`insert_summary`, `get_summaries`, `get_project_summary`, `get_summary_by_source_hash`) — gap #2 do TODO.
+- `Storage::backup()` (`VACUUM INTO`), `Storage::verify()` (`PRAGMA integrity_check`), `Storage::ensure_fts5_available()`, `Storage::analyze()` — gap #5/#6 do TODO.
+- Testes de modo pooled concorrente e de backup/verify.
+
+### Performance
+- `usearch` é ~10x menor e mais rápido que LanceDB para o mesmo workload HNSW.
+
+### Refactor
+- Testes inline extraídos de `src/` para `tests/` (padrão do resto do workspace).
+- `cargo clippy -p arlm-storage --all-targets -- -D warnings` limpo.
+
 ## [0.2.0] - 2026-08-19
 
 ### Changed

@@ -1,0 +1,52 @@
+# arlm-storage
+
+## O que faz
+Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único DB compartilhado isolado por `buffer_id`, mais um vector store embutido (`usearch`, HNSW single-file, L2). Suporta modo single (CLI) e pooled (servidor). CRUD para buffers, chunks, tasks, findings, history, patterns, runs/trajectories, entities, cache e summaries; backup/verify; e busca semântica por embedding.
+
+## Estrutura
+- `src/lib.rs` — API pública (`pub use sqlite::Storage`, `pub use lance::{VectorStore, SearchResult, VectorEntry}`), `#![allow(...)]` de lint no nível do crate (pedantic style pré-existente + `cfg(test)`).
+- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`.
+- `src/sqlite/schema.rs` — `run_migrations` (13 migrations versionadas via `schema_version`), `ANALYZE` pós-migração.
+- `src/sqlite/buffers.rs` — `Buffer`/`NewBuffer`, `insert_buffer` (UUIDv7), `get_buffer`/`get_buffer_by_name`/`get_buffer_by_uuid`/`list_buffers`/`ensure_uuids`/`update_buffer_counts`/`delete_buffer`.
+- `src/sqlite/chunks.rs` — `Chunk`/`NewChunk`, `insert_chunk`/`get_chunk`/`get_chunk_content`/`insert_chunk_content`/`list_chunks`/`count_chunks`/`refresh_last_accessed`/`chunk_exists_by_hash`/`delete_chunks_for_file`/`get_chunks_last_accessed`.
+- `src/sqlite/entities.rs` — `extract_entities` (regex determinístico), `ensure_entities_fts`, `insert_chunk_entities`/`get_chunk_entities`, `search_entities`/`search_entities_all` (BM25 sobre FTS5), `EntityHit`.
+- `src/sqlite/cache.rs` — `get_cached_result`/`put_cached_result`/`invalidate_project_cache` (result_cache).
+- `src/sqlite/findings.rs` — `Finding`, `insert_finding`/`get_findings_for_task`.
+- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`.
+- `src/sqlite/patterns.rs` — `Pattern`, `insert_pattern`/`get_patterns`.
+- `src/sqlite/tasks.rs` — `Task`, `insert_task`/`get_pending_tasks`/`update_task_status`/`complete_task`.
+- `src/sqlite/runs.rs` — `StoredRun`/`ModelUsage`/`NodeCall`/`StoredTrajectory`, `insert_run` (transação com node tree + agregação de custo)/`get_run`/`cancel_run`/`list_runs`/`get_run_model_usage`/`total_cost`/`run_cost`/`insert_trajectory`/`get_trajectories_by_task_hash`; re-exporta `FlatNode`.
+- `src/sqlite/nodes.rs` — `FlatNode` (árvore de nós de run, serializável), `flatten`.
+- `src/sqlite/summaries.rs` — `Summary`, `insert_summary`/`get_summaries`/`get_project_summary`/`get_summary_by_source_hash` (summaries hierárquicos).
+- `src/lance/vectors.rs` — `VectorStore` (usearch), `VectorEntry`, `SearchResult`; `open`/`insert_vectors`/`search_similar`/`count`; filtro por `buffer_id` via `filtered_search`; mapa `chunk_id→buffer_id` persistido em `vectors.meta` ao lado de `vectors.usearch`.
+
+## Dependências
+- Internas: nenhuma (crate folha de storage; consumido por `arlm-search`, `arlm-server`, `arlm-cli`).
+- Externas (runtime): `rusqlite` (bundled + vtab, FTS5), `usearch` (HNSW single-file), `r2d2`/`r2d2_sqlite` (pool), `anyhow`, `serde`/`serde_json` (meta do vector store + summaries), `sha2`, `zstd`, `chrono`, `tokio` (async), `uuid` (v7), `parking_lot` (Mutex), `regex` (entities), `tracing`.
+- Externas (dev): `tempfile`.
+
+## Convenções deste módulo
+- Sem `unwrap`/`expect`/`panic` em `src/` (deny do workspace); use `anyhow::Result` + `?`. Os testes em `tests/` carregam `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, ...)]` no topo.
+- Modelo single-DB: tudo em `~/.arlm/knowledge.db`; isolamento por `buffer_id` em todas as tabelas.
+- `VectorStore` é `usearch` single-file: `reserve` antes de `add`, `save` após inserção (persiste índice + `vectors.meta`). Buffer filter é feito por predicado durante o `filtered_search` (o usearch não tem metadados nativos).
+- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor (WAL + r2d2, múltiplos readers).
+- `cargo clippy -p arlm-storage --all-targets -- -D warnings` deve passar (allows de pedantic style pré-existente no crate).
+
+## Comandos úteis
+```bash
+CARGO_BUILD_JOBS=4 cargo check  -p arlm-storage --all-targets
+CARGO_BUILD_JOBS=4 cargo test   -p arlm-storage   # 48 testes (src + tests/)
+CARGO_BUILD_JOBS=4 cargo clippy -p arlm-storage --all-targets -- -D warnings
+```
+
+## Migrations
+- `migrations/001_initial.sql` … `migrations/013_server_handlers.sql` (13 ao total), aplicadas idempotentemente e versionadas via tabela `schema_version`.
+- `001` base (chunks, buffers, tasks, findings, history, patterns); `004` runs/custos; `005` trajectories; `006` sessions; `007` result_cache; `008` events; `009` entities; `010` last_accessed_at; `011` UUIDv7 em buffers; `012` summaries; `013` server handlers (runs.project/model, sessions.updated_at, chunks_fts).
+- `run_migrations` roda `ANALYZE` ao final para planner stats.
+
+## Rules
+- Mantenha a API pública estável para consumidores (`Storage`, `VectorStore`, `SearchResult`, `VectorEntry`); não quebrar `arlm_storage::lance::vectors::*` nem `arlm_storage::sqlite::runs::FlatNode`.
+- Todo acesso a vetores é por `buffer_id` (filtro no `filtered_search`); o mapa `vectors.meta` deve ser sempre salvo junto com `vectors.usearch`.
+- Novas tabelas entram como migration versionada + `run_migrations`; novos CRUD ficam em módulo dedicado em `src/sqlite/`.
+- `insert_run` é a única escrita transacional do crate (node tree + `run_model_usage` numa `unchecked_transaction`).
+- Backup = `Storage::backup(dest)` (`VACUUM INTO`, destino não pode existir); verificação = `Storage::verify()` (`PRAGMA integrity_check`).

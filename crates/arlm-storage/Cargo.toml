@@ -10,9 +10,7 @@ workspace = true
 
 [dependencies]
 rusqlite.workspace = true
-lancedb.workspace = true
-arrow.workspace = true
-arrow-array.workspace = true
+usearch.workspace = true
 r2d2.workspace = true
 r2d2_sqlite.workspace = true
 anyhow.workspace = true
@@ -25,7 +23,6 @@ sha2.workspace = true
 zstd.workspace = true
 chrono.workspace = true
 tokio.workspace = true
-futures.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

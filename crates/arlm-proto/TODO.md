@@ -45,7 +45,9 @@ por testes de integração em `tests/proto_contract.rs`.
 ---
 
 ## Pendências fora do escopo (não-proto)
-- `arlm-cli`/`arlm-server` ainda não compilam integralmente devido a um mismatch
-  pré-existente em `arlm-core/src/engine/mod.rs:48`
-  (`run_rlm_engine_with_events` espera 4 args; chamadores passam 3). Isso é
-  independente deste crate e fora da autoridade de edição do `arlm-proto`.
+- `arlm-core/src/engine/mod.rs:48` — `run_rlm_engine_with_events` passou a exigir
+  4 argumentos (o 4º é `memory: Option<Arc<dyn MemoryProvider>>`, adicionado na
+  refatoração do `arlm-core`). Os 3 chamadores
+  (`arlm-cli` `commands/run.rs`, `commands/serve.rs`; `arlm-server`
+  `grpc/runs/engine.rs`) foram corrigidos para passar `None`. Workspace compila
+  (`cargo check -p arlm-cli -p arlm-server` verde). Resolvido fora deste crate.

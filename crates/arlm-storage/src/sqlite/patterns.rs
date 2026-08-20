@@ -96,36 +96,3 @@ impl Storage {
         Ok(rows)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    fn setup_storage() -> (Storage, TempDir) {
-        let tmp = TempDir::new().unwrap();
-        let storage = Storage::open(tmp.path()).unwrap();
-        (storage, tmp)
-    }
-
-    #[test]
-    fn test_insert_pattern() {
-        let (storage, _tmp) = setup_storage();
-
-        let id = storage
-            .insert_pattern(
-                None,
-                Some("architectural"),
-                "use of builder pattern",
-                Some("Complex objects use builder pattern"),
-                None,
-                Some(0.85),
-            )
-            .unwrap();
-        assert!(id > 0);
-
-        let patterns = storage.get_patterns(None).unwrap();
-        assert_eq!(patterns.len(), 1);
-        assert_eq!(patterns[0].name, "use of builder pattern");
-    }
-}

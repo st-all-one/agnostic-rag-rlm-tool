@@ -1,12 +1,14 @@
 # arlm-storage
 
-Componente de persistência do arlm — SQLite (metadados, FTS5/BM25) + LanceDB (vetores HNSW).
+Componente de persistência do arlm — SQLite (metadados, FTS5/BM25) + usearch (vetores HNSW, single-file).
 
 ## Responsabilidades
 
 - **SQLite**: Schema com tabelas `chunks`, `buffers`, `tasks`, `findings`, `history`, `patterns`
 - **FTS5**: Índice de busca textual (BM25) com tokenizer `porter unicode61`
-- **LanceDB**: Armazenamento de vetores de embedding com índice HNSW
+- **usearch**: Armazenamento de vetores de embedding com índice HNSW single-file (substitui o LanceDB)
+- **Backups**: `Storage::backup()` (`VACUUM INTO`) e `Storage::verify()` (`PRAGMA integrity_check`)
+- **Summaries**: CRUD hierárquico de resumos (file/module/project) em `summaries.rs`
 - **Single DB**: Todos os projetos compartilham `~/.arlm/knowledge.db`
 - **UUIDv7**: Cada buffer (projeto) tem UUIDv7 único
 
@@ -17,7 +19,7 @@ src/
 ├── lib.rs              # Re-exports públicos
 ├── sqlite/
 │   ├── conn.rs         # Storage::open(), connection management
-│   ├── schema.rs       # 11 migrações SQL
+│   ├── schema.rs       # 13 migrações SQL
 │   ├── chunks.rs       # CRUD de chunks
 │   ├── buffers.rs      # CRUD de buffers com UUIDv7
 │   ├── tasks.rs        # Fila de tasks para dispatch
@@ -25,11 +27,10 @@ src/
 │   ├── history.rs      # Histórico de consultas
 │   ├── patterns.rs     # Padrões extraídos
 │   ├── entities.rs     # Busca por entidades
-│   └── sessions.rs     # Sessões multi-turn
+│   ├── summaries.rs    # CRUD hierárquico de resumos
+│   └── nodes.rs        # FlatNode (persistência de runs)
 ├── lance/
-│   ├── vectors.rs      # VectorStore::open(), insert, search
-│   ├── index.rs        # Criação de índice HNSW
-│   └── search.rs       # SearchResult, search_similar
+│   └── vectors.rs      # VectorStore::open(), insert, search (usearch), SearchResult
 migrations/
 ├── 001_initial.sql
 ├── ...
@@ -42,7 +43,7 @@ migrations/
 ~/.arlm/
 ├── knowledge.db          # SQLite (WAL, FTS5, metadados)
 ├── knowledge.db-wal      # WAL journal
-└── vectors.lance/        # LanceDB (HNSW vetorial, 1024-dim)
+└── vectors.usearch       # usearch (HNSW vetorial, 1024-dim) + vectors.meta (buffer map)
 ```
 
 ### Single Database
@@ -137,7 +138,7 @@ PRAGMA locking_mode=EXCLUSIVE;      -- CLI only (open_exclusive)
 
 ## Migrações
 
-Schema versionado com 11 migrações:
+Schema versionado com 13 migrações:
 - `001_initial` — Schema base (chunks, buffers, tasks, findings, history, patterns)
 - `004` — Runs e custos
 - `005` — Trajectories
@@ -147,6 +148,8 @@ Schema versionado com 11 migrações:
 - `009` — Entidades
 - `010` — last_accessed_at
 - `011` — UUIDv7 em buffers
+- `012` — Summaries hierárquicos
+- `013` — Server handlers (runs.project/model, sessions.updated_at, chunks_fts)
 
 ## Uso Exclusive (CLI)
 
@@ -161,4 +164,4 @@ let storage = Storage::open_exclusive(Path::new("~/.arlm"))?;
 cargo test -p arlm-storage
 ```
 
-29 testes cobrindo: migrações, CRUD de chunks/buffers/tasks/findings/history/patterns, UUIDv7, operações LanceDB.
+48 testes cobrindo: migrações, CRUD de chunks/buffers/tasks/findings/history/patterns/summaries, UUIDv7, backup/verify, FTS5, vector store (usearch) com buffer filter e persistência.

@@ -98,36 +98,3 @@ impl Storage {
         Ok(rows)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    fn setup_storage() -> (Storage, TempDir) {
-        let tmp = TempDir::new().unwrap();
-        let storage = Storage::open(tmp.path()).unwrap();
-        (storage, tmp)
-    }
-
-    #[test]
-    fn test_insert_history() {
-        let (storage, _tmp) = setup_storage();
-
-        let id = storage
-            .insert_history(
-                None,
-                "bug in login",
-                Some("search"),
-                Some(5),
-                Some(100),
-                Some("opencode"),
-            )
-            .unwrap();
-        assert!(id > 0);
-
-        let entries = storage.get_history(None, 10).unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].query, "bug in login");
-    }
-}
