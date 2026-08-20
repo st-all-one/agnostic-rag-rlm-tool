@@ -33,6 +33,7 @@ fn test_run_budget_record_call() {
         prompt_tokens: 100,
         completion_tokens: 50,
         total_tokens: 150,
+        cost_usd: 0.0,
     };
     budget.record_call("gpt-4o", &usage);
     let summary = budget.summary();

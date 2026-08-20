@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::pedantic
+)]
+
 //! Unit tests for the summarizer (cost, progress, strategy) that were
 //! extracted from inline `#[cfg(test)]` modules into the integration suite.
 

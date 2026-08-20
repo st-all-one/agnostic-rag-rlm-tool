@@ -36,3 +36,14 @@ docker/build.sh
 # Temporary
 tmp/
 *.tmp
+
+# Local build / scratch dirs
+.tmp_build/
+_sniff/
+test_tiktoken
+
+# Runtime data
+.arlm/
+*.db
+*.db-*
+data/

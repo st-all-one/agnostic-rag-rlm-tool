@@ -305,11 +305,52 @@ pub fn run_server(
             }
             Ok(())
         }
+        Commands::Index { path, .. } => {
+            let request = Request::new(arlm_proto::proto::IndexRequest {
+                project: project_str.clone(),
+                root_path: path.to_string_lossy().to_string(),
+                ..Default::default()
+            });
+            let response = rt.block_on(grpc_client.index_project(request))?;
+            let resp = response.into_inner();
+            let rendered = match format {
+                Format::Json => crate::output::json::JsonOutput::ok()
+                    .with_data(serde_json::json!({
+                        "files_indexed": resp.files_indexed,
+                        "chunks_created": resp.chunks_created,
+                        "duration_ms": resp.duration_ms,
+                    }))
+                    .to_json_string(),
+                _ => format!(
+                    "Indexed {} files, {} chunks ({:.1} ms)",
+                    resp.files_indexed, resp.chunks_created, resp.duration_ms
+                ),
+            };
+            print!("{rendered}");
+            Ok(())
+        }
+        Commands::Query { question, .. } => {
+            let request = Request::new(arlm_proto::proto::ContextRequest {
+                project: project_str.clone(),
+                task: question.clone(),
+                ..Default::default()
+            });
+            let response = rt.block_on(grpc_client.build_context(request))?;
+            let ctx = response.into_inner().context;
+            let rendered = match format {
+                Format::Json => crate::output::json::JsonOutput::ok()
+                    .with_data(serde_json::json!({ "question": question, "context": ctx }))
+                    .to_json_string(),
+                _ => ctx,
+            };
+            print!("{rendered}");
+            Ok(())
+        }
         _ => {
             bail!(
                 "Server mode does not support this command. Supported commands in server mode: \
-                 search, status, session, run, cost, context. Other commands (index, query, \
-                 history, consolidate, decay, cancel, checkpoints, restore-page, wiki, entities, \
+                 index, search, status, session, run, cost, context, query. Other commands \
+                 (history, consolidate, decay, cancel, checkpoints, restore-page, wiki, entities, \
                  persist, serve) must be run locally."
             );
         }

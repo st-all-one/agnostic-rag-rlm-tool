@@ -20,3 +20,14 @@ target
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 protoc-25.1-linux-x86_64.zip
+
+# Local build / scratch
+.tmp_build/
+
+# arlm runtime data
+.arlm/
+data/
+*.db
+*.db-shm
+*.db-wal
+*.db-wal-journal

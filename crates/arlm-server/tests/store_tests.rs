@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::pedantic
+)]
+
 //! Integration tests for the typed store layer (`arlm_server::store`).
 //!
 //! Storage is opened in single-connection mode (SQLite in a temp dir) so the

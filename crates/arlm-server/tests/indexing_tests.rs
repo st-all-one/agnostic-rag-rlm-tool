@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::pedantic
+)]
+
 //! Unit tests for the deterministic indexing primitives (chunking, language
 //! detection, hashing), extracted from inline `#[cfg(test)]` modules.
 

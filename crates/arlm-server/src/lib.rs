@@ -11,6 +11,37 @@
 //! - [`summarizer`]: hierarchical summarization engine
 //! - [`timing`]: structured scoped timers for execution monitoring
 
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::doc_markdown,
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::needless_pass_by_value,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::cast_lossless,
+    clippy::wildcard_imports,
+    clippy::similar_names,
+    clippy::needless_raw_string_hashes,
+    clippy::redundant_closure_for_method_calls,
+    clippy::field_reassign_with_default,
+    clippy::items_after_statements,
+    clippy::unused_self,
+    clippy::unnecessary_wraps,
+    clippy::unnecessary_fallible_conversions,
+    clippy::useless_conversion,
+    clippy::result_large_err,
+    clippy::must_use_candidate,
+    clippy::cloned_instead_of_copied,
+    clippy::map_unwrap_or,
+    clippy::map_identity,
+    clippy::needless_borrow,
+    clippy::trivially_copy_pass_by_ref,
+    clippy::match_same_arms
+)]
+
 pub mod config;
 pub mod events;
 pub mod grpc;

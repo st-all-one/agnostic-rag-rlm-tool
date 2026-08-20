@@ -6,7 +6,7 @@ use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
 use arlm_proto::proto::arlm_service_server::ArlmServiceServer;
 use arlm_storage::{Storage, VectorStore};
 use tonic::transport::{Identity, Server, ServerTlsConfig};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::config::ServerConfig;
 use crate::grpc::ArlmGrpcService;
@@ -127,15 +127,20 @@ async fn shutdown_signal() {
 
     #[cfg(unix)]
     {
-        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to install SIGTERM handler");
-
-        tokio::select! {
-            _ = ctrl_c => {
-                info!("received SIGINT, shutting down");
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sigterm) => {
+                tokio::select! {
+                    _ = ctrl_c => {
+                        info!("received SIGINT, shutting down");
+                    }
+                    _ = sigterm.recv() => {
+                        info!("received SIGTERM, shutting down");
+                    }
+                }
             }
-            _ = sigterm.recv() => {
-                info!("received SIGTERM, shutting down");
+            Err(e) => {
+                warn!(error = %e, "failed to install SIGTERM handler; waiting on Ctrl+C only");
+                let _ = ctrl_c.await;
             }
         }
     }

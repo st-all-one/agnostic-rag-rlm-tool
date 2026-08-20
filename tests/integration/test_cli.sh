@@ -71,5 +71,44 @@ else
     fail "Install script has syntax errors"
 fi
 
+# Test 7: End-to-end gRPC (docker server + host CLI)
+if command -v docker &> /dev/null; then
+    if docker image inspect arlm-server:latest >/dev/null 2>&1; then
+        echo "Testing end-to-end gRPC (docker server + host CLI)..."
+        SAMPLE=$(mktemp -d)
+        printf 'pub fn add(a: u32, b: u32) -> u32 { a + b }\n' > "$SAMPLE/lib.rs"
+        # The server reads files from its own filesystem: mount the sample
+        # into the container and index the in-container path.
+        docker run -d --name arlm_itest -p 50051:50051 -e ARLM_DATA_DIR=/data \
+            -e ARLM_SERVER_ADDR=0.0.0.0:50051 \
+            -v "$SAMPLE:/workspace/sample" -v arlm_itest_data:/data \
+            arlm-server:latest up >/dev/null 2>&1
+        for i in $(seq 1 30); do
+            if ./target/release/arlm --server 127.0.0.1:50051 status >/dev/null 2>&1; then break; fi
+            sleep 1
+        done
+        if ./target/release/arlm --server 127.0.0.1:50051 index /workspace/sample 2>&1 | grep -q "Indexed"; then
+            pass "docker server indexed via CLI"
+        else
+            docker rm -f arlm_itest >/dev/null 2>&1 || true
+            docker volume rm arlm_itest_data >/dev/null 2>&1 || true
+            rm -rf "$SAMPLE"
+            fail "docker server index via CLI failed"
+        fi
+        if ./target/release/arlm --server 127.0.0.1:50051 search "add" 2>&1 | grep -q "add"; then
+            pass "docker server search via CLI"
+        else
+            fail "docker server search via CLI failed"
+        fi
+        docker rm -f arlm_itest >/dev/null 2>&1 || true
+        docker volume rm arlm_itest_data >/dev/null 2>&1 || true
+        rm -rf "$SAMPLE"
+    else
+        echo "arlm-server:latest image not present, skipping end-to-end docker test"
+    fi
+else
+    echo "Docker not available, skipping end-to-end docker test"
+fi
+
 echo ""
 echo "All tests passed!"

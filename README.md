@@ -4,33 +4,47 @@ Recursive Language Model CLI/HTTP para processamento massivo de codebases. Index
 
 **Agent-agnostic:** qualquer agente (OPencode, Cursor, Aider, Pi) pode consumir sua saída.
 
-## Arquitetura
+## Arquitetura (server-first)
+
+O `arlm` é **server-first** (ver `plan/016-server-first-architecture.md`): o
+`arlm-server` é o processo primário e de longa duração, e o `arlm-cli` é um
+cliente gRPC fino que se comunica com ele.
 
 ```
-arlm-cli → arlm-core → arlm-llm, arlm-search, arlm-memory
-                           ↓
-arlm-search → arlm-storage (SQLite + LanceDB), arlm-embedding
-                           ↓
-arlm-storage → rusqlite (FTS5/BM25), lancedb (HNSW vetorial)
-arlm-embedding → candle (BGE-M3), memmap2, rayon
+┌──────────────────────────────────────────────────────┐
+│                  arlm-server  (long-running)           │
+│  SQLite (pool r2d2) + LanceDB (vetorial) + summarizer  │
+│  expõe API gRPC (tonic + prost, via arlm-proto)       │
+└───────────────────────────┬──────────────────────────┘
+                              │ gRPC (protobuf, TLS opcional)
+┌───────────────────────────┴──────────────────────────┐
+│  arlm-cli  (thin gRPC client)  ── index/search/run…   │
+└───────────────────────────────────────────────────────┘
 ```
 
-**7 crates** no workspace Cargo. Dados compartilhados em `~/.arlm/knowledge.db` (SQLite) + `~/.arlm/vectors.lance/` (LanceDB).
+- **9 crates**: `arlm-cli`, `arlm-core`, `arlm-storage`, `arlm-search`,
+  `arlm-embedding`, `arlm-memory`, `arlm-llm`, `arlm-proto`, `arlm-server`.
+- Conexão tipada por `arlm-proto` (trait `ArlmService`, 19 RPCs).
+- **Sem LLM para index/search/context/query** (embeddings usam
+  *fallback hash* determinístico e offline por padrão; BGE-M3 via `candle`
+  é opcional). LLM é *opt-in* (`--llm`) apenas para `run`/summarize.
+- O CLI também roda **localmente** (sem `--server`), operando diretamente
+  sobre `~/.arlm` (retrocompatibilidade).
 
 ## Instalação
 
 ```bash
-# Build release (recomendado)
-cargo build --release
+# Binários (server + client)
+cargo build --release            # → ./target/release/arlm e ./target/release/arlm-server
 
-# Localizar binário
-./target/release/arlm
+# Ou via script de instalação
+./install.sh                     # instala arlm e cria ~/.arlm/config.toml
 ```
 
 ### Requisitos
 
 - Rust 1.85+ (edition 2024)
-- `protoc` (protobuf-compiler) para LanceDB
+- `protoc` (protobuf-compiler) para gRPC/`arlm-proto`
 - `protobuf-devel` para includes do protobuf
 
 ## Uso Rápido
@@ -63,9 +77,29 @@ arlm context "fix login bug" --all --tier auto --max-tokens 8000
 # Ver status dos projetos
 arlm status
 
-# Servidor HTTP
+# Servidor HTTP (legacy/local, opcional)
 arlm serve --port 8080
 ```
+
+## Modo Servidor (gRPC)
+
+O modelo recomendado é separar servidor e cliente:
+
+```bash
+# 1) Inicia o servidor (long-running) — dono do estado
+arlm-server up                                   # escuta 127.0.0.1:50051
+docker compose -f docker-compose.server.yml up -d   # ou via Docker
+
+# 2) O cliente CLI conecta por gRPC
+arlm --server 127.0.0.1:50051 index ./meu-projeto
+arlm --server 127.0.0.1:50051 search "auth middleware"
+arlm --server 127.0.0.1:50051 context "fix login bug"
+arlm --server 127.0.0.1:50051 status
+```
+
+Sem `--server`, o CLI opera localmente sobre `~/.arlm`. O endereço do servidor
+também é resolvido por `~/.arlm/config.toml` (`[server].addr`) ou
+`ARLM_SERVER_ADDR`.
 
 ## Comandos CLI
 
@@ -174,7 +208,11 @@ arlm context "auth" --max-tokens 4000
 arlm context "auth" --max-tokens 0
 ```
 
-## HTTP API
+## HTTP API (legacy/local)
+
+> O servidor canônico é o `arlm-server` sobre **gRPC** (ver Modo Servidor acima).
+> `arlm serve` é um servidor HTTP/MCP **local/opcional** mantido para
+> retrocompatibilidade e integração MCP.
 
 ```bash
 arlm serve --port 8080
@@ -201,19 +239,35 @@ Ferramentas disponíveis:
 - `rlm_context` — Busca contexto para uma tarefa
 - `rlm_search` — Busca código com BM25 híbrido
 
-## Docker
+## Docker (server-first)
+
+A imagem canônica é o `arlm-server` (gRPC):
 
 ```bash
-# Build
-docker build -t arlm -f docker/Dockerfile .
+# Build da imagem do servidor
+docker build -t arlm-server:latest -f Dockerfile.server .
 
-# Executar
-docker run -v arlm-data:/data arlm index /workspace
-docker run -v arlm-data:/data arlm search "query" --all
+# Subir o servidor (porta 50051, volume de dados persistido)
+docker compose -f docker-compose.server.yml up -d
 
-# Docker Compose
-docker compose up -d
+# CLI (no host) conecta por gRPC
+arlm --server 127.0.0.1:50051 index /workspace
+arlm --server 127.0.0.1:50051 search "query"
 ```
+
+O `docker-compose.server.yml` monta o volume `arlm-server-data` em `/data`
+(configure `ARLM_DATA_DIR=/data`) e expõe `50051` (bind `0.0.0.0` via
+`ARLM_SERVER_ADDR`). O healthcheck usa `arlm-server status`.
+
+> **Indexação em Docker:** o servidor lê os arquivos do *próprio* filesystem.
+> Para indexar via Docker, monte o projeto no container e passe o caminho
+> interno:
+>
+> ```bash
+> docker run -v /caminho/do/projeto:/workspace/projeto -p 50051:50051 \
+>     arlm-server:latest up
+> arlm --server 127.0.0.1:50051 index /workspace/projeto
+> ```
 
 ## Desenvolvimento
 
