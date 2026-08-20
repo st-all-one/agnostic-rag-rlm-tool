@@ -1,0 +1,28 @@
+syntax = "proto3";
+package arlm.v1;
+
+// ── Server Management ──
+
+message ServerStatus {
+  string version = 1;
+  int32 uptime_seconds = 2;
+  int32 active_runs = 3;
+  int32 total_projects = 4;
+  int64 total_chunks = 5;
+  int64 total_summaries = 6;
+  WriteQueueStats write_queue = 7;
+  SummarizeStatus summarize = 8;
+}
+
+message WriteQueueStats {
+  int32 pending_writes = 1;
+  int32 batched_last_flush = 2;
+  double avg_latency_ms = 3;
+}
+
+message SummarizeStatus {
+  bool running = 1;
+  string current_file = 2;
+  int32 files_remaining = 3;
+  double estimated_cost_usd = 4;
+}

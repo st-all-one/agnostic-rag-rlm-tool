@@ -1,0 +1,35 @@
+syntax = "proto3";
+package arlm.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ── Session Management ──
+
+message CreateSessionRequest {
+  string project = 1;
+  string title = 2;
+}
+
+message SessionInfo {
+  string session_id = 1;
+  string project = 2;
+  string title = 3;
+  google.protobuf.Timestamp created_at = 4;
+  int32 turn_count = 5;
+}
+
+message ListSessionsResponse {
+  repeated SessionInfo sessions = 1;
+}
+
+message SessionTurn {
+  string query = 1;
+  string response = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+message AddSessionTurnRequest {
+  string session_id = 1;
+  string query = 2;
+  string response = 3;
+}

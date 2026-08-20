@@ -173,7 +173,7 @@ pub async fn execute(config: RunConfig<'_>) -> Result<()> {
             }
         });
 
-        let result = arlm_core::run_rlm_engine_with_events(input, llm_backend, event_bus)
+        let result = arlm_core::run_rlm_engine_with_events(input, llm_backend, event_bus, None)
             .await
             .context("RLM engine failed")?;
 

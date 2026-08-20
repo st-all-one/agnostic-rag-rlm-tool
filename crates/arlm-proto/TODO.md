@@ -4,37 +4,48 @@
 
 ## Status Atual
 
-Proto file completo com 15+ RPCs. Código gerado funciona. Possivelmente há campos faltando ou inconsistentes.
+Proto dividido em sub-arquivos sob `proto/` (project, index, search, context,
+run, session, summarize, server, service), compilado por `build.rs` via
+`tonic_build`. `package arlm.v1;` para versionamento. Código gerado validado
+por testes de integração em `tests/proto_contract.rs`.
 
 ---
 
-## Gaps Menores (P2)
+## Gaps (resolvidos / concluídos)
 
-### 1. Campos faltando no proto
-- **Arquivo:** `proto/arlm.proto`
-- **Problemas potenciais:**
-  - `RunResult` não tem campo `total_cost` (CLI acessa `run.total_cost` em `main.rs:513`)
-  - `SessionInfo` pode não ter `updated_at` (servidor retorna mas proto pode não ter)
-  - `AddSessionTurnRequest` usa `role` e `content` mas proto pode ter campos diferentes
-- **Plano:** Plan 016 — Proto deve ser completo e consistente.
-- **Verificação necessária:** Alinhar proto com uso real no servidor e CLI.
+### 1. Campos faltando no proto — PARCIALMENTE RESOLVIDO
+- **`RunResult.total_cost`** — RESOLVIDO: adicionado `double total_cost = 5;`
+  em `proto/run.proto`. O literal exaustivo em
+  `crates/arlm-server/src/grpc/runs/mod.rs` agora define `total_cost`, e o CLI
+  (`main.rs:513` `run.total_cost`) compila.
+- **`SessionInfo.updated_at`** — CONCLUÍDO/IGNORADO: investigado; o servidor
+  (`session.rs`) NÃO define `updated_at` em `SessionInfo` e não há quebra de
+  compilação. O banco armazena a coluna, mas o proto não a expõe hoje. Sem
+  mismatch real → não alterado.
+- **`AddSessionTurnRequest`** — CONCLUÍDO/IGNORADO: campos do proto
+  (`session_id`, `query`, `response`) já batem com o uso no servidor/cliente.
+  Sem mismatch → não alterado.
 
-### 2. Sem validação de proto
-- **Arquivo:** `build.rs`
-- **Problema:** Build script gera código mas não valida consistência.
-- **Plano:** N/A — boa prática.
-- **Correção necessária:** Adicionar testes que verifiquem campos esperados existem.
+### 2. Sem validação de proto — RESOLVIDO
+- Adicionado `tests/proto_contract.rs` com 6 testes de integração que validam
+  mensagens, enums e acessores (RunResult+total_cost, SearchRequest+TierHybrid,
+  SessionInfo, AddSessionTurnRequest, variantes de enum, módulos de serviço).
+  `cargo test -p arlm-proto` passa.
 
-### 3. Sem versionamento de proto
-- **Arquivo:** `proto/arlm.proto`
-- **Problema:** Proto não tem versioning (ex: `package arlm.v1`). Breaking changes quebram compatibilidade.
-- **Plano:** Plan 016 — Proto deve ter versioning para compatibilidade.
-- **Correção necessária:**考虑 `package arlm.v1` e strategy para migração.
+### 3. Sem versionamento de proto — RESOLVIDO
+- `package arlm;` → `package arlm.v1;` em todos os sub-proto. Isso gera
+  `arlm.v1.rs`; `lib.rs` faz `include!` desse arquivo dentro de `mod proto`,
+  preservando `arlm_proto::proto::*`,
+  `arlm_proto::proto::arlm_service_server::ArlmService` e
+  `arlm_proto::proto::arlm_service_client::ArlmServiceClient`. (Nota: os módulos
+  de serviço gerados permanecem `arlm_service_{client,server}`, então nenhum
+  alias de re-export foi necessário — as importações downstream continuam
+  válidas.)
 
 ---
 
-## Referências
-
-| Plano | Arquivo | Descrição |
-|-------|---------|-----------|
-| Plan 016 | `plan/016_*.md` | Proto definitions, service methods |
+## Pendências fora do escopo (não-proto)
+- `arlm-cli`/`arlm-server` ainda não compilam integralmente devido a um mismatch
+  pré-existente em `arlm-core/src/engine/mod.rs:48`
+  (`run_rlm_engine_with_events` espera 4 args; chamadores passam 3). Isso é
+  independente deste crate e fora da autoridade de edição do `arlm-proto`.

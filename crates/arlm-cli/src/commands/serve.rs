@@ -419,7 +419,7 @@ async fn handle_run(state: &AppState, req: &RunRequest) -> Result<serde_json::Va
         ..Default::default()
     };
 
-    let result = arlm_core::run_rlm_engine_with_events(input, llm_backend, state.event_bus.clone())
+    let result = arlm_core::run_rlm_engine_with_events(input, llm_backend, state.event_bus.clone(), None)
         .await
         .context("RLM engine failed")?;
 

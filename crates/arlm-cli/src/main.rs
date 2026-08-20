@@ -451,7 +451,7 @@ fn main() -> Result<()> {
                     arlm_proto::proto::ContextRequest {
                         project: project.to_string_lossy().to_string(),
                         task,
-                        max_tokens,
+                        max_tokens: max_tokens as i32,
                         ..Default::default()
                     },
                 );
@@ -465,7 +465,7 @@ fn main() -> Result<()> {
                     let request = tonic::Request::new(rid);
                     let response = rt.block_on(grpc_client.get_run(request))?;
                     let run = response.into_inner();
-                    println!("Run {}: {} - {}", run.id, run.status, run.task);
+                    println!("Run {}: {}", run.run_id, run.status);
                 } else {
                     let request = tonic::Request::new(());
                     let response = rt.block_on(grpc_client.get_server_status(request))?;
@@ -485,14 +485,14 @@ fn main() -> Result<()> {
                     );
                     let response = rt.block_on(grpc_client.create_session(request))?;
                     let session = response.into_inner();
-                    println!("Session created: {}", session.id);
+                    println!("Session created: {}", session.session_id);
                     Ok(())
                 }
                 SessionAction::Resume { session_id } => {
                     let request = tonic::Request::new(session_id);
                     let response = rt.block_on(grpc_client.get_session(request))?;
                     let session = response.into_inner();
-                    println!("Session: {} - {} turns", session.id, session.turn_count);
+                    println!("Session: {} - {} turns", session.session_id, session.turn_count);
                     Ok(())
                 }
                 SessionAction::List => {
@@ -500,7 +500,7 @@ fn main() -> Result<()> {
                     let response = rt.block_on(grpc_client.list_sessions(request))?;
                     let sessions = response.into_inner().sessions;
                     for session in &sessions {
-                        println!("{}: {}", session.id, session.title);
+                        println!("{}: {}", session.session_id, session.title);
                     }
                     Ok(())
                 }
@@ -510,7 +510,7 @@ fn main() -> Result<()> {
                     let request = tonic::Request::new(rid);
                     let response = rt.block_on(grpc_client.get_run(request))?;
                     let run = response.into_inner();
-                    println!("Run {} cost: ${:.6}", run.id, run.total_cost);
+                    println!("Run {} cost: ${:.6}", run.run_id, run.total_cost);
                 }
                 Ok(())
             }

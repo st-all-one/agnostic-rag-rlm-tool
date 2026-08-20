@@ -1,0 +1,67 @@
+syntax = "proto3";
+package arlm.v1;
+
+import "google/protobuf/timestamp.proto";
+import "server.proto";
+
+// ── Summarization (Hierarchical) ──
+
+enum SummaryScope {
+  SCOPE_FILE = 0;      // Per-file summary (1 LLM call per file)
+  SCOPE_MODULE = 1;    // Per-directory summary
+  SCOPE_PROJECT = 2;   // Top-level project summary
+}
+
+message SummaryChunk {
+  int64 id = 1;
+  int64 buffer_id = 2;
+  string content = 3;            // summary text (optimized for LLM)
+  SummaryScope scope = 4;
+  repeated int64 source_chunk_ids = 5;  // parent raw chunk IDs
+  string source_hash = 6;        // hash of all source chunks' content
+  float confidence = 7;          // 0.0-1.0, how reliable is this summary
+  int32 version = 8;
+  int32 tokens = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+}
+
+message SummarizeRequest {
+  string project = 1;
+  bool force_refresh = 2;        // re-summarize even if source_hash matches
+  SummaryScope max_scope = 3;    // how deep to summarize (default: PROJECT)
+  int32 max_concurrent = 4;      // parallel LLM calls (default: 10)
+}
+
+message SummarizeResponse {
+  string run_id = 1;
+  SummarizeStatus status = 2;
+}
+
+message SummarizeProgress {
+  string run_id = 1;
+  SummaryScope current_scope = 2;
+  string current_file = 3;       // file being summarized (if SCOPE_FILE)
+  int32 completed = 4;
+  int32 total = 5;
+  double elapsed_ms = 6;
+  string message = 7;            // "Summarizing auth/middleware.rs..."
+}
+
+message SummaryStatus {
+  string project = 1;
+  int64 total_chunks = 2;
+  int64 summarized_chunks = 3;
+  float coverage_ratio = 4;
+  int64 file_summaries = 5;
+  int64 module_summaries = 6;
+  int64 project_summaries = 7;
+  google.protobuf.Timestamp last_updated = 8;
+  repeated StaleSummary stale = 9;  // summaries needing refresh
+}
+
+message StaleSummary {
+  int64 summary_id = 1;
+  string file_path = 2;
+  string reason = 3;             // "source_hash mismatch", "new chunks added"
+}

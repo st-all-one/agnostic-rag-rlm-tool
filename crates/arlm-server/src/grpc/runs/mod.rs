@@ -104,11 +104,14 @@ pub(crate) async fn handle_get_run(
         duration_ms: row.duration_ms.unwrap_or(0) as f64,
     };
 
+    let total_cost = stats.total_cost_usd as f64;
+
     Ok(Response::new(RunResult {
         run_id,
         status: (store::proto_run_status(&row.status) as i32),
         answer: row.answer.unwrap_or_default(),
         stats: Some(stats),
+        total_cost,
     }))
 }
 

@@ -1,0 +1,51 @@
+syntax = "proto3";
+package arlm.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+
+import "project.proto";
+import "index.proto";
+import "search.proto";
+import "context.proto";
+import "run.proto";
+import "session.proto";
+import "summarize.proto";
+import "server.proto";
+
+// ── gRPC Service ──
+
+service ArlmService {
+  // Project management
+  rpc CreateProject(CreateProjectRequest) returns (ProjectInfo);
+  rpc ListProjects(google.protobuf.Empty) returns (ListProjectsResponse);
+  rpc GetProject(google.protobuf.StringValue) returns (ProjectInfo);
+
+  // Indexing
+  rpc IndexProject(IndexRequest) returns (IndexResponse);
+
+  // Search
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc BuildContext(ContextRequest) returns (ContextResponse);
+
+  // RLM
+  rpc StartRun(RunRequest) returns (RunResponse);
+  rpc GetRun(google.protobuf.StringValue) returns (RunResult);
+  rpc CancelRun(google.protobuf.StringValue) returns (google.protobuf.Empty);
+  rpc StreamRun(google.protobuf.StringValue) returns (stream RunEvent);
+
+  // Sessions
+  rpc CreateSession(CreateSessionRequest) returns (SessionInfo);
+  rpc ListSessions(google.protobuf.StringValue) returns (ListSessionsResponse);
+  rpc GetSession(google.protobuf.StringValue) returns (SessionInfo);
+  rpc AddSessionTurn(AddSessionTurnRequest) returns (SessionTurn);
+
+  // Summarization
+  rpc TriggerSummarize(SummarizeRequest) returns (SummarizeResponse);
+  rpc GetSummaryStatus(google.protobuf.StringValue) returns (SummaryStatus);
+  rpc StreamSummarizeProgress(google.protobuf.StringValue) returns (stream SummarizeProgress);
+
+  // Server management
+  rpc GetServerStatus(google.protobuf.Empty) returns (ServerStatus);
+  rpc StreamEvents(google.protobuf.Empty) returns (stream RunEvent);
+}

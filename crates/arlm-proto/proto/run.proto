@@ -1,0 +1,58 @@
+syntax = "proto3";
+package arlm.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ── RLM Run ──
+
+message RunRequest {
+  string project = 1;
+  string task = 2;
+  string backend = 3;
+  string model = 4;
+  RunOptions options = 5;
+}
+
+message RunOptions {
+  int32 max_depth = 1;
+  int32 max_iterations = 2;
+  float max_budget_usd = 3;
+  float max_timeout_seconds = 4;
+  int32 max_tokens = 5;
+}
+
+message RunResponse {
+  string run_id = 1;
+  RunStatus status = 2;
+}
+
+enum RunStatus {
+  STATUS_PENDING = 0;
+  STATUS_RUNNING = 1;
+  STATUS_COMPLETED = 2;
+  STATUS_FAILED = 3;
+  STATUS_CANCELLED = 4;
+}
+
+message RunResult {
+  string run_id = 1;
+  RunStatus status = 2;
+  string answer = 3;
+  RunStats stats = 4;
+  double total_cost = 5;  // convenience mirror of stats.total_cost_usd for CLI access
+}
+
+message RunStats {
+  int32 nodes_visited = 1;
+  int32 max_depth_reached = 2;
+  int32 total_tokens = 3;
+  float total_cost_usd = 4;
+  double duration_ms = 5;
+}
+
+message RunEvent {
+  string run_id = 1;
+  string event_type = 2;  // "node_start", "node_plan", "node_solve", etc.
+  string data = 3;        // JSON payload
+  google.protobuf.Timestamp timestamp = 4;
+}

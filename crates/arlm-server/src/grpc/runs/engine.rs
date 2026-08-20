@@ -37,7 +37,7 @@ pub(crate) fn spawn_engine(state: AppState, run_id: String, input: StartRunInput
             }
         });
 
-        let result = run_rlm_engine_with_events(input, llm, bus).await;
+        let result = run_rlm_engine_with_events(input, llm, bus, None).await;
 
         bridge.abort();
         state.release_run(&run_id);
