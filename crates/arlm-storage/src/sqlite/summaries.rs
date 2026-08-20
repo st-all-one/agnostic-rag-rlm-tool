@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use anyhow::{Context, Result};
 use rusqlite::params;
 
@@ -18,6 +20,15 @@ pub struct Summary {
     pub parent_summary_id: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// A summary match returned by full-text search over the `summaries` table.
+#[derive(Debug, Clone)]
+pub struct SummaryHit {
+    pub id: i64,
+    pub buffer_id: i64,
+    pub scope: String,
+    pub score: f32,
 }
 
 const SUMMARY_COLUMNS: &str = "id, buffer_id, content, scope, source_chunk_ids, source_hash, confidence, version, tokens, parent_summary_id, created_at, updated_at";
@@ -147,5 +158,123 @@ impl Storage {
         rows.next()
             .transpose()
             .context("failed to read summary by source hash")
+    }
+
+    /// Full-text search over summaries for a specific buffer (BM25 via FTS5).
+    ///
+    /// More relevant matches sort first (FTS5 `bm25()` returns negative scores,
+    /// so results are ordered ascending by score).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the FTS5 query fails.
+    pub fn search_summaries(
+        &self,
+        query: &str,
+        buffer_id: i64,
+        top_k: usize,
+    ) -> Result<Vec<SummaryHit>> {
+        let start = Instant::now();
+        let conn = self.conn();
+        let conn = conn.lock();
+        let limit = i64::try_from(top_k).context("top_k overflow")?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT s.id, s.buffer_id, s.scope, bm25(summaries_fts) AS score \
+                 FROM summaries_fts \
+                 JOIN summaries s ON s.id = summaries_fts.rowid \
+                 WHERE summaries_fts.content MATCH ?1 AND s.buffer_id = ?2 \
+                 ORDER BY score LIMIT ?3",
+            )
+            .context("failed to prepare summary search")?;
+
+        let rows = stmt
+            .query_map(params![query, buffer_id, limit], |row| {
+                Ok(SummaryHit {
+                    id: row.get(0)?,
+                    buffer_id: row.get(1)?,
+                    scope: row.get(2)?,
+                    #[allow(clippy::cast_precision_loss)]
+                    score: row.get(3)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("failed to collect summary hits")?;
+
+        tracing::debug!(
+            query,
+            buffer_id,
+            results_count = rows.len(),
+            elapsed_ms = start.elapsed().as_millis(),
+            "summary search completed"
+        );
+
+        Ok(rows)
+    }
+
+    /// Full-text search over summaries across all buffers (projects).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the FTS5 query fails.
+    pub fn search_summaries_all(&self, query: &str, top_k: usize) -> Result<Vec<SummaryHit>> {
+        let start = Instant::now();
+        let conn = self.conn();
+        let conn = conn.lock();
+        let limit = i64::try_from(top_k).context("top_k overflow")?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT s.id, s.buffer_id, s.scope, bm25(summaries_fts) AS score \
+                 FROM summaries_fts \
+                 JOIN summaries s ON s.id = summaries_fts.rowid \
+                 WHERE summaries_fts.content MATCH ?1 \
+                 ORDER BY score LIMIT ?2",
+            )
+            .context("failed to prepare summary search_all")?;
+
+        let rows = stmt
+            .query_map(params![query, limit], |row| {
+                Ok(SummaryHit {
+                    id: row.get(0)?,
+                    buffer_id: row.get(1)?,
+                    scope: row.get(2)?,
+                    #[allow(clippy::cast_precision_loss)]
+                    score: row.get(3)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("failed to collect summary hits")?;
+
+        tracing::debug!(
+            query,
+            results_count = rows.len(),
+            elapsed_ms = start.elapsed().as_millis(),
+            "summary search_all completed"
+        );
+
+        Ok(rows)
+    }
+
+    /// Get a single summary by its row id.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_summary(&self, id: i64) -> Result<Option<Summary>> {
+        let conn = self.conn();
+        let conn = conn.lock();
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT {SUMMARY_COLUMNS} FROM summaries WHERE id = ?1"
+            ))
+            .context("failed to prepare get_summary")?;
+
+        let mut rows = stmt
+            .query_map(params![id], row_to_summary)?;
+        rows.next()
+            .transpose()
+            .context("failed to read summary by id")
     }
 }

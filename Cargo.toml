@@ -25,9 +25,7 @@ clap_complete = "4"
 
 # Storage
 rusqlite = { version = "0.32", features = ["bundled", "vtab"] }
-lancedb = "0.37"
-arrow = "58"
-arrow-array = "58"
+usearch = "2"
 r2d2 = "0.8"
 r2d2_sqlite = "0.25"
 

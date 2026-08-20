@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0] - 2026-08-20
+
+### Added
+- **Busca dual-layer em summaries** (gaps #1/#2 do TODO): `HybridSearch::search` e
+  `search_all` agora consultam também a tabela `summaries` (via FTS5 `summaries_fts`
+  no `arlm-storage`) e fundem os hits com RRF; resultados trazem `is_summary=true`.
+- `HybridResult` e `SearchResult` ganharam `is_summary` (e `SearchResult` ganha
+  `summary_scope`); `build_context`/`build_search_results` resolvem summaries.
+- `arlm-storage`: migration `014_add_summaries_fts.sql` (FTS5 + triggers de sync) e
+  `Storage::{search_summaries, search_summaries_all, get_summary}`.
+
+### Changed
+- `hybrid.rs` dividido em `hybrid/{mod,rrf,fusion,search,rerank}.rs` (todos < 300 linhas).
+- Semantic search documentado como usearch (não mais LanceDB).
+- `cargo clippy -p arlm-search --all-targets` limpo.
+
 ## [0.2.0] - 2026-08-19
 
 ### Added

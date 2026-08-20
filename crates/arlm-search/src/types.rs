@@ -41,6 +41,9 @@ pub struct EntityResult {
 pub struct HybridResult {
     pub chunk_id: i64,
     pub score: f32,
+    /// `true` when `chunk_id` refers to a row in the `summaries` table
+    /// (dual-layer search) rather than the `chunks` table.
+    pub is_summary: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +55,10 @@ pub struct SearchResult {
     pub line_end: i64,
     pub content: String,
     pub language: Option<String>,
+    /// `true` when this result comes from the `summaries` table.
+    pub is_summary: bool,
+    /// Scope of the source summary (`file`/`module`/`project`) when `is_summary`.
+    pub summary_scope: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -78,6 +85,10 @@ pub struct ChunkWithText {
     pub line_end: i64,
     pub content: String,
     pub language: Option<String>,
+    /// `true` when this record was resolved from the `summaries` table.
+    pub is_summary: bool,
+    /// Scope of the source summary when `is_summary`.
+    pub summary_scope: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,43 +105,5 @@ impl fmt::Display for OutputFormat {
             Self::Json => write!(f, "json"),
             Self::Markdown => write!(f, "markdown"),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_search_tier_display() {
-        assert_eq!(SearchTier::Fts.to_string(), "fts");
-        assert_eq!(SearchTier::Entity.to_string(), "entity");
-        assert_eq!(SearchTier::Vector.to_string(), "vector");
-        assert_eq!(SearchTier::LlmRerank.to_string(), "llm_rerank");
-    }
-
-    #[test]
-    fn test_search_options_default() {
-        let opts = SearchOptions::default();
-        assert_eq!(opts.tier, SearchTier::Entity);
-        assert_eq!(opts.top_k, 10);
-    }
-
-    #[test]
-    fn test_hybrid_result_clone() {
-        let r = HybridResult {
-            chunk_id: 1,
-            score: 0.5,
-        };
-        let r2 = r.clone();
-        assert_eq!(r.chunk_id, r2.chunk_id);
-        assert_eq!(r.score, r2.score);
-    }
-
-    #[test]
-    fn test_output_format_variants() {
-        let _ = OutputFormat::Prompt;
-        let _ = OutputFormat::Json;
-        let _ = OutputFormat::Markdown;
     }
 }

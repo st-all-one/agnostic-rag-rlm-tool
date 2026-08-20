@@ -13,7 +13,11 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/011_add_uuid_to_buffers.sql"),
     include_str!("../../migrations/012_add_summaries.sql"),
     include_str!("../../migrations/013_server_handlers.sql"),
+    include_str!("../../migrations/014_add_summaries_fts.sql"),
 ];
+
+/// Total number of migrations in [`MIGRATIONS`].
+pub const MIGRATION_COUNT: usize = MIGRATIONS.len();
 
 /// Run all pending migrations.
 ///

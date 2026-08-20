@@ -6,8 +6,9 @@ Busca híbrida (BM25 + semântica) com fusão RRF para o arlm.
 
 - **BM25**: Busca textual via SQLite FTS5
 - **Entity**: Busca por entidades regex (function names, imports)
-- **Semantic**: Busca por similaridade via LanceDB
+- **Semantic**: Busca por similaridade via usearch (arlm-storage `VectorStore`)
 - **RRF**: Fusão Reciprocal Rank Fusion (k=60)
+- **Dual-layer**: O `HybridSearch` também consulta a tabela `summaries` (FTS5 `summaries_fts`) e marca `is_summary` nos resultados
 - **Context**: Montagem de contexto formatado para LLM com token budget
 
 ## Estrutura
@@ -15,11 +16,16 @@ Busca híbrida (BM25 + semântica) com fusão RRF para o arlm.
 ```
 src/
 ├── lib.rs          # Re-exports
-├── types.rs        # SearchTier, SearchResult, HybridResult
+├── types.rs        # SearchTier, SearchResult, HybridResult, ChunkWithText
 ├── bm25.rs         # Bm25Search com FTS5
 ├── entity.rs       # EntitySearch com regex
-├── semantic.rs     # SemanticSearch via LanceDB
-├── hybrid.rs       # HybridSearch com RRF, search_all()
+├── semantic.rs     # SemanticSearch via usearch (arlm-storage)
+├── hybrid/
+│   ├── mod.rs      # HybridSearch (RRF, decay, LLM rerank)
+│   ├── rrf.rs      # Reciprocal Rank Fusion (matemática pura)
+│   ├── fusion.rs   # apply_decay, search_fts, search_all (cross-project)
+│   ├── search.rs   # Orquestração multi-tier async + dual-layer summaries
+│   └── rerank.rs   # LLM rerank (Tier 3)
 ├── context.rs      # build_context, build_search_results, token budget
 └── decay.rs        # Salience decay
 ```
@@ -94,4 +100,4 @@ Tabela FTS5 usa `detail='column'` para ~40% menos espaço:
 cargo test -p arlm-search
 ```
 
-32 testes cobrindo: BM25, entity search, semantic search, RRF fusion, token budget, context building.
+56 testes cobrindo: BM25, entity search, semantic search, RRF fusion, dual-layer summaries, token budget, context building.
