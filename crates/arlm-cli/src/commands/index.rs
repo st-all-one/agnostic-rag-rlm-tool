@@ -70,7 +70,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
     // Auto-populate FTS5 index after indexing
     let bm25 = arlm_search::Bm25Search::new(knowledge.storage())
         .context("failed to create BM25 search for FTS population")?;
-    let fts_count = bm25
+    let _fts_count = bm25
         .populate_fts()
         .context("failed to populate FTS index")?;
 
@@ -200,30 +200,4 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_index_empty_dir() {
-        let tmp = TempDir::new().unwrap();
-        // SAFETY: test-only, single-threaded
-        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
-        let project = TempDir::new().unwrap();
-        let project_path = tmp.path().join("test-project");
-        let config = IndexConfig {
-            path: project.path(),
-            chunk_size: 512,
-            ignore_patterns: &[],
-            watch: false,
-            project: project_path.as_path(),
-            format: Format::Json,
-            verbose: false,
-        };
-        let result = execute(config);
-        assert!(result.is_ok());
-    }
 }

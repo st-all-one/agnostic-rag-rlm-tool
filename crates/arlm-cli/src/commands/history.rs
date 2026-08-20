@@ -68,7 +68,7 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
             if !runs.is_empty() {
                 output::info(&format!("Recent {} run(s):", runs.len()));
                 for r in &runs {
-                    let date = chrono::DateTime::from_timestamp(r.started_at.unwrap_or(0), 0)
+                    let _date = chrono::DateTime::from_timestamp(r.started_at.unwrap_or(0), 0)
                         .map_or_else(
                             || "-".to_string(),
                             |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
@@ -202,25 +202,4 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_history_empty() {
-        let tmp = TempDir::new().unwrap();
-        // SAFETY: test-only, single-threaded
-        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
-        let project_path = tmp.path().join("nonexistent");
-        let config = HistoryConfig {
-            limit: 10,
-            project: project_path.as_path(),
-            format: Format::Json,
-        };
-        let result = execute(config);
-        assert!(result.is_ok());
-    }
 }

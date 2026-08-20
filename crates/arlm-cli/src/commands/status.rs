@@ -152,7 +152,7 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
                 println!();
                 output::info(&format!("Recent {} run(s):", runs.len()));
                 for r in &runs {
-                    let dur = r
+                    let _dur = r
                         .duration_ms
                         .map_or_else(|| "-".to_string(), |d| format!("{d}ms"));
                     println!(
@@ -224,53 +224,4 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_status_empty() {
-        let tmp = TempDir::new().unwrap();
-        // SAFETY: test-only, single-threaded
-        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
-        let project_path = tmp.path().join("nonexistent");
-        let result = execute(None, project_path.as_path(), Format::Json);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_status_with_run_id() {
-        let tmp = TempDir::new().unwrap();
-        // SAFETY: test-only, single-threaded
-        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
-
-        let storage = arlm_storage::Storage::open(tmp.path()).unwrap();
-        storage
-            .insert_run(
-                "run-001",
-                "test task",
-                "openai",
-                "auto",
-                "completed",
-                "arlm",
-                1000,
-                500,
-                0.05,
-                150,
-                3,
-                2,
-                5,
-                None,
-                None,
-                None,
-            )
-            .unwrap();
-
-        let project_path = tmp.path().join("nonexistent");
-        let result = execute(Some("run-001"), project_path.as_path(), Format::Json);
-        assert!(result.is_ok());
-    }
 }

@@ -1,13 +1,15 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
-use tonic::transport::Channel;
+use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
+use tracing::{info, warn};
 
 /// Client configuration.
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
-    /// Server address (e.g., "127.0.0.1:50051").
+    /// Server address (e.g., "127.0.0.1:50051" or "https://host:443").
     pub addr: String,
 }
 
@@ -15,37 +17,14 @@ impl ClientConfig {
     /// Load client configuration from default locations.
     ///
     /// Resolution order:
-    /// 1. .arlm/config.toml (local)
-    /// 2. ~/.arlm/config.toml (global)
-    /// 3. ARLM_SERVER_ADDR env var
+    /// 1. .arlm/config.toml (local) — `server.addr`
+    /// 2. ~/.arlm/config.toml (global) — `server.addr`
+    /// 3. `ARLM_SERVER_ADDR` env var
     /// 4. Fallback: 127.0.0.1:50051
+    #[must_use]
     pub fn load() -> Self {
-        // Try local config
-        if let Ok(cwd) = std::env::current_dir() {
-            let local_config = cwd.join(".arlm/config.toml");
-            if local_config.exists() {
-                if let Ok(contents) = std::fs::read_to_string(&local_config) {
-                    if let Ok(config) = toml::from_str::<ServerConfig>(&contents) {
-                        return Self {
-                            addr: config.server.addr,
-                        };
-                    }
-                }
-            }
-        }
-
-        // Try global config
-        if let Some(home) = dirs() {
-            let global_config = home.join(".arlm/config.toml");
-            if global_config.exists() {
-                if let Ok(contents) = std::fs::read_to_string(&global_config) {
-                    if let Ok(config) = toml::from_str::<ServerConfig>(&contents) {
-                        return Self {
-                            addr: config.server.addr,
-                        };
-                    }
-                }
-            }
+        if let Some(addr) = read_server_addr_from_config() {
+            return Self { addr };
         }
 
         // Try env var
@@ -60,19 +39,37 @@ impl ClientConfig {
     }
 }
 
-#[derive(serde::Deserialize)]
-struct ServerConfig {
-    server: ServerSection,
+/// Read the `[server] addr` value from the local/global config files.
+#[must_use]
+fn read_server_addr_from_config() -> Option<String> {
+    // Try local config
+    if let Ok(cwd) = std::env::current_dir() {
+        let local_config = cwd.join(".arlm/config.toml");
+        if let Some(addr) = read_addr_from_file(&local_config) {
+            return Some(addr);
+        }
+    }
+
+    // Try global config
+    if let Some(home) = dirs() {
+        let global_config = home.join(".arlm/config.toml");
+        if let Some(addr) = read_addr_from_file(&global_config) {
+            return Some(addr);
+        }
+    }
+
+    None
 }
 
-#[derive(serde::Deserialize)]
-struct ServerSection {
-    #[serde(default = "default_addr")]
-    addr: String,
-}
-
-fn default_addr() -> String {
-    "127.0.0.1:50051".to_string()
+/// Parse only the `server.addr` field out of a config TOML file.
+#[must_use]
+fn read_addr_from_file(path: &std::path::Path) -> Option<String> {
+    if !path.exists() {
+        return None;
+    }
+    let contents = std::fs::read_to_string(path).ok()?;
+    let config: crate::config::Config = toml::from_str(&contents).ok()?;
+    config.server.addr
 }
 
 fn dirs() -> Option<PathBuf> {
@@ -82,34 +79,85 @@ fn dirs() -> Option<PathBuf> {
         .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
 }
 
+/// Validate that `addr` is a `host:port` pair.
+fn validate_addr(addr: &str) -> Result<()> {
+    let (host, port) = addr
+        .rsplit_once(':')
+        .with_context(|| format!("server address must be host:port, got: {addr}"))?;
+    if host.is_empty() {
+        anyhow::bail!("server address has an empty host: {addr}");
+    }
+    if port.is_empty() {
+        anyhow::bail!("server address has an empty port: {addr}");
+    }
+    port.parse::<u16>()
+        .with_context(|| format!("server port must be 0-65535, got: {port}"))?;
+    Ok(())
+}
+
 /// Create a gRPC client connected to the server.
+///
+/// Supports plaintext (`http://` / host:port) and TLS (`https://` with native
+/// root certificates). Connection failures are retried with exponential
+/// backoff (3 attempts).
 ///
 /// # Errors
 ///
-/// Returns an error if the connection cannot be established.
+/// Returns an error if the address is invalid or the connection cannot be
+/// established after the retry budget is exhausted.
 pub async fn create_client(config: &ClientConfig) -> Result<ArlmServiceClient<Channel>> {
-    let addr = if config.addr.starts_with("http") {
-        config.addr.clone()
+    let raw = config.addr.trim();
+    let (scheme, hostport) = if let Some(rest) = raw.strip_prefix("https://") {
+        ("https", rest)
+    } else if let Some(rest) = raw.strip_prefix("http://") {
+        ("http", rest)
     } else {
-        format!("http://{}", config.addr)
+        ("http", raw)
     };
 
-    let channel = Channel::from_shared(addr.clone())
-        .context("invalid server address")?
-        .connect()
-        .await
-        .context("failed to connect to server")?;
+    validate_addr(hostport).with_context(|| format!("invalid server address: {raw}"))?;
 
-    Ok(ArlmServiceClient::new(channel))
-}
+    let uri = if scheme == "https" {
+        raw.to_string()
+    } else {
+        format!("http://{hostport}")
+    };
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+    let endpoint =
+        Channel::from_shared(uri.clone()).with_context(|| format!("invalid server URI: {uri}"))?;
 
-    #[test]
-    fn test_client_config_load() {
-        let config = ClientConfig::load();
-        assert!(!config.addr.is_empty());
+    let endpoint: Endpoint = if scheme == "https" {
+        let tls = ClientTlsConfig::new().with_native_roots();
+        endpoint.tls_config(tls)?
+    } else {
+        endpoint
+    };
+
+    let max_attempts: u32 = 3;
+    let mut attempt: u32 = 0;
+    loop {
+        attempt += 1;
+        match endpoint.connect().await {
+            Ok(channel) => {
+                info!(attempt, %raw, "connected to arlm-server");
+                return Ok(ArlmServiceClient::new(channel));
+            }
+            Err(e) => {
+                if attempt >= max_attempts {
+                    return Err(anyhow::anyhow!(
+                        "failed to connect to server at {raw} after {max_attempts} attempts: {e}"
+                    ));
+                }
+                let backoff = Duration::from_millis(250 * 2u64.pow(attempt - 1));
+                warn!(
+                    attempt,
+                    max_attempts,
+                    error = %e,
+                    backoff_ms = backoff.as_millis() as u64,
+                    "server connection failed, retrying with backoff"
+                );
+                tokio::time::sleep(backoff).await;
+            }
+        }
     }
 }

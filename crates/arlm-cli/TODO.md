@@ -28,12 +28,14 @@ CLI funciona em modo local (19 subcommands). Modo servidor (`--server`) suporta 
   - `entities` → precisa de handler gRPC (não definido no proto)
   - `persist` → precisa de handler gRPC (não definido no proto)
   - `serve` → N/A (servidor já roda separado)
+- **STATUS:** ⏸️ ADIADO — requer mudanças em `arlm-server`/`arlm-proto` (cross-crate, fora de escopo). O catch-all agora retorna `bail!` estruturado listando os comandos suportados em modo servidor (search, status, session, run, cost, context).
 
 ### 2. Flag --llm não é obrigatória no run
 - **Arquivo:** `src/main.rs:86-138`
 - **Problema:** `Commands::Run` aceita `llm: bool` mas não exige que seja `true` para executar RLM.
 - **Plano:** Plan 03/16 — `arlm run` sem `--llm` deve apenas mostrar help ou erro.
 - **Correção necessária:** Validar que `--llm` está presente antes de chamar `run_rlm_engine`.
+- **STATUS:** ✅ CONCLUÍDO — `commands::run::execute` (engine.rs) já faz `bail!` claro quando `llm` é falso, exigindo `--llm`.
 
 ---
 
@@ -44,30 +46,35 @@ CLI funciona em modo local (19 subcommands). Modo servidor (`--server`) suporta 
 - **Problema:** CLI não tem flag `--persist` para salvar output como markdown.
 - **Plano:** Plan 03/16 — `--persist` deve salvar resultado no wiki via `PersistEngine`.
 - **Correção necessária:** Adicionar `--persist` ao parser e chamar `persist.save_page()`.
+- **STATUS:** ✅ CONCLUÍDO — `--persist` adicionado ao parser (Run/Search/Context), threadado via `RunConfig`/`SearchConfig`/`ContextConfig`, e `persist::save_page(title, content, project, format)` salva a saída renderizada no wiki (escopo analyses) após cada comando.
 
 ### 4. Flag --tier não totalmente integrada
 - **Arquivo:** `src/main.rs:181-188` (search)
 - **Problema:** `tier: String` é aceito mas não propagado corretamente para o request gRPC.
 - **Plano:** Plan 08 — Tier deve controlar profundidade da busca (FTS → Entity → Vector → LLM).
 - **Correção necessária:** Mapear string para `SearchTier` enum no proto.
+- **STATUS:** ✅ CONCLUÍDO — `map_search_tier` em `dispatch/server.rs` mapeia `fts|entity|vector|auto` → `SearchTier` (TierBm25/TierEntity/TierSemantic/TierHybrid) e define `SearchRequest.tier`; logging `debug!` do tier resolvido adicionado em search/context locais.
 
 ### 5. Live tree rendering parcial
 - **Arquivo:** `src/output/live_tree.rs`
 - **Problema:** `LiveTree` existe mas não é integrado ao `run --live`.
 - **Plano:** Plan 14 — Renderização em tempo real da árvore de recursão.
 - **Correção necessária:** Integrar `LiveTree` com `EventBus` para atualizações em tempo real.
+- **STATUS:** ✅ CONCLUÍDO (já estava integrado) — `run/live.rs` já assina o `EventBus` e alimenta `LiveTree::apply`; adicionado `debug!` de timing/entry.
 
 ### 6. gRPC client sem retry/reconnect
 - **Arquivo:** `src/client.rs`
 - **Problema:** `create_client()` não tem retry ou reconexão automática.
 - **Plano:** Plan 016 — Cliente deve ser resiliente a falhas temporárias.
 - **Correção necessária:** Adicionar retry com backoff na conexão.
+- **STATUS:** ✅ CONCLUÍDO — `create_client` agora faz 3 tentativas com backoff exponencial (250ms·2ⁿ) e logs estruturados.
 
 ### 7. gRPC client sem TLS
 - **Arquivo:** `src/client.rs`
 - **Problema:** Conexão é plaintext (`http://`).
 - **Plano:** Plan 016 — Cliente deve suportar TLS para produção.
 - **Correção necessária:** Detectar `https://` e configurar TLS no channel.
+- **STATUS:** ✅ CONCLUÍDO — detecção `https://` configura `ClientTlsConfig::with_native_roots()`; `http://`/host:port mantém plaintext.
 
 ---
 
@@ -78,18 +85,21 @@ CLI funciona em modo local (19 subcommands). Modo servidor (`--server`) suporta 
 - **Problema:** Flag `--format` é aceita mas ignorada em modo servidor (output sempre é texto simples).
 - **Plano:** Plan 03 — Formatos json/tree/markdown/prompt devem funcionar em ambos os modos.
 - **Correção necessária:** Formatar output do gRPC response conforme `--format`.
+- **STATUS:** ✅ CONCLUÍDO — `dispatch/server.rs` renderiza search/context/status/session/cost/run conforme `Format` (Json/Tree/Markdown/Prompt) usando os helpers de `output`.
 
 ### 9. Config file não suporta seção [server]
 - **Arquivo:** `src/config.rs`
 - **Problema:** Config não tem seção `[server]` para definir endereço padrão do servidor.
 - **Plano:** Plan 016 — Config deve ter `[server] addr = "..."`.
 - **Correção necessária:** Adicionar `ServerSection` ao config.
+- **STATUS:** ✅ CONCLUÍDO — `Config.server: ServerSection { addr: Option<String> }` adicionado; `ClientConfig::load()` lê `server.addr` de `.arlm/config.toml` / `~/.arlm/config.toml`.
 
 ### 10. Sem validação de endereço do servidor
 - **Arquivo:** `src/client.rs`
 - **Problema:** Endereço do servidor não é validado antes de conectar.
 - **Plano:** N/A — boa prática.
 - **Correção necessária:** Validar formato do endereço (host:port).
+- **STATUS:** ✅ CONCLUÍDO — `validate_addr` valida `host:port` (porta 0-65535) antes de conectar; código morto removido.
 
 ---
 

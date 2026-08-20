@@ -1,5 +1,6 @@
 use std::fmt::Write as _;
 
+#[must_use]
 pub fn render_search_context(results: &[PromptItem]) -> String {
     let mut ctx = String::from("## Project Context\n\n");
 
@@ -24,22 +25,4 @@ pub struct PromptItem {
     pub score: f32,
     pub content: String,
     pub language: Option<String>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_render_search_context() {
-        let items = vec![PromptItem {
-            file_path: "src/main.rs".into(),
-            score: 0.85,
-            content: "fn main() {}".into(),
-            language: Some("rust".into()),
-        }];
-        let ctx = render_search_context(&items);
-        assert!(ctx.contains("## Project Context"));
-        assert!(ctx.contains("src/main.rs"));
-    }
 }

@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use crate::output::Format;
 use crate::util::data_dir;
 
-pub fn execute(run_id: &str, project: &Path, format: Format) -> Result<()> {
+pub fn execute(run_id: &str, _project: &Path, format: Format) -> Result<()> {
     let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
     storage.ensure_uuids().ok();
 
@@ -36,18 +36,4 @@ pub fn execute(run_id: &str, project: &Path, format: Format) -> Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_cancel_nonexistent_run() {
-        let tmp = TempDir::new().unwrap();
-        let result = execute("nonexistent-run", tmp.path(), Format::Json);
-        // Should not error, just show not found
-        assert!(result.is_ok());
-    }
 }

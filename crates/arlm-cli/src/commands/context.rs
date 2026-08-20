@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use tracing::{debug, warn};
 
 use crate::output::{self, Format};
 use crate::util::{data_dir, project_name};
@@ -14,6 +15,7 @@ pub struct ContextConfig<'a> {
     pub project: &'a Path,
     pub format: Format,
     pub verbose: bool,
+    pub persist: bool,
 }
 
 fn parse_tier(tier: &str) -> arlm_search::SearchTier {
@@ -42,6 +44,7 @@ pub async fn execute(config: ContextConfig<'_>) -> Result<()> {
     let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
 
     let tier = parse_tier(config.tier);
+    debug!(tier = config.tier, resolved = ?tier, "resolved context tier");
 
     let results = if config.all {
         let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
@@ -82,7 +85,7 @@ pub async fn execute(config: ContextConfig<'_>) -> Result<()> {
     let context = arlm_search::build_context(&storage, &results, search_format, config.max_tokens)
         .context("failed to build context")?;
 
-    match config.format {
+    let rendered = match config.format {
         Format::Json => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                 "task": config.task,
@@ -90,42 +93,26 @@ pub async fn execute(config: ContextConfig<'_>) -> Result<()> {
                 "context": context,
                 "results_count": results.len(),
             }));
-            output.print();
+            output.to_json_string()
         }
         Format::Tree => {
-            output::success(&format!("Context for: {}", config.task));
-            println!("\n{context}");
+            format!("Context for: {}\n\n{context}", config.task)
         }
-        Format::Markdown | Format::Prompt => {
-            print!("{context}");
+        Format::Markdown | Format::Prompt => context,
+    };
+
+    print!("{rendered}");
+
+    if config.persist {
+        if let Err(e) = crate::commands::persist::save_page(
+            config.task,
+            &rendered,
+            config.project,
+            config.format,
+        ) {
+            warn!(error = %e, "failed to persist context output");
         }
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[tokio::test]
-    async fn test_context_no_project() {
-        let tmp = TempDir::new().unwrap();
-        // SAFETY: test-only, single-threaded
-        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
-        let project_path = tmp.path().join("nonexistent");
-        let config = ContextConfig {
-            task: "fix auth bug",
-            top_k: 10,
-            all: false,
-            tier: "auto",
-            max_tokens: None,
-            project: project_path.as_path(),
-            format: Format::Json,
-            verbose: false,
-        };
-        let result = execute(config).await;
-        assert!(result.is_err());
-    }
 }

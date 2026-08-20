@@ -112,16 +112,3 @@ pub fn execute(action: &str, project: &Path, format: Format) -> Result<()> {
 
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_wiki_init() {
-        let tmp = TempDir::new().unwrap();
-        let result = execute("init", tmp.path(), Format::Json);
-        assert!(result.is_ok());
-    }
-}

@@ -212,24 +212,3 @@ pub fn execute_list(_project: &Path, format: Format) -> Result<()> {
 fn open_storage() -> Result<arlm_storage::Storage> {
     arlm_storage::Storage::open(&data_dir()).context("failed to open storage")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_session_create_and_list() {
-        let tmp = TempDir::new().unwrap();
-        // SAFETY: test-only, single-threaded
-        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
-        let project = tmp.path().join("test-proj");
-        std::fs::create_dir_all(&project).unwrap();
-
-        let result = execute_create("My Analysis", &project, Format::Json);
-        assert!(result.is_ok());
-
-        let result = execute_list(&project, Format::Json);
-        assert!(result.is_ok());
-    }
-}

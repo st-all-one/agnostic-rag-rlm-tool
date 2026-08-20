@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct JsonOutput {
-    status: String,
+    pub status: String,
     data: Option<serde_json::Value>,
     metadata: HashMap<String, serde_json::Value>,
 }
@@ -45,24 +45,5 @@ impl JsonOutput {
         }
         let output = serde_json::Value::Object(map);
         serde_json::to_string_pretty(&output).unwrap_or_else(|_| r#"{"status":"ok"}"#.to_string())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_json_output_ok() {
-        let output = JsonOutput::ok();
-        let s = output.status.clone();
-        assert_eq!(s, "ok");
-    }
-
-    #[test]
-    fn test_json_output_with_data() {
-        let output = JsonOutput::ok().with_data(serde_json::json!({"count": 42}));
-        let json = output.to_json_string();
-        assert!(json.contains("42"));
     }
 }

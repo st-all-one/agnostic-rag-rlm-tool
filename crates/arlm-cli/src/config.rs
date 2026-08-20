@@ -35,6 +35,18 @@ pub struct Config {
     /// Agent configuration.
     #[serde(default)]
     pub agent: AgentConfig,
+
+    /// Server configuration.
+    #[serde(default)]
+    pub server: ServerSection,
+}
+
+/// Server configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ServerSection {
+    /// Default gRPC server address (e.g. `127.0.0.1:50051` or `https://host:443`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub addr: Option<String>,
 }
 
 /// Embedding configuration.

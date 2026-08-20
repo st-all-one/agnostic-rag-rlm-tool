@@ -152,12 +152,12 @@ pub fn execute(
             if let Some(a) = agent {
                 output::success(&format!("Cost for agent '{a}':"));
             } else {
-                output::success(&format!("Total cost: ${:.4}", total));
+                output::success(&format!("Total cost: ${total:.4}"));
             }
             println!("  Across {} run(s)\n", filtered_runs.len());
             if !filtered_runs.is_empty() {
                 for r in &filtered_runs {
-                    println!("  {} — ${:.4} ({})", r.id, r.total_cost, r.task,);
+                    println!("  {} — ${:.4} ({})", r.id, r.total_cost, r.task);
                 }
             }
         }
@@ -174,7 +174,7 @@ pub fn execute(
             if !filtered_runs.is_empty() {
                 println!("| Run ID | Task | Agent | Cost | Tokens |");
                 println!("|--------|------|-------|------|--------|");
-                for r in filtered_runs.iter() {
+                for r in &filtered_runs {
                     let task_display = if r.task.len() > 30 {
                         format!("{}...", &r.task[..30])
                     } else {
@@ -209,51 +209,4 @@ pub fn execute(
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_cost_empty() {
-        let tmp = TempDir::new().unwrap();
-        // SAFETY: test-only, single-threaded
-        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
-        let result = execute(None, None, tmp.path(), Format::Json);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_cost_with_run() {
-        let tmp = TempDir::new().unwrap();
-        // SAFETY: test-only, single-threaded
-        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
-
-        let storage = arlm_storage::Storage::open(tmp.path()).unwrap();
-        storage
-            .insert_run(
-                "run-001",
-                "test task",
-                "openai",
-                "auto",
-                "completed",
-                "arlm",
-                1000,
-                500,
-                0.05,
-                150,
-                3,
-                2,
-                5,
-                None,
-                None,
-                None,
-            )
-            .unwrap();
-
-        let result = execute(Some("run-001"), None, tmp.path(), Format::Json);
-        assert!(result.is_ok());
-    }
 }

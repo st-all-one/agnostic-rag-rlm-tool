@@ -1,5 +1,6 @@
 use std::fmt::Write as _;
 
+#[must_use]
 pub fn render_search_results(results: &[SuperItem]) -> String {
     let mut md = String::from("# Search Results\n\n");
 
@@ -19,6 +20,7 @@ pub fn render_search_results(results: &[SuperItem]) -> String {
     md
 }
 
+#[must_use]
 pub fn render_run_result(task: &str, output: &str, duration_ms: u64) -> String {
     let mut md = String::new();
     let _ = writeln!(md, "# RLM Analysis\n");
@@ -34,29 +36,4 @@ pub struct SuperItem {
     pub score: f32,
     pub content: String,
     pub language: Option<String>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_render_search_results() {
-        let items = vec![SuperItem {
-            file_path: "src/main.rs".into(),
-            score: 0.9,
-            content: "fn main() {}".into(),
-            language: Some("rust".into()),
-        }];
-        let md = render_search_results(&items);
-        assert!(md.contains("# Search Results"));
-        assert!(md.contains("src/main.rs"));
-    }
-
-    #[test]
-    fn test_render_run_result() {
-        let md = render_run_result("analyze code", "found 3 issues", 1234);
-        assert!(md.contains("analyze code"));
-        assert!(md.contains("found 3 issues"));
-    }
 }

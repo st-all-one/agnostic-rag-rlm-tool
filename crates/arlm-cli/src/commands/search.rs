@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use tracing::{debug, warn};
 
 use crate::output::{self, Format};
 use crate::util::{data_dir, project_name};
@@ -16,6 +17,7 @@ pub struct SearchConfig<'a> {
     pub project: &'a Path,
     pub format: Format,
     pub verbose: bool,
+    pub persist: bool,
 }
 
 fn parse_tier(tier: &str) -> arlm_search::SearchTier {
@@ -44,6 +46,7 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
     let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
 
     let tier = parse_tier(config.tier);
+    debug!(tier = config.tier, resolved = ?tier, "resolved search tier");
 
     let results = if config.all {
         let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
@@ -85,7 +88,7 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
     let search_results = arlm_search::build_search_results(&storage, &results, config.max_tokens)
         .context("failed to build results")?;
 
-    match config.format {
+    let rendered = match config.format {
         Format::Json => {
             let items: Vec<serde_json::Value> = search_results
                 .iter()
@@ -115,7 +118,7 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
                 "results": items,
                 "count": search_results.len(),
             }));
-            output.print();
+            output.to_json_string()
         }
         Format::Tree => {
             let items: Vec<crate::output::tree::SearchResultItem> = search_results
@@ -127,7 +130,7 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
                     score: r.score,
                 })
                 .collect();
-            print!("{}", crate::output::tree::render_search_results(&items));
+            crate::output::tree::render_search_results(&items)
         }
         Format::Markdown => {
             let items: Vec<crate::output::markdown::SuperItem> = search_results
@@ -139,7 +142,7 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
                     language: r.language.clone(),
                 })
                 .collect();
-            print!("{}", crate::output::markdown::render_search_results(&items));
+            crate::output::markdown::render_search_results(&items)
         }
         Format::Prompt => {
             let items: Vec<crate::output::prompt::PromptItem> = search_results
@@ -151,37 +154,22 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
                     language: r.language.clone(),
                 })
                 .collect();
-            print!("{}", crate::output::prompt::render_search_context(&items));
+            crate::output::prompt::render_search_context(&items)
+        }
+    };
+
+    print!("{rendered}");
+
+    if config.persist {
+        if let Err(e) = crate::commands::persist::save_page(
+            config.query,
+            &rendered,
+            config.project,
+            config.format,
+        ) {
+            warn!(error = %e, "failed to persist search output");
         }
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[tokio::test]
-    async fn test_search_no_project() {
-        let tmp = TempDir::new().unwrap();
-        // SAFETY: test-only, single-threaded
-        unsafe { std::env::set_var("ARLM_DATA_DIR", tmp.path()) };
-        let project_path = tmp.path().join("nonexistent");
-        let config = SearchConfig {
-            query: "test query",
-            top_k: 10,
-            file_pattern: None,
-            min_score: None,
-            all: false,
-            tier: "auto",
-            max_tokens: None,
-            project: project_path.as_path(),
-            format: Format::Json,
-            verbose: false,
-        };
-        let result = execute(config).await;
-        assert!(result.is_err());
-    }
 }

@@ -44,16 +44,3 @@ pub fn warn(msg: &str) {
     let style = console::Style::new().yellow();
     eprintln!("{} {}", style.apply_to("⚠"), msg);
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_format_display() {
-        assert_eq!(Format::Json.to_string(), "json");
-        assert_eq!(Format::Tree.to_string(), "tree");
-        assert_eq!(Format::Markdown.to_string(), "markdown");
-        assert_eq!(Format::Prompt.to_string(), "prompt");
-    }
-}

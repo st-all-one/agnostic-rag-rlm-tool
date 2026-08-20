@@ -58,16 +58,3 @@ pub fn execute(query: &str, project: &Path, format: Format) -> Result<()> {
 
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_entities_no_project() {
-        let tmp = TempDir::new().unwrap();
-        let result = execute("test", tmp.path(), Format::Json);
-        assert!(result.is_err());
-    }
-}

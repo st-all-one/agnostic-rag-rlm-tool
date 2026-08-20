@@ -1,56 +1,66 @@
 # arlm-cli
 
-Interface de linha de comando para o arlm — agent-agnostic.
+Interface de linha de comando para o **arlm** — *agent-agnostic Recursive Language Model*.
+Conecta-se a um `arlm-server` via gRPC (`--server`) ou roda localmente.
 
 ## Responsabilidades
 
-- **CLI**: Parsing de argumentos com clap derive
-- **Comandos**: 11 subcomandos para todas as operações
-- **Output**: 4 formatos (JSON, Tree, Markdown, Prompt)
-- **Allocator**: mimalloc para performance
-- **Logging**: Flag `--verbose` para logs estruturados
-- **Async**: search e context são async (tokio) para tiers híbridos
+- **CLI (lib + bin):** `src/lib.rs` expõe a API pública; `src/main.rs` é um *thin binary*
+  que faz o parsing e delega o dispatch.
+- **Parsing:** `clap` derive em `src/cli/` (estrutura de subcomandos desacoplada de `main`).
+- **Dispatch:** `src/dispatch/` resolve a precedência de config (CLI > config > ...)
+  e roteia para modo local ou servidor gRPC.
+- **Comandos:** 19 subcomandos, um módulo `commands/<cmd>` cada (alguns subdivididos).
+- **Output:** 4 formatos (`json`, `tree`, `markdown`, `prompt`) em `src/output/`.
+- **Observabilidade:** logs estruturados via `tracing` (`--verbose`) e *timing* de fases
+  com `std::time::Instant` (registrado como `elapsed_ms`).
+- **Resiliência de cliente:** retry com backoff, validação de endereço e TLS automático
+  em `src/client.rs`.
+- **Allocator:** mimalloc para performance.
 
 ## Estrutura
 
 ```
 src/
-├── main.rs              # Entry point, mimalloc, clap, tokio runtime
-├── util.rs              # data_dir(), project_name() helpers
-├── commands/
+├── lib.rs                 # API pública (re-exports) + allows de lint
+├── main.rs                # Thin binary: parse → logging → dispatch
+├── cli/                   # Definição dos argumentos (clap)
 │   ├── mod.rs
-│   ├── run.rs           # arlm run "tarefa" (--llm)
-│   ├── index.rs         # arlm index ./projeto (--watch, --ignore)
-│   ├── search.rs        # arlm search "query" (--all, --tier, --max-tokens)
-│   ├── query.rs         # arlm query "pergunta"
-│   ├── context.rs       # arlm context "tarefa" (--all, --tier, --max-tokens)
-│   ├── status.rs        # arlm status
-│   ├── history.rs       # arlm history
-│   ├── cost.rs          # arlm cost
-│   ├── session.rs       # arlm session create/resume
-│   ├── consolidate.rs   # arlm consolidate
-│   ├── persist.rs       # arlm persist
-│   ├── decay.rs         # arlm decay
-│   ├── mcp.rs           # MCP protocol handler
-│   └── serve.rs         # arlm serve (HTTP/MCP)
+│   ├── root.rs            # Cli, OutputFormatArg, parse_tool_arg
+│   └── commands.rs        # enum Commands + SessionAction
+├── dispatch/              # Roteamento de comandos
+│   ├── mod.rs             # resolução de config + branch local/servidor
+│   ├── local.rs           # execução local (chama commands::*)
+│   └── server.rs          # modo servidor gRPC (formatado por --format)
+├── client.rs              # gRPC client: retry/backoff, TLS, validação
+├── config.rs              # Config (TOML) + seção [server]
+├── metrics.rs             # ArlmMetrics (Prometheus)
+├── util.rs                # data_dir(), project_name()
+├── commands/              # um módulo por subcomando
+│   ├── mod.rs
+│   ├── run/               # engine, setup, live (LiveTree), finalize
+│   ├── serve/             # HTTP/MCP server (handlers, state, logic)
+│   ├── mcp/               # MCP protocol (protocol, session, handlers)
+│   ├── index.rs  search.rs  query.rs  context.rs
+│   ├── status.rs history.rs cost.rs session.rs
+│   ├── consolidate.rs decay.rs cancel.rs checkpoints.rs
+│   ├── restore_page.rs wiki.rs entities.rs persist.rs
 └── output/
-    ├── mod.rs           # Format enum
-    ├── json.rs          # JsonOutput
-    ├── tree.rs          # ASCII tree
-    ├── markdown.rs      # Markdown
-    ├── prompt.rs        # LLM prompt
-    └── live_tree.rs     # Live tree para --live
+    ├── mod.rs             # Format enum
+    ├── json.rs tree.rs markdown.rs prompt.rs
+    └── live_tree/         # LiveTree (model + render) para --live
+tests/                     # testes de integração (sem #[cfg(test)] em src/)
 ```
 
 ## Comandos
 
-| Comando | Descrição | Requer --llm |
-|---------|-----------|--------------|
+| Comando | Descrição | Requer `--llm` |
+|---------|-----------|---------------|
 | `arlm index` | Indexa projeto | Não |
 | `arlm search` | Busca híbrida | Não |
 | `arlm context` | Contexto para agente | Não |
 | `arlm query` | Consulta com RLM | Sim |
-| `arlm run` | Executa RLM recursivo | Sim |
+| `arlm run` | Executa RLM recursivo | **Sim** (`--llm` obrigatório) |
 | `arlm status` | Mostra projetos indexados | Não |
 | `arlm history` | Histórico de consultas | Não |
 | `arlm cost` | Resumo de custos | Não |
@@ -59,32 +69,43 @@ src/
 | `arlm persist` | Salva como wiki pages | Não |
 | `arlm decay` | Salience decay | Não |
 | `arlm serve` | HTTP/MCP server | Não |
+| `arlm cancel` | Cancela run | Não |
+| `arlm checkpoints` | Lista checkpoints | Não |
+| `arlm restore-page` | Restaura wiki page | Não |
+| `arlm wiki` | Gerencia wiki (git) | Não |
+| `arlm entities` | Busca entidades | Não |
+| `arlm mcp` | Model Context Protocol | Não |
 
 ## Flags Principais
 
-### `arlm index`
+### `arlm run`
 
 ```bash
-arlm index ./meu-projeto
-arlm index ./meu-projeto --ignore "dist/" --ignore "*.log"
-arlm index ./meu-projeto --watch
-arlm index ./meu-projeto --chunk-size 1024
+arlm run "analise completa" --llm --backend openai
+arlm run "refactor" --llm --backend anthropic --model claude-3.5-sonnet
+arlm run "fix bug" --llm --depth 5 --max-nodes 100 --live
+arlm run "doc" --llm --persist          # salva o output no wiki
 ```
 
 | Flag | Descrição | Default |
 |------|-----------|---------|
-| `--chunk-size <N>` | Tamanho máximo por chunk | 512 |
-| `--ignore <pattern>` | Padrões de ignore (múltiplos) | `.env`, `*.pem`, `*.key` |
-| `--watch` / `-w` | Reindexa a cada mudança | off |
+| `--llm` | **Obrigatório** para RLM | — |
+| `--backend <name>` | openai, anthropic, ollama, gemini, deepseek, mimo | ollama |
+| `--model <name>` | Modelo | — |
+| `--depth <N>` | Profundidade recursão | 3 |
+| `--max-nodes <N>` | Máximo de nós | 50 |
+| `--concurrency <N>` | Concorrência | 4 |
+| `--max-budget <USD>` | Orçamento | 1.0 |
+| `--live` | Árvore em tempo real (LiveTree) | off |
+| `--persist` | Salva o resultado como wiki page | off |
+| `--session <id>` | Sessão multi-turno | — |
+| `--tool name:desc` | Tool custom p/ o solver | — |
 
-### `arlm search`
+### `arlm search` / `arlm context`
 
 ```bash
-arlm search "auth middleware"
-arlm search "config" --all
-arlm search "error" --tier entity
-arlm search "schema" --max-tokens 4000
-arlm search "bug" --all --tier auto --max-tokens 8000
+arlm search "auth middleware" --all --tier entity --max-tokens 4000
+arlm context "fix login bug" --persist
 ```
 
 | Flag | Descrição | Default |
@@ -95,40 +116,7 @@ arlm search "bug" --all --tier auto --max-tokens 8000
 | `--max-tokens <N>` | Limite de tokens (0=ilimitado) | 8000 |
 | `--file-pattern <pat>` | Filtro por arquivo | — |
 | `--min-score <f>` | Score mínimo | — |
-
-### `arlm context`
-
-```bash
-arlm context "fix login bug"
-arlm context "auth" --all --max-tokens 4000
-arlm context "db schema" --tier entity
-```
-
-| Flag | Descrição | Default |
-|------|-----------|---------|
-| `--top-k <N>` | Número de resultados | 10 |
-| `--all` / `-a` | Busca cross-project | off |
-| `--tier <tier>` | `fts`, `entity`, `vector`, `auto` | auto |
-| `--max-tokens <N>` | Limite de tokens (0=ilimitado) | 8000 |
-
-### `arlm run`
-
-```bash
-arlm run "analise completa" --llm --backend openai
-arlm run "refactor" --llm --backend anthropic --model claude-3.5-sonnet
-arlm run "fix bug" --llm --depth 5 --max-nodes 100 --live
-```
-
-| Flag | Descrição | Default |
-|------|-----------|---------|
-| `--llm` | Habilita modo LLM | — |
-| `--backend <name>` | openai, anthropic, ollama, gemini, deepseek, mimo | ollama |
-| `--model <name>` | Modelo | — |
-| `--depth <N>` | Profundidade recursão | 3 |
-| `--max-nodes <N>` | Máximo de nós | 50 |
-| `--concurrency <N>` | Concorrência | 4 |
-| `--max-budget <USD>` | Orçamento | 1.0 |
-| `--live` | Árvore em tempo real | off |
+| `--persist` | Salva o resultado como wiki page | off |
 
 ## Formatos de Saída
 
@@ -139,12 +127,33 @@ arlm search "query" --format markdown   # Markdown
 arlm search "query" --format prompt     # Prompt para LLM
 ```
 
+O `--format` também é respeitado no modo servidor (`--server`): as respostas gRPC
+são renderizadas conforme o formato escolhido.
+
+## Modo Servidor (`--server`)
+
+```bash
+arlm --server 127.0.0.1:50051 search "query"
+arlm --server 127.0.0.1:50051 status
+```
+
+- Suporta `search`, `status`, `session`, `run`, `cost`, `context`.
+- O endereço padrão é lido da seção `[server]` do `~/.arlm/config.toml` ou
+  `.arlm/config.toml` (campo `addr`), depois da env `ARLM_SERVER_ADDR`.
+- Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e
+  **TLS automático** quando a URL usa `https://`.
+
 ## Flags Globais
 
 ```
 --project <path>        # Caminho do projeto (default: .)
 --format <fmt>          # json|tree|markdown|prompt
---verbose, -v           # Logs detalhados
+--config <path>         # arquivo de config (default: ~/.arlm/config.toml)
+--backend <name>        # override de backend
+--model <name>          # override de modelo
+--agent <name>          # override de agente
+--server <addr>         # usa gRPC remoto em vez de local
+--verbose, -v           # logs estruturados (tracing)
 ```
 
 ## Uso
@@ -153,23 +162,17 @@ arlm search "query" --format prompt     # Prompt para LLM
 # Indexar projeto
 arlm index ./meu-projeto
 
-# Buscar com verbose
+# Buscar com verbose (logs estruturados + timing)
 arlm search "bug no login" --verbose
 
 # Contexto formatado
 arlm context "analise auth" --format prompt
 
-# Output JSON
-arlm search "error" --format json
-
-# Com LLM
+# Com LLM (--llm obrigatório)
 arlm run "analise completa" --llm --backend openai
 
-# Busca cross-project
-arlm search "config" --all
-
-# Com watch mode
-arlm index ./projeto --watch
+# Servidor remoto
+arlm --server 127.0.0.1:50051 status
 ```
 
 ## Integração com Agentes
@@ -194,19 +197,16 @@ arlm index ./projeto --watch
 ## Build
 
 ```bash
-# Debug
-cargo build -p arlm-cli
-
-# Release (otimizado)
-cargo build --release -p arlm-cli
-
+cargo build -p arlm-cli                 # Debug
+cargo build --release -p arlm-cli       # Release (otimizado)
 # Binary: ./target/release/arlm
 ```
 
 ## Testes
 
 ```bash
-cargo test -p arlm-cli
+CARGO_BUILD_JOBS=4 cargo test -p arlm-cli
 ```
 
-49 testes cobrindo: todos os comandos, formatos de output, parsing, watch mode.
+Testes de integração ficam em `tests/` (um arquivo por módulo); não há `#[cfg(test)]`
+dentro de `src/`. Use sempre `CARGO_BUILD_JOBS=4`.

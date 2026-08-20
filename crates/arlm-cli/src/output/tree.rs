@@ -2,6 +2,7 @@ use std::fmt::Write as _;
 
 use console::Style;
 
+#[must_use]
 pub fn render_tree(root_id: &str, task: &str, max_depth: u32) -> String {
     let bold = Style::new().bold();
     let dim = Style::new().dim();
@@ -20,6 +21,7 @@ pub fn render_tree(root_id: &str, task: &str, max_depth: u32) -> String {
     out
 }
 
+#[must_use]
 pub fn render_search_results(results: &[SearchResultItem]) -> String {
     let bold = Style::new().bold();
     let dim = Style::new().dim();
@@ -58,6 +60,7 @@ pub fn render_search_results(results: &[SearchResultItem]) -> String {
     out
 }
 
+#[must_use]
 pub fn render_history_table(rows: &[HistoryRow]) -> String {
     let bold = Style::new().bold();
     let header = format!(
@@ -95,34 +98,4 @@ pub struct HistoryRow {
     pub query: String,
     pub duration: String,
     pub results: String,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_render_tree() {
-        let tree = render_tree("run-001", "analyze project", 3);
-        assert!(tree.contains("run-001"));
-        assert!(tree.contains("analyze project"));
-    }
-
-    #[test]
-    fn test_render_search_results_empty() {
-        let results = render_search_results(&[]);
-        assert!(results.contains("Search Results (0)"));
-    }
-
-    #[test]
-    fn test_render_history_table() {
-        let rows = vec![HistoryRow {
-            date: "2024-01-15 10:30".into(),
-            query: "find bugs".into(),
-            duration: "2.3s".into(),
-            results: "5".into(),
-        }];
-        let table = render_history_table(&rows);
-        assert!(table.contains("find bugs"));
-    }
 }

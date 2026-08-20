@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.3.0] - 2026-08-20
+
+### Added
+- Reorganização em **lib + bin**: `src/lib.rs` expõe a API pública; `src/main.rs`
+  é um *thin binary* que faz parse e delega ao `dispatch`.
+- Módulo `cli/` desacoplado: definição dos argumentos (`Cli`, `Commands`,
+  `SessionAction`, `parse_tool_arg`) separada do entry point.
+- Módulo `dispatch/` (`mod`/`local`/`server`) com resolução de precedência de
+  config e roteamento local/servidor.
+- `commands/run/`, `commands/serve/`, `commands/mcp/` e `output/live_tree/`
+  divididos em módulos menores (<300 linhas), type-driven, com logs
+  estruturados (`tracing`) e *timing* de fases (`elapsed_ms`).
+- Testes de `#[cfg(test)]` extraídos de `src/` para `tests/` (26 arquivos de
+  integração); `src/` não contém mais testes inline.
+- `--persist` em `run`, `search` e `context` (salva output no wiki).
+- `--llm` obrigatório em `run` (erro claro sem a flag).
+- Cliente gRPC resiliente: retry com backoff exponencial, validação de
+  endereço e TLS automático (`https://`).
+- Seção `[server]` no `config.toml` (`addr`) lida pelo `ClientConfig::load()`.
+- `--format` respeitado também no modo servidor (`--server`).
+- Mapeamento `--tier` → `SearchTier` do proto (fts/entity/vector/auto).
+- `LiveTree` integrado ao `run --live` via EventBus.
+
+### Changed
+- `run`, `serve`, `mcp` e `live_tree` refatorados em módulos menores com
+  observabilidade (logs + timing) e segurança de thread (`Send + Sync`).
+- Mensagem de erro do modo servidor lista os comandos suportados.
+
 ## [0.2.0] - 2026-08-19
 
 ### Added
