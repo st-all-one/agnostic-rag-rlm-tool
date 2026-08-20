@@ -58,11 +58,7 @@ pub struct Summarizer {
 impl Summarizer {
     /// Create a new summarizer.
     #[must_use]
-    pub fn new(
-        storage: Storage,
-        llm: Arc<dyn LlmBackend + Send + Sync>,
-        events: EventHub,
-    ) -> Self {
+    pub fn new(storage: Storage, llm: Arc<dyn LlmBackend + Send + Sync>, events: EventHub) -> Self {
         Self {
             storage,
             llm,
@@ -92,7 +88,11 @@ impl Summarizer {
             return Ok(SummaryResult::default());
         }
 
-        let file_count = chunks.iter().map(|c| c.file_path.as_str()).collect::<std::collections::HashSet<_>>().len();
+        let file_count = chunks
+            .iter()
+            .map(|c| c.file_path.as_str())
+            .collect::<std::collections::HashSet<_>>()
+            .len();
         self.tracker.start(u32::try_from(file_count).unwrap_or(0));
 
         // Group chunks by file.
@@ -117,7 +117,11 @@ impl Summarizer {
                     &summary,
                     "file",
                     owned.iter().map(|c| c.id).collect(),
-                    owned.iter().map(|c| c.content.as_str()).collect::<Vec<_>>().join(""),
+                    owned
+                        .iter()
+                        .map(|c| c.content.as_str())
+                        .collect::<Vec<_>>()
+                        .join(""),
                     0.8,
                 )?;
 
@@ -130,7 +134,13 @@ impl Summarizer {
                     .unwrap_or("root")
                     .to_string();
                 module_groups.entry(module).or_default().push(summary);
-                self.emit_progress(&job.run_id, file_path, file_summaries, u32::try_from(file_groups.len()).unwrap_or(0), format!("summarizing {file_path}"));
+                self.emit_progress(
+                    &job.run_id,
+                    file_path,
+                    file_summaries,
+                    u32::try_from(file_groups.len()).unwrap_or(0),
+                    format!("summarizing {file_path}"),
+                );
             }
         }
 
@@ -142,22 +152,52 @@ impl Summarizer {
                 let summary = self.call_llm(&format!(
                     "Summarize the module at '{module_path}'. Combine these file summaries into a coherent module-level summary:\n\n{combined}"
                 )).await?;
-                self.persist(job.buffer_id, &summary, "module", Vec::new(), module_path.clone(), 0.7)?;
+                self.persist(
+                    job.buffer_id,
+                    &summary,
+                    "module",
+                    Vec::new(),
+                    module_path.clone(),
+                    0.7,
+                )?;
                 module_summaries += 1;
-                self.emit_progress(&job.run_id, module_path, module_summaries, module_groups.len() as u32, format!("summarizing module {module_path}"));
+                self.emit_progress(
+                    &job.run_id,
+                    module_path,
+                    module_summaries,
+                    module_groups.len() as u32,
+                    format!("summarizing module {module_path}"),
+                );
             }
         }
 
         // Project scope.
         let mut project_summaries = 0u32;
         if job.max_scope >= 2 {
-            let all = module_groups.values().flat_map(|v| v.clone()).collect::<Vec<_>>().join("\n\n");
+            let all = module_groups
+                .values()
+                .flat_map(|v| v.clone())
+                .collect::<Vec<_>>()
+                .join("\n\n");
             let summary = self.call_llm(&format!(
                 "Summarize the entire project. Combine these module summaries into a coherent project-level summary:\n\n{all}"
             )).await?;
-            self.persist(job.buffer_id, &summary, "project", Vec::new(), "project".to_string(), 0.6)?;
+            self.persist(
+                job.buffer_id,
+                &summary,
+                "project",
+                Vec::new(),
+                "project".to_string(),
+                0.6,
+            )?;
             project_summaries = 1;
-            self.emit_progress(&job.run_id, "project", 1, 1, "summarizing project".to_string());
+            self.emit_progress(
+                &job.run_id,
+                "project",
+                1,
+                1,
+                "summarizing project".to_string(),
+            );
         }
 
         self.tracker.finish();
@@ -263,15 +303,16 @@ impl Summarizer {
         total: u32,
         message: String,
     ) {
-        self.events.publish_summarize(arlm_proto::proto::SummarizeProgress {
-            run_id: run_id.to_string(),
-            current_scope: 0,
-            current_file: current_file.to_string(),
-            completed: i32::try_from(completed).unwrap_or(i32::MAX),
-            total: i32::try_from(total).unwrap_or(i32::MAX),
-            elapsed_ms: 0.0,
-            message,
-        });
+        self.events
+            .publish_summarize(arlm_proto::proto::SummarizeProgress {
+                run_id: run_id.to_string(),
+                current_scope: 0,
+                current_file: current_file.to_string(),
+                completed: i32::try_from(completed).unwrap_or(i32::MAX),
+                total: i32::try_from(total).unwrap_or(i32::MAX),
+                elapsed_ms: 0.0,
+                message,
+            });
     }
 }
 

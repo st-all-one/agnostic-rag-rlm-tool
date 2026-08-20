@@ -106,17 +106,14 @@ pub(crate) async fn handle_search(
     let results = tokio::task::spawn_blocking(move || {
         let conn = storage.connection()?;
         conn.execute(|conn| {
-            if let Ok(limit_rows) = conn.query_row(
-                "SELECT COUNT(*) FROM chunks_fts",
-                [],
-                |r| r.get::<_, i64>(0),
-            ) {
+            if let Ok(limit_rows) = conn.query_row("SELECT COUNT(*) FROM chunks_fts", [], |r| {
+                r.get::<_, i64>(0)
+            }) {
                 if limit_rows == 0 {
                     sync_fts(conn)?;
                 }
             }
-            bm25_search(conn, buffer_id, &fts_query, max_results)
-                .map_err(anyhow::Error::from)
+            bm25_search(conn, buffer_id, &fts_query, max_results).map_err(anyhow::Error::from)
         })
     })
     .await
@@ -173,10 +170,12 @@ pub(crate) async fn handle_build_context(
 
     let fts_query = sanitize_fts(&task);
     let storage = state.storage.clone();
-    let ctx = tokio::task::spawn_blocking(move || assemble_context(&storage, buffer_id, &fts_query, max_tokens))
-        .await
-        .map_err(internal)?
-        .map_err(internal)?;
+    let ctx = tokio::task::spawn_blocking(move || {
+        assemble_context(&storage, buffer_id, &fts_query, max_tokens)
+    })
+    .await
+    .map_err(internal)?
+    .map_err(internal)?;
 
     tracing::info!(
         project = %project,
@@ -198,9 +197,9 @@ fn assemble_context(
 ) -> anyhow::Result<ContextResponse> {
     let conn = storage.connection()?;
     let results = conn.execute(|conn| {
-        if let Ok(limit_rows) =
-            conn.query_row("SELECT COUNT(*) FROM chunks_fts", [], |r| r.get::<_, i64>(0))
-        {
+        if let Ok(limit_rows) = conn.query_row("SELECT COUNT(*) FROM chunks_fts", [], |r| {
+            r.get::<_, i64>(0)
+        }) {
             if limit_rows == 0 {
                 sync_fts(conn)?;
             }

@@ -37,9 +37,12 @@ fn test_chunk_lines_basic() {
 fn test_chunk_lines_overlap() {
     let content = "1\n2\n3\n4\n5";
     let chunks = chunk_lines(content, 3, 1);
+    // chunk 1 covers lines 1..3; chunk 2 starts at line 3 (1 line of overlap)
+    assert_eq!(chunks.len(), 2);
     assert_eq!(chunks[0].0, 1);
+    assert_eq!(chunks[0].1, 3);
     assert_eq!(chunks[1].0, 3);
-    assert_eq!(chunks[2].0, 5);
+    assert_eq!(chunks[1].1, 5);
 }
 
 #[test]

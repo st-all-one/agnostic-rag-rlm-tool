@@ -172,9 +172,11 @@ impl ServerConfig {
         let kind = BackendKind::from_str(&self.llm.backend)
             .with_context(|| format!("unknown llm backend '{}'", self.llm.backend))?;
 
-        let api_key = self.llm.api_key.clone().or_else(|| {
-            env_key_for(&kind).and_then(|key| std::env::var(key).ok())
-        });
+        let api_key = self
+            .llm
+            .api_key
+            .clone()
+            .or_else(|| env_key_for(&kind).and_then(|key| std::env::var(key).ok()));
 
         Ok(get_backend(&kind, api_key, self.llm.base_url.clone())
             .context("failed to build LLM backend")?)

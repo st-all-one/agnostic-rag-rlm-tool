@@ -9,12 +9,12 @@ use std::sync::Arc;
 
 use arlm_core::{RlmBackend, RlmEvent, RlmMode, StartRunInput, run_rlm_engine_with_events};
 use arlm_proto::proto::*;
-use tokio_stream::wrappers::BroadcastStream;
 use futures::StreamExt as _;
+use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Response, Status};
 
-use crate::grpc::error::{internal, not_found};
 use crate::grpc::EventStream;
+use crate::grpc::error::{internal, not_found};
 use crate::state::AppState;
 use crate::store;
 use crate::timing::Timer;
@@ -40,8 +40,15 @@ pub(crate) async fn handle_start_run(
         Some(req.model.clone())
     };
 
-    let input = build_run_input(&run_id, &req.project, &req.task, &backend, model.clone(), req.options)
-        .map_err(|e| Status::invalid_argument(format!("invalid run options: {e}")))?;
+    let input = build_run_input(
+        &run_id,
+        &req.project,
+        &req.task,
+        &backend,
+        model.clone(),
+        req.options,
+    )
+    .map_err(|e| Status::invalid_argument(format!("invalid run options: {e}")))?;
 
     let run = store::RunRow {
         id: run_id.clone(),

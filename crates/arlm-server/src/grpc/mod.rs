@@ -21,8 +21,8 @@ pub mod summarize;
 
 use std::pin::Pin;
 
-use arlm_proto::proto::*;
 use arlm_proto::proto::arlm_service_server::ArlmService;
+use arlm_proto::proto::*;
 use futures::Stream;
 use tonic::{Request, Response, Status};
 
@@ -64,10 +64,7 @@ impl ArlmService for ArlmGrpcService {
         project::handle_list_projects(&self.state).await
     }
 
-    async fn get_project(
-        &self,
-        request: Request<String>,
-    ) -> Result<Response<ProjectInfo>, Status> {
+    async fn get_project(&self, request: Request<String>) -> Result<Response<ProjectInfo>, Status> {
         let _timer = crate::timing::Timer::new("handler.get_project");
         project::handle_get_project(&self.state, request.into_inner()).await
     }
@@ -148,10 +145,7 @@ impl ArlmService for ArlmGrpcService {
         session::handle_list_sessions(&self.state, request.into_inner()).await
     }
 
-    async fn get_session(
-        &self,
-        request: Request<String>,
-    ) -> Result<Response<SessionInfo>, Status> {
+    async fn get_session(&self, request: Request<String>) -> Result<Response<SessionInfo>, Status> {
         let _timer = crate::timing::Timer::new("handler.get_session");
         session::handle_get_session(&self.state, request.into_inner()).await
     }

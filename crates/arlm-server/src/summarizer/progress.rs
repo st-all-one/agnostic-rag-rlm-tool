@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 /// Progress tracker for summarization operations.
 #[derive(Clone)]
@@ -40,10 +40,7 @@ impl ProgressTracker {
 
     /// Update progress for a completed file.
     pub fn update(&self, file: &str, completed: u32) {
-        self.inner
-            .current_file
-            .lock()
-            .replace_range(.., file);
+        self.inner.current_file.lock().replace_range(.., file);
         self.inner.completed.store(completed, Ordering::Relaxed);
     }
 

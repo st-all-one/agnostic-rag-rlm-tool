@@ -51,11 +51,9 @@ pub struct RunRow {
     pub max_depth: i64,
 }
 
-const PROJECT_COLUMNS: &str =
-    "id, uuid, name, path, total_chunks, total_files, created_at";
+const PROJECT_COLUMNS: &str = "id, uuid, name, path, total_chunks, total_files, created_at";
 
-const RUN_COLUMNS: &str =
-    "id, project, task, backend, model, status, partial_answer, started_at, finished_at, duration_ms, total_tokens, total_cost, nodes_visited, max_depth";
+const RUN_COLUMNS: &str = "id, project, task, backend, model, status, partial_answer, started_at, finished_at, duration_ms, total_tokens, total_cost, nodes_visited, max_depth";
 
 fn row_to_project(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectRow> {
     Ok(ProjectRow {
@@ -93,8 +91,8 @@ fn row_to_run(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunRow> {
         duration_ms: row.get(9)?,
         total_tokens: row.get(10)?,
         total_cost: row.get(11)?,
-        nodes_visited: row.get(12)?,
-        max_depth: row.get(13)?,
+        nodes_visited: row.get::<_, Option<i64>>(12)?.unwrap_or(0),
+        max_depth: row.get::<_, Option<i64>>(13)?.unwrap_or(0),
     })
 }
 
@@ -243,12 +241,7 @@ pub fn list_projects(storage: &Storage) -> Result<Vec<ProjectRow>> {
 /// # Errors
 ///
 /// Returns an error if the insert fails.
-pub fn insert_session(
-    storage: &Storage,
-    id: &str,
-    project: &str,
-    title: &str,
-) -> Result<()> {
+pub fn insert_session(storage: &Storage, id: &str, project: &str, title: &str) -> Result<()> {
     let conn = storage
         .connection()
         .context("failed to acquire connection")?;
@@ -370,10 +363,7 @@ pub fn insert_session_turn(
 /// # Errors
 ///
 /// Returns an error if the insert fails.
-pub fn insert_run(
-    storage: &Storage,
-    run: &RunRow,
-) -> Result<()> {
+pub fn insert_run(storage: &Storage, run: &RunRow) -> Result<()> {
     let conn = storage
         .connection()
         .context("failed to acquire connection")?;
@@ -492,11 +482,7 @@ pub fn fail_run(storage: &Storage, run_id: &str, error: &str) -> Result<()> {
         conn.execute(
             "UPDATE runs SET status = 'failed', partial_answer = ?1, finished_at = ?2 \
              WHERE id = ?3",
-            params![
-                error,
-                chrono::Utc::now().timestamp(),
-                run_id,
-            ],
+            params![error, chrono::Utc::now().timestamp(), run_id,],
         )?;
         Ok(())
     })
@@ -749,14 +735,8 @@ pub fn count_all_summaries(storage: &Storage) -> Result<i64> {
         .connection()
         .context("failed to acquire connection")?;
 
-    conn.execute(|conn| {
-        Ok(conn.query_row(
-            "SELECT COUNT(*) FROM summaries",
-            [],
-            |row| row.get(0),
-        )?)
-    })
-    .context("failed to count all summaries")
+    conn.execute(|conn| Ok(conn.query_row("SELECT COUNT(*) FROM summaries", [], |row| row.get(0))?))
+        .context("failed to count all summaries")
 }
 
 /// Buffer id for a project name.

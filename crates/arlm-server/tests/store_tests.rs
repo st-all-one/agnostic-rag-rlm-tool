@@ -63,7 +63,9 @@ fn test_session_crud_and_turns() {
     let session_id = "sess-1";
     store::insert_session(&storage, session_id, "proj", "Hello").unwrap();
 
-    let row = store::get_session(&storage, session_id).unwrap().expect("session");
+    let row = store::get_session(&storage, session_id)
+        .unwrap()
+        .expect("session");
     assert_eq!(row.title, "Hello");
 
     store::insert_session_turn(&storage, session_id, "query", "answer").unwrap();
@@ -142,5 +144,8 @@ fn test_cancel_run_and_proto_status() {
         store::proto_run_status("completed"),
         arlm_proto::proto::RunStatus::StatusCompleted
     );
-    assert_eq!(store::db_run_status(arlm_proto::proto::RunStatus::StatusRunning), "running");
+    assert_eq!(
+        store::db_run_status(arlm_proto::proto::RunStatus::StatusRunning),
+        "running"
+    );
 }

@@ -1,12 +1,12 @@
 //! Server status RPCs: `GetServerStatus`, `StreamEvents`.
 
 use arlm_proto::proto::*;
-use tokio_stream::wrappers::BroadcastStream;
 use futures::StreamExt as _;
+use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Response, Status};
 
-use crate::grpc::error::stream_error;
 use crate::grpc::EventStream;
+use crate::grpc::error::stream_error;
 use crate::state::AppState;
 use crate::store;
 
@@ -21,12 +21,10 @@ pub(crate) async fn handle_get_server_status(
     let storage = state.storage.clone();
     let stats = store::blocking(move || {
         let projects = store::list_projects(&storage)?;
-        let chunks: i64 = storage
-            .connection()?
-            .execute(|conn| {
-                conn.query_row("SELECT COUNT(*) FROM chunks", [], |row| row.get(0))
-                    .map_err(anyhow::Error::from)
-            })?;
+        let chunks: i64 = storage.connection()?.execute(|conn| {
+            conn.query_row("SELECT COUNT(*) FROM chunks", [], |row| row.get(0))
+                .map_err(anyhow::Error::from)
+        })?;
         let summaries = store::count_all_summaries(&storage)?;
         let active_runs = store::count_active_runs(&storage)?;
         Ok((projects.len(), chunks, summaries, active_runs))

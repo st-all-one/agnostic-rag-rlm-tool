@@ -7,7 +7,10 @@ use crate::grpc::error::{internal, not_found};
 use crate::state::AppState;
 use crate::store;
 
-fn project_to_info(row: &store::ProjectRow, created_at: Option<prost_types::Timestamp>) -> ProjectInfo {
+fn project_to_info(
+    row: &store::ProjectRow,
+    created_at: Option<prost_types::Timestamp>,
+) -> ProjectInfo {
     ProjectInfo {
         id: row.uuid.clone().unwrap_or_else(|| row.id.to_string()),
         name: row.name.clone(),
@@ -38,12 +41,11 @@ pub(crate) async fn handle_create_project(
     let path = req.root_path.clone();
     let storage = state.storage.clone();
 
-    let project_id = tokio::task::spawn_blocking(move || {
-        store::insert_project(&storage, &name, &path)
-    })
-    .await
-    .map_err(internal)?
-    .map_err(internal)?;
+    let project_id =
+        tokio::task::spawn_blocking(move || store::insert_project(&storage, &name, &path))
+            .await
+            .map_err(internal)?
+            .map_err(internal)?;
 
     let storage = state.storage.clone();
     let row = store::blocking(move || store::get_project_by_id(&storage, project_id))
@@ -112,8 +114,5 @@ pub(crate) async fn handle_get_project(
 }
 
 fn ts(seconds: i64) -> prost_types::Timestamp {
-    prost_types::Timestamp {
-        seconds,
-        nanos: 0,
-    }
+    prost_types::Timestamp { seconds, nanos: 0 }
 }

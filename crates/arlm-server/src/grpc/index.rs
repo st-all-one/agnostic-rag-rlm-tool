@@ -36,11 +36,12 @@ pub(crate) async fn handle_index_project(
 
     let project_storage = state.storage.clone();
     let project_for_buffer = project.clone();
-    let buffer_id =
-        store::blocking(move || store::buffer_id_for_project(&project_storage, &project_for_buffer))
-            .await
-            .map_err(internal)?
-            .ok_or_else(|| not_found("project not found"))?;
+    let buffer_id = store::blocking(move || {
+        store::buffer_id_for_project(&project_storage, &project_for_buffer)
+    })
+    .await
+    .map_err(internal)?
+    .ok_or_else(|| not_found("project not found"))?;
 
     let root = std::path::PathBuf::from(&req.root_path);
     if !root.is_dir() {

@@ -5,12 +5,12 @@
 //! and returns immediately; progress is streamed through the event hub.
 
 use arlm_proto::proto::*;
-use tokio_stream::wrappers::BroadcastStream;
 use futures::StreamExt as _;
+use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Response, Status};
 
-use crate::grpc::error::{internal, not_found};
 use crate::grpc::EventStream;
+use crate::grpc::error::{internal, not_found};
 use crate::state::AppState;
 use crate::store;
 use crate::summarizer::{SummarizeJob, cost::estimate_cost};
@@ -153,9 +153,8 @@ pub(crate) fn handle_stream_summarize_progress(
 ) -> Result<Response<EventStream<SummarizeProgress>>, Status> {
     let rx = state.events.register_summarize(&run_id);
 
-    let stream = BroadcastStream::new(rx).map(|item| {
-        item.map_err(|e| Status::internal(format!("summarize stream error: {e}")))
-    });
+    let stream = BroadcastStream::new(rx)
+        .map(|item| item.map_err(|e| Status::internal(format!("summarize stream error: {e}"))));
 
     Ok(Response::new(Box::pin(stream)))
 }

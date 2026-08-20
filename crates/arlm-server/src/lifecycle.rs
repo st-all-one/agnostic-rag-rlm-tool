@@ -27,8 +27,8 @@ pub async fn run() -> Result<()> {
 
     info!(addr = %config.listen_addr, backend = %config.llm.backend, model = %config.llm.model, "starting arlm-server");
 
-    let storage =
-        Storage::open_pooled(&config.data_dir, config.pool_size).context("failed to open storage")?;
+    let storage = Storage::open_pooled(&config.data_dir, config.pool_size)
+        .context("failed to open storage")?;
 
     let llm = AppState::build_llm(&config).context("failed to configure LLM backend")?;
 
@@ -84,8 +84,7 @@ pub async fn run_server(
 }
 
 fn load_file(path: &PathBuf) -> Result<Vec<u8>> {
-    std::fs::read(path)
-        .with_context(|| format!("failed to read TLS file {}", path.display()))
+    std::fs::read(path).with_context(|| format!("failed to read TLS file {}", path.display()))
 }
 
 /// Wait for a shutdown signal (SIGINT or SIGTERM).
@@ -94,9 +93,8 @@ async fn shutdown_signal() {
 
     #[cfg(unix)]
     {
-        let mut sigterm =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                .expect("failed to install SIGTERM handler");
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler");
 
         tokio::select! {
             _ = ctrl_c => {

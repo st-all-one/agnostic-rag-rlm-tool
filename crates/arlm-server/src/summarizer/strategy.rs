@@ -42,8 +42,14 @@ pub fn build_summary_prompt(chunks: &[RawChunk], scope: &str) -> Result<String> 
         format!("File: {}", chunks[0].file_path)
     } else {
         let files: Vec<&str> = chunks.iter().map(|c| c.file_path.as_str()).collect();
-        let unique_files = files.iter().copied().collect::<std::collections::HashSet<_>>();
-        format!("Files: {}", unique_files.iter().cloned().collect::<Vec<_>>().join(", "))
+        let unique_files = files
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>();
+        format!(
+            "Files: {}",
+            unique_files.iter().cloned().collect::<Vec<_>>().join(", ")
+        )
     };
 
     let chunks_text = chunks

@@ -119,6 +119,6 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 13);
+        assert_eq!(version, MIGRATIONS.len() as i64);
     }
 }

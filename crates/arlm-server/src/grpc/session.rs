@@ -117,11 +117,9 @@ pub(crate) async fn handle_add_session_turn(
     let query = req.query.clone();
     let response = req.response.clone();
 
-    store::blocking(move || {
-        store::insert_session_turn(&storage, &session_id, &query, &response)
-    })
-    .await
-    .map_err(internal)?;
+    store::blocking(move || store::insert_session_turn(&storage, &session_id, &query, &response))
+        .await
+        .map_err(internal)?;
 
     Ok(Response::new(SessionTurn {
         query: req.query,
@@ -131,8 +129,5 @@ pub(crate) async fn handle_add_session_turn(
 }
 
 fn ts(seconds: i64) -> prost_types::Timestamp {
-    prost_types::Timestamp {
-        seconds,
-        nanos: 0,
-    }
+    prost_types::Timestamp { seconds, nanos: 0 }
 }

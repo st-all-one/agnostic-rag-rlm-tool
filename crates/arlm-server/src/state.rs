@@ -54,8 +54,7 @@ impl AppState {
         );
 
         let events = EventHub::new();
-        let summarize_tx =
-            summarizer::spawn_worker(storage.clone(), llm.clone(), events.clone());
+        let summarize_tx = summarizer::spawn_worker(storage.clone(), llm.clone(), events.clone());
 
         Ok(Self {
             storage,
