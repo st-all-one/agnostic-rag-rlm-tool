@@ -136,7 +136,45 @@ install_cli() {
     # Create config directory
     mkdir -p "$DATA_DIR"
 
-    success "Configuration directory: $DATA_DIR"
+    # Guarantee a valid config.toml exists at $DATA_DIR/config.toml
+    local config_file="${DATA_DIR}/config.toml"
+    if [ ! -f "$config_file" ]; then
+        info "Creating default config at ${config_file}"
+
+        local example_src=""
+        if [ -f "config.toml.example" ]; then
+            example_src="config.toml.example"
+        elif [ -f "${0%/*}/config.toml.example" ]; then
+            example_src="${0%/*}/config.toml.example"
+        fi
+
+        if [ -n "$example_src" ]; then
+            cp "$example_src" "$config_file"
+        else
+            local example_url="https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/config.toml.example"
+            download "$example_url" "$config_file" || true
+        fi
+
+        # If the copy/download did not yield a valid config, write a minimal
+        # but valid default so the file always exists.
+        if ! grep -Fq '[[backends]]' "$config_file" 2>/dev/null; then
+            cat > "$config_file" << 'EOF'
+# arlm default config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/config.toml.example
+[[backends]]
+name = "ollama"
+family = "ollama"
+base_url = "http://localhost:11434"
+model = "llama3"
+completions_path = "api/chat"
+auth = "none"
+EOF
+        fi
+
+        chmod 600 "$config_file"
+        success "Default config created: $config_file"
+    else
+        success "Config already exists: $config_file (keeping existing)"
+    fi
 }
 
 # Install server via Docker

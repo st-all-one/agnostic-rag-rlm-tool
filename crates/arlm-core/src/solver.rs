@@ -113,6 +113,8 @@ pub async fn solve_task(
             temperature: None,
             max_tokens: Some(2048),
             stop: None,
+            seed: None,
+            tools: None,
         });
 
         let response = retry_with_backoff(&input.retry_policy.inner, || {
@@ -182,6 +184,8 @@ pub async fn solve_task(
         temperature: None,
         max_tokens: Some(2048),
         stop: None,
+        seed: None,
+        tools: None,
     });
 
     let final_response = retry_with_backoff(&input.retry_policy.inner, || {
@@ -269,6 +273,8 @@ async fn compact_messages(
         temperature: Some(0.3),
         max_tokens: Some(1024),
         stop: None,
+        seed: None,
+        tools: None,
     };
 
     let response = retry_with_backoff(retry_config, || {
@@ -443,6 +449,8 @@ impl PersistentSolver {
             temperature: None,
             max_tokens: Some(2048),
             stop: None,
+            seed: None,
+            tools: None,
         });
 
         let response = retry_with_backoff(&input.retry_policy.inner, || {
@@ -654,6 +662,8 @@ async fn run_repl_loop(
             temperature: None,
             max_tokens: Some(2048),
             stop: None,
+            seed: None,
+            tools: None,
         });
 
         let response = retry_with_backoff(&input.retry_policy.inner, || {
@@ -715,6 +725,8 @@ async fn run_repl_loop(
         temperature: None,
         max_tokens: Some(2048),
         stop: None,
+        seed: None,
+        tools: None,
     });
 
     let final_response = retry_with_backoff(&input.retry_policy.inner, || {

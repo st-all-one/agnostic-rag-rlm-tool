@@ -106,6 +106,8 @@ impl HybridSearch {
             temperature: Some(0.0),
             max_tokens: Some(RERANK_MAX_TOKENS),
             stop: None,
+            seed: None,
+            tools: None,
         };
 
         let response = backend

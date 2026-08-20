@@ -1,71 +1,130 @@
 # arlm-llm
 
-Abstração unificada de backends LLM para o arlm.
+Abstração unificada e **agnóstica a provider** de backends LLM para o arlm.
 
 ## Responsabilidades
 
-- **Trait**: Interface comum `LlmBackend` para todos os backends
-- **Backends**: OpenAI, Anthropic, Ollama, Gemini
-- **Retry**: Lógica de retry com exponential backoff
-- **Pricing**: Tabela de preços (USD por 1M tokens)
+- **Trait**: Interface comum `LlmBackend` para todos os backends (async, `Send + Sync`)
+- **Backend genérico**: `GenericBackend` — um único backend dirigido por `BackendConfig`
+- **Config**: `BackendConfig` totalmente deserializável (TOML/JSON); presets `openai`, `anthropic`, `gemini`, `ollama`, `deepseek`, `mimo`
+- **Famílias de protocolo**: `BackendFamily` (OpenAi, Anthropic, Gemini, Ollama) mapeia request/response
+- **Retry**: Retry com exponential backoff (429, 5xx, erros de conexão/timeout)
+- **Pricing**: Tabela de preços (USD por 1M tokens) + `cost_usd` no `UsageSummary`
+- **Transport**: HTTP compartilhado (`transport.rs`) com logs estruturados e timing
+- **Fallback**: `ModelFallback` encadeia backend primário → secundário (+ health check)
+- **Token counting**: `TokenCounter` + `ModelContextLimits` (janela de contexto)
 
 ## Estrutura
 
 ```
 src/
-├── lib.rs          # Re-exports
-├── types.rs        # CompletionRequest, CompletionResponse, UsageSummary
-├── trait_llm.rs    # LlmBackend trait async
-├── factory.rs      # get_backend() factory function
-├── openai.rs       # OpenAI API
-├── anthropic.rs    # Anthropic API
-├── ollama.rs       # Ollama (local)
-├── gemini.rs       # Google Gemini
-├── retry.rs        # RetryConfig, retry_with_backoff
-└── pricing.rs      # PricingTable com USD/1M tokens
+├── lib.rs            # Re-exports, Timer de timing
+├── types.rs          # CompletionRequest, CompletionResponse, UsageSummary, LlmError, ToolDefinition
+├── trait_llm.rs      # LlmBackend trait async
+├── factory.rs        # get_backend() / get_backend_from_config() / BackendKind
+├── config.rs         # BackendConfig, BackendFamily, AuthScheme, HealthMethod (presets + TOML)
+├── backend.rs        # GenericBackend (request/response por família, auth, health)
+├── transport.rs      # request_completion() — POST/status/retry compartilhado
+├── retry.rs          # RetryConfig, retry_with_backoff
+├── pricing.rs        # PricingTable, ModelPricing, estimate_default()
+├── fallback.rs       # ModelFallback (primary → fallback)
+└── token_counter.rs  # TokenCounter, ModelContextLimits
 ```
 
 ## Uso
 
+### Via `BackendKind` (compatível com versões anteriores)
+
 ```rust
-use arlm_llm::{get_backend, CompletionRequest};
+use arlm_llm::{get_backend, BackendKind, CompletionRequest, Message, Role};
 
-// Criar backend
-let backend = get_backend("openai", "gpt-4")?;
+let backend = get_backend(&BackendKind::OpenAI, Some("sk-...".into()), None)?;
+```
 
-// Completar
-let response = backend.complete(&CompletionRequest {
-    prompt: "Analise este código".to_string(),
-    system: Some("Você é um analista".into()),
-    model: Some("gpt-4".to_string()),
-    max_tokens: Some(1000),
-    ..Default::default()
-}).await?;
+### Via configuração (genérico, dirigido por `config.toml`)
 
-println!("Resposta: {}", response.text);
+```rust
+use arlm_llm::{get_backend_from_config, BackendConfig, CompletionRequest, Message, Role};
+
+// A partir de um preset:
+let cfg = BackendConfig::anthropic(Some("sk-...".into()));
+let backend = get_backend_from_config(cfg)?;
+
+// Ou diretamente de TOML/JSON:
+// [[backends]]
+// name = "my-openai"
+// family = "openai"
+// api_key = "sk-..."
+// model = "gpt-4o"
+```
+
+```rust
+let response = backend
+    .complete(CompletionRequest {
+        model: "gpt-4o".to_string(),
+        messages: vec![Message { role: Role::User, content: "Analise este código".to_string() }],
+        temperature: Some(0.7),
+        max_tokens: Some(1000),
+        stop: None,
+        seed: Some(42),
+        tools: None,
+    })
+    .await?;
+
+println!("Resposta: {}", response.content);
 println!("Custo: ${:.4}", response.usage.cost_usd);
 ```
 
-## Backends
+## Carregando de arquivo
 
-| Backend | Modelo Padrão | Autenticação |
-|---------|---------------|--------------|
-| OpenAI | gpt-4 | API key |
-| Anthropic | claude-3-opus | API key |
-| Ollama | llama3 | Local (sem key) |
-| Gemini | gemini-pro | API key |
+`BackendConfig` é totalmente deserializável de TOML. O arquivo padrão fica em
+`~/.arlm/config.toml` (criado pelo `install.sh` a partir de `config.toml.example`,
+que documenta todos os parâmetros). Carregue com:
+
+```rust
+use arlm_llm::LlmConfig;
+use std::path::Path;
+
+let path = Path::new(&format!(
+    "{}/.arlm/config.toml",
+    std::env::var("HOME").unwrap_or_default()
+));
+let cfg = LlmConfig::from_file(&path).expect("config inválido");
+for backend in cfg.backends() {
+    let _backend = arlm_llm::get_backend_from_config(backend.clone())?;
+}
+```
+
+## Backends (presets → família de protocolo)
+
+| Preset | Família | Autenticação | seed | tools (function calling) |
+|--------|---------|--------------|------|--------------------------|
+| openai | OpenAi | Bearer | ✓ | ✓ |
+| anthropic | Anthropic | Header (`x-api-key`) | — | — (formato próprio) |
+| ollama | Ollama | Nenhuma (local) | ✓ | — |
+| gemini | Gemini | Query (`?key=`) | ✓ | — (formato próprio) |
+| deepseek | OpenAi | Bearer | ✓ | ✓ |
+| mimo | OpenAi | Bearer | ✓ | ✓ |
+
+Adicionar um novo provider exige **apenas** uma entrada de `BackendConfig` — nenhum código novo.
+
+## Model Fallback
+
+```rust
+use std::sync::Arc;
+use arlm_llm::{get_backend, BackendKind, ModelFallback};
+
+let primary = get_backend(&BackendKind::OpenAI, Some("sk-...".into()), None)?;
+let fallback = get_backend(&BackendKind::Ollama, None, Some("http://localhost:11434".into()))?;
+let chain = ModelFallback::new(primary, Some(fallback)).with_health_check(true);
+```
 
 ## Retry Logic
 
 ```rust
-let config = RetryConfig {
-    max_retries: 3,
-    base_delay_ms: 1000,
-    max_delay_ms: 30000,
-    backoff_factor: 2.0,
-};
-
-// Retry automático em erros 429, 500, 502, 503
+use arlm_llm::RetryConfig;
+let config = RetryConfig::default(); // max_retries=3, base=1000ms, max=30000ms, backoff×2
+// Retry automático em 429, 5xx, Connection e Timeout.
 ```
 
 ## Testes
@@ -74,4 +133,4 @@ let config = RetryConfig {
 cargo test -p arlm-llm
 ```
 
-51 testes cobrindo: todos os backends, retry logic, pricing, tipos.
+Cobrindo: tipos, trait mock, factory (6 presets/`BackendKind`), `config` (presets + (de)serialização), `backend` (build_request/parse_response/url/auth por família), pricing, retry e transport.

@@ -97,6 +97,8 @@ impl RootCompactor {
             temperature: Some(0.2),
             max_tokens: Some(1024),
             stop: None,
+            seed: None,
+            tools: None,
         };
 
         let response = retry_with_backoff(retry_config, || {

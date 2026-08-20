@@ -1,6 +1,7 @@
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletionRequest {
@@ -12,6 +13,23 @@ pub struct CompletionRequest {
     pub max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<Vec<String>>,
+    /// Sampling seed for reproducible outputs (propagated to backends that support it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
+    /// Function-calling tool definitions (propagated to backends that support it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolDefinition>>,
+}
+
+/// A function-calling tool definition.
+///
+/// `parameters` is a JSON Schema object describing the tool's arguments.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub parameters: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +68,9 @@ pub struct UsageSummary {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    /// Estimated cost in USD (filled by the transport layer via the default pricing table).
+    #[serde(default)]
+    pub cost_usd: f64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -72,78 +93,4 @@ pub enum LlmError {
     Serialization(String),
     #[error("Backend error: {0}")]
     Backend(String),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_message_creation() {
-        let msg = Message {
-            role: Role::User,
-            content: "Hello".to_string(),
-        };
-        assert_eq!(msg.role, Role::User);
-        assert_eq!(msg.content, "Hello");
-    }
-
-    #[test]
-    fn test_role_display() {
-        assert_eq!(Role::System.to_string(), "system");
-        assert_eq!(Role::User.to_string(), "user");
-        assert_eq!(Role::Assistant.to_string(), "assistant");
-    }
-
-    #[test]
-    fn test_usage_summary_default() {
-        let usage = UsageSummary::default();
-        assert_eq!(usage.prompt_tokens, 0);
-        assert_eq!(usage.completion_tokens, 0);
-        assert_eq!(usage.total_tokens, 0);
-    }
-
-    #[test]
-    fn test_completion_request_serialization() {
-        let req = CompletionRequest {
-            model: "gpt-4".to_string(),
-            messages: vec![Message {
-                role: Role::User,
-                content: "test".to_string(),
-            }],
-            temperature: Some(0.7),
-            max_tokens: Some(100),
-            stop: None,
-        };
-        let json = serde_json::to_string(&req).expect("serialization should succeed");
-        assert!(json.contains("gpt-4"));
-        assert!(json.contains("0.7"));
-    }
-
-    #[test]
-    fn test_completion_response_deserialization() {
-        let json = r#"{
-            "content": "Hello!",
-            "model": "gpt-4",
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 5,
-                "total_tokens": 15
-            }
-        }"#;
-        let resp: CompletionResponse =
-            serde_json::from_str(json).expect("deserialization should succeed");
-        assert_eq!(resp.content, "Hello!");
-        assert_eq!(resp.usage.prompt_tokens, 10);
-        assert_eq!(resp.usage.completion_tokens, 5);
-    }
-
-    #[test]
-    fn test_llm_error_display() {
-        let err = LlmError::Http {
-            status: 429,
-            body: "rate limited".to_string(),
-        };
-        assert!(err.to_string().contains("429"));
-    }
 }

@@ -111,6 +111,8 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
             temperature: Some(0.7),
             max_tokens: Some(2048),
             stop: None,
+            seed: None,
+            tools: None,
         })
         .await
         .context("LLM completion failed")?;

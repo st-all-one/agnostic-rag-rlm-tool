@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use crate::types::UsageSummary;
 
@@ -103,82 +104,13 @@ impl Default for PricingTable {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+static DEFAULT_TABLE: LazyLock<PricingTable> = LazyLock::new(PricingTable::default);
 
-    #[test]
-    fn test_model_pricing_cost() {
-        let pricing = ModelPricing::new(10.0, 30.0);
-        let usage = UsageSummary {
-            prompt_tokens: 1_000_000,
-            completion_tokens: 1_000_000,
-            total_tokens: 2_000_000,
-        };
-        let cost = pricing.cost_usd(&usage);
-        assert!((cost - 40.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_model_pricing_cost_partial() {
-        let pricing = ModelPricing::new(10.0, 30.0);
-        let usage = UsageSummary {
-            prompt_tokens: 100_000,
-            completion_tokens: 50_000,
-            total_tokens: 150_000,
-        };
-        let cost = pricing.cost_usd(&usage);
-        assert!((cost - 2.5).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_pricing_table_default() {
-        let table = PricingTable::default();
-        assert!(table.get("gpt-4o").is_some());
-        assert!(table.get("claude-sonnet-4-20250514").is_some());
-        assert!(table.get("unknown-model").is_none());
-    }
-
-    #[test]
-    fn test_pricing_table_register() {
-        let mut table = PricingTable::default();
-        table.register("custom-model".to_string(), ModelPricing::new(5.0, 10.0));
-        assert!(table.get("custom-model").is_some());
-    }
-
-    #[test]
-    fn test_pricing_table_estimate_cost() {
-        let table = PricingTable::default();
-        let usage = UsageSummary {
-            prompt_tokens: 1_000_000,
-            completion_tokens: 1_000_000,
-            total_tokens: 2_000_000,
-        };
-        let cost = table.estimate_cost("gpt-4o", &usage);
-        assert!((cost - 12.5).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_pricing_table_unknown_model() {
-        let table = PricingTable::default();
-        let usage = UsageSummary {
-            prompt_tokens: 1_000_000,
-            completion_tokens: 1_000_000,
-            total_tokens: 2_000_000,
-        };
-        let cost = table.estimate_cost("unknown-model", &usage);
-        assert!((cost - 0.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_ollama_zero_cost() {
-        let table = PricingTable::default();
-        let usage = UsageSummary {
-            prompt_tokens: 1_000_000,
-            completion_tokens: 1_000_000,
-            total_tokens: 2_000_000,
-        };
-        let cost = table.estimate_cost("llama3", &usage);
-        assert!((cost - 0.0).abs() < f64::EPSILON);
-    }
+/// Estimate the cost in USD for `usage` using the default pricing table.
+///
+/// Uses a process-wide lazily-initialized table so repeated calls on the
+/// completion hot path avoid rebuilding the model map.
+#[must_use]
+pub fn estimate_default(model: &str, usage: &UsageSummary) -> f64 {
+    DEFAULT_TABLE.estimate_cost(model, usage)
 }

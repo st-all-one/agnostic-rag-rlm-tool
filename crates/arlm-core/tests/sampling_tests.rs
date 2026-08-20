@@ -44,6 +44,8 @@ fn test_apply_to_request_sets_temperature() {
         temperature: None,
         max_tokens: None,
         stop: None,
+        seed: None,
+        tools: None,
     };
     let updated = args.apply_to_request(req);
     assert!((updated.temperature.unwrap() - 0.5).abs() < f32::EPSILON);
@@ -66,6 +68,8 @@ fn test_apply_to_request_preserves_existing_temperature() {
         temperature: Some(0.9),
         max_tokens: None,
         stop: None,
+        seed: None,
+        tools: None,
     };
     let updated = args.apply_to_request(req);
     assert!((updated.temperature.unwrap() - 0.9).abs() < f32::EPSILON);

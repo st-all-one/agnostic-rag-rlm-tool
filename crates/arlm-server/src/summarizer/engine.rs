@@ -258,6 +258,8 @@ impl Summarizer {
             temperature: Some(0.3),
             max_tokens: Some(1024),
             stop: None,
+            seed: None,
+            tools: None,
         };
 
         let response = self.llm.complete(request).await?;

@@ -109,6 +109,8 @@ Decomposition multiplies cost — only decompose when it clearly helps."#,
         temperature: None,
         max_tokens: Some(512),
         stop: None,
+        seed: None,
+        tools: None,
     });
 
     let response = retry_with_backoff(&input.retry_policy.inner, || {
