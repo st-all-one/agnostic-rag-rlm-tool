@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
 use arlm_proto::proto::arlm_service_server::ArlmServiceServer;
 use arlm_storage::{Storage, VectorStore};
 use tonic::transport::{Identity, Server, ServerTlsConfig};
@@ -87,9 +88,41 @@ fn load_file(path: &PathBuf) -> Result<Vec<u8>> {
     std::fs::read(path).with_context(|| format!("failed to read TLS file {}", path.display()))
 }
 
+/// Query a running server's health over gRPC and print a summary.
+///
+/// Used by the `arlm-server status` subcommand (and the Docker HEALTHCHECK).
+///
+/// # Errors
+///
+/// Returns an error if the config cannot be loaded or the server is unreachable.
+pub async fn status_check() -> anyhow::Result<()> {
+    let config = ServerConfig::load().context("failed to load server config")?;
+    let endpoint = format!("http://{}", config.listen_addr);
+
+    let mut client = ArlmServiceClient::connect(endpoint)
+        .await
+        .context("failed to connect to arlm-server (is it running?)")?;
+
+    let status = client
+        .get_server_status(())
+        .await
+        .context("GetServerStatus RPC failed")?
+        .into_inner();
+
+    println!(
+        "OK version={} uptime_s={} active_runs={} total_projects={} total_chunks={} total_summaries={}",
+        status.version,
+        status.uptime_seconds,
+        status.active_runs,
+        status.total_projects,
+        status.total_chunks,
+        status.total_summaries,
+    );
+    Ok(())
+}
+
 /// Wait for a shutdown signal (SIGINT or SIGTERM).
-async fn shutdown_signal() {
-    let ctrl_c = tokio::signal::ctrl_c();
+async fn shutdown_signal() {    let ctrl_c = tokio::signal::ctrl_c();
 
     #[cfg(unix)]
     {

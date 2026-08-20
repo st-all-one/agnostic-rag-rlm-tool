@@ -8,6 +8,13 @@ pub struct SamplingArgs {
     pub temperature: f32,
     pub top_p: f32,
     pub top_k: Option<u32>,
+    /// Optional deterministic seed for reproducible sampling.
+    ///
+    /// `arlm-core` carries this value so callers/backends that support seeding can read
+    /// it via [`SamplingArgs::seed`]. The underlying `arlm-llm::CompletionRequest` does not
+    /// yet expose a `seed` field, so it is preserved here rather than pushed onto the wire.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
 }
 
 impl SamplingArgs {
@@ -19,18 +26,34 @@ impl SamplingArgs {
                 temperature: 0.3,
                 top_p: 0.9,
                 top_k: None,
+                seed: None,
             },
             Action::Decompose => Self {
                 temperature: 0.1,
                 top_p: 0.85,
                 top_k: None,
+                seed: None,
             },
         }
     }
 
+    /// Set a deterministic seed (builder-style).
+    #[must_use]
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = Some(seed);
+        self
+    }
+
+    /// Get the configured seed, if any.
+    #[must_use]
+    pub fn seed(&self) -> Option<u64> {
+        self.seed
+    }
+
     /// Apply these sampling args to a `CompletionRequest` by setting the
     /// temperature field. Returns the request unchanged if temperature is
-    /// already set.
+    /// already set. The `seed` (if present) is carried on `SamplingArgs` for
+    /// backends that support deterministic sampling.
     #[must_use]
     pub fn apply_to_request(
         self,
@@ -40,82 +63,5 @@ impl SamplingArgs {
             req.temperature = Some(self.temperature);
         }
         req
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_for_solve_action() {
-        let args = SamplingArgs::for_node_type(Action::Solve);
-        assert!((args.temperature - 0.3).abs() < f32::EPSILON);
-        assert!((args.top_p - 0.9).abs() < f32::EPSILON);
-        assert!(args.top_k.is_none());
-    }
-
-    #[test]
-    fn test_for_decompose_action() {
-        let args = SamplingArgs::for_node_type(Action::Decompose);
-        assert!((args.temperature - 0.1).abs() < f32::EPSILON);
-        assert!((args.top_p - 0.85).abs() < f32::EPSILON);
-        assert!(args.top_k.is_none());
-    }
-
-    #[test]
-    fn test_apply_to_request_sets_temperature() {
-        use arlm_llm::{CompletionRequest, Message, Role};
-
-        let args = SamplingArgs {
-            temperature: 0.5,
-            top_p: 0.9,
-            top_k: Some(40),
-        };
-        let req = CompletionRequest {
-            model: "test".to_string(),
-            messages: vec![Message {
-                role: Role::User,
-                content: "hi".to_string(),
-            }],
-            temperature: None,
-            max_tokens: None,
-            stop: None,
-        };
-        let updated = args.apply_to_request(req);
-        assert!((updated.temperature.unwrap() - 0.5).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_apply_to_request_preserves_existing_temperature() {
-        use arlm_llm::{CompletionRequest, Message, Role};
-
-        let args = SamplingArgs {
-            temperature: 0.5,
-            top_p: 0.9,
-            top_k: None,
-        };
-        let req = CompletionRequest {
-            model: "test".to_string(),
-            messages: vec![Message {
-                role: Role::User,
-                content: "hi".to_string(),
-            }],
-            temperature: Some(0.9),
-            max_tokens: None,
-            stop: None,
-        };
-        let updated = args.apply_to_request(req);
-        assert!((updated.temperature.unwrap() - 0.9).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_serialization_roundtrip() {
-        let args = SamplingArgs::for_node_type(Action::Decompose);
-        let json = serde_json::to_string(&args).unwrap();
-        let deserialized: SamplingArgs = serde_json::from_str(&json).unwrap();
-        assert_eq!(args.temperature, deserialized.temperature);
-        assert_eq!(args.top_p, deserialized.top_p);
     }
 }

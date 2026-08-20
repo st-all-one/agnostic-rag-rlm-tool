@@ -1,111 +1,99 @@
 # arlm-core
 
-Engine RLM recursivo — o coração do sistema arlm.
+Engine RLM recursivo — o coração do sistema `arlm` (Agnostic RLM).
 
-## Responsabilidades
+## O que faz
 
-- **Engine**: Loop recursivo RLM (planner → solver → synthesizer)
-- **Planner**: Decisão solve/decompose via LLM
-- **Solver**: Resolução direta de tarefas
-- **Synthesizer**: Merge de resultados dos filhos
-- **Guardrails**: Detecção de ciclos, max depth/branching
-- **Concurrency**: map_concurrent com buffer_unordered
-- **Budget**: Controle de custo (USD/tokens/errors/time)
-- **Events**: EventBus com broadcast channel
-- **Cache**: ResultCache para dedup de subtasks
+Implementa o loop recursivo `planner → solver → synthesizer` que decompõe uma tarefa em
+uma árvore de nós, resolve cada nó (opcionalmente via um loop REPL de código-execução-feedback)
+e sintetiza os resultados dos filhos de volta para a raiz. O crate é **agent-agnostic**: define
+traits desacoplados (`CodeSearch`, `MemoryProvider`) para que backends concretos de busca/memória
+(vividos em outros crates) sejam injetados sem dependência rígida.
 
 ## Estrutura
 
 ```
 src/
-├── lib.rs          # Re-exports
-├── logging.rs      # ScopedTimer, init_logging, log_metric
-├── types.rs        # StartRunInput, RlmRunResult, RlmNode
-├── engine.rs       # run_rlm_engine(), EngineState
-├── planner.rs      # plan_node(), parse_planner_decision
-├── solver.rs       # solve_task()
-├── synthesizer.rs  # synthesize(), build_children_block
-├── node.rs         # RlmNode tree structure
-├── guardrails.rs   # detect_cycle, normalize_task
-├── concurrency.rs  # map_concurrent
-├── budget.rs       # RunBudget (atomic counters)
-├── events.rs       # EventBus, RlmEvent
-└── cache.rs        # ResultCache (HashMap + TTL)
+├── lib.rs                 # API pública: pub mod / pub use
+├── types/
+│   ├── mod.rs             # re-exports de enums/node/input
+│   ├── enums.rs           # Action, NodeStatus, RlmBackend, CustomTool, CompactionPolicy
+│   ├── input.rs           # StartRunInput (inclui CompactionPolicy)
+│   └── node.rs            # RlmNode, RlmRunResult, RunStats
+├── engine/
+│   ├── mod.rs             # run_rlm_engine(_with_events): entrada; EventSink; save_trajectory (#3)
+│   ├── node.rs            # run_node_owned: planner/solve/synthesize, recursão, guardrails
+│   ├── state.rs           # EngineState: contadores atômicos lock-free
+│   └── compactor.rs       # RootCompactor: fallback + summarize_with_llm (#6)
+├── tools.rs               # ToolRegistry, ExecutableTool, ferramentas built-in, CodeSearch (#1)
+├── memory.rs              # MemoryProvider trait + SharedMemory (#2, #3)
+├── planner.rs             # plan_node / parse_planner_decision
+├── solver.rs              # solve_task / solve_task_repl / PersistentSolver (#2)
+├── synthesizer.rs         # synthesize / build_children_block + compactação por tokens (#4, #5)
+├── router.rs              # DepthRouter: seleção de modelo por profundidade
+├── budget.rs              # RunBudget: custo/tokens/erros/tempo (CAS loop p/ f64)
+├── cache.rs               # ResultCache: TTL + LRU + invalidação por dependência (#10)
+├── events.rs              # RlmEvent, EventBus (broadcast), EventSink (#7)
+├── sampling.rs            # SamplingArgs com seed (#8)
+├── token_counter.rs       # TokenCounter, get_context_limit, estimate (#9)
+├── compaction.rs          # tipo Compaction (sumário de resultado de busca)
+├── concurrency.rs         # map_concurrent: fan-out paralelo limitado
+├── docker.rs              # DockerExecutor: execução sandboxed
+├── repl.rs                # CodeExecutor, LlmQueryServer, find/format code blocks
+├── guardrails.rs          # detecção de ciclo, normalização, sanitização
+├── logging.rs             # ScopedTimer / Timer: timing estruturado
+└── jsonl_logger.rs        # writer JSONL append-only (observabilidade)
+
+tests/                     # 20 arquivos de teste de integração (em tests/, 196 testes)
+benches/                   # rlm_loop.rs, search.rs (criterion)
 ```
+
+## Funcionalidades (gaps do TODO concluídos)
+
+- **#1 Busca real** — `SearchCodeTool` usa o trait `CodeSearch`; quando nenhum backend é
+  injetado (`None`), retorna mensagem honesta `"search_code not configured: ..."` (sem fake).
+- **#2 Injeção de memória** — `solve_task`/`solve_task_repl` aceitam `Option<Arc<dyn MemoryProvider>>`
+  e prependam `context(task)` ao prompt do LLM.
+- **#3 Persistência de trajectory** — `run_rlm_engine_with_events` chama `save_trajectory` ao final.
+- **#4/#5 Compaction por tokens** — `compact_children_if_needed` compacta os filhos mais antigos
+  via LLM quando excedem ~85% do contexto, respeitando `CompactionPolicy`.
+- **#6 RootCompactor LLM** — `summarize_with_llm` resume saídas acumuladas.
+- **#7 EventSink** — wrapper thread-safe sobre `Arc<EventBus>`.
+- **#8 SamplingArgs.seed** — campo `seed: Option<u64>` propagado.
+- **#9 Token counter** — heurística `estimate` (chars + pontuação) em vez de split por espaço.
+- **#10 Cache** — invalidação por hash de dependência (`get_dep`/`put_dep`/`invalidate_dep`).
 
 ## Uso
 
 ```rust
 use arlm_core::{run_rlm_engine, StartRunInput};
 
-let result = run_rlm_engine(StartRunInput {
-    run_id: "abc123".to_string(),
-    task: "Analise a arquitetura deste projeto".to_string(),
-    backend: "openai".to_string(),
-    model: Some("gpt-4".to_string()),
-    project: "meu-projeto".to_string(),
-    max_depth: 3,
-    max_nodes: 20,
-    concurrency: 4,
-    max_budget: 1.0, // $1 USD
+# async fn run(llm: std::sync::Arc<dyn arlm_llm::LlmBackend + Send + Sync>) -> anyhow::Result<()> {
+let input = StartRunInput {
+    run_id: std::sync::Arc::from("run-1"),
+    task: "implementar feature X".to_string(),
+    backend: arlm_core::RlmBackend::Ollama,
     ..Default::default()
-}, llm_backend, memory, None, None).await?;
-
-println!("Resultado: {}", result.final_output);
-println!("Nós visitados: {}", result.stats.nodes_visited);
-```
-
-## Algoritmo RLM
-
-```
-task → planner → solve → solver → result
-                  ↓
-            decompose → subtasks
-                           ↓
-                    ┌──────┼──────┐
-                 runNode runNode runNode
-                    └──────┼──────┘
-                           ↓
-                       synthesizer
-                           ↓
-                         result
-```
-
-## Guardrails
-
-- **Ciclo detection**: Normaliza tasks e compara com lineage
-- **Max depth**: Força solve quando atinge profundidade máxima
-- **Max nodes**: Limita número total de nós
-- **Budget**: Para quando custo/tokens/tempo estouram
-- **Error threshold**: Para após N erros consecutivos
-
-## Budget
-
-```rust
-// Controle de custo com CAS loop para f64 correto
-pub struct CostBudget {
-    spent_bits: AtomicU64,  // f64 bits via CAS loop
-    max: f64,
-}
-```
-
-**Nota**: O `CostBudget` usa `compare_exchange_weak` para adição atômica correta de `f64`. Usar `fetch_add` em bits de `f64` não resulta em soma correta.
-
-## Concorrência
-
-```rust
-// fan-out com limite real
-let children = stream::iter(subtasks)
-    .map(|task| run_node(task))
-    .buffer_unordered(concurrency) // limite de tasks simultâneas
-    .collect::<Vec<_>>()
-    .await;
+};
+let result = run_rlm_engine(input, llm).await?;
+println!("{}", result.final_output);
+# Ok(())
+# }
 ```
 
 ## Testes
 
 ```bash
-cargo test -p arlm-core
+cargo test -p arlm-core        # 196 testes
+cargo test --test engine_tests -p arlm-core
 ```
 
-78 testes cobrindo: engine, planner, solver, synthesizer, guardrails, concurrency, budget, events, cache.
+## Convenções
+
+- Sem `unwrap`/`expect`/`panic` em `src/` (deny-lints do workspace); use `anyhow::Result` + `?`.
+- Sem `unsafe` (forbid).
+- Traits desacoplados (`CodeSearch`, `MemoryProvider`) injetados como `Arc<dyn Trait>`;
+  default honesto (`None`) em vez de placeholder.
+- Thread-safety: atômicos para contadores, `Arc<str>` para IDs, `EventSink` sobre `Arc<EventBus>`.
+- Hot paths usam `ScopedTimer` + `tracing` com campos tipados.
+- Testes vivem em `tests/` como integração; arquivos de teste podem usar `#![allow(...)]`.

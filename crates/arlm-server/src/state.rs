@@ -12,13 +12,11 @@ use crate::config::ServerConfig;
 use crate::events::EventHub;
 use crate::summarizer;
 use crate::summarizer::SummarizeSender;
-use crate::write_queue::WriteQueue;
 
 /// Shared state across gRPC handlers.
 #[derive(Clone)]
 pub struct AppState {
     pub storage: Storage,
-    pub write_queue: WriteQueue,
     pub config: ServerConfig,
     pub llm: Arc<dyn LlmBackend + Send + Sync>,
     pub events: EventHub,
@@ -47,18 +45,11 @@ impl AppState {
         llm: Arc<dyn LlmBackend + Send + Sync>,
         vector_store: Option<Arc<VectorStore>>,
     ) -> Result<Self> {
-        let write_queue = WriteQueue::new(
-            storage.clone(),
-            std::time::Duration::from_millis(config.flush_interval_ms),
-            config.max_batch_size,
-        );
-
         let events = EventHub::new();
         let summarize_tx = summarizer::spawn_worker(storage.clone(), llm.clone(), events.clone());
 
         Ok(Self {
             storage,
-            write_queue,
             config,
             llm,
             events,

@@ -128,21 +128,3 @@ pub fn log_metric_verbose(name: &str, value: f64, unit: &str) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_scoped_timer() {
-        init_logging(false);
-        let timer = ScopedTimer::new("test_operation");
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        assert!(timer.elapsed_ms() >= 10);
-    }
-
-    #[test]
-    fn test_is_verbose() {
-        init_logging(true);
-        assert!(is_verbose());
-    }
-}

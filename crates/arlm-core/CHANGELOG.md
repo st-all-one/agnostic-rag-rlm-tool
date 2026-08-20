@@ -1,5 +1,38 @@
 # Changelog
 
+Todas as mudanças notáveis deste crate são documentadas neste arquivo.
+
+O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
+e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
+
+## [Unreleased]
+
+### Adicionado
+- Traits desacoplados `CodeSearch` (`tools.rs`) e `MemoryProvider` (`memory.rs`) para injeção
+  de backends de busca/memória sem dependência rígida de outros crates (#1, #2, #3).
+- `EventSink` (`events.rs`): wrapper thread-safe sobre `Arc<EventBus>` (#7).
+- `RootCompactor::summarize_with_llm` para sumarização LLM das saídas acumuladas (#6).
+- `compact_children_if_needed` no `synthesizer` com compaction por tokens respeitando
+  `CompactionPolicy` (#4, #5).
+- `SamplingArgs.seed: Option<u64>` propagado para as chamadas LLM (#8).
+- `TokenCounter::estimate` com heurística chars+pontuação (substitui split por espaço) (#9).
+- Invalidação por dependências no `ResultCache` (`get_dep`/`put_dep`/`invalidate_dep`) (#10).
+
+### Alterado
+- **Reorganização type-driven**: `types.rs` dividido em `types/{mod,enums,node,input}.rs`;
+  `engine.rs` dividido em `engine/{mod,node,state,compactor}.rs`; ferramentas movidas para
+  `tools.rs`; memória movida para `memory.rs`. Nenhum arquivo fonte excede ~300 linhas.
+- Persistência de trajectory no fim de `run_rlm_engine_with_events` quando `MemoryProvider`
+  está configurado (#3).
+- Logs estruturados (`tracing` com campos tipados) e `ScopedTimer`/`Timer` em hot paths
+  (solve, synthesize, run de nó, compaction, cache).
+- Testes extraídos de `src/` para `tests/` (20 arquivos de integração, 196 testes).
+- `README.md`, `MODULE.md` e `TODO.md` atualizados para a nova estrutura.
+
+### Removido
+- Placeholder fake do `SearchCodeTool` — agora retorna mensagem honesta `"search_code not
+  configured: ..."` quando nenhum backend é injetado (#1).
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

@@ -22,7 +22,6 @@ async fn buffer_id_for(state: &AppState, project: &str) -> Result<Option<i64>, S
     store::blocking(move || store::buffer_id_for_project(&storage, &project_owned))
         .await
         .map_err(internal)
-        .map_err(internal)
 }
 
 /// Run the FTS5 BM25 query returning hydrated results for a buffer.

@@ -41,11 +41,9 @@ pub(crate) async fn handle_create_project(
     let path = req.root_path.clone();
     let storage = state.storage.clone();
 
-    let project_id =
-        tokio::task::spawn_blocking(move || store::insert_project(&storage, &name, &path))
-            .await
-            .map_err(internal)?
-            .map_err(internal)?;
+    let project_id = store::blocking(move || store::insert_project(&storage, &name, &path))
+        .await
+        .map_err(internal)?;
 
     let storage = state.storage.clone();
     let row = store::blocking(move || store::get_project_by_id(&storage, project_id))
@@ -70,9 +68,8 @@ pub(crate) async fn handle_list_projects(
     state: &AppState,
 ) -> Result<Response<ListProjectsResponse>, Status> {
     let storage = state.storage.clone();
-    let projects = tokio::task::spawn_blocking(move || store::list_projects(&storage))
+    let projects = store::blocking(move || store::list_projects(&storage))
         .await
-        .map_err(internal)?
         .map_err(internal)?;
 
     tracing::info!(count = projects.len(), "listed projects");
@@ -96,14 +93,13 @@ pub(crate) async fn handle_get_project(
 ) -> Result<Response<ProjectInfo>, Status> {
     let storage = state.storage.clone();
     let project = project.clone();
-    let row = tokio::task::spawn_blocking(move || {
+    let row = store::blocking(move || {
         if let Some(row) = store::get_project_by_uuid(&storage, &project)? {
             return Ok(Some(row));
         }
         store::get_project_by_name(&storage, &project)
     })
     .await
-    .map_err(internal)?
     .map_err(internal)?
     .ok_or_else(|| not_found("project not found"))?;
 

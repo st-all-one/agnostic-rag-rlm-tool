@@ -9,7 +9,6 @@
 //! - [`store`]: typed, pool-safe data access
 //! - [`grpc`]: tonic service implementation (one file per RPC group)
 //! - [`summarizer`]: hierarchical summarization engine
-//! - [`write_queue`]: batched SQLite writer
 //! - [`timing`]: structured scoped timers for execution monitoring
 
 pub mod config;
@@ -21,7 +20,6 @@ pub mod state;
 pub mod store;
 pub mod summarizer;
 pub mod timing;
-pub mod write_queue;
 
 pub use config::ServerConfig;
 pub use state::AppState;

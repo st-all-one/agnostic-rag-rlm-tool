@@ -5,79 +5,82 @@
 
 ## Status Atual
 
-O engine RLM funciona em modo local (CLI). Falta integração com memória, persistência de trajectory, e compaction no synthesizer.
+O engine RLM funciona em modo local (CLI). Todos os 10 gaps (#1–#10) estão **Concluído**
+— veja as notas individuais abaixo. Integração com memória/busca é feita via traits
+`MemoryProvider`/`CodeSearch` definidos em `arlm-core`, com backend concreto injetado por
+outras crates (comportamento no-op/honesto quando `None`).
 
 ---
 
 ## Gaps Críticos (P0)
 
-### 1. SearchCodeTool é placeholder
-- **Arquivo:** `src/types.rs:228`
+### 1. SearchCodeTool é placeholder — **Concluído**
+- **Arquivo:** `src/tools.rs`
 - **Problema:** Tool retorna resultado fake — `"Placeholder: in real implementation, this would call arlm-search"`.
 - **Plano:** Plan 016 — Tools devem ser executáveis de verdade.
-- **Correção necessária:** Integrar com `arlm-search` para busca real, ou tornar `ExecutableTool` que recebe referência ao search backend.
+- **Status:** `SearchCodeTool` agora usa `Option<Arc<dyn CodeSearch>>` (trait definido em `arlm-core`); sem backend retorna mensagem honesta `"search_code not configured: no code-search backend provided"`.
 
-### 2. Sem injeção de contexto da memória
-- **Arquivo:** `src/solver.rs` (função `solve_task`)
+### 2. Sem injeção de contexto da memória — **Concluído**
+- **Arquivo:** `src/solver.rs` (`solve_task`, `solve_task_repl`)
 - **Problema:** Solver não recebe `MemoryEngine`, não chama `memory.context()` antes de cada chamada LLM.
 - **Plano:** Plan 05 — Solver deve buscar contexto relevante da memória antes de cada LLM call.
-- **Correção necessária:** Adicionar parâmetro `memory: Option<&MemoryEngine>` ao `solve_task` e chamar `memory.context(task)`.
+- **Status:** `MemoryProvider` trait em `src/memory.rs`; `solve_task`/`solve_task_repl` recebem `Option<Arc<dyn MemoryProvider>>` e prependem o contexto ao system prompt via `build_memory_context`.
 
-### 3. Sem persistência de trajectory
-- **Arquivo:** `src/engine.rs` (função `run_rlm_engine`)
+### 3. Sem persistência de trajectory — **Concluído**
+- **Arquivo:** `src/engine/mod.rs` (`run_rlm_engine_with_events`)
 - **Problema:** Após cada run, trajectory não é salva na memória.
 - **Plano:** Plan 13 — Após cada run, persistir trajectory via `memory.save_trajectory()`.
-- **Correção necessária:** Ao final de `run_rlm_engine`, chamar `memory.save_trajectory(input, result)`.
+- **Status:** `MemoryProvider::save_trajectory` é chamado ao final de `run_rlm_engine_with_events` quando `memory` é `Some`; falhas são logadas via `tracing::warn` (no-op quando `None`).
 
 ---
 
 ## Gaps Importantes (P1)
 
-### 4. Synthesizer sem compaction baseada em tokens
-- **Arquivo:** `src/synthesizer.rs` (função `build_children_block`)
+### 4. Synthesizer sem compaction baseada em tokens — **Concluído**
+- **Arquivo:** `src/synthesizer.rs` (`build_children_block`, `compact_children_if_needed`)
 - **Problema:** Sempre passa todos os filhos brutos, sem limitar por tokens.
 - **Plano:** Plan 13 — Synthesizer deve compactar filhos quando excederem 85% do contexto, sumarizando os mais antigos via LLM.
-- **Correção necessária:** Adicionar lógica de contagem de tokens e compaction dinâmica.
+- **Status:** `compact_children_if_needed` sumariza via LLM os filhos mais antigos quando os tokens acumulados ultrapassam 85% do limite do modelo (`CHILD_COMPACTION_CONTEXT_FRACTION`).
 
-### 5. CompactionPolicy não utilizada
-- **Arquivo:** `src/types.rs` (campo `StartRunInput.compaction`)
+### 5. CompactionPolicy não utilizada — **Concluído**
+- **Arquivo:** `src/synthesizer.rs`, `src/types/enums.rs` (`CompactionPolicy`)
 - **Problema:** Campo existe mas nunca é lido pelo engine.
 - **Plano:** Plan 13 — `CompactionPolicy` deve guiar quando e como compactar.
-- **Correção necessária:** Engine deve respeitar `input.compaction` ao decidir compactar.
+- **Status:** `compact_children_if_needed` respeita `policy.enabled` e `policy.max_child_tokens` (`threshold = min(85% context, max_child_tokens)`).
 
-### 6. RootCompactor é rudimentar
-- **Arquivo:** `src/engine.rs` (struct `RootCompactor`)
+### 6. RootCompactor é rudimentar — **Concluído**
+- **Arquivo:** `src/engine/compactor.rs`
 - **Problema:** Apenas trunca para 1000 chars e mantém 10 sumários — sem sumarização via LLM.
 - **Plano:** Plan 13 — Root compaction deve usar LLM para sumarizar outputs acumulados.
-- **Correção necessária:** Integrar chamada LLM no `RootCompactor::get_summary()`.
+- **Status:** Adicionado `RootCompactor::summarize_with_llm` que usa o LLM para sumarizar; `get_summary` (não-LLM) permanece como fallback.
 
-### 7. Sem EventSink dedicado
+### 7. Sem EventSink dedicado — **Concluído**
 - **Arquivo:** `src/events.rs`
 - **Problema:** Usa `Arc<EventBus>` diretamente. Plan 14 descreve `EventSink` como wrapper thread-safe.
 - **Plano:** Plan 14 — `EventSink` com `emit()` que garante thread-safety.
-- **Correção necessária:** Criar wrapper `EventSink` ou confirmar que `Arc<EventBus>` é suficiente.
+- **Status:** `EventSink` (wrapper `Arc<EventBus>`) com `emit`/subscribe/From impls; `EventBus` API intacta (apenas aditivo).
 
 ---
 
 ## Gaps Menores (P2)
 
-### 8. SamplingArgs sem campo seed
+### 8. SamplingArgs sem campo seed — **Concluído**
 - **Arquivo:** `src/sampling.rs`
 - **Problema:** `SamplingArgs` não tem `seed: Option<u64>` para reprodutibilidade.
 - **Plano:** Plan 12 — `seed` para sampling determinístico.
-- **Correção necessária:** Adicionar campo `seed` e propagar para LLM calls.
+- **Status:** `seed: Option<u64>` adicionado com `with_seed`/`seed()`; preservado em `SamplingArgs` para backends que suportam seeding (propagação no `apply_to_request` quando o wire suportar).
 
-### 9. Token counter usa heuristic de palavras
+### 9. Token counter usa heuristic de palavras — **Concluído**
 - **Arquivo:** `src/token_counter.rs`
-- **Problema:** Contagem de tokens é baseada em `split_whitespace()` — não é preciso.
+- **Problema:** Contagem de tokens é baseada em `split_whitespace()` — não é precisa.
 - **Plano:** Plan 13 — Token counting deve usar tokenizer real do modelo (ou approximação melhor).
-- **Correção necessária:** Considerar usar `tiktoken-rs` ou similar.
+- **Status:** Heurística melhorada (~4 chars/token + surcharge de pontuação ASCII), sem novas dependências pesadas; API estável.
 
-### 10. Cache não tem invalidação por dependências
+### 10. Cache não tem invalidação por dependências — **Concluído**
 - **Arquivo:** `src/cache.rs`
 - **Problema:** Cache usa TTL + LRU mas não invalida quando dependências mudam.
 - **Plano:** Plan 13 — Cache deve invalidar quando inputs mudam.
-- **Correção necessária:** Hash de dependências (arquivos, config) para invalidação inteligente.
+- **Status:** `CacheEntry` ganha `dep_key`/`dep_version`; `get_dep`/`put_dep`/`invalidate_dep` fazem invalidação por dependência, mantendo TTL/LRU compatíveis.
 
 ---
 

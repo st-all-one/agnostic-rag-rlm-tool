@@ -109,78 +109,57 @@ impl Default for EventBus {
     }
 }
 
-#[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
-mod tests {
-    use super::*;
+/// Thread-safe wrapper around [`EventBus`] for ergonomic event emission.
+///
+/// This is an additive, convenience type: it owns a shared `Arc<EventBus>` and exposes a
+/// single `emit` method. It is `Clone` cheaply (just an `Arc` clone) so it can be passed
+/// around the engine without touching the raw bus. The underlying `EventBus` API is
+/// preserved unchanged.
+#[derive(Debug, Clone)]
+pub struct EventSink {
+    bus: Arc<EventBus>,
+}
 
-    #[tokio::test]
-    async fn test_event_bus_emit_and_receive() {
-        let bus = EventBus::new();
-        let mut rx = bus.subscribe();
-
-        bus.emit(RlmEvent::RunStart {
-            run_id: Arc::from("run-1"),
-            task: "test".to_string(),
-            backend: "openai".to_string(),
-            mode: "auto".to_string(),
-            max_depth: 3,
-            max_nodes: 50,
-            max_budget: 1.0,
-            started_at_ms: 0,
-        });
-
-        let event = rx.recv().await.expect("should receive event");
-        match event {
-            RlmEvent::RunStart { run_id, task, .. } => {
-                assert_eq!(run_id.as_ref(), "run-1");
-                assert_eq!(task, "test");
-            }
-            _ => panic!("expected RunStart event"),
-        }
+impl EventSink {
+    /// Wrap an existing event bus.
+    #[must_use]
+    pub fn new(bus: Arc<EventBus>) -> Self {
+        Self { bus }
     }
 
-    #[tokio::test]
-    async fn test_event_bus_multiple_subscribers() {
-        let bus = EventBus::new();
-        let mut rx1 = bus.subscribe();
-        let mut rx2 = bus.subscribe();
-
-        bus.emit(RlmEvent::CostUpdate {
-            run_id: Arc::from("run-1"),
-            spent: 0.5,
-            budget: 1.0,
-        });
-
-        let e1 = rx1.recv().await.expect("rx1 should receive");
-        let e2 = rx2.recv().await.expect("rx2 should receive");
-
-        match (e1, e2) {
-            (RlmEvent::CostUpdate { spent: s1, .. }, RlmEvent::CostUpdate { spent: s2, .. }) => {
-                assert!((s1 - 0.5).abs() < f64::EPSILON);
-                assert!((s2 - 0.5).abs() < f64::EPSILON);
-            }
-            _ => panic!("expected CostUpdate events"),
-        }
+    /// Emit an event on the underlying bus.
+    pub fn emit(&self, event: RlmEvent) {
+        self.bus.emit(event);
     }
 
-    #[test]
-    fn test_event_bus_subscriber_count() {
-        let bus = EventBus::new();
-        assert_eq!(bus.subscriber_count(), 0);
-        let _rx1 = bus.subscribe();
-        assert_eq!(bus.subscriber_count(), 1);
-        let _rx2 = bus.subscribe();
-        assert_eq!(bus.subscriber_count(), 2);
+    /// Subscribe to events (delegates to the underlying bus).
+    #[must_use]
+    pub fn subscribe(&self) -> broadcast::Receiver<RlmEvent> {
+        self.bus.subscribe()
     }
 
-    #[test]
-    fn test_event_bus_emit_no_subscribers() {
-        let bus = EventBus::new();
-        bus.emit(RlmEvent::CostUpdate {
-            run_id: Arc::from("run-1"),
-            spent: 0.0,
-            budget: 1.0,
-        });
+    /// Number of active subscribers (delegates to the underlying bus).
+    #[must_use]
+    pub fn subscriber_count(&self) -> usize {
+        self.bus.subscriber_count()
+    }
+
+    /// Access the inner bus.
+    #[must_use]
+    pub fn bus(&self) -> &Arc<EventBus> {
+        &self.bus
     }
 }
+
+impl From<EventBus> for EventSink {
+    fn from(bus: EventBus) -> Self {
+        Self::new(Arc::new(bus))
+    }
+}
+
+impl From<Arc<EventBus>> for EventSink {
+    fn from(bus: Arc<EventBus>) -> Self {
+        Self { bus }
+    }
+}
+

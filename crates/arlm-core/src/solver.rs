@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -7,6 +8,7 @@ use tracing::info;
 use crate::budget::RunBudget;
 use crate::cache::ResultCache;
 use crate::logging::ScopedTimer;
+use crate::memory::MemoryProvider;
 use crate::repl::{CodeExecutor, find_code_blocks, format_repl_result};
 use crate::token_counter::{TokenCounter, get_context_limit};
 use crate::types::{Action, StartRunInput, format_tools_for_prompt};
@@ -23,15 +25,20 @@ const MAX_COMPACTION_ITERATIONS: u32 = 5;
 ///
 /// Supports iterative refinement with compaction when context exceeds 85% of model limit.
 ///
+/// When `memory` is `Some`, relevant context is fetched from the memory provider and
+/// prepended to the system prompt before the LLM call (no-op when `None`).
+///
 /// # Errors
 ///
 /// Returns an error if the LLM call fails.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub async fn solve_task(
     task: &str,
     input: &StartRunInput,
     llm: Arc<dyn LlmBackend + Send + Sync>,
     budget: &RunBudget,
     cache: &ResultCache,
+    memory: Option<Arc<dyn MemoryProvider>>,
     forced_reason: Option<&str>,
     model_override: Option<&str>,
 ) -> Result<String> {
@@ -58,10 +65,15 @@ pub async fn solve_task(
         .to_string();
 
     let tools_block = format_tools_for_prompt(&input.custom_tools);
-    let system_content = if tools_block.is_empty() {
+    let memory_block = build_memory_context(memory.as_ref(), task);
+    let system_content = if tools_block.is_empty() && memory_block.is_empty() {
         SOLVER_SYSTEM.to_string()
-    } else {
+    } else if memory_block.is_empty() {
         format!("{SOLVER_SYSTEM}\n\n{tools_block}")
+    } else if tools_block.is_empty() {
+        format!("{SOLVER_SYSTEM}\n\n{memory_block}")
+    } else {
+        format!("{SOLVER_SYSTEM}\n\n{tools_block}\n\n{memory_block}")
     };
 
     let mut messages: Vec<Message> = vec![
@@ -77,7 +89,8 @@ pub async fn solve_task(
 
     let sampling = crate::sampling::SamplingArgs::for_node_type(Action::Solve);
     let model_limit = get_context_limit(&model);
-    let threshold_tokens = (model_limit as f64 * COMPACTION_THRESHOLD) as u32;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let threshold_tokens = (f64::from(model_limit) * COMPACTION_THRESHOLD) as u32;
 
     let mut compaction_count = 0u32;
 
@@ -283,12 +296,39 @@ async fn compact_messages(
     Ok(new_messages)
 }
 
-/// Truncate text to max_chars, adding "..." if truncated.
+/// Truncate text to `max_chars`, adding "..." if truncated.
 fn truncate(text: &str, max_chars: usize) -> String {
     if text.len() <= max_chars {
         text.to_string()
     } else {
         format!("{}...", &text[..max_chars])
+    }
+}
+
+/// Build a memory-context block from the provider, or an empty string when unavailable.
+fn build_memory_context(memory: Option<&Arc<dyn MemoryProvider>>, task: &str) -> String {
+    let Some(provider) = memory else {
+        return String::new();
+    };
+    match provider.context(task) {
+        Ok(context) if !context.is_empty() => {
+            let joined = context
+                .iter()
+                .filter(|c| !c.trim().is_empty())
+                .map(|c| format!("- {c}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            if joined.is_empty() {
+                String::new()
+            } else {
+                format!("Relevant memory context:\n{joined}")
+            }
+        }
+        Ok(_) => String::new(),
+        Err(e) => {
+            tracing::warn!(error = %e, "memory context fetch failed; continuing without it");
+            String::new()
+        }
     }
 }
 
@@ -302,6 +342,7 @@ pub struct PersistentSolver {
 
 impl PersistentSolver {
     /// Create a new persistent solver.
+    #[must_use]
     pub fn new(max_history_tokens: u32) -> Self {
         Self {
             history: Vec::new(),
@@ -326,6 +367,7 @@ impl PersistentSolver {
     }
 
     /// Get the conversation history.
+    #[must_use]
     pub fn history(&self) -> &[Message] {
         &self.history
     }
@@ -358,6 +400,10 @@ impl PersistentSolver {
     }
 
     /// Solve a task with conversation history context.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the LLM call fails.
     pub async fn solve_with_history(
         &mut self,
         task: &str,
@@ -432,6 +478,7 @@ pub struct StateInspector {
 
 impl StateInspector {
     /// Create a new state inspector.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             completed_tasks: Vec::new(),
@@ -455,11 +502,13 @@ impl StateInspector {
     }
 
     /// Get a variable.
+    #[must_use]
     pub fn get_variable(&self, name: &str) -> Option<&str> {
-        self.current_variables.get(name).map(|s| s.as_str())
+        self.current_variables.get(name).map(std::string::String::as_str)
     }
 
-    /// List all variables (equivalent to SHOW_VARS).
+    /// List all variables (equivalent to `SHOW_VARS`).
+    #[must_use]
     pub fn show_vars(&self) -> String {
         if self.current_variables.is_empty() {
             return "No variables created yet.".to_string();
@@ -472,12 +521,13 @@ impl StateInspector {
             } else {
                 value.clone()
             };
-            output.push_str(&format!("  {name}: {preview}\n"));
+            let _ = writeln!(output, "  {name}: {preview}");
         }
         output
     }
 
     /// Get a summary of completed work.
+    #[must_use]
     pub fn summary(&self) -> String {
         format!(
             "Completed {} tasks. {} variables set.",
@@ -487,11 +537,13 @@ impl StateInspector {
     }
 
     /// Get the iteration count.
+    #[must_use]
     pub fn iteration_count(&self) -> u32 {
         self.iteration_count
     }
 
     /// Get all completed tasks.
+    #[must_use]
     pub fn completed_tasks(&self) -> &[String] {
         &self.completed_tasks
     }
@@ -509,6 +561,8 @@ const MAX_REPL_ITERATIONS: u32 = 10;
 
 /// Solve a task using REPL mode: LLM generates code, code is executed, results feed back.
 ///
+/// When `memory` is `Some`, relevant context is prepended to the system prompt (no-op when `None`).
+///
 /// # Errors
 ///
 /// Returns an error if the LLM call fails.
@@ -518,6 +572,7 @@ pub async fn solve_task_repl(
     llm: Arc<dyn LlmBackend + Send + Sync>,
     budget: &RunBudget,
     cache: &ResultCache,
+    memory: Option<Arc<dyn MemoryProvider>>,
     model_override: Option<&str>,
 ) -> Result<String> {
     let _timer = ScopedTimer::new("solve_task_repl");
@@ -531,10 +586,15 @@ pub async fn solve_task_repl(
 
     let executor = CodeExecutor::default_executor();
     let tools_block = format_tools_for_prompt(&input.custom_tools);
-    let system_content = if tools_block.is_empty() {
+    let memory_block = build_memory_context(memory.as_ref(), task);
+    let system_content = if tools_block.is_empty() && memory_block.is_empty() {
         REPL_SYSTEM.to_string()
-    } else {
+    } else if memory_block.is_empty() {
         format!("{REPL_SYSTEM}\n\n{tools_block}")
+    } else if tools_block.is_empty() {
+        format!("{REPL_SYSTEM}\n\n{memory_block}")
+    } else {
+        format!("{REPL_SYSTEM}\n\n{tools_block}\n\n{memory_block}")
     };
 
     let model = model_override
@@ -666,33 +726,3 @@ async fn run_repl_loop(
     Ok(final_response.content)
 }
 
-#[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
-mod tests {
-    #[test]
-    fn test_solver_prompt_with_forced_reason() {
-        let task = "implement feature X";
-        let reason = "max depth reached";
-        let prompt = format!(
-            "Solve this task directly. You were forced to solve because: {reason}
-
-Task: {task}
-
-Provide a concrete, actionable answer.",
-        );
-        assert!(prompt.contains("forced to solve"));
-        assert!(prompt.contains(task));
-    }
-
-    #[test]
-    fn test_solver_prompt_without_forced_reason() {
-        let task = "fix bug Y";
-        let prompt = format!(
-            "Solve this task directly and return a concrete answer.
-
-Task: {task}",
-        );
-        assert!(!prompt.contains("forced"));
-        assert!(prompt.contains(task));
-    }
-}

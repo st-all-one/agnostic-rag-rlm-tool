@@ -1,0 +1,15 @@
+services:
+  arlm-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    volumes:
+      - arlm-server-data:/data
+    ports:
+      - "50051:50051"
+    environment:
+      - ARLM_DATA_DIR=/data
+    command: ["up"]
+
+volumes:
+  arlm-server-data:

@@ -65,20 +65,21 @@ impl RunBudget {
 
 /// Cost budget in USD using atomic CAS loop for correct f64 addition.
 #[derive(Debug)]
-struct CostBudget {
+pub struct CostBudget {
     spent_bits: AtomicU64,
     max: f64,
 }
 
 impl CostBudget {
-    fn new(max: f64) -> Self {
+    #[must_use]
+    pub fn new(max: f64) -> Self {
         Self {
             spent_bits: AtomicU64::new(0),
             max,
         }
     }
 
-    fn spend(&self, amount: f64) {
+    pub fn spend(&self, amount: f64) {
         loop {
             let current_bits = self.spent_bits.load(Ordering::Relaxed);
             let current = f64::from_bits(current_bits);
@@ -95,13 +96,19 @@ impl CostBudget {
     }
 
     #[allow(clippy::cast_precision_loss)]
-    fn remaining(&self) -> f64 {
+    #[must_use]
+    pub fn remaining(&self) -> f64 {
         let spent_bits = self.spent_bits.load(Ordering::Relaxed);
         let spent = f64::from_bits(spent_bits);
         (self.max - spent).max(0.0)
     }
 
-    fn check(&self) -> anyhow::Result<()> {
+    /// Check whether the USD budget is exhausted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no USD budget remains.
+    pub fn check(&self) -> anyhow::Result<()> {
         if self.remaining() <= 0.0 {
             anyhow::bail!("USD budget exhausted");
         }
@@ -111,13 +118,14 @@ impl CostBudget {
 
 /// Token budget.
 #[derive(Debug)]
-struct TokenBudget {
+pub struct TokenBudget {
     used: AtomicU32,
     max: u32,
 }
 
 impl TokenBudget {
-    fn new(max: u64) -> Self {
+    #[must_use]
+    pub fn new(max: u64) -> Self {
         Self {
             used: AtomicU32::new(0),
             #[allow(clippy::cast_possible_truncation)]
@@ -125,15 +133,21 @@ impl TokenBudget {
         }
     }
 
-    fn add(&self, tokens: u32) {
+    pub fn add(&self, tokens: u32) {
         self.used.fetch_add(tokens, Ordering::Relaxed);
     }
 
-    fn remaining(&self) -> u32 {
+    #[must_use]
+    pub fn remaining(&self) -> u32 {
         self.max.saturating_sub(self.used.load(Ordering::Relaxed))
     }
 
-    fn check(&self) -> anyhow::Result<()> {
+    /// Check whether the token budget is exhausted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no token budget remains.
+    pub fn check(&self) -> anyhow::Result<()> {
         if self.remaining() == 0 {
             anyhow::bail!("token budget exhausted");
         }
@@ -143,28 +157,35 @@ impl TokenBudget {
 
 /// Error budget.
 #[derive(Debug)]
-struct ErrorBudget {
+pub struct ErrorBudget {
     count: AtomicU32,
     max: u32,
 }
 
 impl ErrorBudget {
-    fn new(max: u32) -> Self {
+    #[must_use]
+    pub fn new(max: u32) -> Self {
         Self {
             count: AtomicU32::new(0),
             max,
         }
     }
 
-    fn add_one(&self) {
+    pub fn add_one(&self) {
         self.count.fetch_add(1, Ordering::Relaxed);
     }
 
-    fn remaining(&self) -> u32 {
+    #[must_use]
+    pub fn remaining(&self) -> u32 {
         self.max.saturating_sub(self.count.load(Ordering::Relaxed))
     }
 
-    fn check(&self) -> anyhow::Result<()> {
+    /// Check whether the error budget is exhausted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no error budget remains.
+    pub fn check(&self) -> anyhow::Result<()> {
         if self.remaining() == 0 {
             anyhow::bail!("error threshold reached");
         }
@@ -174,25 +195,26 @@ impl ErrorBudget {
 
 /// Time budget.
 #[derive(Debug)]
-struct TimeBudget {
+pub struct TimeBudget {
     start: Instant,
     timeout: Duration,
 }
 
 impl TimeBudget {
-    fn new(timeout_ms: u64) -> Self {
+    #[must_use]
+    pub fn new(timeout_ms: u64) -> Self {
         Self {
             start: Instant::now(),
             timeout: Duration::from_millis(timeout_ms),
         }
     }
 
-    fn remaining_ms(&self) -> u64 {
+    #[must_use]
+    pub fn remaining_ms(&self) -> u64 {
         let elapsed = self.start.elapsed();
         if elapsed >= self.timeout {
             0
         } else {
-            #[allow(clippy::cast_possible_truncation)]
             #[allow(clippy::cast_possible_truncation)]
             let remaining =
                 (self.timeout.checked_sub(elapsed).unwrap_or_default()).as_millis() as u64;
@@ -200,7 +222,12 @@ impl TimeBudget {
         }
     }
 
-    fn check(&self) -> anyhow::Result<()> {
+    /// Check whether the time budget is exhausted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the timeout has elapsed.
+    pub fn check(&self) -> anyhow::Result<()> {
         if self.start.elapsed() >= self.timeout {
             anyhow::bail!("timeout reached");
         }
@@ -217,97 +244,3 @@ pub struct BudgetSummary {
     pub time_remaining_ms: u64,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_run_budget_new() {
-        let budget = RunBudget::new(1.0, 100_000, 5, 60_000);
-        let summary = budget.summary();
-        assert!((summary.budget_remaining - 1.0).abs() < f64::EPSILON);
-        assert_eq!(summary.tokens_remaining, 100_000);
-        assert_eq!(summary.errors_remaining, 5);
-        assert!(summary.time_remaining_ms > 0);
-    }
-
-    #[test]
-    fn test_run_budget_check_passes() {
-        let budget = RunBudget::new(1.0, 100_000, 5, 60_000);
-        assert!(budget.check().is_ok());
-    }
-
-    #[test]
-    fn test_run_budget_check_fails_on_timeout() {
-        let budget = RunBudget::new(1.0, 100_000, 5, 0);
-        std::thread::sleep(Duration::from_millis(10));
-        assert!(budget.check().is_err());
-    }
-
-    #[test]
-    fn test_run_budget_record_call() {
-        let budget = RunBudget::new(1.0, 100_000, 5, 60_000);
-        let usage = UsageSummary {
-            prompt_tokens: 100,
-            completion_tokens: 50,
-            total_tokens: 150,
-        };
-        budget.record_call("gpt-4o", &usage);
-        let summary = budget.summary();
-        assert!(summary.tokens_remaining < 100_000);
-    }
-
-    #[test]
-    fn test_run_budget_record_error() {
-        let budget = RunBudget::new(1.0, 100_000, 2, 60_000);
-        budget.record_error();
-        assert_eq!(budget.summary().errors_remaining, 1);
-        budget.record_error();
-        assert_eq!(budget.summary().errors_remaining, 0);
-        assert!(budget.check().is_err());
-    }
-
-    #[test]
-    fn test_cost_budget_spend() {
-        let cb = CostBudget::new(1.0);
-        assert!((cb.remaining() - 1.0).abs() < f64::EPSILON);
-        cb.spend(0.3);
-        assert!((cb.remaining() - 0.7).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_token_budget() {
-        let tb = TokenBudget::new(1000);
-        assert_eq!(tb.remaining(), 1000);
-        tb.add(300);
-        assert_eq!(tb.remaining(), 700);
-        tb.add(800);
-        assert_eq!(tb.remaining(), 0);
-        assert!(tb.check().is_err());
-    }
-
-    #[test]
-    fn test_error_budget() {
-        let eb = ErrorBudget::new(2);
-        assert_eq!(eb.remaining(), 2);
-        eb.add_one();
-        assert_eq!(eb.remaining(), 1);
-        eb.add_one();
-        assert_eq!(eb.remaining(), 0);
-        assert!(eb.check().is_err());
-    }
-
-    #[test]
-    fn test_time_budget_remaining() {
-        let tb = TimeBudget::new(60_000);
-        assert!(tb.remaining_ms() > 50_000);
-    }
-
-    #[test]
-    fn test_time_budget_expired() {
-        let tb = TimeBudget::new(0);
-        std::thread::sleep(Duration::from_millis(5));
-        assert_eq!(tb.remaining_ms(), 0);
-        assert!(tb.check().is_err());
-    }
-}

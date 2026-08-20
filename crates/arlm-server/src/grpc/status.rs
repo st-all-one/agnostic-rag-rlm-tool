@@ -34,13 +34,6 @@ pub(crate) async fn handle_get_server_status(
 
     let (total_projects, total_chunks, total_summaries, active_runs) = stats;
 
-    let write_queue_stats = state.write_queue.stats();
-    let write_queue = Some(WriteQueueStats {
-        pending_writes: i32::try_from(write_queue_stats.pending).unwrap_or(i32::MAX),
-        batched_last_flush: i32::try_from(write_queue_stats.flushed).unwrap_or(i32::MAX),
-        avg_latency_ms: 0.0,
-    });
-
     tracing::info!(
         total_projects,
         total_chunks,
@@ -56,7 +49,7 @@ pub(crate) async fn handle_get_server_status(
         total_projects: i32::try_from(total_projects).unwrap_or(i32::MAX),
         total_chunks,
         total_summaries,
-        write_queue,
+        write_queue: None,
         summarize: None,
     }))
 }

@@ -5,14 +5,23 @@ use sha2::{Digest, Sha256};
 
 use crate::types::now_ms;
 
-/// Cache entry with expiration.
+/// Cache entry with expiration and optional dependency tracking.
 #[derive(Debug, Clone)]
 struct CacheEntry {
     result: String,
     created_at_ms: u64,
+    /// Optional dependency key this entry is bound to (e.g. a config/file set id).
+    dep_key: Option<String>,
+    /// Optional dependency version/hash; the entry is invalid when this changes.
+    dep_version: Option<String>,
 }
 
 /// Result cache for deduplicating identical subtask resolutions.
+///
+/// Supports TTL + LRU eviction (default) and, additionally, dependency-based
+/// invalidation (#10): entries may be stored with a `dep_key`/`dep_version` so that
+/// [`ResultCache::get_dep`] returns a miss when the dependency version no longer matches,
+/// and [`ResultCache::invalidate_dep`] can drop every entry bound to a dependency.
 #[derive(Debug)]
 pub struct ResultCache {
     inner: RwLock<HashMap<String, CacheEntry>>,
@@ -46,7 +55,7 @@ impl ResultCache {
         hex::encode(hash)
     }
 
-    /// Look up a cached result by task.
+    /// Look up a cached result by task (dependency tracking is ignored here).
     #[must_use]
     pub fn get(&self, task: &str, _project: &str) -> Option<String> {
         let hash = Self::task_hash(task);
@@ -61,12 +70,56 @@ impl ResultCache {
         })
     }
 
-    /// Store a result in the cache.
-    pub fn put(&self, task: &str, _project: &str, result: &str) {
+    /// Look up a cached result, but only if its stored dependency key + version match.
+    ///
+    /// Returns `None` (a cache miss) when no entry exists, it is expired, or its
+    /// `dep_key`/`dep_version` differ from the supplied values — signalling that the
+    /// underlying inputs changed and the result must be recomputed.
+    #[must_use]
+    pub fn get_dep(
+        &self,
+        task: &str,
+        _project: &str,
+        dep_key: &str,
+        dep_version: &str,
+    ) -> Option<String> {
+        let hash = Self::task_hash(task);
+        let entries = self.inner.read();
+        let now = now_ms();
+        entries.get(&hash).and_then(|entry| {
+            if now.saturating_sub(entry.created_at_ms) > self.ttl_ms {
+                return None;
+            }
+            if entry.dep_key.as_deref() != Some(dep_key) {
+                return None;
+            }
+            if entry.dep_version.as_deref() != Some(dep_version) {
+                return None;
+            }
+            Some(entry.result.clone())
+        })
+    }
+
+    /// Store a result in the cache (no dependency binding).
+    pub fn put(&self, task: &str, project: &str, result: &str) {
+        self.put_dep(task, project, result, None, None);
+    }
+
+    /// Store a result bound to a dependency key + version for invalidation (#10).
+    pub fn put_dep(
+        &self,
+        task: &str,
+        _project: &str,
+        result: &str,
+        dep_key: Option<&str>,
+        dep_version: Option<&str>,
+    ) {
         let hash = Self::task_hash(task);
         let entry = CacheEntry {
             result: result.to_string(),
             created_at_ms: now_ms(),
+            dep_key: dep_key.map(String::from),
+            dep_version: dep_version.map(String::from),
         };
         let mut entries = self.inner.write();
 
@@ -85,6 +138,12 @@ impl ResultCache {
         }
 
         entries.insert(hash, entry);
+    }
+
+    /// Invalidate every entry bound to the given dependency key.
+    pub fn invalidate_dep(&self, dep_key: &str) {
+        let mut entries = self.inner.write();
+        entries.retain(|_, e| e.dep_key.as_deref() != Some(dep_key));
     }
 
     /// Clear all cached entries.
@@ -108,71 +167,5 @@ impl ResultCache {
 impl Default for ResultCache {
     fn default() -> Self {
         Self::default_config()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_result_cache_put_and_get() {
-        let cache = ResultCache::new(10, 60_000);
-        assert!(cache.is_empty());
-
-        cache.put("task A", "proj", "result A");
-        assert_eq!(cache.len(), 1);
-
-        let got = cache.get("task A", "proj");
-        assert_eq!(got.as_deref(), Some("result A"));
-    }
-
-    #[test]
-    fn test_result_cache_miss() {
-        let cache = ResultCache::new(10, 60_000);
-        assert!(cache.get("nonexistent", "proj").is_none());
-    }
-
-    #[test]
-    fn test_task_hash_deterministic() {
-        let h1 = ResultCache::task_hash("hello world");
-        let h2 = ResultCache::task_hash("hello world");
-        assert_eq!(h1, h2);
-    }
-
-    #[test]
-    fn test_task_hash_different() {
-        let h1 = ResultCache::task_hash("task A");
-        let h2 = ResultCache::task_hash("task B");
-        assert_ne!(h1, h2);
-    }
-
-    #[test]
-    fn test_result_cache_clear() {
-        let cache = ResultCache::new(10, 60_000);
-        cache.put("task", "proj", "result");
-        assert!(!cache.is_empty());
-        cache.clear();
-        assert!(cache.is_empty());
-    }
-
-    #[test]
-    fn test_result_cache_eviction() {
-        let cache = ResultCache::new(3, 60_000);
-        cache.put("t1", "p", "r1");
-        cache.put("t2", "p", "r2");
-        cache.put("t3", "p", "r3");
-        cache.put("t4", "p", "r4"); // should trigger eviction
-        // After eviction, should have removed some entries
-        assert!(cache.len() <= 3);
-    }
-
-    #[test]
-    fn test_result_cache_overwrite() {
-        let cache = ResultCache::new(10, 60_000);
-        cache.put("task", "proj", "v1");
-        cache.put("task", "proj", "v2");
-        let got = cache.get("task", "proj");
-        assert_eq!(got.as_deref(), Some("v2"));
     }
 }

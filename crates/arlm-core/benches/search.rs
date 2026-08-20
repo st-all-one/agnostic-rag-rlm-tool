@@ -31,10 +31,14 @@ fn bench_compaction(c: &mut Criterion) {
 
     let compaction = Compaction::new(1000);
     let results: Vec<SearchResult> = (0..20)
-        .map(|i| SearchResult {
-            score: (i as f32) / 20.0,
-            content: format!("## Section {i}\nContent for section {i} with some details."),
-            file_path: format!("file_{i}.rs"),
+        .map(|i| {
+            #[allow(clippy::cast_precision_loss)]
+            let score = i as f32 / 20.0;
+            SearchResult {
+                score,
+                content: format!("## Section {i}\nContent for section {i} with some details."),
+                file_path: format!("file_{i}.rs"),
+            }
         })
         .collect();
     let context = results
