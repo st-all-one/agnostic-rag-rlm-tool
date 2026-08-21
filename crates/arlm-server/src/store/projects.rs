@@ -41,6 +41,40 @@ pub fn insert_project(storage: &Storage, name: &str, path: &str) -> Result<i64> 
     .context("failed to insert project")
 }
 
+/// Ensure a project (buffer) exists, creating it if necessary, and return its
+/// numeric id.
+///
+/// Safe to call concurrently: `INSERT OR IGNORE` dedupes on the unique `name`,
+/// and the id is read back in the *same* connection. Performing both steps
+/// under a single pooled connection matters under concurrent index streams —
+/// acquiring two connections sequentially would deadlock against a small pool
+/// when the number of parallel streams exceeds `pool_size`.
+///
+/// # Errors
+///
+/// Returns an error if the insert or lookup fails.
+pub fn ensure_project(storage: &Storage, name: &str, path: &str) -> Result<i64> {
+    let conn = storage
+        .connection()
+        .context("failed to acquire connection")?;
+    let uuid = uuid::Uuid::now_v7().to_string();
+
+    conn.execute(|conn| {
+        conn.execute(
+            "INSERT OR IGNORE INTO buffers (name, path, uuid, total_chunks, total_files) \
+             VALUES (?1, ?2, ?3, 0, 0)",
+            params![name, path, uuid],
+        )?;
+        let id = conn.query_row(
+            "SELECT id FROM buffers WHERE name = ?1",
+            params![name],
+            |row| row.get(0),
+        )?;
+        Ok(id)
+    })
+    .context("failed to ensure project")
+}
+
 /// Look up a project by name.
 ///
 /// # Errors

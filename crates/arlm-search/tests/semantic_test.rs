@@ -5,6 +5,8 @@
     clippy::cast_precision_loss
 )]
 
+use std::sync::Arc;
+
 use arlm_search::semantic::SemanticSearch;
 use arlm_storage::lance::vectors::{VectorEntry, VectorStore};
 use tempfile::TempDir;
@@ -13,7 +15,7 @@ const DIMS: usize = 1024;
 
 async fn setup_store() -> (SemanticSearch, TempDir) {
     let tmp = TempDir::new().unwrap();
-    let store = VectorStore::open(tmp.path()).await.unwrap();
+    let store = Arc::new(VectorStore::open(tmp.path()).await.unwrap());
 
     let entries: Vec<VectorEntry> = (0..3)
         .map(|i| VectorEntry {
@@ -63,7 +65,7 @@ async fn test_semantic_search_buffer_filter() {
     ];
     store.insert_vectors(&entries).await.unwrap();
 
-    let search = SemanticSearch::new(store);
+    let search = SemanticSearch::new(Arc::new(store));
     let query = vec![1.0_f32; DIMS];
     let results = search.search(&query, 1, 10).await.unwrap();
     assert_eq!(results.len(), 1);

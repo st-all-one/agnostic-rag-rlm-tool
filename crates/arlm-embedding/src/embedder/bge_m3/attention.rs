@@ -52,8 +52,6 @@ impl TransformerLayer {
 
         let mask_f32 = attention_mask
             .to_dtype(candle_core::DType::F32)
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))?
-            .unsqueeze(0)
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
 
         let neg_inf = Tensor::new(f32::NEG_INFINITY, attention_mask.device())
@@ -61,8 +59,13 @@ impl TransformerLayer {
         let filled = neg_inf
             .broadcast_as(attn_weights.shape())
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
+        // Mask the *key* dimension: `attn_weights` is `[heads, seq, seq]`, so the
+        // broadcastable mask is `[1, 1, seq, seq]` where column `j` is the
+        // key's attention mask (padded positions attend to -inf).
         let mask_4d = mask_f32
-            .unsqueeze(2)
+            .unsqueeze(1)
+            .map_err(|e| EmbeddingError::Candle(e.to_string()))?
+            .broadcast_as(&[self.num_heads, seq_len, seq_len])
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
         let attn_weights = masked_fill(&attn_weights, &mask_4d, &filled)?;
 

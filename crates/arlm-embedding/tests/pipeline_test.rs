@@ -18,7 +18,7 @@ use arlm_embedding::embedder::config::EmbeddingConfig;
 use arlm_embedding::embedder::fallback::FallbackEmbedder;
 use arlm_embedding::pipeline::{
     IngestOptions, IngestionPipeline, compress_text, compute_hash, discover_files, glob_match,
-    is_text_file,
+    is_text_file, path_force_matches,
 };
 
 #[test]
@@ -60,7 +60,7 @@ fn test_discover_files() {
     std::fs::create_dir(&sub).expect("mkdir");
     std::fs::write(sub.join("d.txt"), "text").expect("write");
 
-    let files = discover_files(dir.path(), &[]).expect("discover");
+    let files = discover_files(dir.path(), &[], &[]).expect("discover");
     assert_eq!(files.len(), 3); // a.rs, b.py, sub/d.txt (filtered: .env, key.pem, c.png)
 }
 
@@ -72,7 +72,7 @@ fn test_discover_files_custom_ignore() {
     std::fs::write(dir.path().join("c.rs"), "fn foo() {}").expect("write");
 
     let ignores = vec!["*.log".to_string()];
-    let files = discover_files(dir.path(), &ignores).expect("discover");
+    let files = discover_files(dir.path(), &ignores, &[]).expect("discover");
     assert_eq!(files.len(), 2); // a.rs, c.rs (filtered: b.log)
 }
 
@@ -85,6 +85,53 @@ fn test_glob_match() {
     assert!(!glob_match(".env.*", ".env"));
     assert!(glob_match(".env", ".env"));
     assert!(!glob_match(".env", ".env.local"));
+}
+
+#[test]
+fn test_default_ignores_sensitive_dirs() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("a.rs"), "fn main() {}").expect("write");
+    std::fs::write(dir.path().join(".env"), "SECRET=1").expect("write");
+    std::fs::create_dir_all(dir.path().join(".github")).expect("mkdir");
+    std::fs::write(dir.path().join(".github").join("ci.yml"), "run").expect("write");
+    std::fs::create_dir_all(dir.path().join(".vscode")).expect("mkdir");
+    std::fs::write(dir.path().join(".vscode").join("settings.json"), "{}").expect("write");
+    std::fs::create_dir_all(dir.path().join("vendor")).expect("mkdir");
+    std::fs::write(dir.path().join("vendor").join("lib.rs"), "code").expect("write");
+
+    let files = discover_files(dir.path(), &[], &[]).expect("discover");
+    // Only the non-ignored source file is indexed by default.
+    assert_eq!(files.len(), 1);
+    assert!(files[0].ends_with("a.rs"));
+}
+
+#[test]
+fn test_force_include_bypasses_ignore() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join(".env"), "SECRET=1").expect("write");
+    std::fs::create_dir_all(dir.path().join(".github").join("workflows")).expect("mkdir");
+    std::fs::write(
+        dir.path().join(".github").join("workflows").join("ci.yml"),
+        "run",
+    )
+    .expect("write");
+
+    let force = vec![".env".to_string(), ".github".to_string()];
+    let files = discover_files(dir.path(), &[], &force).expect("discover");
+    assert_eq!(files.len(), 2);
+}
+
+#[test]
+fn test_path_force_matches_glob() {
+    assert!(path_force_matches(
+        &["vendor/**".to_string()],
+        "vendor/foo/bar.rs"
+    ));
+    assert!(path_force_matches(&["*.env".to_string()], "config.env"));
+    assert!(!path_force_matches(
+        &["vendor".to_string()],
+        "vendorx/foo.rs"
+    ));
 }
 
 #[test]

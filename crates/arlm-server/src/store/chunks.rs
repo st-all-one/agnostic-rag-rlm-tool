@@ -145,3 +145,39 @@ pub fn update_buffer_counts(
     })
     .context("failed to update buffer counts")
 }
+
+/// Add to the aggregate counts on a buffer (used when multiple concurrent
+/// index streams each contribute a disjoint file set).
+///
+/// # Errors
+///
+/// Returns an error if the update fails.
+pub fn increment_buffer_counts(
+    storage: &Storage,
+    buffer_id: i64,
+    delta_chunks: i64,
+    delta_files: i64,
+    embedding_model: &str,
+    embedding_dims: i64,
+) -> Result<()> {
+    let conn = storage
+        .connection()
+        .context("failed to acquire connection")?;
+
+    conn.execute(|conn| {
+        conn.execute(
+            "UPDATE buffers SET total_chunks = total_chunks + ?1, total_files = total_files + ?2, \
+             embedding_model = ?3, embedding_dims = ?4, last_indexed_at = unixepoch() \
+             WHERE id = ?5",
+            params![
+                delta_chunks,
+                delta_files,
+                embedding_model,
+                embedding_dims,
+                buffer_id,
+            ],
+        )?;
+        Ok(())
+    })
+    .context("failed to increment buffer counts")
+}

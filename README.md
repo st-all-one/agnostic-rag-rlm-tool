@@ -259,15 +259,19 @@ O `docker-compose.server.yml` monta o volume `arlm-server-data` em `/data`
 (configure `ARLM_DATA_DIR=/data`) e expõe `50051` (bind `0.0.0.0` via
 `ARLM_SERVER_ADDR`). O healthcheck usa `arlm-server status`.
 
-> **Indexação em Docker:** o servidor lê os arquivos do *próprio* filesystem.
-> Para indexar via Docker, monte o projeto no container e passe o caminho
-> interno:
+> **Indexação em Docker (client-streaming):** o servidor **não** lê o filesystem
+> do cliente. A CLI descobre e lê os arquivos localmente e faz *stream* dos bytes
+> para o servidor via gRPC (`IndexProject` é client-streaming). Portanto **não é
+> necessário montar o projeto no container** — basta apontar a CLI para o caminho
+> local:
 >
 > ```bash
-> docker run -v /caminho/do/projeto:/workspace/projeto -p 50051:50051 \
->     arlm-server:latest up
-> arlm --server 127.0.0.1:50051 index /workspace/projeto
+> arlm --server 127.0.0.1:50051 index /caminho/do/projeto
 > ```
+>
+> Por padrão, caminhos sensíveis/ignorados (`.env`, `.vscode`, `.github`,
+> `.gitlab`, `.zed`, vendors, …) **não** são enviados. Use `--force-include=`
+> para enviá-los explicitamente.
 
 ## Desenvolvimento
 

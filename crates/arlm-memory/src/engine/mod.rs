@@ -45,6 +45,8 @@ pub struct IndexProjectOptions {
     pub embedding_dims: i64,
     /// Additional glob patterns to ignore.
     pub ignore_patterns: Vec<String>,
+    /// Glob patterns that bypass ignore rules (mirrors `--force-include`).
+    pub force_include: Vec<String>,
 }
 
 impl Default for IndexProjectOptions {
@@ -56,6 +58,7 @@ impl Default for IndexProjectOptions {
             embedding_model: "bge-m3".to_string(),
             embedding_dims: 1024,
             ignore_patterns: Vec::new(),
+            force_include: Vec::new(),
         }
     }
 }

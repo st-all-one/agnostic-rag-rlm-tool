@@ -28,8 +28,13 @@ pub async fn run() -> Result<()> {
 
     info!(addr = %config.listen_addr, backend = %config.llm.backend, model = %config.llm.model, "starting arlm-server");
 
-    let storage = Storage::open_pooled(&config.data_dir, config.pool_size)
-        .context("failed to open storage")?;
+    // Single-mode storage: `arlm-storage`'s read paths (`get_chunk`,
+    // `get_summary`, `search_summaries`, …) currently assume a single
+    // connection via `Storage::conn()`. Opening single-mode keeps both the
+    // `conn()`-based read helpers and the `connection()`-based pooled writes
+    // (used by indexing) valid. Concurrent handlers serialize on the shared
+    // connection mutex, which is acceptable for a local dev server.
+    let storage = Storage::open(&config.data_dir).context("failed to open storage")?;
 
     let llm = AppState::build_llm(&config).context("failed to configure LLM backend")?;
 

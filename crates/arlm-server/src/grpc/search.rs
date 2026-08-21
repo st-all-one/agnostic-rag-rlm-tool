@@ -1,14 +1,25 @@
 //! Search and context-building RPCs: `Search`, `BuildContext`.
 //!
-//! Both use the `chunks_fts` FTS5 index over `chunk_texts`, joined against
-//! `chunks` metadata and filtered by the project buffer. Queries are sanitised
-//! before being passed to the FTS5 MATCH operator to avoid injection errors.
+//! Both run a unified hybrid search (`arlm_search::HybridSearch`) over the
+//! project's chunks: BM25 (FTS5) is always the base tier, and the `entity`,
+//! `vector` (semantic) and `llm_rerank` tiers are fused on top via Reciprocal
+//! Rank Fusion (RRF). The semantic tier is powered by the server's embedder
+//! (BGE-M3 when weights are present, otherwise a hash fallback), so vector
+//! search degrades gracefully to BM25 when no vector store is configured.
+//!
+//! Result scores are min-max normalised to `[0, 1]` (higher = better) so that
+//! `--min-score` thresholds and client ranking stay meaningful regardless of
+//! which tiers contributed. Natural-language questions that return nothing
+//! under FTS5's default AND semantics are retried with an OR pass.
 
+use std::fmt::Write as _;
 use std::time::Instant;
 
 use arlm_proto::proto::*;
-use arlm_storage::Storage;
-use rusqlite::{Connection, params};
+use arlm_search::{
+    Bm25Search, EntitySearch, HybridSearch, SearchOptions, SearchTier as HybridTier,
+    SemanticSearch, build_search_results,
+};
 use tonic::{Response, Status};
 
 use crate::grpc::error::{internal, invalid_arg, not_found};
@@ -22,40 +33,6 @@ async fn buffer_id_for(state: &AppState, project: &str) -> Result<Option<i64>, S
     store::blocking(move || store::buffer_id_for_project(&storage, &project_owned))
         .await
         .map_err(internal)
-}
-
-/// Run the FTS5 BM25 query returning hydrated results for a buffer.
-fn bm25_search(
-    conn: &Connection,
-    buffer_id: i64,
-    query: &str,
-    limit: i64,
-) -> Result<Vec<SearchResult>, rusqlite::Error> {
-    let mut stmt = conn.prepare(
-        "SELECT c.id, c.file_path, c.line_start, c.line_end, bm25(chunks_fts) AS score, \
-                COALESCE(cc.content, '') \
-         FROM chunks_fts \
-         JOIN chunks c ON c.id = chunks_fts.rowid \
-         LEFT JOIN chunk_texts cc ON cc.chunk_id = c.id \
-         WHERE chunks_fts.content MATCH ?1 AND c.buffer_id = ?2 \
-         ORDER BY score \
-         LIMIT ?3",
-    )?;
-
-    let rows = stmt.query_map(params![query, buffer_id, limit], |row| {
-        Ok(SearchResult {
-            chunk_id: row.get(0)?,
-            file_path: row.get(1)?,
-            start_line: row.get(2)?,
-            end_line: row.get(3)?,
-            score: row.get(4)?,
-            text: row.get(5)?,
-            is_summary: false,
-            summary: None,
-        })
-    })?;
-
-    rows.collect()
 }
 
 /// Sanitise a user query for FTS5 `MATCH`: keep only alphanumeric and
@@ -73,7 +50,133 @@ fn sanitize_fts(query: &str) -> String {
         .collect()
 }
 
-/// Search chunks in a project with BM25 ranking.
+/// Run the unified hybrid search and hydrate results into full chunks.
+///
+/// Always runs BM25; adds the `entity`/`vector` tiers according to `tier`.
+/// When the query is a multi-word natural-language question that returns
+/// nothing, a second OR-based BM25 pass recovers relevant chunks.
+async fn hybrid_search(
+    state: &AppState,
+    buffer_id: i64,
+    fts_query: &str,
+    tier: HybridTier,
+    top_k: usize,
+) -> anyhow::Result<Vec<arlm_search::SearchResult>> {
+    let storage = state.storage.clone();
+    let bm25 = Bm25Search::new(&storage).map_err(|e| anyhow::anyhow!("bm25 init: {e}"))?;
+    let entity = EntitySearch::new(storage.clone()).ok();
+    let semantic = state
+        .vector_store
+        .as_ref()
+        .map(|v| SemanticSearch::new(v.clone()));
+    let hybrid = HybridSearch::new(bm25, entity, semantic).with_llm_backend(state.llm.clone());
+
+    let query_vector = state.embedder.embed(fts_query).ok();
+    let query_vector = query_vector.as_deref();
+    let options = SearchOptions {
+        tier,
+        top_k: top_k * 3,
+    };
+
+    let mut fused = hybrid
+        .search(
+            fts_query,
+            query_vector,
+            buffer_id,
+            &options,
+            None,
+            Some(&state.storage),
+        )
+        .await?;
+
+    // Natural-language fix: AND yields nothing on multi-word queries, retry
+    // with OR so questions still surface relevant chunks.
+    if fused.is_empty() && fts_query.split_whitespace().count() > 1 {
+        let or_query = fts_query
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        fused = hybrid
+            .search(
+                &or_query,
+                query_vector,
+                buffer_id,
+                &options,
+                None,
+                Some(&state.storage),
+            )
+            .await?;
+    }
+
+    let mut results = build_search_results(&state.storage, &fused, None)?;
+    normalize_scores(&mut results);
+    Ok(results)
+}
+
+/// Min-max normalise RRF fusion scores to `[0, 1]` (higher = better) so that
+/// `--min-score` thresholds and downstream ranking remain meaningful.
+fn normalize_scores(results: &mut [arlm_search::SearchResult]) {
+    if results.is_empty() {
+        return;
+    }
+    let min = results
+        .iter()
+        .map(|r| r.score)
+        .fold(f32::INFINITY, f32::min);
+    let max = results
+        .iter()
+        .map(|r| r.score)
+        .fold(f32::NEG_INFINITY, f32::max);
+
+    if (max - min).abs() < f32::EPSILON {
+        for r in results.iter_mut() {
+            r.score = 1.0;
+        }
+        return;
+    }
+    for r in results.iter_mut() {
+        r.score = (r.score - min) / (max - min);
+    }
+}
+
+/// Map hydrated `arlm_search` results into the gRPC `SearchResult` shape.
+fn to_proto_results(results: &[arlm_search::SearchResult]) -> Vec<SearchResult> {
+    results
+        .iter()
+        .map(|r| SearchResult {
+            chunk_id: r.chunk_id,
+            text: r.content.clone(),
+            score: r.score,
+            file_path: r.file_path.clone(),
+            start_line: r.line_start as i32,
+            end_line: r.line_end as i32,
+            is_summary: r.is_summary,
+            summary: None,
+        })
+        .collect()
+}
+
+/// Render hydrated chunks into the markdown-style LLM context with a token
+/// budget. Returns the body and the number of tokens consumed.
+fn render_context(candidates: &[SearchResult], max_tokens: u32) -> (String, u32) {
+    let mut body = String::from("# Project Context\n\n");
+    let mut budget: u32 = 0;
+    for r in candidates {
+        let tokens = (r.text.len() as u32).saturating_div(4);
+        if tokens > 0 && budget + tokens > max_tokens {
+            continue;
+        }
+        budget += tokens;
+        let _ = write!(
+            body,
+            "## {} (score {:.2})\n```\n{}\n```\n\n",
+            r.file_path, r.score, r.text
+        );
+    }
+    (body, budget)
+}
+
+/// Search chunks in a project with BM25 (+ optional semantic) ranking.
 ///
 /// # Errors
 ///
@@ -95,53 +198,30 @@ pub(crate) async fn handle_search(
         .ok_or_else(|| not_found("project not found"))?;
 
     let max_results = if req.max_results > 0 {
-        i64::from(req.max_results)
+        req.max_results as usize
     } else {
         10
     };
 
+    let tier = match SearchTier::try_from(req.tier).unwrap_or(SearchTier::TierBm25) {
+        SearchTier::TierBm25 => HybridTier::Fts,
+        SearchTier::TierEntity => HybridTier::Entity,
+        SearchTier::TierSemantic => HybridTier::Vector,
+        SearchTier::TierHybrid => HybridTier::LlmRerank,
+    };
+
     let fts_query = sanitize_fts(&query);
-    let storage = state.storage.clone();
-    let results = tokio::task::spawn_blocking(move || {
-        let conn = storage.connection()?;
-        conn.execute(|conn| {
-            if let Ok(limit_rows) = conn.query_row("SELECT COUNT(*) FROM chunks_fts", [], |r| {
-                r.get::<_, i64>(0)
-            }) {
-                if limit_rows == 0 {
-                    sync_fts(conn)?;
-                }
-            }
-            bm25_search(conn, buffer_id, &fts_query, max_results).map_err(anyhow::Error::from)
-        })
-    })
-    .await
-    .map_err(internal)?
-    .map_err(internal)?;
+    let candidates = hybrid_search(state, buffer_id, &fts_query, tier, max_results)
+        .await
+        .map_err(internal)?;
 
-    tracing::info!(
-        project = %project,
-        results = results.len(),
-        elapsed_ms = start.elapsed().as_millis(),
-        "search completed"
-    );
-
+    let results = to_proto_results(&candidates);
     let total_count = i32::try_from(results.len()).unwrap_or(i32::MAX);
     Ok(Response::new(SearchResponse {
         results,
         total_count,
         duration_ms: start.elapsed().as_secs_f64() * 1000.0,
     }))
-}
-
-/// Ensure chunks_fts matches chunk_texts (repopulate when out of sync).
-fn sync_fts(conn: &Connection) -> Result<(), rusqlite::Error> {
-    conn.execute("DELETE FROM chunks_fts", [])?;
-    let _ = conn.execute(
-        "INSERT INTO chunks_fts(rowid, content) SELECT chunk_id, content FROM chunk_texts",
-        [],
-    )?;
-    Ok(())
 }
 
 /// Build an LLM-ready context from the top relevant chunks of a project.
@@ -165,84 +245,39 @@ pub(crate) async fn handle_build_context(
         .await?
         .ok_or_else(|| not_found("project not found"))?;
 
-    let max_tokens = u32::try_from(req.max_tokens).unwrap_or(8_000);
+    let max_tokens: u32 = if req.max_tokens == 0 {
+        8_000
+    } else {
+        req.max_tokens as u32
+    };
 
     let fts_query = sanitize_fts(&task);
-    let storage = state.storage.clone();
-    let ctx = tokio::task::spawn_blocking(move || {
-        assemble_context(&storage, buffer_id, &fts_query, max_tokens)
-    })
-    .await
-    .map_err(internal)?
-    .map_err(internal)?;
+    // Context uses the full hybrid tier (BM25 + entity + semantic) so the
+    // token budget keeps the strongest matches across both signals.
+    let candidates = hybrid_search(state, buffer_id, &fts_query, HybridTier::Vector, 50)
+        .await
+        .map_err(internal)?;
+
+    let results = to_proto_results(&candidates);
+    let (context, total_tokens) = render_context(&results, max_tokens);
 
     tracing::info!(
         project = %project,
-        chunks = ctx.sources.len(),
-        total_tokens = ctx.stats.as_ref().map_or(0, |s| s.total_tokens),
+        chunks = results.len(),
+        total_tokens,
         elapsed_ms = start.elapsed().as_millis(),
         "build_context completed"
     );
 
-    Ok(Response::new(ctx))
-}
-
-/// Assemble the context payload: markdown-style prose + sources + stats.
-fn assemble_context(
-    storage: &Storage,
-    buffer_id: i64,
-    query: &str,
-    max_tokens: u32,
-) -> anyhow::Result<ContextResponse> {
-    let conn = storage.connection()?;
-    let results = conn.execute(|conn| {
-        if let Ok(limit_rows) = conn.query_row("SELECT COUNT(*) FROM chunks_fts", [], |r| {
-            r.get::<_, i64>(0)
-        }) {
-            if limit_rows == 0 {
-                sync_fts(conn)?;
-            }
-        }
-        // Fetch a generous candidate pool so the budget keeps the best matches.
-        let results = bm25_search(conn, buffer_id, query, 50)?;
-        let mut sources = Vec::with_capacity(results.len());
-        let mut budget_used: u32 = 0;
-        let mut body = String::from("# Project Context\n\n");
-
-        for r in &results {
-            let tokens = estimate_tokens(&r.text);
-            if tokens > 0 && budget_used + tokens > max_tokens {
-                continue;
-            }
-            budget_used += tokens;
-            use std::fmt::Write as _;
-            let _ = write!(
-                body,
-                "## {} (score {:.2})\n```\n{}\n```\n\n",
-                r.file_path, r.score, r.text
-            );
-            sources.push(r.clone());
-        }
-
-        Ok((body, sources, budget_used))
-    })?;
-
-    let (body, sources, budget_used) = results;
-    let raw_chunks = sources.len();
-
-    Ok(ContextResponse {
-        context: body,
-        sources,
+    let raw_chunks = results.len() as i32;
+    Ok(Response::new(ContextResponse {
+        context,
+        sources: results,
         stats: Some(ContextStats {
-            total_tokens: i32::try_from(budget_used).unwrap_or(i32::MAX),
-            raw_chunks_included: i32::try_from(raw_chunks).unwrap_or(i32::MAX),
+            total_tokens: total_tokens as i32,
+            raw_chunks_included: raw_chunks,
             summary_chunks_included: 0,
             summary_ratio: 0.0,
         }),
-    })
-}
-
-/// Rough token estimate: 1 token per 4 ASCII characters.
-fn estimate_tokens(text: &str) -> u32 {
-    (text.len() as u32).saturating_div(4)
+    }))
 }

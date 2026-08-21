@@ -26,6 +26,9 @@ pub struct IndexOptions {
     pub embedding_dims: i64,
     /// Additional glob patterns to ignore (e.g., `["*.log", "dist/"]`).
     pub ignore_patterns: Vec<String>,
+    /// Glob patterns that bypass ignore rules (e.g., `[".env", "vendor"]`).
+    /// Mirrors the client `--force-include` flag.
+    pub force_include: Vec<String>,
 }
 
 impl Default for IndexOptions {
@@ -34,7 +37,8 @@ impl Default for IndexOptions {
             max_chunk_bytes: 1500,
             embedding_model: "bge-m3".to_string(),
             embedding_dims: 1024,
-            ignore_patterns: Vec::new(),
+            ignore_patterns: vec![],
+            force_include: vec![],
         }
     }
 }
@@ -91,7 +95,7 @@ impl KnowledgeEngine {
             .context("failed to find project")?
             .context("project not found")?;
 
-        let files = discover_files(dir_path, &options.ignore_patterns)
+        let files = discover_files(dir_path, &options.ignore_patterns, &options.force_include)
             .context("failed to discover files")?;
 
         let mut files_processed: u64 = 0;

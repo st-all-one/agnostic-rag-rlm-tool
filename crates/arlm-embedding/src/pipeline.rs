@@ -2,7 +2,9 @@
 
 pub mod files;
 
-pub use files::{compress_text, compute_hash, discover_files, glob_match, is_text_file};
+pub use files::{
+    compress_text, compute_hash, discover_files, glob_match, is_text_file, path_force_matches,
+};
 
 use std::path::PathBuf;
 use std::sync::Arc;

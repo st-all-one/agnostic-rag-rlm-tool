@@ -40,6 +40,7 @@ impl MemoryEngine {
                 embedding_model: options.embedding_model.clone(),
                 embedding_dims: options.embedding_dims,
                 ignore_patterns: options.ignore_patterns.clone(),
+                force_include: options.force_include.clone(),
             },
         )?;
 
@@ -83,8 +84,12 @@ impl MemoryEngine {
         }
 
         // Discover files
-        let files = discover_files(&options.dir_path, &options.ignore_patterns)
-            .context("failed to discover files")?;
+        let files = discover_files(
+            &options.dir_path,
+            &options.ignore_patterns,
+            &options.force_include,
+        )
+        .context("failed to discover files")?;
         let total_files = files.len();
 
         // Run ingestion pipeline

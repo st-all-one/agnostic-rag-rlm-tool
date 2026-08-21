@@ -24,7 +24,7 @@ use std::pin::Pin;
 use arlm_proto::proto::arlm_service_server::ArlmService;
 use arlm_proto::proto::*;
 use futures::Stream;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response, Status, Streaming};
 
 use crate::state::AppState;
 
@@ -73,10 +73,10 @@ impl ArlmService for ArlmGrpcService {
 
     async fn index_project(
         &self,
-        request: Request<IndexRequest>,
+        request: Request<Streaming<IndexChunk>>,
     ) -> Result<Response<IndexResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.index_project");
-        index::handle_index_project(&self.state, request.into_inner()).await
+        index::handle_index_project(&self.state, request).await
     }
 
     // ── Search ────────────────────────────────────────────────────────────

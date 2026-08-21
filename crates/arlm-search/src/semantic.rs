@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
@@ -6,12 +7,12 @@ use arlm_storage::VectorStore;
 use crate::types::SemanticResult;
 
 pub struct SemanticSearch {
-    store: VectorStore,
+    store: Arc<VectorStore>,
 }
 
 impl SemanticSearch {
     #[must_use]
-    pub fn new(store: VectorStore) -> Self {
+    pub fn new(store: Arc<VectorStore>) -> Self {
         Self { store }
     }
 

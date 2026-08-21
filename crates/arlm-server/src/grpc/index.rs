@@ -1,89 +1,83 @@
-//! Indexing RPC: `IndexProject`.
+//! Indexing RPC: `IndexProject` (client-streaming).
 //!
-//! Orchestrates full project ingestion: file discovery → deterministic
-//! chunking → entity extraction → SQLite persistence (chunks + chunk_texts +
-//! FTS + entities) → vector persistence (LanceDB) → buffer count update.
+//! The client discovers and reads files from its OWN filesystem, then streams
+//! each file's content here. This handler never touches the client's
+//! filesystem — it only receives bytes over gRPC, chunks them deterministically,
+//! hashes, extracts entities and persists to SQLite + (optionally) LanceDB.
+//! Removing server-side path knowledge closes the arbitrary-file-read footgun
+//! described in the security review.
 
+use std::path::Path;
 use std::time::Instant;
 
-use arlm_embedding::embedder::Embedder;
-use arlm_embedding::embedder::fallback::FallbackEmbedder;
-use arlm_embedding::pipeline::discover_files;
-use arlm_proto::proto::*;
 use arlm_storage::VectorEntry;
-use rayon::prelude::*;
-use tonic::{Response, Status};
+use tonic::{Request, Response, Status, Streaming};
 
-use crate::grpc::error::{internal, not_found};
+use arlm_proto::proto::index_chunk;
+use arlm_proto::proto::*;
+
+use crate::grpc::error::internal;
 use crate::indexing;
 use crate::state::AppState;
 use crate::store;
 
 const EMBEDDING_DIMS: i64 = 1024;
-const EMBEDDING_MODEL: &str = "fallback-hash";
 
-/// Index all text files of a project.
+/// Decode a streamed file's content, transparently decompressing if the client
+/// sent it zstd-compressed.
+fn decode_content(file: &IndexFile) -> Result<String, Status> {
+    let bytes = if file.compressed {
+        zstd::stream::decode_all(&mut &file.content[..]).map_err(internal)?
+    } else {
+        file.content.clone()
+    };
+    String::from_utf8(bytes).map_err(internal)
+}
+
+/// Index a project from a client stream of file bytes.
 ///
 /// # Errors
 ///
-/// Returns an error if the project is unknown or any persistence step fails.
+/// Returns an error if the stream is malformed, the project is unknown, or any
+/// persistence step fails.
 pub(crate) async fn handle_index_project(
     state: &AppState,
-    req: IndexRequest,
+    request: Request<Streaming<IndexChunk>>,
 ) -> Result<Response<IndexResponse>, Status> {
     let start = Instant::now();
-    let project = req.project.clone();
+    let mut stream = request.into_inner();
 
-    let project_storage = state.storage.clone();
-    let project_for_buffer = project.clone();
-    let root_for_buffer = req.root_path.clone();
-    let buffer_id = store::blocking(move || {
-        if let Some(id) = store::buffer_id_for_project(&project_storage, &project_for_buffer)? {
-            return Ok(Some(id));
+    let mut project: Option<String> = None;
+    let mut buffer_id: Option<i64> = None;
+    let mut chunks: Vec<(String, Vec<indexing::IndexedChunk>)> = Vec::new();
+    let mut distinct_files: usize = 0;
+
+    while let Some(msg) = stream.message().await.map_err(internal)? {
+        match msg.body {
+            Some(index_chunk::Body::Init(init)) => {
+                project = Some(init.project.clone());
+                let pid = store::ensure_project(&state.storage, &init.project, &init.root_path)
+                    .map_err(internal)?;
+                buffer_id = Some(pid);
+            }
+            Some(index_chunk::Body::File(file)) => {
+                let content = decode_content(&file)?;
+                let chunk_list = indexing::index_file(Path::new(&file.rel_path), &content);
+                distinct_files += 1;
+                chunks.push((file.rel_path.clone(), chunk_list));
+            }
+            None => {}
         }
-        store::insert_project(&project_storage, &project_for_buffer, &root_for_buffer)?;
-        store::buffer_id_for_project(&project_storage, &project_for_buffer)
-    })
-    .await
-    .map_err(internal)?
-    .ok_or_else(|| not_found("project not found"))?;
-
-    let root = std::path::PathBuf::from(&req.root_path);
-    if !root.is_dir() {
-        return Err(Status::invalid_argument(format!(
-            "invalid root_path: {}",
-            req.root_path
-        )));
     }
 
-    // Phase 1: discover files (blocking I/O on the blocking pool).
-    let excludes = req.exclude_patterns.clone();
-    let root_clone = root.clone();
-    let files = tokio::task::spawn_blocking(move || discover_files(&root_clone, &excludes))
-        .await
-        .map_err(internal)?
-        .map_err(internal)?;
+    let project = project
+        .ok_or_else(|| Status::invalid_argument("index stream did not send an init message"))?;
+    let buffer_id =
+        buffer_id.ok_or_else(|| Status::invalid_argument("index stream missing init"))?;
 
-    tracing::info!(project = %project, files = files.len(), "indexing discovered files");
-
-    // Phase 2: read + chunk + hash in parallel (CPU bound).
-    let chunks: Vec<(String, Vec<indexing::IndexedChunk>)> = files
-        .par_iter()
-        .filter_map(|path| {
-            let content = std::fs::read_to_string(path).ok()?;
-            Some((
-                path.to_string_lossy().into_owned(),
-                indexing::index_file(path, &content),
-            ))
-        })
-        .collect();
-
-    let distinct_files = chunks.len();
     let total_chunks: usize = chunks.iter().map(|(_, cs)| cs.len()).sum();
-    tracing::info!(project = %project, distinct_files, total_chunks, "chunked project files");
 
-    // Phase 3: persist chunks + texts + FTS + entities + collect (id, content)
-    // pairs for the optional vector pass.
+    // Phase 1: persist chunks + texts + FTS + entities.
     let storage = state.storage.clone();
     let persisted: Vec<(i64, String)> = store::blocking(move || {
         let mut persisted = Vec::with_capacity(total_chunks);
@@ -115,9 +109,9 @@ pub(crate) async fn handle_index_project(
     .await
     .map_err(internal)?;
 
-    // Phase 4: persist vectors to LanceDB when available.
+    // Phase 2: persist vectors to LanceDB when available.
     if let Some(vector_store) = &state.vector_store {
-        let embedder = FallbackEmbedder::new(EMBEDDING_DIMS as usize);
+        let embedder = state.embedder.clone();
         let mut entries = Vec::with_capacity(persisted.len());
         for (chunk_id, content) in &persisted {
             let vector = embedder.embed(content).map_err(internal)?;
@@ -132,15 +126,16 @@ pub(crate) async fn handle_index_project(
         }
     }
 
-    // Phase 5: refresh buffer aggregate counts.
+    // Phase 3: bump aggregate counts by this stream's contribution.
     let storage = state.storage.clone();
+    let embedding_model = state.embedder.name().to_string();
     store::blocking(move || {
-        store::update_buffer_counts(
+        store::increment_buffer_counts(
             &storage,
             buffer_id,
             i64::try_from(total_chunks).unwrap_or(i64::MAX),
             i64::try_from(distinct_files).unwrap_or(i64::MAX),
-            EMBEDDING_MODEL,
+            &embedding_model,
             EMBEDDING_DIMS,
         )
     })
