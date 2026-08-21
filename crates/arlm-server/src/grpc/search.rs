@@ -71,7 +71,15 @@ async fn hybrid_search(
         .map(|v| SemanticSearch::new(v.clone()));
     let hybrid = HybridSearch::new(bm25, entity, semantic).with_llm_backend(state.llm.clone());
 
-    let query_vector = state.embedder.embed(fts_query).ok();
+    // The embedder's HTTP client (ureq) is synchronous and would block the
+    // async worker, so run it on a blocking task. Falls back to BM25-only when
+    // the embed fails.
+    let fts_query_owned = fts_query.to_string();
+    let embedder = state.embedder.clone();
+    let query_vector = tokio::task::spawn_blocking(move || embedder.embed(&fts_query_owned))
+        .await
+        .ok()
+        .and_then(Result::ok);
     let query_vector = query_vector.as_deref();
     let options = SearchOptions {
         tier,

@@ -49,8 +49,8 @@ fn load_embedder() -> Arc<dyn Embedder + Send + Sync> {
             .ok()
             .and_then(|d| d.parse::<usize>().ok())
             .unwrap_or(768);
-        let prefix = std::env::var("ARLM_OLLAMA_PREFIX")
-            .unwrap_or_else(|_| "search_document: ".to_string());
+        let prefix =
+            std::env::var("ARLM_OLLAMA_PREFIX").unwrap_or_else(|_| "search_document: ".to_string());
         let cfg = arlm_embedding::embedder::config::EmbeddingConfig {
             model: arlm_embedding::embedder::config::EmbeddingModel::Ollama,
             quantization: arlm_embedding::embedder::config::Quantization::None,
