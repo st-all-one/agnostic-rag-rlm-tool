@@ -26,9 +26,9 @@ fn test_session_create_and_list() {
     let project = tmp.path().join("test-proj");
     std::fs::create_dir_all(&project).unwrap();
 
-    let result = execute_create("My Analysis", &project, Format::Json);
+    let result = execute_create("My Analysis", &project, Format::FullJson);
     assert!(result.is_ok());
 
-    let result = execute_list(&project, Format::Json);
+    let result = execute_list(&project, Format::FullJson);
     assert!(result.is_ok());
 }

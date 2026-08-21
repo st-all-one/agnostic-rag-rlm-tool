@@ -23,7 +23,7 @@ pub fn execute(
 
         match run {
             Some(r) => match format {
-                Format::Json => {
+                Format::FullJson | Format::Jsonl => {
                     let models: Vec<serde_json::Value> = usage
                         .iter()
                         .map(|u| {
@@ -47,7 +47,7 @@ pub fn execute(
                         }));
                     output.print();
                 }
-                Format::Tree => {
+                Format::Path => {
                     output::success(&format!("Cost for run {}:", r.id));
                     println!("  Task: {}", r.task);
                     if let Some(ref a) = r.agent {
@@ -85,7 +85,7 @@ pub fn execute(
                         }
                     }
                 }
-                Format::Prompt => {
+                Format::Text => {
                     println!(
                         "Cost for run {}: ${:.4} ({} tokens)",
                         r.id, r.total_cost, r.total_tokens
@@ -96,7 +96,7 @@ pub fn execute(
                 }
             },
             None => match format {
-                Format::Json => {
+                Format::FullJson | Format::Jsonl => {
                     let output =
                         crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                             "run_id": rid,
@@ -126,7 +126,7 @@ pub fn execute(
     };
 
     match format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let items: Vec<serde_json::Value> = filtered_runs
                 .iter()
                 .map(|r| {
@@ -148,7 +148,7 @@ pub fn execute(
             }));
             output.print();
         }
-        Format::Tree => {
+        Format::Path => {
             if let Some(a) = agent {
                 output::success(&format!("Cost for agent '{a}':"));
             } else {
@@ -188,7 +188,7 @@ pub fn execute(
                 }
             }
         }
-        Format::Prompt => {
+        Format::Text => {
             if let Some(a) = agent {
                 println!(
                     "Cost for agent '{a}': ${:.4} across {} run(s)",

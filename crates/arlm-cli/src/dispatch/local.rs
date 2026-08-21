@@ -65,11 +65,13 @@ pub fn run_local(
             path,
             chunk_size,
             ignore_patterns,
+            force_include,
             watch,
         } => commands::index::execute(commands::index::IndexConfig {
             path: &path,
             chunk_size,
             ignore_patterns: &ignore_patterns,
+            force_include: &force_include,
             watch,
             project: &project,
             format,

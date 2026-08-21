@@ -16,8 +16,9 @@ use arlm_cli::output::Format;
 
 #[test]
 fn test_format_display() {
-    assert_eq!(Format::Json.to_string(), "json");
-    assert_eq!(Format::Tree.to_string(), "tree");
+    assert_eq!(Format::FullJson.to_string(), "full_json");
+    assert_eq!(Format::Path.to_string(), "path");
     assert_eq!(Format::Markdown.to_string(), "markdown");
-    assert_eq!(Format::Prompt.to_string(), "prompt");
+    assert_eq!(Format::Text.to_string(), "text");
+    assert_eq!(Format::Jsonl.to_string(), "jsonl");
 }

@@ -28,7 +28,8 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
     storage.ensure_uuids().ok();
 
     // Search for relevant context
-    let context_str = if let Ok(Some(buffer)) = storage.get_buffer_by_name(&pname) {
+    let (context_str, query_results) = if let Ok(Some(buffer)) = storage.get_buffer_by_name(&pname)
+    {
         let bm25 =
             arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
         let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
@@ -47,16 +48,19 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
             )
             .await
             .unwrap_or_default();
-        arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
-            .unwrap_or_default()
+        let built = arlm_search::build_search_results(&storage, &results, None).unwrap_or_default();
+        let ctx =
+            arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
+                .unwrap_or_default();
+        (ctx, Some(built))
     } else {
-        String::new()
+        (String::new(), None)
     };
 
     // Without --llm: return deterministic search results as context
     if !config.llm {
         match config.format {
-            Format::Json => {
+            Format::FullJson => {
                 let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                     "question": config.question,
                     "context": context_str,
@@ -65,14 +69,24 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
                 }));
                 output.print();
             }
-            Format::Tree => {
+            Format::Jsonl => {
+                let pairs: Vec<(String, String)> = query_results
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|r| (r.file_path.clone(), r.content.clone()))
+                    .collect();
+                let rendered =
+                    crate::output::jsonl::render_content_jsonl("question", config.question, &pairs);
+                println!("{rendered}");
+            }
+            Format::Path => {
                 output::success(&format!("Context for: {}", config.question));
                 println!("\n{context_str}");
             }
             Format::Markdown => {
                 println!("## {}\n\n{context_str}", config.question);
             }
-            Format::Prompt => {
+            Format::Text => {
                 println!("{context_str}");
             }
         }
@@ -118,7 +132,7 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
         .context("LLM completion failed")?;
 
     match config.format {
-        Format::Json => {
+        Format::FullJson => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                 "question": config.question,
                 "answer": response.content,
@@ -127,14 +141,23 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
             }));
             output.print();
         }
-        Format::Tree => {
+        Format::Jsonl => {
+            let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
+                "question": config.question,
+                "answer": response.content,
+                "model": response.model,
+                "llm": true,
+            }));
+            output.print();
+        }
+        Format::Path => {
             output::success(&format!("Answer for: {}", config.question));
             println!("\n{}", response.content);
         }
         Format::Markdown => {
             println!("## {}\n\n{}", config.question, response.content);
         }
-        Format::Prompt => {
+        Format::Text => {
             println!("{}", response.content);
         }
     }

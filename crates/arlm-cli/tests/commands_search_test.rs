@@ -33,7 +33,7 @@ async fn test_search_no_project() {
         tier: "auto",
         max_tokens: None,
         project: project_path.as_path(),
-        format: Format::Json,
+        format: Format::FullJson,
         verbose: false,
         persist: false,
     };

@@ -53,7 +53,7 @@ pub fn execute(args: DecayArgs<'_>) -> Result<()> {
     });
 
     match args.format {
-        crate::output::Format::Json => {
+        crate::output::Format::FullJson | crate::output::Format::Jsonl => {
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
         _ => {

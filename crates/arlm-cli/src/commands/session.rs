@@ -18,7 +18,7 @@ pub fn execute_create(title: &str, project: &Path, format: Format) -> Result<()>
         .context("failed to create session")?;
 
     match format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                 "session_id": session_id,
                 "project": pname,
@@ -26,7 +26,7 @@ pub fn execute_create(title: &str, project: &Path, format: Format) -> Result<()>
             }));
             output.print();
         }
-        Format::Tree => {
+        Format::Path => {
             output::success(&format!("Session created: {session_id}"));
             println!("  Project: {pname}");
             println!("  Title: {title}");
@@ -36,7 +36,7 @@ pub fn execute_create(title: &str, project: &Path, format: Format) -> Result<()>
                 "# Session Created\n\n- **ID:** {session_id}\n- **Project:** {pname}\n- **Title:** {title}"
             );
         }
-        Format::Prompt => {
+        Format::Text => {
             println!("Session created: {session_id} (project: {pname}, title: {title})");
         }
     }
@@ -64,7 +64,7 @@ pub fn execute_resume(session_id: &str, _project: &Path, format: Format) -> Resu
         .context("failed to get history")?;
 
     match format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let ctx: Vec<serde_json::Value> = contexts
                 .iter()
                 .map(|c| {
@@ -93,7 +93,7 @@ pub fn execute_resume(session_id: &str, _project: &Path, format: Format) -> Resu
             }));
             output.print();
         }
-        Format::Tree => {
+        Format::Path => {
             output::success(&format!("Session: {} ({})", session.id, session.title));
             println!("  Project: {}", session.project_name);
             println!("  Contexts: {}", contexts.len());
@@ -111,7 +111,7 @@ pub fn execute_resume(session_id: &str, _project: &Path, format: Format) -> Resu
                 session.id, session.project_name, session.title
             );
         }
-        Format::Prompt => {
+        Format::Text => {
             println!(
                 "Session {} resumed. Project: {}. Contexts: {}. History: {} entries.",
                 session.id,
@@ -157,7 +157,7 @@ pub fn execute_list(_project: &Path, format: Format) -> Result<()> {
     drop(conn);
 
     match format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let items: Vec<serde_json::Value> = sessions
                 .iter()
                 .map(|(id, proj, title, ts)| {
@@ -175,7 +175,7 @@ pub fn execute_list(_project: &Path, format: Format) -> Result<()> {
             }));
             output.print();
         }
-        Format::Tree => {
+        Format::Path => {
             if sessions.is_empty() {
                 output::warn("No sessions found.");
             } else {
@@ -195,7 +195,7 @@ pub fn execute_list(_project: &Path, format: Format) -> Result<()> {
                 }
             }
         }
-        Format::Prompt => {
+        Format::Text => {
             if sessions.is_empty() {
                 println!("No sessions found.");
             } else {

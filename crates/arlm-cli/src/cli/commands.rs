@@ -78,6 +78,13 @@ pub enum Commands {
         #[arg(long = "ignore", action = clap::ArgAction::Append)]
         ignore_patterns: Vec<String>,
 
+        /// Force-include patterns (glob) that bypass the default ignores
+        /// (.env, .vscode, .github, .gitlab, .zed, vendors, …). Can be
+        /// specified multiple times. Only files matching these are sent when
+        /// they would otherwise be skipped.
+        #[arg(long = "force-include", action = clap::ArgAction::Append)]
+        force_include: Vec<String>,
+
         /// Watch for file changes and reindex automatically
         #[arg(short, long)]
         watch: bool,

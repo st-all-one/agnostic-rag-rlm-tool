@@ -19,6 +19,6 @@ use tempfile::TempDir;
 #[test]
 fn test_restore_page_no_project() {
     let tmp = TempDir::new().unwrap();
-    let result = execute("test", tmp.path(), Format::Json);
+    let result = execute("test", tmp.path(), Format::FullJson);
     assert!(result.is_err());
 }

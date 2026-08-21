@@ -23,7 +23,7 @@ pub fn execute(query: &str, project: &Path, format: Format) -> Result<()> {
         .unwrap_or_default();
 
     match format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let entities: Vec<_> = results
                 .iter()
                 .filter_map(|r| {

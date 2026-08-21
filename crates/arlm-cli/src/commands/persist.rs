@@ -37,7 +37,7 @@ pub fn execute(args: PersistArgs<'_>) -> Result<()> {
     });
 
     match args.format {
-        crate::output::Format::Json => {
+        crate::output::Format::FullJson | Format::Jsonl => {
             println!("{}", serde_json::to_string_pretty(&output)?);
         }
         _ => {
@@ -64,8 +64,8 @@ pub fn save_page(title: &str, content: &str, project: &Path, format: Format) -> 
     let pname = project_name(project);
 
     let body = match format {
-        Format::Json => format!("# {title}\n\n```json\n{content}\n```\n"),
-        Format::Tree | Format::Markdown | Format::Prompt => format!("# {title}\n\n{content}"),
+        Format::FullJson | Format::Jsonl => format!("# {title}\n\n```json\n{content}\n```\n"),
+        Format::Path | Format::Markdown | Format::Text => format!("# {title}\n\n{content}"),
     };
 
     let result = engine.persist_analysis(&AnalysisPersistOptions {

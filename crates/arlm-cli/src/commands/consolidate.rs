@@ -36,7 +36,7 @@ pub fn execute(config: ConsolidateConfig<'_>) -> Result<()> {
         .context("consolidation failed")?;
 
     match config.format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                 "project": pname,
                 "duplicate_chunks_removed": result.duplicate_chunks_removed,
@@ -44,7 +44,7 @@ pub fn execute(config: ConsolidateConfig<'_>) -> Result<()> {
             }));
             output.print();
         }
-        Format::Tree => {
+        Format::Path => {
             output::success(&format!("Consolidation complete for '{pname}'"));
             println!("  Duplicates removed: {}", result.duplicate_chunks_removed);
             println!(
@@ -58,7 +58,7 @@ pub fn execute(config: ConsolidateConfig<'_>) -> Result<()> {
                 result.duplicate_chunks_removed, result.low_confidence_patterns_removed,
             );
         }
-        Format::Prompt => {
+        Format::Text => {
             println!(
                 "Consolidation complete for {pname}: {} duplicates, {} patterns removed.",
                 result.duplicate_chunks_removed, result.low_confidence_patterns_removed,

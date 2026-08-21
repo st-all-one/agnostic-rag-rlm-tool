@@ -1,4 +1,5 @@
 pub mod json;
+pub mod jsonl;
 pub mod live_tree;
 pub mod markdown;
 pub mod prompt;
@@ -8,19 +9,21 @@ pub use live_tree::LiveTree;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
-    Json,
-    Tree,
+    FullJson,
+    Path,
     Markdown,
-    Prompt,
+    Text,
+    Jsonl,
 }
 
 impl std::fmt::Display for Format {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Json => write!(f, "json"),
-            Self::Tree => write!(f, "tree"),
+            Self::FullJson => write!(f, "full_json"),
+            Self::Path => write!(f, "path"),
             Self::Markdown => write!(f, "markdown"),
-            Self::Prompt => write!(f, "prompt"),
+            Self::Text => write!(f, "text"),
+            Self::Jsonl => write!(f, "jsonl"),
         }
     }
 }

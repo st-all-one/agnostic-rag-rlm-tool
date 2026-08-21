@@ -22,7 +22,7 @@ fn test_consolidate_no_project() {
     let project_path = tmp.path().join("nonexistent");
     let config = ConsolidateConfig {
         project: project_path.as_path(),
-        format: Format::Json,
+        format: Format::FullJson,
         verbose: false,
     };
     let result = execute(config);

@@ -19,6 +19,6 @@ use tempfile::TempDir;
 #[test]
 fn test_wiki_init() {
     let tmp = TempDir::new().unwrap();
-    let result = execute("init", tmp.path(), Format::Json);
+    let result = execute("init", tmp.path(), Format::FullJson);
     assert!(result.is_ok());
 }

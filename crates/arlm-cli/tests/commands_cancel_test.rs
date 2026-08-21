@@ -19,7 +19,7 @@ use tempfile::TempDir;
 #[test]
 fn test_cancel_nonexistent_run() {
     let tmp = TempDir::new().unwrap();
-    let result = execute("nonexistent-run", tmp.path(), Format::Json);
+    let result = execute("nonexistent-run", tmp.path(), Format::FullJson);
     // Should not error, just show not found
     assert!(result.is_ok());
 }

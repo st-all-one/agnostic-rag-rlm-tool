@@ -26,7 +26,7 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
     let runs = storage.list_runs(limit).context("failed to get runs")?;
 
     match config.format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let query_items: Vec<serde_json::Value> = records
                 .iter()
                 .map(|r| {
@@ -64,7 +64,7 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
             }));
             output.print();
         }
-        Format::Tree => {
+        Format::Path => {
             if !runs.is_empty() {
                 output::info(&format!("Recent {} run(s):", runs.len()));
                 for r in &runs {
@@ -172,7 +172,7 @@ pub fn execute(config: HistoryConfig<'_>) -> Result<()> {
                 println!("No history found.");
             }
         }
-        Format::Prompt => {
+        Format::Text => {
             if !runs.is_empty() {
                 println!("Recent runs:");
                 for r in &runs {

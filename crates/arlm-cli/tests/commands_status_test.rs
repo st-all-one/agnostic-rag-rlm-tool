@@ -25,7 +25,7 @@ fn test_status_empty() {
         std::env::set_var("ARLM_DATA_DIR", tmp.path());
     }
     let project_path = tmp.path().join("nonexistent");
-    let result = execute(None, project_path.as_path(), Format::Json);
+    let result = execute(None, project_path.as_path(), Format::FullJson);
     assert!(result.is_ok());
 }
 
@@ -60,6 +60,6 @@ fn test_status_with_run_id() {
         .unwrap();
 
     let project_path = tmp.path().join("nonexistent");
-    let result = execute(Some("run-001"), project_path.as_path(), Format::Json);
+    let result = execute(Some("run-001"), project_path.as_path(), Format::FullJson);
     assert!(result.is_ok());
 }

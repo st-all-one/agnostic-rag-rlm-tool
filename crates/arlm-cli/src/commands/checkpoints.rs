@@ -14,7 +14,7 @@ pub fn execute(run_id: Option<&str>, format: Format) -> Result<()> {
             .context("failed to get trajectories")?;
 
         match format {
-            Format::Json => {
+            Format::FullJson | Format::Jsonl => {
                 let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                     "run_id": id,
                     "checkpoints": trajectories.len(),
@@ -37,7 +37,7 @@ pub fn execute(run_id: Option<&str>, format: Format) -> Result<()> {
         let runs = storage.list_runs(20).context("failed to list runs")?;
 
         match format {
-            Format::Json => {
+            Format::FullJson | Format::Jsonl => {
                 let runs_data: Vec<_> = runs
                     .iter()
                     .map(|r| {

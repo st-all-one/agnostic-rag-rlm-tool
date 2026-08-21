@@ -7,10 +7,17 @@ use super::commands::Commands;
 /// Output format selected on the command line.
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 pub enum OutputFormatArg {
-    Json,
-    Tree,
+    #[value(name = "full_json")]
+    FullJson,
+    #[value(name = "path")]
+    Path,
+    #[value(name = "markdown")]
     Markdown,
-    Prompt,
+    /// `text` is the agent-facing prompt context format (formerly `prompt`).
+    #[value(name = "text")]
+    Text,
+    #[value(name = "jsonl")]
+    Jsonl,
 }
 
 /// arlm command-line interface.
@@ -28,7 +35,12 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
-    /// Output format: json, tree, markdown, prompt
+    /// Output format: full_json, path, markdown, text, jsonl
+    ///
+    /// `path` prints the relative file path (human tree for search). `text`
+    /// renders the agent-facing prompt context. `jsonl` (default for
+    /// search/context/query) emits a single `{"query":..,"results":[{"file","text"}]}`
+    /// object so an AI can consume only the needed content.
     #[arg(short, long, global = true)]
     pub format: Option<OutputFormatArg>,
 

@@ -17,7 +17,7 @@ pub fn execute(run_id: &str, _project: &Path, format: Format) -> Result<()> {
             storage.cancel_run(run_id).context("failed to cancel run")?;
 
             match format {
-                Format::Json => {
+                Format::FullJson | Format::Jsonl => {
                     let output =
                         crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                             "run_id": run_id,

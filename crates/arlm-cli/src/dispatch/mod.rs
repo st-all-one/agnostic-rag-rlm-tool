@@ -6,24 +6,44 @@ use std::path::PathBuf;
 use anyhow::Result;
 use tokio::runtime::Runtime;
 
-use crate::cli::{Cli, OutputFormatArg};
+use crate::cli::{Cli, Commands, OutputFormatArg};
+use crate::client;
 use crate::config::Config;
 use crate::output::Format;
 
 /// Resolve the effective output format from CLI flag and config file.
-fn resolve_format(cli_format: Option<OutputFormatArg>, cfg_format: Option<&str>) -> Format {
-    match cli_format {
-        Some(OutputFormatArg::Json) => Format::Json,
-        Some(OutputFormatArg::Tree) => Format::Tree,
+///
+/// `default` is used when neither the CLI flag nor the config file specify a
+/// format. Content-retrieval commands (search/context/query) pass
+/// `Format::Jsonl` so an AI consumes only the matched file content; all other
+/// commands keep `Format::Path`. `allow_jsonl` coerces an explicit `jsonl`
+/// selection to `Format::FullJson` for non-content commands, which have no
+/// simplified JSONL rendering.
+fn resolve_format(
+    cli_format: Option<OutputFormatArg>,
+    cfg_format: Option<&str>,
+    default: Format,
+    allow_jsonl: bool,
+) -> Format {
+    let resolved = match cli_format {
+        Some(OutputFormatArg::FullJson) => Format::FullJson,
+        Some(OutputFormatArg::Path) => Format::Path,
         Some(OutputFormatArg::Markdown) => Format::Markdown,
-        Some(OutputFormatArg::Prompt) => Format::Prompt,
+        Some(OutputFormatArg::Text) => Format::Text,
+        Some(OutputFormatArg::Jsonl) => Format::Jsonl,
         None => match cfg_format {
-            Some("json") => Format::Json,
-            Some("tree") => Format::Tree,
+            Some("full_json") => Format::FullJson,
+            Some("path") => Format::Path,
             Some("markdown") => Format::Markdown,
-            Some("prompt") => Format::Prompt,
-            _ => Format::Tree,
+            Some("text") => Format::Text,
+            Some("jsonl") => Format::Jsonl,
+            _ => default,
         },
+    };
+    if !allow_jsonl && resolved == Format::Jsonl {
+        Format::FullJson
+    } else {
+        resolved
     }
 }
 
@@ -41,10 +61,23 @@ pub fn dispatch(cli: Cli, cfg: Config, rt: &Runtime) -> Result<()> {
     let backend = cli.backend.clone().or_else(|| cfg.backend.clone());
     let model = cli.model.clone().or_else(|| cfg.model.clone());
     let agent_name = cli.agent.clone().or_else(|| cfg.agent.name.clone());
-    let format = resolve_format(cli.format, cfg.format.as_deref());
+    let is_content = matches!(
+        cli.command,
+        Commands::Search { .. } | Commands::Context { .. } | Commands::Query { .. }
+    );
+    let default = if is_content {
+        Format::Text
+    } else {
+        Format::Path
+    };
+    let format = resolve_format(cli.format, cfg.format.as_deref(), default, is_content);
 
-    if let Some(server_addr) = cli.server.clone() {
-        return server::run_server(cli, server_addr, project, format, rt);
+    // Remote gRPC server mode. Precedence: `--server` flag > config file /
+    // env (`~/.arlm/config.toml` `[server] addr` or `ARLM_SERVER_ADDR`) >
+    // local execution. When neither is set we fall through to local mode.
+    let server_addr = cli.server.clone().or_else(client::explicit_addr);
+    if let Some(addr) = server_addr {
+        return server::run_server(cli, addr, project, format, rt);
     }
 
     local::run_local(cli, cfg, project, backend, model, agent_name, format, rt)

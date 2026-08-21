@@ -24,7 +24,7 @@ fn test_cost_empty() {
     unsafe {
         std::env::set_var("ARLM_DATA_DIR", tmp.path());
     }
-    let result = execute(None, None, tmp.path(), Format::Json);
+    let result = execute(None, None, tmp.path(), Format::FullJson);
     assert!(result.is_ok());
 }
 
@@ -58,6 +58,6 @@ fn test_cost_with_run() {
         )
         .unwrap();
 
-    let result = execute(Some("run-001"), None, tmp.path(), Format::Json);
+    let result = execute(Some("run-001"), None, tmp.path(), Format::FullJson);
     assert!(result.is_ok());
 }

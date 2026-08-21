@@ -30,7 +30,7 @@ pub fn execute(action: &str, project: &Path, format: Format) -> Result<()> {
                 .context("failed to create .gitignore")?;
 
             match format {
-                Format::Json => {
+                Format::FullJson | Format::Jsonl => {
                     let output =
                         crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                             "action": "init",
@@ -64,7 +64,7 @@ pub fn execute(action: &str, project: &Path, format: Format) -> Result<()> {
                 .context("failed to git commit")?;
 
             match format {
-                Format::Json => {
+                Format::FullJson | Format::Jsonl => {
                     let output =
                         crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                             "action": "commit",
@@ -92,7 +92,7 @@ pub fn execute(action: &str, project: &Path, format: Format) -> Result<()> {
                 .context("failed to git log")?;
 
             match format {
-                Format::Json => {
+                Format::FullJson | Format::Jsonl => {
                     let output =
                         crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                             "action": "log",

@@ -77,7 +77,7 @@ pub async fn execute(config: ContextConfig<'_>) -> Result<()> {
     };
 
     let search_format = match config.format {
-        Format::Json => arlm_search::OutputFormat::Json,
+        Format::FullJson => arlm_search::OutputFormat::Json,
         Format::Markdown => arlm_search::OutputFormat::Markdown,
         _ => arlm_search::OutputFormat::Prompt,
     };
@@ -86,7 +86,7 @@ pub async fn execute(config: ContextConfig<'_>) -> Result<()> {
         .context("failed to build context")?;
 
     let rendered = match config.format {
-        Format::Json => {
+        Format::FullJson => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                 "task": config.task,
                 "project": pname,
@@ -95,10 +95,19 @@ pub async fn execute(config: ContextConfig<'_>) -> Result<()> {
             }));
             output.to_json_string()
         }
-        Format::Tree => {
+        Format::Jsonl => {
+            let built = arlm_search::build_search_results(&storage, &results, config.max_tokens)
+                .unwrap_or_default();
+            let pairs: Vec<(String, String)> = built
+                .iter()
+                .map(|r| (r.file_path.clone(), r.content.clone()))
+                .collect();
+            crate::output::jsonl::render_content_jsonl("task", config.task, &pairs)
+        }
+        Format::Path => {
             format!("Context for: {}\n\n{context}", config.task)
         }
-        Format::Markdown | Format::Prompt => context,
+        Format::Markdown | Format::Text => context,
     };
 
     print!("{rendered}");

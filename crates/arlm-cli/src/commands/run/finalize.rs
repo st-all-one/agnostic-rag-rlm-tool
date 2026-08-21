@@ -79,7 +79,7 @@ pub fn save_session(result: &RlmRunResult, config: &RunConfig<'_>) {
 #[must_use]
 pub fn print_output(result: &RlmRunResult, config: &RunConfig<'_>) -> String {
     match config.format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let output = json::JsonOutput::ok().with_data(serde_json::json!({
                 "run_id": result.run_id,
                 "task": config.task,
@@ -90,7 +90,7 @@ pub fn print_output(result: &RlmRunResult, config: &RunConfig<'_>) -> String {
             }));
             output.to_json_string()
         }
-        Format::Tree => {
+        Format::Path => {
             let rendered =
                 tree::render_tree(&result.run_id, config.task, result.stats.max_depth_seen);
             format!("{rendered}\n{}", result.final_output)
@@ -98,7 +98,7 @@ pub fn print_output(result: &RlmRunResult, config: &RunConfig<'_>) -> String {
         Format::Markdown => {
             markdown::render_run_result(config.task, &result.final_output, result.stats.duration_ms)
         }
-        Format::Prompt => {
+        Format::Text => {
             format!(
                 "## RLM Result\n\n**Task:** {}\n\n{}",
                 config.task, result.final_output

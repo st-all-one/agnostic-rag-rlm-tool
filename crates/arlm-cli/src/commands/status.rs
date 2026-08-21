@@ -16,7 +16,7 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
 
         match run {
             Some(r) => match format {
-                Format::Json => {
+                Format::FullJson | Format::Jsonl => {
                     let output =
                         crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                             "run_id": r.id,
@@ -31,7 +31,7 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
                         }));
                     output.print();
                 }
-                Format::Tree => {
+                Format::Path => {
                     output::success(&format!("Run {}", r.id));
                     println!("  Task: {}", r.task);
                     println!("  Status: {}", r.status.as_deref().unwrap_or("unknown"));
@@ -55,7 +55,7 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
                     println!("- **Tokens:** {}", r.total_tokens);
                     println!("- **Nodes:** {}", r.nodes_visited.unwrap_or(0));
                 }
-                Format::Prompt => {
+                Format::Text => {
                     println!(
                         "Run {}: {} ({})",
                         r.id,
@@ -71,7 +71,7 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
                 }
             },
             None => match format {
-                Format::Json => {
+                Format::FullJson | Format::Jsonl => {
                     let output =
                         crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                             "run_id": rid,
@@ -93,7 +93,7 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
     let runs = storage.list_runs(10).context("failed to list runs")?;
 
     match format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let projects: Vec<serde_json::Value> = buffers
                 .iter()
                 .map(|b| {
@@ -129,7 +129,7 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
             }));
             output.print();
         }
-        Format::Tree => {
+        Format::Path => {
             if buffers.is_empty() {
                 output::warn("No indexed projects found.");
             } else {
@@ -197,7 +197,7 @@ pub fn execute(run_id: Option<&str>, _project: &Path, format: Format) -> Result<
                 }
             }
         }
-        Format::Prompt => {
+        Format::Text => {
             if buffers.is_empty() {
                 println!("No indexed projects found. Run `arlm index` first.");
             } else {

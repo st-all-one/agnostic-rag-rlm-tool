@@ -29,9 +29,10 @@ fn test_index_empty_dir() {
         path: project.path(),
         chunk_size: 512,
         ignore_patterns: &[],
+        force_include: &[],
         watch: false,
         project: project_path.as_path(),
-        format: Format::Json,
+        format: Format::FullJson,
         verbose: false,
     };
     let result = execute(config);

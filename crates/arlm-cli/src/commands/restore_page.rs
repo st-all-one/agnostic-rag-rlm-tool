@@ -34,7 +34,7 @@ pub fn execute(page_name: &str, project: &Path, format: Format) -> Result<()> {
             .unwrap_or_default();
 
     match format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let output = crate::output::json::JsonOutput::ok().with_data(serde_json::json!({
                 "page": page_name,
                 "content": context_str,

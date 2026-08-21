@@ -9,6 +9,7 @@ pub struct IndexConfig<'a> {
     pub path: &'a Path,
     pub chunk_size: usize,
     pub ignore_patterns: &'a [String],
+    pub force_include: &'a [String],
     pub watch: bool,
     pub project: &'a Path,
     pub format: Format,
@@ -52,6 +53,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
     let opts = arlm_memory::knowledge::IndexOptions {
         max_chunk_bytes: config.chunk_size * 4,
         ignore_patterns: config.ignore_patterns.to_vec(),
+        force_include: config.force_include.to_vec(),
         ..Default::default()
     };
 
@@ -77,7 +79,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
     progress.finish_and_clear();
 
     match config.format {
-        Format::Json => {
+        Format::FullJson | Format::Jsonl => {
             let dur: u64 = result.duration_ms.try_into().unwrap_or(u64::MAX);
             let output = crate::output::json::JsonOutput::ok()
                 .with_data(serde_json::json!({
@@ -90,7 +92,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
                 .with_metadata("duration_ms", dur);
             output.print();
         }
-        Format::Tree => {
+        Format::Path => {
             let dur_ms = u64::try_from(result.duration_ms).unwrap_or(u64::MAX);
             #[allow(clippy::cast_precision_loss)]
             let dur_secs = dur_ms as f64 / 1000.0;
@@ -109,7 +111,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
                 result.files_processed, result.chunks_created,
             );
         }
-        Format::Prompt => {
+        Format::Text => {
             println!(
                 "Indexed {} files into {} chunks. Project: {}.",
                 result.files_processed, result.chunks_created, pname,

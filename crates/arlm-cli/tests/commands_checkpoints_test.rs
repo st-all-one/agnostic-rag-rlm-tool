@@ -19,6 +19,6 @@ use tempfile::TempDir;
 #[test]
 fn test_checkpoints_empty() {
     let _tmp = TempDir::new().unwrap();
-    let result = execute(None, Format::Json);
+    let result = execute(None, Format::FullJson);
     assert!(result.is_ok());
 }

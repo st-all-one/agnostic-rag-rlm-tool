@@ -29,7 +29,7 @@ async fn test_run_without_llm_fails() {
         concurrency: 4,
         max_budget: 1.0,
         project: tmp.path(),
-        format: Format::Json,
+        format: Format::FullJson,
         verbose: false,
         live: false,
         agent: None,

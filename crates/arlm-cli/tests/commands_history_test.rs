@@ -27,7 +27,7 @@ fn test_history_empty() {
     let config = HistoryConfig {
         limit: 10,
         project: project_path.as_path(),
-        format: Format::Json,
+        format: Format::FullJson,
     };
     let result = execute(config);
     assert!(result.is_ok());

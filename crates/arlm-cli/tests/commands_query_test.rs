@@ -26,7 +26,7 @@ async fn test_query_no_project() {
         backend: Some("ollama"),
         model: None,
         project: project_path.as_path(),
-        format: Format::Json,
+        format: Format::FullJson,
         verbose: false,
         llm: false,
     };
@@ -44,7 +44,7 @@ async fn test_query_with_llm_no_project() {
         backend: Some("ollama"),
         model: None,
         project: project_path.as_path(),
-        format: Format::Json,
+        format: Format::FullJson,
         verbose: false,
         llm: true,
     };

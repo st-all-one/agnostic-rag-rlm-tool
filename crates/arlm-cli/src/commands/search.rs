@@ -89,7 +89,7 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
         .context("failed to build results")?;
 
     let rendered = match config.format {
-        Format::Json => {
+        Format::FullJson => {
             let items: Vec<serde_json::Value> = search_results
                 .iter()
                 .filter(|r| config.min_score.is_none_or(|min| r.score >= min))
@@ -120,7 +120,21 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
             }));
             output.to_json_string()
         }
-        Format::Tree => {
+        Format::Jsonl => {
+            let pairs: Vec<(String, String)> = search_results
+                .iter()
+                .filter(|r| config.min_score.is_none_or(|min| r.score >= min))
+                .filter(|r| {
+                    config
+                        .file_pattern
+                        .as_ref()
+                        .is_none_or(|pat| r.file_path.contains(pat))
+                })
+                .map(|r| (r.file_path.clone(), r.content.clone()))
+                .collect();
+            crate::output::jsonl::render_content_jsonl("query", config.query, &pairs)
+        }
+        Format::Path => {
             let items: Vec<crate::output::tree::SearchResultItem> = search_results
                 .iter()
                 .map(|r| crate::output::tree::SearchResultItem {
@@ -144,7 +158,7 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
                 .collect();
             crate::output::markdown::render_search_results(&items)
         }
-        Format::Prompt => {
+        Format::Text => {
             let items: Vec<crate::output::prompt::PromptItem> = search_results
                 .iter()
                 .map(|r| crate::output::prompt::PromptItem {

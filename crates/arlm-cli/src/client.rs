@@ -72,6 +72,23 @@ fn read_addr_from_file(path: &std::path::Path) -> Option<String> {
     config.server.addr
 }
 
+/// Resolve a server address only when it is *explicitly* configured
+/// (via `.arlm/config.toml` or the `ARLM_SERVER_ADDR` env var).
+///
+/// Returns `None` when falling back to the built-in default, so callers can
+/// distinguish "user wants remote mode" from "no server configured". The
+/// `--server` CLI flag, when present, takes precedence over this value.
+#[must_use]
+pub fn explicit_addr() -> Option<String> {
+    if let Some(addr) = read_server_addr_from_config() {
+        return Some(addr);
+    }
+    if let Ok(addr) = std::env::var("ARLM_SERVER_ADDR") {
+        return Some(addr);
+    }
+    None
+}
+
 fn dirs() -> Option<PathBuf> {
     std::env::var("HOME")
         .ok()

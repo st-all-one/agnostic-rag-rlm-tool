@@ -21,8 +21,8 @@ service ArlmService {
   rpc ListProjects(google.protobuf.Empty) returns (ListProjectsResponse);
   rpc GetProject(google.protobuf.StringValue) returns (ProjectInfo);
 
-  // Indexing
-  rpc IndexProject(IndexRequest) returns (IndexResponse);
+  // Indexing (client-streaming: client streams file bytes to the server)
+  rpc IndexProject(stream IndexChunk) returns (IndexResponse);
 
   // Search
   rpc Search(SearchRequest) returns (SearchResponse);

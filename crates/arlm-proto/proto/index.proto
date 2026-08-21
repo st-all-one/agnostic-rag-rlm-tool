@@ -1,14 +1,33 @@
 syntax = "proto3";
 package arlm.v1;
 
-// ── Indexing ──
+// ── Indexing (client-streaming) ──
+//
+// The client discovers and reads files from its OWN filesystem, then streams
+// each file's content to the server. The server never touches the client's
+// filesystem — it only receives bytes over gRPC and indexes them. This removes
+// any server-side path/FS knowledge (and the associated arbitrary-file-read
+// footgun) and keeps the server a pure indexing engine.
 
-message IndexRequest {
+message IndexChunk {
+  oneof body {
+    IndexInit init = 1;
+    IndexFile file = 2;
+  }
+}
+
+message IndexInit {
   string project = 1;
   string root_path = 2;
-  repeated string include_patterns = 3;
+  repeated string force_include = 3;
   repeated string exclude_patterns = 4;
-  bool auto_summarize = 5;  // default: true
+}
+
+message IndexFile {
+  string rel_path = 1;
+  bytes content = 2;
+  bool compressed = 3;
+  int64 size_bytes = 4;
 }
 
 message IndexResponse {
