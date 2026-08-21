@@ -1,49 +1,6 @@
-# Build artifacts
 target/
-*.o
-*.d
-*.rlib
-
-# Git
+models/
 .git/
-.gitignore
-.gitmodules
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Documentation
-*.md
-LICENSE
-plan/
-ai-guides/
-
-# Seeds
-.seeds/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Docker
-docker-compose.yml
-docker/Dockerfile*
-docker/build.sh
-
-# Temporary
-tmp/
-*.tmp
-
-# Local build / scratch dirs
-.tmp_build/
-_sniff/
-test_tiktoken
-
-# Runtime data
-.arlm/
+vendor/
 *.db
-*.db-*
-data/
+*.log

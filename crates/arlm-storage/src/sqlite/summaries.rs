@@ -180,6 +180,11 @@ impl Storage {
         let conn = conn.lock();
         let limit = i64::try_from(top_k).context("top_k overflow")?;
 
+        let safe_query = crate::fts::sanitize_query(query);
+        if safe_query.split_whitespace().next().is_none() {
+            return Ok(Vec::new());
+        }
+
         let mut stmt = conn
             .prepare(
                 "SELECT s.id, s.buffer_id, s.scope, bm25(summaries_fts) AS score \
@@ -191,7 +196,7 @@ impl Storage {
             .context("failed to prepare summary search")?;
 
         let rows = stmt
-            .query_map(params![query, buffer_id, limit], |row| {
+            .query_map(params![safe_query, buffer_id, limit], |row| {
                 Ok(SummaryHit {
                     id: row.get(0)?,
                     buffer_id: row.get(1)?,
@@ -225,6 +230,11 @@ impl Storage {
         let conn = conn.lock();
         let limit = i64::try_from(top_k).context("top_k overflow")?;
 
+        let safe_query = crate::fts::sanitize_query(query);
+        if safe_query.split_whitespace().next().is_none() {
+            return Ok(Vec::new());
+        }
+
         let mut stmt = conn
             .prepare(
                 "SELECT s.id, s.buffer_id, s.scope, bm25(summaries_fts) AS score \
@@ -236,7 +246,7 @@ impl Storage {
             .context("failed to prepare summary search_all")?;
 
         let rows = stmt
-            .query_map(params![query, limit], |row| {
+            .query_map(params![safe_query, limit], |row| {
                 Ok(SummaryHit {
                     id: row.get(0)?,
                     buffer_id: row.get(1)?,

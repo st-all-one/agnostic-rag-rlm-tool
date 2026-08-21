@@ -13,11 +13,12 @@
 )]
 
 use arlm_cli::commands::index::{IndexConfig, execute};
+use arlm_cli::config::Config;
 use arlm_cli::output::Format;
 use tempfile::TempDir;
 
-#[test]
-fn test_index_empty_dir() {
+#[tokio::test]
+async fn test_index_empty_dir() {
     let tmp = TempDir::new().unwrap();
     // SAFETY: test-only, single-threaded
     unsafe {
@@ -34,7 +35,8 @@ fn test_index_empty_dir() {
         project: project_path.as_path(),
         format: Format::FullJson,
         verbose: false,
+        config: &Config::default(),
     };
-    let result = execute(config);
+    let result = execute(config).await;
     assert!(result.is_ok());
 }

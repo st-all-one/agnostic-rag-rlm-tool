@@ -1,7 +1,11 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
+use crate::backend::resolve_backend;
+use crate::config::Config;
+use crate::embedding::{build_embedder_from_config, open_vector_store};
 use crate::output::{self, Format};
 use crate::util::{data_dir, project_name};
 
@@ -13,6 +17,7 @@ pub struct QueryConfig<'a> {
     pub format: Format,
     pub verbose: bool,
     pub llm: bool,
+    pub config: &'a Config,
 }
 
 pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
@@ -27,20 +32,57 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
     let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
     storage.ensure_uuids().ok();
 
-    // Search for relevant context
+    // Search for relevant context. Semantic (BGE-M3) filtering is wired in: we
+    // build a real embedder, open the per-buffer vector store, and pass a query
+    // vector so the `Vector` tier actually runs (previously `semantic = None`
+    // and `query_vector = None`, so semantic search never executed).
     let (context_str, query_results) = if let Ok(Some(buffer)) = storage.get_buffer_by_name(&pname)
     {
         let bm25 =
             arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-        let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
-        let options = arlm_search::SearchOptions {
-            tier: arlm_search::SearchTier::Entity,
-            top_k: 10,
+
+        let embedder = build_embedder_from_config(config.config, "search_query: ");
+        let (semantic, query_vector) = match open_vector_store(buffer.id, embedder.dimensions())
+            .await
+        {
+                Ok(vstore) => {
+                    if vstore.dimensions() == embedder.dimensions() {
+                        match embedder.embed(config.question) {
+                            Ok(vec) => {
+                                let sem = arlm_search::SemanticSearch::new(Arc::clone(&vstore));
+                                (Some(sem), Some(vec))
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "query embedding failed, semantic tier disabled");
+                                (None, None)
+                            }
+                        }
+                    } else {
+                        tracing::warn!(
+                            store_dims = vstore.dimensions(),
+                            embedder_dims = embedder.dimensions(),
+                            "vector store dimensionality mismatch, semantic tier disabled"
+                        );
+                        (None, None)
+                    }
+                }
+            Err(e) => {
+                tracing::warn!(error = %e, "vector store unavailable, semantic tier disabled");
+                (None, None)
+            }
         };
+
+        let hybrid = arlm_search::HybridSearch::new(bm25, None, semantic);
+        let tier = if query_vector.is_some() {
+            arlm_search::SearchTier::Vector
+        } else {
+            arlm_search::SearchTier::Entity
+        };
+        let options = arlm_search::SearchOptions { tier, top_k: 15 };
         let results = hybrid
             .search(
                 config.question,
-                None,
+                query_vector.as_deref(),
                 buffer.id,
                 &options,
                 None,
@@ -94,21 +136,8 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
     }
 
     // With --llm: call LLM with context
-    let backend_name = config.backend.unwrap_or("ollama");
-    let kind: arlm_llm::BackendKind = backend_name.parse().context("failed to parse backend")?;
-
-    let api_key = std::env::var(match kind {
-        arlm_llm::BackendKind::OpenAI => "OPENAI_API_KEY",
-        arlm_llm::BackendKind::Anthropic => "ANTHROPIC_API_KEY",
-        arlm_llm::BackendKind::Gemini => "GEMINI_API_KEY",
-        arlm_llm::BackendKind::Ollama => "",
-        arlm_llm::BackendKind::DeepSeek => "DEEPSEEK_API_KEY",
-        arlm_llm::BackendKind::MiMo => "MIMO_API_KEY",
-    })
-    .ok();
-
-    let llm_backend =
-        arlm_llm::get_backend(&kind, api_key, None).context("failed to create LLM backend")?;
+    let llm_backend = resolve_backend(config.config, config.backend, config.model)
+        .context("failed to create LLM backend")?;
 
     let prompt = format!(
         "Based on the following project context, answer this question:\n\nQuestion: {}\n\nContext:\n{context_str}",

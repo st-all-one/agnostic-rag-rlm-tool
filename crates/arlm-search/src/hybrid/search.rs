@@ -42,9 +42,36 @@ impl HybridSearch {
 
         let mut scores: HashMap<i64, f32> = HashMap::with_capacity(k * 3);
 
-        // Tier 0: BM25 always runs
+        // Tier 0: BM25 always runs (but a parse error must not abort the
+        // whole search — degrade to the other tiers like entity/semantic do).
         let tier_start = Instant::now();
-        let bm25_results = self.bm25.search(query, buffer_id, k * 3)?;
+        let bm25_results = match self.bm25.search(query, buffer_id, k * 3) {
+            Ok(results) if !results.is_empty() => results,
+            // A natural-language question rarely matches every token (implicit
+            // AND), so retry once with an OR of the sanitized tokens to recover
+            // lexical recall instead of leaving the lexical tier dead.
+            Ok(_) => {
+                let or_query = arlm_storage::fts::sanitize_query(query)
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" OR ");
+                if or_query.split_whitespace().count() > 1 {
+                    match self.bm25.search(&or_query, buffer_id, k * 3) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            tracing::warn!(error = %e, "bm25 OR-fallback failed, continuing without lexical tier");
+                            Vec::new()
+                        }
+                    }
+                } else {
+                    Vec::new()
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "bm25 search failed, continuing without lexical tier");
+                Vec::new()
+            }
+        };
         for (rank, result) in bm25_results.iter().enumerate() {
             *scores.entry(result.chunk_id).or_insert(0.0) += rrf_score(rank, self.rrf_k);
         }

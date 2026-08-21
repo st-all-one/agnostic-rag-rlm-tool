@@ -13,6 +13,7 @@
 )]
 
 use arlm_cli::commands::query::{QueryConfig, execute};
+use arlm_cli::config::Config;
 use arlm_cli::output::Format;
 use tempfile::TempDir;
 
@@ -29,6 +30,7 @@ async fn test_query_no_project() {
         format: Format::FullJson,
         verbose: false,
         llm: false,
+        config: &Config::default(),
     };
     let result = execute(config).await;
     assert!(result.is_ok());
@@ -47,6 +49,7 @@ async fn test_query_with_llm_no_project() {
         format: Format::FullJson,
         verbose: false,
         llm: true,
+        config: &Config::default(),
     };
     let result = execute(config).await;
     assert!(result.is_err());

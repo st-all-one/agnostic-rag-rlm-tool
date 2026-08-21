@@ -1,8 +1,11 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tracing::{debug, warn};
 
+use crate::config::Config;
+use crate::embedding::{build_embedder_from_config, open_vector_store};
 use crate::output::{self, Format};
 use crate::util::{data_dir, project_name};
 
@@ -18,6 +21,7 @@ pub struct SearchConfig<'a> {
     pub format: Format,
     pub verbose: bool,
     pub persist: bool,
+    pub config: &'a Config,
 }
 
 fn parse_tier(tier: &str) -> arlm_search::SearchTier {
@@ -65,16 +69,58 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
                 .search_fts(config.query, buffer.id, config.top_k, None)
                 .context("FTS search failed")?
         } else {
+            // Build the semantic (BGE-M3) tier: open the per-buffer vector
+            // store and embed the query. Previously this was `None`/no vector,
+            // so semantic filtering never ran.
+            let embedder = build_embedder_from_config(config.config, "search_query: ");
+            let (semantic, query_vector) = match open_vector_store(buffer.id, embedder.dimensions())
+                .await
+            {
+                Ok(vstore) => {
+                    if vstore.dimensions() == embedder.dimensions() {
+                        match embedder.embed(config.query) {
+                            Ok(vec) => (Some(arlm_search::SemanticSearch::new(Arc::clone(&vstore))), Some(vec)),
+                            Err(e) => {
+                                warn!(error = %e, "query embedding failed, semantic tier disabled");
+                                (None, None)
+                            }
+                        }
+                    } else {
+                        warn!(
+                            store_dims = vstore.dimensions(),
+                            embedder_dims = embedder.dimensions(),
+                            "vector store dimensionality mismatch, semantic tier disabled"
+                        );
+                        (None, None)
+                    }
+                }
+                Err(e) => {
+                    warn!(error = %e, "vector store unavailable, semantic tier disabled");
+                    (None, None)
+                }
+            };
+
+            // If semantic is available, run at least the `Vector` tier so the
+            // semantic results are actually fused in (instead of being skipped).
+            let effective_tier = if semantic.is_some() {
+                match tier {
+                    arlm_search::SearchTier::LlmRerank => arlm_search::SearchTier::LlmRerank,
+                    _ => arlm_search::SearchTier::Vector,
+                }
+            } else {
+                tier
+            };
+
             let entity = arlm_search::EntitySearch::new(storage.clone()).ok();
-            let hybrid = arlm_search::HybridSearch::new(bm25, entity, None);
+            let hybrid = arlm_search::HybridSearch::new(bm25, entity, semantic);
             let options = arlm_search::SearchOptions {
-                tier,
+                tier: effective_tier,
                 top_k: config.top_k,
             };
             hybrid
                 .search(
                     config.query,
-                    None,
+                    query_vector.as_deref(),
                     buffer.id,
                     &options,
                     None,

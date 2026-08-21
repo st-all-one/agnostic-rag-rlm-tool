@@ -23,6 +23,7 @@
     clippy::cast_possible_wrap,
     clippy::cast_lossless
 )]
+pub mod fts;
 pub mod lance;
 pub mod sqlite;
 

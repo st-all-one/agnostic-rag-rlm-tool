@@ -99,6 +99,11 @@ impl Bm25Search {
         let start = Instant::now();
         let limit = i64::try_from(top_k).context("top_k overflow")?;
 
+        let safe_query = arlm_storage::fts::sanitize_query(query);
+        if safe_query.split_whitespace().next().is_none() {
+            return Ok(Vec::new());
+        }
+
         let results = self.storage.connection()?.execute(|conn| {
             let mut stmt = conn
                 .prepare(
@@ -113,7 +118,7 @@ impl Bm25Search {
                 .context("failed to prepare BM25 search query")?;
 
             let results = stmt
-                .query_map(rusqlite::params![query, buffer_id, limit], |row| {
+                .query_map(rusqlite::params![safe_query, buffer_id, limit], |row| {
                     Ok(Bm25Result {
                         chunk_id: row.get(0)?,
                         score: row.get(1)?,
@@ -145,6 +150,11 @@ impl Bm25Search {
         let start = Instant::now();
         let limit = i64::try_from(top_k).context("top_k overflow")?;
 
+        let safe_query = arlm_storage::fts::sanitize_query(query);
+        if safe_query.split_whitespace().next().is_none() {
+            return Ok(Vec::new());
+        }
+
         let results = self.storage.connection()?.execute(|conn| {
             let mut stmt = conn
                 .prepare(
@@ -157,7 +167,7 @@ impl Bm25Search {
                 .context("failed to prepare BM25 search_all query")?;
 
             let results = stmt
-                .query_map(rusqlite::params![query, limit], |row| {
+                .query_map(rusqlite::params![safe_query, limit], |row| {
                     Ok(Bm25Result {
                         chunk_id: row.get(0)?,
                         score: row.get(1)?,

@@ -9,8 +9,10 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use usearch::{Index, IndexOptions, MetricKind, ScalarKind};
 
-/// Embedding dimensionality for the stored vectors (BGE-M3).
-const VECTOR_DIMS: usize = 1024;
+/// Default embedding dimensionality for the stored vectors (BGE-M3 = 1024).
+/// Callers that use a different embedder (e.g. Ollama/nomic at 768) must pass
+/// the model's dimensionality via [`VectorStore::open_with_dims`].
+const DEFAULT_VECTOR_DIMS: usize = 1024;
 const INDEX_FILE: &str = "vectors.usearch";
 const META_FILE: &str = "vectors.meta";
 
@@ -42,13 +44,25 @@ pub struct VectorStore {
 }
 
 impl VectorStore {
-    /// Open or create a vector store at the given directory.
+    /// Open or create a vector store at the given directory using the default
+    /// dimensionality (1024, matching BGE-M3).
     ///
     /// # Errors
     ///
     /// Returns an error if the `usearch` index cannot be created or restored,
     /// or if the side metadata file is present but unreadable.
     pub async fn open(path: &Path) -> Result<Self> {
+        Self::open_with_dims(path, DEFAULT_VECTOR_DIMS).await
+    }
+
+    /// Open or create a vector store at the given directory with an explicit
+    /// embedding dimensionality (e.g. 768 for Ollama/nomic models).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the `usearch` index cannot be created or restored,
+    /// or if the side metadata file is present but unreadable.
+    pub async fn open_with_dims(path: &Path, dims: usize) -> Result<Self> {
         std::fs::create_dir_all(path).context("failed to create vector store directory")?;
 
         let index_path = path.join(INDEX_FILE);
@@ -61,7 +75,7 @@ impl VectorStore {
                 .map_err(|e| anyhow::anyhow!("failed to restore vector index: {e}"))?
         } else {
             let opts = IndexOptions {
-                dimensions: VECTOR_DIMS,
+                dimensions: dims,
                 metric: MetricKind::L2sq,
                 quantization: ScalarKind::F32,
                 connectivity: 0,
@@ -69,7 +83,7 @@ impl VectorStore {
                 expansion_search: 0,
                 ..Default::default()
             };
-            tracing::info!(path = %path.display(), dims = VECTOR_DIMS, "creating usearch index");
+            tracing::info!(path = %index_path.display(), dims, "creating usearch index");
             Index::new(&opts).map_err(|e| anyhow::anyhow!("failed to create vector index: {e}"))?
         };
 
@@ -79,7 +93,7 @@ impl VectorStore {
             HashMap::new()
         };
 
-        tracing::info!(path = %path.display(), vectors = index.size(), "opened vector store");
+        tracing::info!(path = %index_path.display(), vectors = index.size(), "opened vector store");
 
         Ok(Self {
             index,
@@ -87,6 +101,12 @@ impl VectorStore {
             index_path,
             meta_path,
         })
+    }
+
+    /// The embedding dimensionality of this store.
+    #[must_use]
+    pub fn dimensions(&self) -> usize {
+        self.index.dimensions()
     }
 
     /// Insert vectors into the store and persist the index + buffer mapping.

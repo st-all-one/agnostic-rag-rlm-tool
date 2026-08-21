@@ -10,9 +10,11 @@ pub mod cache;
 pub mod config;
 pub mod fallback;
 pub mod lightweight;
+pub mod ollama;
 
 pub use config::{EmbeddingConfig, EmbeddingModel, Quantization, build_embedder};
 pub use lightweight::LightweightEmbedder;
+pub use ollama::OllamaEmbedder;
 
 /// Errors specific to the embedding subsystem.
 #[derive(Debug, Error)]
@@ -28,6 +30,9 @@ pub enum EmbeddingError {
 
     #[error("tokenizer error: {0}")]
     Tokenizer(String),
+
+    #[error("ollama error: {0}")]
+    Ollama(String),
 
     #[error("model not loaded: {0}")]
     ModelNotLoaded(String),

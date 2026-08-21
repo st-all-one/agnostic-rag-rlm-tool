@@ -1,0 +1,29 @@
+# Prebuilt image: copies the host-compiled release binary instead of
+# recompiling inside the container (candle/cxx deps make an in-container
+# build very slow). Build the binary first with:
+#   cargo build --release --bin arlm-server
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && groupadd -r arlm && useradd -r -g arlm -m -s /bin/false arlm
+
+COPY target/release/arlm-server /usr/local/bin/arlm-server
+
+RUN mkdir -p /data && chown arlm:arlm /data
+
+USER arlm
+
+EXPOSE 50051
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD arlm-server status || exit 1
+
+ENV RUST_LOG=info,arlm_server=debug
+ENV ARLM_DATA_DIR=/data
+
+ENTRYPOINT ["arlm-server"]
+CMD ["up"]

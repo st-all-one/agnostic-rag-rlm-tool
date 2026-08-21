@@ -67,7 +67,7 @@ pub fn run_local(
             ignore_patterns,
             force_include,
             watch,
-        } => commands::index::execute(commands::index::IndexConfig {
+        } => rt.block_on(commands::index::execute(commands::index::IndexConfig {
             path: &path,
             chunk_size,
             ignore_patterns: &ignore_patterns,
@@ -76,7 +76,8 @@ pub fn run_local(
             project: &project,
             format,
             verbose: cli.verbose,
-        }),
+            config: &cfg,
+        })),
         Commands::Search {
             query,
             top_k,
@@ -102,6 +103,7 @@ pub fn run_local(
             format,
             verbose: cli.verbose,
             persist: cmd_persist,
+            config: &cfg,
         })),
         Commands::Query {
             question,
@@ -116,6 +118,7 @@ pub fn run_local(
             format,
             verbose: cli.verbose,
             llm,
+            config: &cfg,
         })),
         Commands::Context {
             task,

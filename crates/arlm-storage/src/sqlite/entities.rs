@@ -163,8 +163,16 @@ impl Storage {
         let mut results: Vec<EntityHit> = Vec::new();
 
         for entity in query_entities {
-            // FTS5 prefix match: "entity*" matches "entity_name"
-            let fts_query = format!("{entity}*");
+            // FTS5 prefix match: "entity*" matches "entity_name".
+            // Sanitise the entity token (identifiers only) before binding.
+            let safe_entity: String = entity
+                .chars()
+                .filter(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            if safe_entity.is_empty() {
+                continue;
+            }
+            let fts_query = format!("{safe_entity}*");
             let mut stmt = conn
                 .prepare(
                     "SELECT ce.chunk_id, bm25(entities_fts) as score \
@@ -210,7 +218,15 @@ impl Storage {
         let mut results: Vec<EntityHit> = Vec::new();
 
         for entity in query_entities {
-            let fts_query = format!("{entity}*");
+            // Sanitise the entity token (identifiers only) before binding.
+            let safe_entity: String = entity
+                .chars()
+                .filter(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            if safe_entity.is_empty() {
+                continue;
+            }
+            let fts_query = format!("{safe_entity}*");
             let mut stmt = conn
                 .prepare(
                     "SELECT ce.chunk_id, bm25(entities_fts) as score \

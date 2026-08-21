@@ -20,6 +20,10 @@ impl MemoryEngine {
         let conn = conn.lock();
 
         let limit = i64::try_from(options.limit).unwrap_or(i64::MAX);
+        let safe_query = arlm_storage::fts::sanitize_query(query);
+        if safe_query.split_whitespace().next().is_none() {
+            return Ok(Vec::new());
+        }
         let sql = "SELECT c.id, c.file_path, c.content, bm25(chunks_fts) AS rank
                    FROM chunks_fts
                    JOIN chunks c ON c.rowid = chunks_fts.rowid
@@ -30,7 +34,7 @@ impl MemoryEngine {
         let mut stmt = conn.prepare(sql).context("failed to prepare FTS search")?;
 
         let rows: Vec<SearchResult> = stmt
-            .query_map(params![query, limit], |row| {
+            .query_map(params![safe_query, limit], |row| {
                 Ok(SearchResult {
                     chunk_id: row.get(0)?,
                     file_path: row.get(1)?,

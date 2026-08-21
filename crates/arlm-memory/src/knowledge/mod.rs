@@ -144,8 +144,12 @@ impl KnowledgeEngine {
         file_path: &Path,
         options: &IndexOptions,
     ) -> Result<Vec<i64>> {
-        let content = std::fs::read_to_string(file_path)
+        let raw = std::fs::read(file_path)
             .with_context(|| format!("failed to read file: {}", file_path.display()))?;
+        // Lossy decode: source files may contain invalid UTF-8, and the
+        // byte-based chunker below can split a multi-byte character in half.
+        // Neither must abort indexing — replace invalid bytes instead.
+        let content = String::from_utf8_lossy(&raw).into_owned();
 
         let path_str = file_path.to_str().context("file path is not valid UTF-8")?;
 
@@ -190,8 +194,8 @@ impl KnowledgeEngine {
             };
 
             let chunk_bytes = &bytes[offset..chunk_end];
-            let chunk_text =
-                std::str::from_utf8(chunk_bytes).context("chunk content is not valid UTF-8")?;
+            // Lossy: a byte boundary can land inside a multi-byte character.
+            let chunk_text = String::from_utf8_lossy(chunk_bytes).into_owned();
 
             let line_count = chunk_text.bytes().filter(|&b| b == b'\n').count();
             #[allow(clippy::cast_possible_wrap)]
@@ -210,7 +214,7 @@ impl KnowledgeEngine {
                 hash,
                 language: detect_language(file_path),
                 chunk_type: None,
-                token_count: Some(estimate_tokens(chunk_text)),
+                token_count: Some(estimate_tokens(&chunk_text)),
             };
 
             let chunk_id = self
@@ -219,11 +223,11 @@ impl KnowledgeEngine {
                 .context("failed to insert chunk")?;
 
             self.storage
-                .insert_chunk_content(chunk_id, chunk_text)
+                .insert_chunk_content(chunk_id, &chunk_text)
                 .context("failed to insert chunk content")?;
 
             // Extract and store entities for entity search tier
-            let entities = arlm_storage::Storage::extract_entities(chunk_text, path_str);
+            let entities = arlm_storage::Storage::extract_entities(&chunk_text, path_str);
             if !entities.is_empty() {
                 self.storage
                     .insert_chunk_entities(chunk_id, &entities)

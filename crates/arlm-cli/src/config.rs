@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::util::data_dir;
+use arlm_llm::LlmConfig;
 
 /// Configuration file structure.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -39,6 +40,11 @@ pub struct Config {
     /// Server configuration.
     #[serde(default)]
     pub server: ServerSection,
+
+    /// LLM provider backends (provider-agnostic, OpenAI-compatible, etc.).
+    /// Deserializes into [`LlmConfig`]; see `arlm-llm` for the schema.
+    #[serde(default)]
+    pub llm: LlmConfig,
 }
 
 /// Server configuration.
@@ -52,6 +58,33 @@ pub struct ServerSection {
 /// Embedding configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EmbeddingConfig {
+    /// Embedding backend: `"bge-m3"` (local candle inference, requires
+    /// `model_dir`), `"ollama"` (remote Ollama `/api/embed`, e.g.
+    /// `nomic-embed-text-v2-moe` — laptop-friendly), or `"lightweight"`
+    /// (deterministic hash, no semantic value). When unset and `model_dir` is
+    /// provided, `bge-m3` is implied; otherwise `lightweight`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+
+    /// Directory containing `model.safetensors` + `tokenizer.json` for BGE-M3.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_dir: Option<PathBuf>,
+
+    /// Ollama base URL (default `http://localhost:11434`). Used when
+    /// `model = "ollama"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ollama_url: Option<String>,
+
+    /// Ollama model name (default `nomic-embed-text-v2-moe`). Used when
+    /// `model = "ollama"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ollama_model: Option<String>,
+
+    /// Embedding dimensionality. Must match the vector store (1024 for BGE-M3,
+    /// 768 for `nomic-embed-text-v2-moe`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dims: Option<usize>,
+
     /// Batch size for embedding.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub batch_size: Option<usize>,

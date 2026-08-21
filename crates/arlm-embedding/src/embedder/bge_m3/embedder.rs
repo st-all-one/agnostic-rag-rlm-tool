@@ -150,7 +150,7 @@ impl BgeM3Embedder {
             .broadcast_mul(&mask_3d)
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
         let summed = masked
-            .sum(candle_core::D::Minus1)
+            .sum(candle_core::D::Minus2)
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
         let mask_sum = mask_f32
             .sum(candle_core::D::Minus1)
@@ -162,7 +162,7 @@ impl BgeM3Embedder {
             .unsqueeze(1)
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
         let pooled = summed
-            .div(&mask_sum_2d)
+            .broadcast_div(&mask_sum_2d)
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
 
         let norm = pooled
@@ -178,7 +178,7 @@ impl BgeM3Embedder {
             .unsqueeze(1)
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
         pooled
-            .div(&norm_2d)
+            .broadcast_div(&norm_2d)
             .map_err(|e| EmbeddingError::Candle(e.to_string()))
     }
 }
@@ -192,6 +192,8 @@ impl Embedder for BgeM3Embedder {
         let output = self.model.forward(&input_ids, &attention_mask)?;
         let embedding = Self::mean_pool(&output, &attention_mask)?;
         let vec = embedding
+            .get(0)
+            .map_err(|e| EmbeddingError::Candle(e.to_string()))?
             .to_vec1::<f32>()
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
         Ok(apply_matryoshka(vec, self.matryoshka_dims))

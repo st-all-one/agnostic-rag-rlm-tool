@@ -142,11 +142,24 @@ impl IngestionPipeline {
 
         tracing::info!(total_files = total_files, "starting ingestion pipeline");
 
-        // Phase 1: Read files (parallel via rayon)
+        // Phase 1: Read files (parallel via rayon).
+        // A single unreadable file (e.g. invalid UTF-8) must not abort the
+        // whole index — skip it with a warning instead.
         let owned_files: Vec<OwnedFile> = files
             .par_iter()
-            .map(|p| OwnedFile::new(p))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|p| match OwnedFile::new(p) {
+                Ok(f) => Some(f),
+                Err(e) => {
+                    tracing::warn!(
+                        path = %p.display(),
+                        error = %e,
+                        "skipping file that could not be read"
+                    );
+                    None
+                }
+            })
+            .flatten()
+            .collect();
 
         tracing::info!(files_read = owned_files.len(), "finished reading files");
 

@@ -38,7 +38,7 @@ pub async fn run() -> Result<()> {
 
     let llm = AppState::build_llm(&config).context("failed to configure LLM backend")?;
 
-    let vector_store = match VectorStore::open(&config.data_dir).await {
+    let vector_store = match VectorStore::open_with_dims(&config.data_dir, crate::state::embedder_dimension()).await {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {
             tracing::warn!(error = %e, "vector store unavailable, continuing without semantic search");

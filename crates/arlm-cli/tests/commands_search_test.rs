@@ -13,6 +13,7 @@
 )]
 
 use arlm_cli::commands::search::{SearchConfig, execute};
+use arlm_cli::config::Config;
 use arlm_cli::output::Format;
 use tempfile::TempDir;
 
@@ -36,6 +37,7 @@ async fn test_search_no_project() {
         format: Format::FullJson,
         verbose: false,
         persist: false,
+        config: &Config::default(),
     };
     let result = execute(config).await;
     assert!(result.is_err());

@@ -1,9 +1,19 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use tracing::warn;
 
+use crate::config::Config;
+use crate::embedding::{build_embedder_from_config, open_vector_store, vector_dir};
 use crate::output::{self, Format};
 use crate::util::{data_dir, project_name};
+
+use arlm_storage::VectorEntry;
+use arlm_embedding::embedder::Embedder;
+use std::sync::Arc;
+
+/// Number of chunks embedded per Ollama batch request during indexing.
+const EMBED_BATCH_SIZE: usize = 64;
 
 pub struct IndexConfig<'a> {
     pub path: &'a Path,
@@ -14,10 +24,11 @@ pub struct IndexConfig<'a> {
     pub project: &'a Path,
     pub format: Format,
     pub verbose: bool,
+    pub config: &'a Config,
 }
 
 #[allow(clippy::needless_pass_by_value)]
-pub fn execute(config: IndexConfig<'_>) -> Result<()> {
+pub async fn execute(config: IndexConfig<'_>) -> Result<()> {
     let _timer = arlm_core::logging::ScopedTimer::new("cli_index");
 
     let absolute_path = config
@@ -49,7 +60,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
             .context("failed to create buffer")?
     };
 
-    let knowledge = arlm_memory::KnowledgeEngine::new(storage);
+    let knowledge = arlm_memory::KnowledgeEngine::new(storage.clone());
     let opts = arlm_memory::knowledge::IndexOptions {
         max_chunk_bytes: config.chunk_size * 4,
         ignore_patterns: config.ignore_patterns.to_vec(),
@@ -75,6 +86,17 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
     let _fts_count = bm25
         .populate_fts()
         .context("failed to populate FTS index")?;
+
+    // Populate the semantic (BGE-M3) vector store. Previously this step was
+    // missing entirely (the knowledge engine explicitly "does NOT compute
+    // embeddings"), so semantic search had no vectors to retrieve. We rebuild
+    // this buffer's vector store from scratch and embed every chunk.
+    if let Some(buffer) = storage
+        .get_buffer_by_name(&pname)
+        .context("failed to check buffer")?
+    {
+        embed_buffer(config.config, &storage, buffer.id).await;
+    }
 
     progress.finish_and_clear();
 
@@ -170,7 +192,7 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
                     let storage = arlm_storage::Storage::open(&data_dir())
                         .context("failed to open storage")?;
 
-                    let knowledge = arlm_memory::KnowledgeEngine::new(storage);
+                    let knowledge = arlm_memory::KnowledgeEngine::new(storage.clone());
                     let opts = arlm_memory::knowledge::IndexOptions {
                         max_chunk_bytes: config.chunk_size * 4,
                         ignore_patterns: config.ignore_patterns.to_vec(),
@@ -182,6 +204,15 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
                             // Re-populate FTS after reindex
                             if let Ok(bm25) = arlm_search::Bm25Search::new(knowledge.storage()) {
                                 let _ = bm25.populate_fts();
+                            }
+                            // Re-embed into the semantic vector store.
+                            if let Some(buf) = knowledge
+                                .storage()
+                                .get_buffer_by_name(&pname)
+                                .ok()
+                                .flatten()
+                            {
+                                embed_buffer(config.config, knowledge.storage(), buf.id).await;
                             }
                             output::success(&format!(
                                 "Reindexed {} files → {} chunks",
@@ -202,4 +233,110 @@ pub fn execute(config: IndexConfig<'_>) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Embed every chunk of `buffer_id` into the per-buffer vector store, replacing
+/// any previous vectors for that buffer.
+///
+/// This is the missing piece that makes semantic (BGE-M3) filtering functional:
+/// Embed a batch of `(chunk_id, text)` pairs and push the resulting
+/// `VectorEntry`s. Uses a single batched request; on failure it falls back to
+/// per-chunk embedding so one bad chunk never drops the whole batch.
+fn embed_pending(
+    entries: &mut Vec<VectorEntry>,
+    embedder: &Arc<dyn Embedder>,
+    pending: &[(u64, String)],
+    buffer_u: u64,
+) {
+    let texts: Vec<&str> = pending.iter().map(|(_, t)| t.as_str()).collect();
+    match embedder.embed_batch(&texts) {
+        Ok(vectors) => {
+            for (meta, vector) in pending.iter().zip(vectors) {
+                entries.push(VectorEntry {
+                    chunk_id: meta.0,
+                    buffer_id: buffer_u,
+                    vector,
+                });
+            }
+        }
+        Err(e) => {
+            warn!(error = %e, "batch embedding failed, falling back to per-chunk");
+            for (chunk_u, text) in pending {
+                match embedder.embed(text) {
+                    Ok(vector) => entries.push(VectorEntry {
+                        chunk_id: *chunk_u,
+                        buffer_id: buffer_u,
+                        vector,
+                    }),
+                    Err(e2) => warn!(chunk_id = chunk_u, error = %e2, "chunk embedding failed"),
+                }
+            }
+        }
+    }
+}
+
+/// the knowledge engine stores chunk text but never computes embeddings, so the
+/// vector store was always empty. We rebuild this buffer's store from scratch
+/// to avoid stale vectors from deleted chunks.
+async fn embed_buffer(config: &Config, storage: &arlm_storage::Storage, buffer_id: i64) {
+    let embedder = build_embedder_from_config(config, "search_document: ");
+
+    // Rebuild from scratch: remove the old vector store directory for this buffer.
+    let vdir = vector_dir(buffer_id);
+    if vdir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&vdir) {
+            warn!(error = %e, "failed to clear old vector store, reusing existing");
+        }
+    }
+
+    let vstore = match open_vector_store(buffer_id, embedder.dimensions()).await {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(error = %e, "failed to open vector store, skipping embeddings");
+            return;
+        }
+    };
+
+    let chunks = match storage.list_chunks(buffer_id) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(error = %e, "failed to list chunks for embedding");
+            return;
+        }
+    };
+
+    let Ok(buffer_u) = u64::try_from(buffer_id) else {
+        warn!(buffer_id, "negative buffer id, skipping embeddings");
+        return;
+    };
+
+    let mut entries: Vec<VectorEntry> = Vec::with_capacity(chunks.len());
+    let mut pending: Vec<(u64, String)> = Vec::with_capacity(EMBED_BATCH_SIZE);
+    for c in &chunks {
+        let Ok(chunk_u) = u64::try_from(c.id) else {
+            warn!(chunk_id = c.id, "negative chunk id, skipping chunk");
+            continue;
+        };
+        match storage.get_chunk_content(c.id) {
+            Ok(Some(text)) => pending.push((chunk_u, text)),
+            Ok(None) => {}
+            Err(e) => warn!(chunk_id = c.id, error = %e, "chunk content read failed"),
+        }
+        if pending.len() >= EMBED_BATCH_SIZE {
+            embed_pending(&mut entries, &embedder, &pending, buffer_u);
+            pending.clear();
+        }
+    }
+    if !pending.is_empty() {
+        embed_pending(&mut entries, &embedder, &pending, buffer_u);
+    }
+
+    if entries.is_empty() {
+        return;
+    }
+
+    match vstore.insert_vectors(&entries).await {
+        Ok(()) => tracing::info!(count = entries.len(), "embedded chunks into vector store"),
+        Err(e) => warn!(error = %e, "failed to insert vectors"),
+    }
 }

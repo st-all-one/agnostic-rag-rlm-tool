@@ -36,14 +36,69 @@ pub struct AppState {
     started_at: std::time::Instant,
 }
 
-/// Build the embedder: BGE-M3 when weights are available, else hash fallback.
+/// Build the embedder: Ollama when configured, else BGE-M3 (quantized) when
+/// weights are available, else a hash fallback.
 fn load_embedder() -> Arc<dyn Embedder + Send + Sync> {
     const DIMS: usize = 1024;
+
+    // Ollama backend (laptop-friendly): enabled via ARLM_OLLAMA_MODEL.
+    if let Ok(model) = std::env::var("ARLM_OLLAMA_MODEL") {
+        let url = std::env::var("ARLM_OLLAMA_URL")
+            .unwrap_or_else(|_| "http://localhost:11434".to_string());
+        let dims = std::env::var("ARLM_OLLAMA_DIMS")
+            .ok()
+            .and_then(|d| d.parse::<usize>().ok())
+            .unwrap_or(768);
+        let prefix = std::env::var("ARLM_OLLAMA_PREFIX")
+            .unwrap_or_else(|_| "search_document: ".to_string());
+        let cfg = arlm_embedding::embedder::config::EmbeddingConfig {
+            model: arlm_embedding::embedder::config::EmbeddingModel::Ollama,
+            quantization: arlm_embedding::embedder::config::Quantization::None,
+            matryoshka_dims: None,
+            model_dir: None,
+            dims,
+            ollama_url: Some(url.clone()),
+            ollama_model: Some(model.clone()),
+            ollama_prefix: Some(prefix),
+        };
+        match arlm_embedding::embedder::config::build_embedder(&cfg) {
+            Ok(embedder) => {
+                tracing::info!(model = "ollama", ollama_model = %model, "loaded Ollama embedder");
+                return embedder;
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "Ollama embedder failed; falling back");
+            }
+        }
+    }
+
     match std::env::var("ARLM_MODEL_DIR").ok().map(PathBuf::from) {
         Some(dir) if dir.join("model.safetensors").exists() => {
-            match bge_m3::BgeM3Embedder::new(&dir, DIMS) {
+            // Quantize to INT8 at load time: runs real BGE-M3 semantics via
+            // `QMatMul` at ~3-4x less CPU/RAM than FP32 (set ARLM_MODEL_QUANT
+            // to override). FP32 ("none") is far too slow for CPU indexing.
+            let quant = match std::env::var("ARLM_MODEL_QUANT").as_deref() {
+                Ok("none") => arlm_embedding::embedder::config::Quantization::None,
+                Ok("int4") => arlm_embedding::embedder::config::Quantization::Int4,
+                _ => arlm_embedding::embedder::config::Quantization::Int8,
+            };
+            let cfg = arlm_embedding::embedder::config::EmbeddingConfig {
+                model: arlm_embedding::embedder::config::EmbeddingModel::BgeM3,
+                quantization: quant,
+                matryoshka_dims: Some(DIMS),
+                model_dir: Some(dir.clone()),
+                dims: DIMS,
+                ollama_url: None,
+                ollama_model: None,
+                ollama_prefix: None,
+            };
+            match bge_m3::BgeM3Embedder::new_with_config(&dir, &cfg) {
                 Ok(embedder) => {
-                    tracing::info!(model_dir = %dir.display(), "loaded BGE-M3 embedder");
+                    tracing::info!(
+                        model_dir = %dir.display(),
+                        quantization = ?quant,
+                        "loaded BGE-M3 embedder"
+                    );
                     Arc::new(embedder)
                 }
                 Err(err) => {
@@ -66,6 +121,20 @@ fn load_embedder() -> Arc<dyn Embedder + Send + Sync> {
             tracing::info!("ARLM_MODEL_DIR not set; using fallback hash embedder");
             Arc::new(fallback::FallbackEmbedder::new(DIMS))
         }
+    }
+}
+
+/// Dimensionality of the embedder [`load_embedder`] will build, used to size
+/// the server's global vector store so stored and query vectors are comparable.
+#[must_use]
+pub fn embedder_dimension() -> usize {
+    if std::env::var("ARLM_OLLAMA_MODEL").is_ok() {
+        std::env::var("ARLM_OLLAMA_DIMS")
+            .ok()
+            .and_then(|d| d.parse::<usize>().ok())
+            .unwrap_or(768)
+    } else {
+        1024
     }
 }
 

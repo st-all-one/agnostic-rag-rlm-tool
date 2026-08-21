@@ -25,11 +25,13 @@
     clippy::match_same_arms
 )]
 
+pub mod backend;
 pub mod cli;
 pub mod client;
 pub mod commands;
 pub mod config;
 pub mod dispatch;
+pub mod embedding;
 pub mod metrics;
 pub mod output;
 pub mod util;

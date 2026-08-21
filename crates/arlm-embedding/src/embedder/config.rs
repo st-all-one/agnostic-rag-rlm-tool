@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 
 use super::bge_m3::BgeM3Embedder;
-use super::{Embedder, LightweightEmbedder};
+use super::{Embedder, LightweightEmbedder, OllamaEmbedder};
 
 /// Which embedding backend to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +13,9 @@ pub enum EmbeddingModel {
     BgeM3,
     /// Lightweight deterministic embedder (no weights, no candle inference).
     Lightweight,
+    /// Remote embedding via an Ollama `/api/embed` endpoint (e.g.
+    /// `nomic-embed-text-v2-moe`). Runs on CPU with negligible latency.
+    Ollama,
 }
 
 /// Weight quantization applied to the BGE-M3 projections.
@@ -55,6 +58,13 @@ pub struct EmbeddingConfig {
     pub model_dir: Option<PathBuf>,
     /// Base embedding dimensionality of the underlying model (BGE-M3 = 1024).
     pub dims: usize,
+    /// Ollama base URL (e.g. `http://localhost:11434`). Used by `Ollama`.
+    pub ollama_url: Option<String>,
+    /// Ollama model name (e.g. `nomic-embed-text-v2-moe`). Used by `Ollama`.
+    pub ollama_model: Option<String>,
+    /// Task prefix prepended to inputs for the Ollama model (e.g.
+    /// `search_document: ` for documents, `search_query: ` for queries).
+    pub ollama_prefix: Option<String>,
 }
 
 impl Default for EmbeddingConfig {
@@ -66,6 +76,9 @@ impl Default for EmbeddingConfig {
             matryoshka_dims: Some(512),
             model_dir: None,
             dims: 1024,
+            ollama_url: None,
+            ollama_model: None,
+            ollama_prefix: None,
         }
     }
 }
@@ -80,6 +93,9 @@ impl EmbeddingConfig {
             matryoshka_dims: Some(256),
             model_dir: None,
             dims: 384,
+            ollama_url: None,
+            ollama_model: None,
+            ollama_prefix: None,
         }
     }
 }
@@ -105,6 +121,22 @@ pub fn build_embedder(config: &EmbeddingConfig) -> anyhow::Result<Arc<dyn Embedd
                 .ok_or_else(|| anyhow!("EmbeddingConfig.model_dir must be set for model=BgeM3"))?;
             let embedder = BgeM3Embedder::new_with_config(dir, config)?;
             Ok(Arc::new(embedder))
+        }
+        EmbeddingModel::Ollama => {
+            let url = config
+                .ollama_url
+                .clone()
+                .unwrap_or_else(|| "http://localhost:11434".to_string());
+            let model = config
+                .ollama_model
+                .clone()
+                .ok_or_else(|| anyhow!("embedding.ollama_model must be set for model=Ollama"))?;
+            let dims = if config.dims == 0 { 768 } else { config.dims };
+            let prefix = config
+                .ollama_prefix
+                .clone()
+                .unwrap_or_else(|| "search_document: ".to_string());
+            Ok(Arc::new(OllamaEmbedder::new(url, model, dims, prefix)))
         }
     }
 }
