@@ -1,6 +1,6 @@
 target/
-models/
 .git/
-vendor/
-*.db
-*.log
+.seeds/
+*.md
+plan/
+ai-guides/

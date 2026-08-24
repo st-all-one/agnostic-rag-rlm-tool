@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+- `VectorStore::open` default dims: 1024 → **384** (`arlm_core::EMBEDDING_DIMS`,
+  all-MiniLM-L6-v2); `open_with_dims` segue disponível.
+
 ### Removed (limpeza pós-019/020)
 - Módulo `sqlite/summaries.rs` (`Summary`, `insert_summary`,
   `search_summaries`, FTS5 `summaries_fts`) e migrations `006_add_sessions`,

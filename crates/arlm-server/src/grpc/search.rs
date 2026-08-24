@@ -4,7 +4,7 @@
 //! project's chunks: BM25 (FTS5) is always the base tier, and the `entity`,
 //! `vector` (semantic) tiers are fused on top via Reciprocal
 //! Rank Fusion (RRF). The semantic tier is powered by the server's embedder
-//! (BGE-M3 when weights are present, otherwise a hash fallback), so vector
+//! (native all-MiniLM-L6-v2; a hash fallback without weights), so vector
 //! search degrades gracefully to BM25 when no vector store is configured.
 //!
 //! Result scores are min-max normalised to `[0, 1]` (higher = better) so that
@@ -71,9 +71,9 @@ pub(crate) async fn hybrid_search(
         .map(|v| SemanticSearch::new(v.clone()));
     let hybrid = HybridSearch::new(bm25, entity, semantic);
 
-    // The embedder's HTTP client (ureq) is synchronous and would block the
-    // async worker, so run it on a blocking task. Falls back to BM25-only when
-    // the embed fails.
+    // Embedding inference is synchronous CPU work and would block the async
+    // worker, so run it on a blocking task. Falls back to BM25-only when the
+    // embed fails.
     let fts_query_owned = fts_query.to_string();
     let embedder = state.embedder.clone();
     let query_vector = tokio::task::spawn_blocking(move || embedder.embed(&fts_query_owned))

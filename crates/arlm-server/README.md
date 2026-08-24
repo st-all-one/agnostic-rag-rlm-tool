@@ -67,12 +67,8 @@ flush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)
 max_batch_size = 50      # linhas por transação de indexação
 
 [embedder]
-model = "ollama"                      # bge-m3 | ollama | lightweight
-# model_dir = "/models/bge-m3"        # p/ bge-m3 (model.safetensors)
-ollama_url = "http://127.0.0.1:11434"
-ollama_model = "all-minilm"
-ollama_prefix = ""                    # "search_document: " p/ família nomic
-dims = 384
+model_dir = "/models/all-MiniLM-L6-v2"  # model.safetensors + tokenizer.json
+quantization = "int8"                 # default; "none" = f32
 batch_size = 64                       # chunks por request de embedding
 max_tokens = 512                      # tamanho máximo de chunk (tokens)
 overlap_tokens = 64                   # sobreposição entre chunks
@@ -103,9 +99,10 @@ decay_score_floor = 0.05
 retention_days = 90                   # purge no ticker; 0 = mantém
 ```
 
-> Os knobs de embedding vivem **apenas** aqui — as envs `ARLM_OLLAMA_*`,
-> `ARLM_MODEL_DIR` e `ARLM_EMBED_BATCH` foram substituídas pelo `[embedder]`
-> do `server.toml` (plan 020).
+> Os knobs de embedding vivem **apenas** aqui — as envs `ARLM_OLLAMA_*` (e
+> demais legadas) foram substituídas pelo `[embedder]` do `server.toml`. O
+> modelo é **fixo**: all-MiniLM-L6-v2 nativo em candle (sem Ollama, sem
+> Python); `model_dir` aponta para o checkpoint baixado do HF.
 
 > **Auth (plan 018):** os RPCs mutantes (`InvalidateCache`, e qualquer RPC que
 > escreva estado) exigem um `Authorization: Bearer <session>` válido; operações

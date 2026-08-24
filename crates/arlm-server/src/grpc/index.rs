@@ -23,7 +23,7 @@ use crate::state::AppState;
 use crate::store;
 
 /// Default number of concurrent embedding batches when `ARLM_INDEX_CONCURRENCY`
-/// is unset. Should track Ollama's `OLLAMA_NUM_PARALLEL`.
+/// is unset.
 const DEFAULT_INDEX_CONCURRENCY: usize = 4;
 
 /// Rough tokens-per-line heuristic used to translate the `[embedder]`
@@ -134,7 +134,7 @@ pub(crate) async fn handle_index_project(
         let buffer_id_u = u64::try_from(buffer_id).unwrap_or(u64::MAX);
 
         // Split the persisted chunks into batches and embed each batch
-        // concurrently. `ureq` (Ollama HTTP client) is synchronous, so each
+        // concurrently. Candle inference on CPU is synchronous, so each
         // batch runs inside `spawn_blocking`; `buffer_unordered` bounds the
         // number of in-flight blocking tasks to `concurrency`.
         let batches: Vec<Vec<(i64, String)>> =
@@ -146,7 +146,7 @@ pub(crate) async fn handle_index_project(
                 tokio::task::spawn_blocking(move || {
                     let texts: Vec<&str> = batch.iter().map(|(_, c)| c.as_str()).collect();
                     emb.embed_batch(&texts).map(|vectors| {
-                        // Ollama preserves input order, so zipping is safe.
+                        // `embed_batch` preserves input order, so zipping is safe.
                         batch
                             .into_iter()
                             .zip(vectors)

@@ -5,9 +5,9 @@ Pipeline de chunking e geração de embeddings para o arlm.
 ## Responsabilidades
 
 - **Chunking**: Divisão inteligente de arquivos em chunks (code, text, markdown, recursive)
-- **Embedding**: Geração de vetores via BGE-M3 (candle, com quantização INT8/INT4 opcional)
-- **Modelo configurável**: `BgeM3` (produção) ou `Lightweight` determinístico (testes, sem pesos)
-- **Quantização**: BGE-M3 em INT8/INT4 via `QMatMul`, com fallback f32
+- **Embedding**: Geração de vetores via all-MiniLM-L6-v2 nativo em candle (INT8 default)
+- **Modelo fixo**: all-MiniLM-L6-v2 nativo em candle (produção); hash determinístico apenas para testes
+- **Quantização**: MiniLM em INT8 via `QMatMul`, com opção f32
 - **Matryoshka**: truncamento do vetor para dimensões configuráveis (default 512)
 - **Fallback**: Embedding determinístico via SHA-256 quando modelo não disponível
 - **Cache**: Cache de embeddings em SQLite para reuso
@@ -28,13 +28,10 @@ src/
 │   └── recursive.rs        # Chunking recursivo por tamanho
 ├── embedder/
 │   ├── mod.rs              # Embedder trait, EmbeddingError, matryoshka_truncate, OwnedFile
-│   ├── bge_m3/
-│   │   ├── mod.rs          # BgeM3Embedder, re-exports
-│   │   ├── model.rs        # BgeM3Model (transformer BGE-M3)
-│   │   ├── attention.rs    # TransformerLayer, SelfAttention
+│   ├── minilm/             # MinilmEmbedder + encoder BERT nativo (modelo fixo)
+│   ├── common/
 │   │   ├── weights.rs      # Carga de pesos (QMatMul, Projection)
-│   │   ├── ops.rs          # gelu / layer_norm / masked_fill / half_to_f32
-│   │   └── embedder.rs     # embed/embed_batch + cache matryoshka
+│   │   └── ops.rs          # gelu / layer_norm / masked_fill / half_to_f32
 │   ├── fallback.rs         # Hash-based determinístico
 │   ├── lightweight.rs      # LightweightEmbedder (sem pesos, p/ testes)
 │   ├── config.rs           # EmbeddingConfig, EmbeddingModel, Quantization, build_embedder
@@ -46,7 +43,7 @@ src/
 ```
 
 > Os testes unitários foram extraídos de `src/` para `tests/` (`chunker_test.rs`,
-> `embedder_test.rs`, `bge_m3_test.rs`, `pipeline_test.rs`).
+> `embedder_test.rs`, `minilm_test.rs`, `pipeline_test.rs`).
 
 ## Uso
 
@@ -97,24 +94,23 @@ O embedder é configurável via `EmbeddingConfig` (`embedder::config`):
 
 ```rust
 use arlm_embedding::embedder::{EmbeddingConfig, build_embedder, Quantization};
+use std::path::PathBuf;
 
-// Produção: BGE-M3, f32, matryoshka 512 (default)
-let cfg = EmbeddingConfig::default();
-
-// Opcional: quantizar para INT8 e reduzir vetor para 256 dims
+// Produção: all-MiniLM-L6-v2, INT8 (default)
 let cfg = EmbeddingConfig {
-    quantization: Quantization::Int8,
-    matryoshka_dims: Some(256),
+    model_dir: Some(PathBuf::from("/models/all-MiniLM-L6-v2")),
     ..Default::default()
 };
 
-let embedder = build_embedder(&cfg)?; // Arc<dyn Embedder>
+// f32 quando a máxima qualidade importar mais que CPU/RAM
+let cfg = EmbeddingConfig { quantization: Quantization::None, ..cfg };
+
+let embedder = build_embedder(&cfg)?; // Arc<dyn Embedder>, 384 dims
 ```
 
-- **`EmbeddingModel::BgeM3`** (padrão real): transformer BGE-M3 em candle.
-  - `Quantization::Int8`/`Int4` usa `QMatMul` (reduz o modelo ~2,3 GB → ~300–600 MB e acelera).
-  - `matryoshka_dims` trunca/preenche o vetor (ex.: 512) — menos armazenamento e busca ANN mais rápida.
-- **`EmbeddingModel::Lightweight`** (padrão em testes via `EmbeddingConfig::for_tests()`):
+- **`EmbeddingModel::Minilm`** (padrão real, modelo fixo do projeto): encoder
+  BERT canônico em candle — 22M params (~90 MB f32 → ~25–45 MB INT8).
+- **`EmbeddingModel::Lightweight`** (apenas testes via `EmbeddingConfig::for_tests()`):
   embedder determinístico SHA-256→xorshift→`f32`, L2-normalizado, **sem pesos nem candle**.
   Testes compilam/rodam instantâneo; não requer modelo baixado.
 
@@ -131,4 +127,4 @@ let embedder = build_embedder(&cfg)?; // Arc<dyn Embedder>
 cargo test -p arlm-embedding
 ```
 
-78 testes cobrindo: strategies de chunking, embedders (BGE-M3 + Lightweight), cache, pipeline, discover_files, glob_match, matryoshka, quantização e config.
+Testes cobrindo: strategies de chunking, embedders (MiniLM sintético + Lightweight), cache, pipeline, discover_files, glob_match, matryoshka, quantização e config. Smoke test com pesos reais atrás de `ARLM_MINILM_DIR` (`cargo test -- --ignored`).

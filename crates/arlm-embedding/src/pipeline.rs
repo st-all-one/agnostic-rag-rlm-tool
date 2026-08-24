@@ -114,7 +114,7 @@ impl IngestionPipeline {
     }
 
     /// Create a pipeline from an [`EmbeddingConfig`], building the embedder
-    /// (BGE-M3 or lightweight) accordingly.
+    /// (`MiniLM` or lightweight) accordingly.
     ///
     /// # Errors
     ///

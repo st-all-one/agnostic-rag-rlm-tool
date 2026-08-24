@@ -7,6 +7,15 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Changed — embedder fixo all-MiniLM-L6-v2 (BREAKING) — agnostic-rlm-rs-1194
+- `[embedder]` sem seleção de modelo: `model_dir` (checkpoint MiniLM),
+  `quantization` (`int8` default), knobs de chunk/batch/cache. Campos
+  `model`, `dims`, `ollama_url/ollama_model/ollama_prefix` **removidos**.
+- Sem weights em `model_dir` → hash fallback com aviso (busca semântica
+  desligada, pipeline vivo).
+- `qa_cache.question_vector_dims` default: 1024 → **384**.
+- Reindex obrigatório ao migrar (vetores incompatíveis).
+
 ### Removed (limpeza pós-019/020)
 - Handlers gRPC de sessão (`grpc/session.rs`) e persistência
   (`store/sessions.rs`) — nenhum cliente chama mais esses RPCs.

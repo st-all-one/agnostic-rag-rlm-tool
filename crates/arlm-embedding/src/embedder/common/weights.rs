@@ -4,11 +4,47 @@ use std::sync::Arc;
 
 use candle_core::quantized::{GgmlDType, QMatMul, QTensor};
 use candle_core::{Device, Tensor};
+use candle_nn::{Linear, Module};
 
-use super::super::{EmbeddingError, EmbeddingResult};
-use super::ops::half_to_f32;
+use crate::embedder::common::ops::half_to_f32;
+use crate::embedder::{EmbeddingError, EmbeddingResult};
 
-/// Create a [`super::model::Projection`] from safetensors weights.
+/// A linear projection that may run with full-precision weights or as a
+/// quantized matmul (`QMatMul`). Both variants apply the optional bias.
+#[derive(Debug)]
+pub(crate) enum Projection {
+    /// Full-precision f32 linear (`candle_nn::Linear`, includes bias).
+    F32 { linear: Linear },
+    /// Quantized matmul (`QMatMul`) plus separately-stored bias.
+    Quantized {
+        qmatmul: QMatMul,
+        bias: Option<Tensor>,
+    },
+}
+
+impl Projection {
+    /// Forward pass: returns `x @ W^T + b`.
+    pub(crate) fn forward(&self, x: &Tensor) -> EmbeddingResult<Tensor> {
+        match self {
+            Projection::F32 { linear } => linear
+                .forward(x)
+                .map_err(|e| EmbeddingError::Candle(e.to_string())),
+            Projection::Quantized { qmatmul, bias } => {
+                let out = qmatmul
+                    .forward(x)
+                    .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
+                match bias {
+                    Some(b) => out
+                        .broadcast_add(b)
+                        .map_err(|e| EmbeddingError::Candle(e.to_string())),
+                    None => Ok(out),
+                }
+            }
+        }
+    }
+}
+
+/// Create a [`Projection`] from safetensors weights.
 ///
 /// When `quant` is `None`, a full-precision `Linear` is built. When a GGML
 /// dtype is supplied, the weight tensor is quantized via [`QTensor::quantize`]
@@ -19,12 +55,12 @@ pub(crate) fn build_projection(
     tensors: &safetensors::SafeTensors<'_>,
     device: &Device,
     quant: Option<GgmlDType>,
-) -> EmbeddingResult<super::model::Projection> {
+) -> EmbeddingResult<Projection> {
     let w = load_tensor(tensors, &format!("{prefix}.weight"), device)?;
     let b = load_tensor(tensors, &format!("{prefix}.bias"), device)?;
 
     match quant {
-        None => Ok(super::model::Projection::F32 {
+        None => Ok(Projection::F32 {
             linear: candle_nn::Linear::new(w, Some(b)),
         }),
         Some(dtype) => {
@@ -32,7 +68,7 @@ pub(crate) fn build_projection(
                 .map_err(|e| EmbeddingError::Candle(format!("quantize {prefix}: {e}")))?;
             let qmatmul = QMatMul::from_arc(Arc::new(qtensor))
                 .map_err(|e| EmbeddingError::Candle(format!("qmatmul {prefix}: {e}")))?;
-            Ok(super::model::Projection::Quantized {
+            Ok(Projection::Quantized {
                 qmatmul,
                 bias: Some(b),
             })

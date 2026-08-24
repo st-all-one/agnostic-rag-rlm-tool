@@ -19,10 +19,7 @@ fn init_files(cwd: &Path, project_name: &str, ignore: Vec<String>) -> String {
     } else {
         format!("ignore = {}\n", serde_json::to_string(&ignore).unwrap())
     };
-    format!(
-        "[project]\nname = \"{}\"\n{}\n[server]\naddr = \"http://127.0.0.1:50051\"\n",
-        project_name, ignore_field
-    )
+    format!("[project]\nname = \"{}\"\n{}", project_name, ignore_field)
 }
 
 #[test]
@@ -31,8 +28,9 @@ fn test_init_creates_local_arlm_toml_and_gitignores() {
     let content = init_files(dir.path(), "meu-repo", vec!["target/".into()]);
     assert!(content.contains("[project]"));
     assert!(content.contains("name = \"meu-repo\""));
-    // The generated local config carries the server target override.
-    assert!(content.contains("[server]"));
+    // The generated local config must NOT carry a `[server]` stamp
+    // (agnostic-rlm-rs-152a): the global addr wins unless overridden.
+    assert!(!content.contains("[server]"));
 
     // Simulate the idempotent gitignore append performed by `arlm init`
     // (check-then-append, exactly like `dispatch::server::append_gitignore`).

@@ -16,6 +16,11 @@
 pub mod logging;
 pub mod qa_cache;
 
+/// Dimensionality of the project's fixed embedding model
+/// (`all-MiniLM-L6-v2`). Single source of truth for sizing vector stores
+/// and caches across the workspace.
+pub const EMBEDDING_DIMS: usize = 384;
+
 #[must_use]
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

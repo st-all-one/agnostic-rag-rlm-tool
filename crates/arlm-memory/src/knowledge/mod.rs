@@ -35,8 +35,8 @@ impl Default for IndexOptions {
     fn default() -> Self {
         Self {
             max_chunk_bytes: 1500,
-            embedding_model: "bge-m3".to_string(),
-            embedding_dims: 1024,
+            embedding_model: "all-MiniLM-L6-v2".to_string(),
+            embedding_dims: 384,
             ignore_patterns: vec![],
             force_include: vec![],
         }

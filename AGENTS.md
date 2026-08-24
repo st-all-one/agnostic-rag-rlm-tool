@@ -12,7 +12,7 @@ arlm-cli  ──gRPC──▶  arlm-server (data plane, LLM-free)
    │                        │
    │ uses user LLM          ├─ arlm-storage (SQLite FTS5/BM25 + LanceDB HNSW)
    │ (query -qa, persist)   ├─ arlm-search (hybrid BM25 + semantic + RRF)
-   │                        ├─ arlm-embedding (chunking + candle BGE-M3)
+   │                        ├─ arlm-embedding (chunking + candle all-MiniLM-L6-v2)
    │                        └─ arlm-memory (memory, history, maintenance)
    └─ arlm-core, arlm-llm, arlm-proto
 ```
@@ -21,7 +21,7 @@ arlm-cli  ──gRPC──▶  arlm-server (data plane, LLM-free)
 - Rust 2024 (edition = "2024", rust-version = "1.85")
 - SQLite via rusqlite (bundled, WAL, FTS5 for BM25)
 - LanceDB for vector storage (HNSW index)
-- candle-core + candle-transformers for BGE-M3 embeddings (INT8 quantized)
+- candle-core + candle-transformers for all-MiniLM-L6-v2 embeddings (INT8 quantized, fixed model)
 - memmap2 for zero-copy file I/O
 - Rayon for parallel chunking
 - zstd for text compression
@@ -63,7 +63,7 @@ benches/
 | `arlm-cli` | Binary entry point, clap parsing, output formatting; pure gRPC client |
 | `arlm-core` | Shared types, client config (2-scope user config), dispatch, output formatting; no RLM engine |
 | `arlm-storage` | SQLite (metadata, FTS5) + LanceDB (vectors), dual transactions |
-| `arlm-embedding` | Chunking strategies (code/text/markdown), candle BGE-M3 embeddings (server-side) |
+| `arlm-embedding` | Chunking strategies (code/text/markdown), native candle all-MiniLM-L6-v2 embedder (fixed model, server-side) |
 | `arlm-search` | Hybrid search (BM25 + semantic + RRF fusion) |
 | `arlm-memory` | Multi-project memory, knowledge base, history, server maintenance (consolidate/decay) |
 | `arlm-llm` | LLM backend abstraction (OpenAI, Anthropic, Ollama, Gemini) — used by client only |
@@ -129,7 +129,7 @@ Every PR must pass:
 | CPU parallelism | Rayon (par_iter) | 100% core utilization for chunking/embedding |
 | Search | SQLite FTS5 (BM25) + LanceDB HNSW (semantic) | Each specialist, fused via RRF |
 | State | SQLite WAL | Transactional, crash-safe, concurrent readers |
-| Embedding | Candle BGE-M3 INT8 | Local inference, no Python/API dependency |
+| Embedding | Native candle all-MiniLM-L6-v2 INT8 (384 dims) | Local inference, no Python/API/Ollama dependency |
 | Concurrency | Sync + channels + Rayon | Zero async overhead for CLI operations |
 | Build | lto=true, codegen-units=1 | Minimum binary, maximum machine code optimization |
 | Allocator | mimalloc | Less fragmentation than glibc for ingestion workloads |

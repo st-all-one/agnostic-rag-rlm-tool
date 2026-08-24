@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Changed — all-MiniLM-L6-v2 nativo (BREAKING) — agnostic-rlm-rs-1194
+- **Novo backend `minilm`**: encoder BERT canônico em candle
+  (`embedder/minilm/`), atenção 4-D batched correta, positions a partir de 1,
+  token-type row 0, mean pooling + L2. INT8 (`QMatMul`) por default.
+- **Removidos os backends alternativos**: `ollama.rs` (HTTP) e `bge_m3/`
+  (transformer 568M) deletados junto com o enum de seleção — o modelo do
+  projeto é fixo e não-alterável.
+- `EmbeddingConfig` enxuto: `model` + `model_dir` + `quantization`
+  (`Int8`/`None`; `Int4` removido). Matryoshka removido (384 dims fixos).
+- Dependência `ureq` cortada — zero rede no crate.
+- Correções herdadas do caminho antigo: batching `[B,S,H]` real (o caminho
+  batch>1 do bge-m3 tinha reshape incorreto), padding para o maior comprimento
+  do batch (não o menor).
+
 ### Added
 - **`CachedEmbedder`** (`src/embedder/cache.rs`): wrapper da trait `Embedder`
   com cache SQLite por hash de conteúdo — hit pula a inferência; batch suporta

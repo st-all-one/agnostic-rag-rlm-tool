@@ -1,7 +1,7 @@
 # arlm-embedding
 
 ## O que faz
-Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em chunks (code/text/markdown/recursive) e os converte em vetores densos para busca semântica. O modelo é configurável — `BgeM3` (candle, produção) ou `Lightweight` (determinístico, sem pesos, para testes) — com quantização INT8/INT4 e truncamento matryoshka opcionais.
+Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em chunks (code/text/markdown/recursive) e os converte em vetores densos para busca semântica. O modelo de produção é **fixo**: all-MiniLM-L6-v2 nativo em candle (22M params, 384 dims, INT8 default via `QMatMul`) — sem Ollama, sem Python, sem rede. `Lightweight` (hash determinístico) existe apenas para testes/degradação.
 
 ## Estrutura
 - `src/lib.rs` — API pública (re-exports), `Timer` de profiling.
@@ -12,12 +12,8 @@ Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em
 - `src/chunker/markdown.rs` — chunking por headings.
 - `src/chunker/recursive.rs` — chunking recursivo por tamanho.
 - `src/embedder/mod.rs` — trait `Embedder`, `Embedding`, `EmbeddingError`, `matryoshka_truncate`.
-- `src/embedder/bge_m3/mod.rs` — `BgeM3Embedder`, re-exports.
-- `src/embedder/bge_m3/model.rs` — `BgeM3Model` (transformer BGE-M3: embeddings + camadas).
-- `src/embedder/bge_m3/attention.rs` — `TransformerLayer`, `SelfAttention`.
-- `src/embedder/bge_m3/weights.rs` — carga de pesos (`QMatMul`, `Projection`).
-- `src/embedder/bge_m3/ops.rs` — `gelu`/`layer_norm`/`masked_fill`/`half_to_f32`.
-- `src/embedder/bge_m3/embedder.rs` — `embed`/`embed_batch` + cache matryoshka.
+- `src/embedder/minilm/` — **all-MiniLM-L6-v2 nativo** (`MinilmEmbedder`): encoder BERT canônico com atenção 4-D batched correta, positions a partir de 1, token-type row 0; INT8/f32 via `QMatMul`; mean pooling + L2 norm; teste de pesos reais atrás de `ARLM_MINILM_DIR`.
+- `src/embedder/common/` — infra compartilhada: `ops.rs` (`gelu`/`layer_norm`/`masked_fill`), `weights.rs` (carga safetensors + `Projection` F32/quantizado).
 - `src/embedder/lightweight.rs` — `LightweightEmbedder` (SHA-256→xorshift→f32, sem pesos).
 - `src/embedder/config.rs` — `EmbeddingConfig`, `EmbeddingModel`, `Quantization`, `build_embedder`.
 - `src/embedder/fallback.rs` — `FallbackEmbedder` (hash-based).
@@ -28,14 +24,14 @@ Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em
 
 ## Dependências
 - Internas: nenhuma (crate folha de embeddings; consumido por `arlm-search`, `arlm-memory`, `arlm-server`).
-- Externas: `candle-core`/`candle-nn`/`candle-transformers` (inferência BGE-M3, INT8/INT4 via `QMatMul`), `tokenizers`, `memmap2` (leitura zero-copy), `rayon` (chunking paralelo), `rusqlite` (cache), `sha2`/`hex` (chaves), `serde`/`serde_json`, `tracing` (logs), `anyhow`/`thiserror` (erros).
+- Externas: `candle-core`/`candle-nn` (inferência MiniLM, INT8 via `QMatMul`), `tokenizers`, `memmap2` (leitura zero-copy), `rayon` (chunking paralelo), `rusqlite` (cache), `sha2`/`hex` (chaves), `serde`/`serde_json`, `tracing` (logs), `anyhow`/`thiserror` (erros).
 
 ## Convenções deste módulo
 - Sem `unwrap`/`expect`/`panic` em `src/`; use `anyhow::Result`+`?`. Sem `unsafe` (exceto `Mmap::map`/`transmute` com `#[allow]`, sob `deny`).
 - Testes unitários residem em `tests/` (extraídos de `src/`), usando helpers expostos (`pub`/`#[doc(hidden)]`) e `EmbeddingConfig::for_tests()` (Lightweight) — nada de pesos/candle em runtime.
 - `crate::Timer` marca pontos quentes (criação de pipeline, ingest, batch embed) com span + timing.
 - zstd é aplicado no ingest via `IngestOptions::compress` (default `true`); `ChunkedText::compressed` guarda o texto comprimido.
-- `Embedder` é a trait central — novos modelos (ex.: `gte-small`, `e5-small`) implementam-na e entram em `EmbeddingModel`.
+- `Embedder` é a trait central — novos modelos (ex.: `gte-small`, `e5-small`) implementam-na — o modelo é fixo e não-alterável por decisão de projeto.
 - `matryoshka_truncate(emb, dims)` é a fonte única de truncamento de dimensão.
 
 ## Comandos úteis
@@ -53,8 +49,10 @@ cargo bench -p arlm-embedding
 - N/A — o crate não possui schema próprio; o cache de embeddings usa SQLite interno gerenciado por `EmbeddingCache`.
 
 ## Rules
-- Padrão de produção: `EmbeddingConfig::default()` → `BgeM3`, f32, matryoshka **512**.
-- Padrão de testes: `EmbeddingConfig::for_tests()` → `Lightweight`, matryoshka **256** (sem pesos/candle).
-- `Quantization::None` mantém f32; `Int8`/`Int4` usam `QMatMul` (fallback f32 se o peso não for quantizável).
-- `matryoshka_dims` sempre aplicado no `embed`/`embed_batch` do BGE-M3 (trunca ou preenche com 0.0).
-- Trocar de modelo NÃO altera o tempo de compilação do candle — apenas o peso/runtime de inferência.
+- Padrão de produção: `EmbeddingConfig::default()` → `Minilm`, INT8 (384 dims fixos — `arlm_core::EMBEDDING_DIMS`).
+- Padrão de testes: `EmbeddingConfig::for_tests()` → `Lightweight` (sem pesos/candle).
+- `Quantization::None` mantém f32; `Int8` usa `QMatMul`.
+- O modelo é **fixo por decisão de projeto** (all-MiniLM-L6-v2): não há seleção
+  de backend em `server.toml`; mudanças de arquitetura são código, não config.
+- Trocar modelo/dims exige reindex (vetores incompatíveis) e ajuste de
+  `qa_cache.question_vector_dims`.

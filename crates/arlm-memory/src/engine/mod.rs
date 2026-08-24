@@ -73,8 +73,8 @@ impl Default for IndexProjectOptions {
             project_name: String::new(),
             dir_path: std::path::PathBuf::new(),
             max_chunk_bytes: 1500,
-            embedding_model: "bge-m3".to_string(),
-            embedding_dims: 1024,
+            embedding_model: "all-MiniLM-L6-v2".to_string(),
+            embedding_dims: 384,
             ignore_patterns: Vec::new(),
             force_include: Vec::new(),
         }

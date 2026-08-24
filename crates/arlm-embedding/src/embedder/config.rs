@@ -3,30 +3,32 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 
-use super::bge_m3::BgeM3Embedder;
-use super::{Embedder, LightweightEmbedder, OllamaEmbedder};
+use super::minilm::MinilmEmbedder;
+use super::{Embedder, LightweightEmbedder};
 
-/// Which embedding backend to use.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Which embedding backend to instantiate.
+///
+/// `Minilm` is the single production model of the data plane;
+/// `Lightweight` is a deterministic hash fixture for tests and degraded
+/// mode — it is not a user-selectable alternative.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EmbeddingModel {
-    /// Full BGE-M3 transformer (candle). Requires model weights on disk.
-    BgeM3,
+    /// Native all-`MiniLM`-L6-v2 via candle. Requires model weights on disk.
+    #[default]
+    Minilm,
     /// Lightweight deterministic embedder (no weights, no candle inference).
     Lightweight,
-    /// Remote embedding via an Ollama `/api/embed` endpoint (e.g.
-    /// `nomic-embed-text-v2-moe`). Runs on CPU with negligible latency.
-    Ollama,
 }
 
-/// Weight quantization applied to the BGE-M3 projections.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Weight quantization applied to the `MiniLM` projections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Quantization {
-    /// Full-precision (f32) linear projections. Default.
+    /// Full-precision (f32) linear projections.
     None,
-    /// INT8 quantization (GGML `Q8_0`).
+    /// INT8 quantization (GGML `Q8_0`). Best balance of speed, memory and
+    /// quality — the default.
+    #[default]
     Int8,
-    /// INT4 quantization (GGML `Q4_0`).
-    Int4,
 }
 
 impl Quantization {
@@ -36,49 +38,36 @@ impl Quantization {
         match self {
             Quantization::None => None,
             Quantization::Int8 => Some(candle_core::quantized::GgmlDType::Q8_0),
-            Quantization::Int4 => Some(candle_core::quantized::GgmlDType::Q4_0),
+        }
+    }
+
+    /// Parse a `[embedder] quantization` string (`"int8"` default, `"none"`).
+    #[must_use]
+    pub fn parse(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "none" | "f32" | "fp32" => Quantization::None,
+            _ => Quantization::Int8,
         }
     }
 }
 
 /// Configuration controlling which embedder is built and how.
-///
-/// The three fields required by the public config contract are
-/// `model`, `quantization`, and `matryoshka_dims`. `model_dir` and `dims`
-/// are auxiliary and only used by the BGE-M3 backend.
 #[derive(Debug, Clone)]
 pub struct EmbeddingConfig {
     /// The backend to instantiate.
     pub model: EmbeddingModel,
-    /// Quantization applied to BGE-M3 projections.
-    pub quantization: Quantization,
-    /// If `Some(d)`, embeddings are truncated (or zero-padded) to `d` dims.
-    pub matryoshka_dims: Option<usize>,
-    /// Directory containing `model.safetensors` + `tokenizer.json` (BGE-M3).
+    /// Directory containing `model.safetensors` + `tokenizer.json` (`MiniLM`).
     pub model_dir: Option<PathBuf>,
-    /// Base embedding dimensionality of the underlying model (BGE-M3 = 1024).
-    pub dims: usize,
-    /// Ollama base URL (e.g. `http://localhost:11434`). Used by `Ollama`.
-    pub ollama_url: Option<String>,
-    /// Ollama model name (e.g. `nomic-embed-text-v2-moe`). Used by `Ollama`.
-    pub ollama_model: Option<String>,
-    /// Task prefix prepended to inputs for the Ollama model (e.g.
-    /// `search_document: ` for documents, `search_query: ` for queries).
-    pub ollama_prefix: Option<String>,
+    /// Weight quantization (INT8 by default).
+    pub quantization: Quantization,
 }
 
 impl Default for EmbeddingConfig {
     fn default() -> Self {
-        // REAL usage default: full BGE-M3, matryoshka 512.
         Self {
-            model: EmbeddingModel::BgeM3,
-            quantization: Quantization::None,
-            matryoshka_dims: Some(512),
+            model: EmbeddingModel::Minilm,
             model_dir: None,
-            dims: 1024,
-            ollama_url: None,
-            ollama_model: None,
-            ollama_prefix: None,
+            quantization: Quantization::Int8,
         }
     }
 }
@@ -89,54 +78,32 @@ impl EmbeddingConfig {
     pub fn for_tests() -> Self {
         Self {
             model: EmbeddingModel::Lightweight,
-            quantization: Quantization::None,
-            matryoshka_dims: Some(256),
             model_dir: None,
-            dims: 384,
-            ollama_url: None,
-            ollama_model: None,
-            ollama_prefix: None,
+            quantization: Quantization::None,
         }
     }
 }
 
 /// Build an embedder from a configuration.
 ///
-/// Returns a `LightweightEmbedder` for the lightweight model, or a
-/// `BgeM3Embedder` (with quantization/matryoshka applied) for BGE-M3.
+/// Returns a [`LightweightEmbedder`] for the test fixture model, or a
+/// [`MinilmEmbedder`] (with INT8/f32 quantization) for `MiniLM`.
 ///
 /// # Errors
 ///
-/// Returns an error if BGE-M3 is selected but `model_dir` is unset, or if the
-/// model/tokenizer cannot be loaded.
+/// Returns an error if `MiniLM` is selected but `model_dir` is unset, or if
+/// the model/tokenizer cannot be loaded.
 pub fn build_embedder(config: &EmbeddingConfig) -> anyhow::Result<Arc<dyn Embedder>> {
     match config.model {
         EmbeddingModel::Lightweight => Ok(Arc::new(LightweightEmbedder::new(
-            config.matryoshka_dims.unwrap_or(384),
+            super::minilm::HIDDEN_SIZE,
         ))),
-        EmbeddingModel::BgeM3 => {
-            let dir = config
-                .model_dir
-                .as_ref()
-                .ok_or_else(|| anyhow!("EmbeddingConfig.model_dir must be set for model=BgeM3"))?;
-            let embedder = BgeM3Embedder::new_with_config(dir, config)?;
+        EmbeddingModel::Minilm => {
+            let dir = config.model_dir.as_ref().ok_or_else(|| {
+                anyhow!("EmbeddingConfig.model_dir must be set for model=`MiniLM`")
+            })?;
+            let embedder = MinilmEmbedder::new(dir, config.quantization)?;
             Ok(Arc::new(embedder))
-        }
-        EmbeddingModel::Ollama => {
-            let url = config
-                .ollama_url
-                .clone()
-                .unwrap_or_else(|| "http://localhost:11434".to_string());
-            let model = config
-                .ollama_model
-                .clone()
-                .ok_or_else(|| anyhow!("embedding.ollama_model must be set for model=Ollama"))?;
-            let dims = if config.dims == 0 { 768 } else { config.dims };
-            let prefix = config
-                .ollama_prefix
-                .clone()
-                .unwrap_or_else(|| "search_document: ".to_string());
-            Ok(Arc::new(OllamaEmbedder::new(url, model, dims, prefix)))
         }
     }
 }

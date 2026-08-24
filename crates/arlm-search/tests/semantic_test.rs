@@ -11,7 +11,8 @@ use arlm_search::semantic::SemanticSearch;
 use arlm_storage::lance::vectors::{VectorEntry, VectorStore};
 use tempfile::TempDir;
 
-const DIMS: usize = 1024;
+// Matches the default vector-store dimensionality (all-MiniLM-L6-v2).
+const DIMS: usize = 384;
 
 async fn setup_store() -> (SemanticSearch, TempDir) {
     let tmp = TempDir::new().unwrap();

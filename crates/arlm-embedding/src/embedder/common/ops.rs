@@ -1,11 +1,11 @@
-//! Low-level tensor math used by the BGE-M3 transformer.
+//! Low-level tensor math shared by the `MiniLM` transformer.
 //!
 //! These pure functions are exposed for testing but are not part of the
 //! public embedder API surface in a meaningful sense.
 
 use candle_core::{DType, Tensor};
 
-use super::super::{Embedding, EmbeddingError, EmbeddingResult, matryoshka_truncate};
+use crate::embedder::{Embedding, EmbeddingError, EmbeddingResult, matryoshka_truncate};
 
 /// Layer normalization: (x - mean) / sqrt(var + eps) * weight + bias
 #[doc(hidden)]

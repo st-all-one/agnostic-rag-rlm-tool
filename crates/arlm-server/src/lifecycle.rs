@@ -41,7 +41,7 @@ pub async fn run() -> Result<()> {
 
     let vector_store = match VectorStore::open_with_dims(
         &config.data_dir,
-        crate::state::embedder_dimension(&config.embedder),
+        crate::state::embedder_dimension(),
     )
     .await
     {
@@ -54,7 +54,7 @@ pub async fn run() -> Result<()> {
 
     let question_vector_store = match arlm_storage::QuestionVectorStore::open(
         &config.data_dir,
-        crate::state::embedder_dimension(&config.embedder),
+        crate::state::embedder_dimension(),
     ) {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {

@@ -14,7 +14,8 @@ use arlm_storage::VectorStore;
 use arlm_storage::lance::vectors::VectorEntry;
 use tempfile::TempDir;
 
-const DIMS: usize = 1024;
+// Matches the default vector-store dimensionality (all-MiniLM-L6-v2).
+const DIMS: usize = 384;
 
 fn vec_of(value: f32) -> Vec<f32> {
     vec![value; DIMS]

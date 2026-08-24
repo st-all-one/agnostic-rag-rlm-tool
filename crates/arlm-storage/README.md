@@ -124,7 +124,7 @@ let vectors = VectorStore::open(Path::new("~/.arlm")).await?;
 vectors.insert_vectors(&[VectorEntry {
     chunk_id: 1,
     buffer_id: 1,
-    vector: vec![0.1; 1024], // BGE-M3 dims
+    vector: vec![0.1; 384], // all-MiniLM-L6-v2 dims
 }]).await?;
 ```
 

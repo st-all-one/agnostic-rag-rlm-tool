@@ -5,6 +5,17 @@ Este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Changed — embedding nativo all-MiniLM-L6-v2 (agnostic-rlm-rs-1194)
+
+O modelo de embeddings virou **parte do projeto**: all-MiniLM-L6-v2 nativo em
+candle (22M params, 384 dims, INT8 default), sem Ollama, sem Python, sem rede.
+
+- **Backends alternativos removidos**: Ollama HTTP (imagem pesada) e BGE-M3
+  (2,2 GB de weights) deletados; `[embedder].model` não existe mais.
+- Config: `[embedder] model_dir` + `quantization = "int8"` + knobs de chunk.
+- `VectorStore`/QA-cache defaults alinhados a 384 dims.
+- **Reindex necessário** após atualizar.
+
 ### Removed — limpeza de código morto (pós planos 019/020)
 
 Auditoria pós-consolidação removeu os resquícios que sobraram da arquitetura

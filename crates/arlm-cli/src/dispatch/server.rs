@@ -766,6 +766,10 @@ fn run_init(
         );
     } else {
         let ignore = seed_ignore_from_gitignore();
+        // No `[server]` section on purpose (agnostic-rlm-rs-152a): a
+        // hardcoded localhost stamp would override the operator's global
+        // `~/.arlm/arlm.toml` in the field-by-field merge. Absent here, the
+        // merge falls back to the global addr (default `127.0.0.1:50051`).
         let content = toml::to_string_pretty(&LocalArlmToml {
             project: LocalProject {
                 name: project_name.clone(),
@@ -774,9 +778,6 @@ fn run_init(
                 } else {
                     Some(ignore)
                 },
-            },
-            server: LocalServer {
-                addr: "http://127.0.0.1:50051".to_string(),
             },
         })
         .context("failed to serialize .arlm.toml")?;
@@ -799,7 +800,6 @@ fn run_init(
 #[derive(serde::Serialize)]
 struct LocalArlmToml {
     project: LocalProject,
-    server: LocalServer,
 }
 
 #[derive(serde::Serialize)]
@@ -807,11 +807,6 @@ struct LocalProject {
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     ignore: Option<Vec<String>>,
-}
-
-#[derive(serde::Serialize)]
-struct LocalServer {
-    addr: String,
 }
 
 /// Best-effort project name: git remote, else directory basename.

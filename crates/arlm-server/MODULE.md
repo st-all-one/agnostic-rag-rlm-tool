@@ -12,15 +12,16 @@ ocorre no cliente (`arlm-cli`) via o LLM do usuário.
 - `src/lib.rs` — API pública do crate (`ServerConfig`, `AppState`, `run()`).
 - `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`):
   listen/TLS/`mtls_ca`, storage (`pool_size`, `flush_interval_ms`,
-  `max_batch_size`), `[embedder]` (model/model_dir/ollama_*/dims/batch_size/
-  max_tokens/overlap_tokens/cache), `[search]` (tier/top_k/max_tokens),
+  `max_batch_size`), `[embedder]` (model_dir/quantization/batch_size/
+  max_tokens/overlap_tokens/cache — modelo fixo all-MiniLM-L6-v2), `[search]` (tier/top_k/max_tokens),
   `[qa_cache]`, `[maintenance]`, `[history] retention_days`. Load de
   `ARLM_SERVER_CONFIG` (default `/etc/arlm/server.toml`) + overrides
   `ARLM_SERVER_ADDR`/`ARLM_DATA_DIR`.
 - `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config,
-  maintenance config); `load_embedder(&EmbedderConfig)` constrói o embedder da
-  config (bge-m3/ollama/lightweight) e `wrap_with_cache` habilita o
-  `CachedEmbedder` quando `[embedder].cache = true`.
+  maintenance config); `load_embedder(&EmbedderConfig)` constrói o embedder
+  nativo all-MiniLM-L6-v2 (`MinilmEmbedder`, INT8 default) a partir de
+  `[embedder].model_dir` — hash fallback sem weights — e `wrap_with_cache`
+  habilita o `CachedEmbedder` quando `[embedder].cache = true`.
 - `src/store/mod.rs` — camada de dados tipada; re-exporta os submódulos.
   - `store/projects.rs` — CRUD de `buffers` + `buffer_id_for_project`.
   - `store/chunks.rs` — chunks, texts, FTS5, entities, contadores de buffer.

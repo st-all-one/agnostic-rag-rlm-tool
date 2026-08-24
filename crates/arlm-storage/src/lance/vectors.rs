@@ -9,10 +9,10 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use usearch::{Index, IndexOptions, MetricKind, ScalarKind};
 
-/// Default embedding dimensionality for the stored vectors (BGE-M3 = 1024).
-/// Callers that use a different embedder (e.g. Ollama/nomic at 768) must pass
-/// the model's dimensionality via [`VectorStore::open_with_dims`].
-const DEFAULT_VECTOR_DIMS: usize = 1024;
+/// Default embedding dimensionality for the stored vectors
+/// (all-MiniLM-L6-v2 = 384). Callers with a different dimensionality must
+/// pass it via [`VectorStore::open_with_dims`].
+const DEFAULT_VECTOR_DIMS: usize = arlm_core::EMBEDDING_DIMS;
 const INDEX_FILE: &str = "vectors.usearch";
 const META_FILE: &str = "vectors.meta";
 
@@ -45,7 +45,7 @@ pub struct VectorStore {
 
 impl VectorStore {
     /// Open or create a vector store at the given directory using the default
-    /// dimensionality (1024, matching BGE-M3).
+    /// dimensionality (384, matching all-MiniLM-L6-v2).
     ///
     /// # Errors
     ///
@@ -56,7 +56,7 @@ impl VectorStore {
     }
 
     /// Open or create a vector store at the given directory with an explicit
-    /// embedding dimensionality (e.g. 768 for Ollama/nomic models).
+    /// embedding dimensionality.
     ///
     /// # Errors
     ///

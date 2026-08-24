@@ -7,6 +7,10 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added
+- `EMBEDDING_DIMS` (384): fonte única da dimensionalidade do modelo fixo
+  all-MiniLM-L6-v2, usada por storage/server/embedding.
+
 ### Removed (limpeza pós-019/020)
 - `src/types/{enums,input,node}.rs` (placeholders vazios do engine RLM) e o
   trait `MemoryProvider` (`src/memory.rs`) — sem uso em todo o workspace.

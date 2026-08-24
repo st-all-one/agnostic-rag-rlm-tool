@@ -100,70 +100,28 @@ fn dirs() -> Option<PathBuf> {
         .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
 }
 
-/// Embedding model family served by the data plane (plan 020 `[embedder]`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum EmbedderModel {
-    /// Real BGE-M3 via candle (requires `model_dir` with weights).
-    #[default]
-    BgeM3,
-    /// Ollama HTTP embedding server (`ollama_url` + `ollama_model`).
-    Ollama,
-    /// Hash-based lightweight embedder (tests / degraded mode).
-    Lightweight,
-}
-
-impl EmbedderModel {
-    /// Parse a `server.toml` `model` string.
-    #[must_use]
-    pub fn parse(s: &str) -> Self {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "ollama" => Self::Ollama,
-            "lightweight" | "fallback" | "hash" => Self::Lightweight,
-            _ => Self::BgeM3,
-        }
-    }
-}
-
-/// Server-side chunking + embedding parameters (plan 020, D2).
+/// Server-side chunking + embedding parameters.
 ///
-/// The server chunks raw file content it receives over gRPC using
-/// `max_tokens`/`overlap_tokens`, then embeds and stores vectors. All of this
-/// is configured exclusively here — the client has no data config.
+/// The embedding model is **fixed**: native all-`MiniLM`-L6-v2 via candle,
+/// in-process. The server chunks raw file content it receives over gRPC using
+/// `max_tokens`/`overlap_tokens`, then embeds and stores vectors (384 dims).
+/// All of this is configured exclusively here — the client has no data config.
 #[derive(Debug, Clone, Deserialize)]
 pub struct EmbedderConfig {
-    /// Embedding model: `bge-m3` (default), `ollama`, or `lightweight`.
-    #[serde(default)]
-    pub model: Option<String>,
-
-    /// Model weights directory (BGE-M3: `model.safetensors` + `tokenizer.json`).
+    /// Checkpoint directory (`model.safetensors` + `tokenizer.json`, as
+    /// shipped by `sentence-transformers/all-MiniLM-L6-v2`). Without weights
+    /// the server degrades to a hash embedder (no semantic search).
     #[serde(default)]
     pub model_dir: Option<PathBuf>,
 
-    /// Ollama base URL (model = "ollama").
+    /// Weight quantization: `int8` (default, best speed/memory/quality
+    /// balance) or `none` (f32).
     #[serde(default)]
-    pub ollama_url: Option<String>,
-
-    /// Ollama embedding model tag (model = "ollama"), e.g. `all-minilm`.
-    #[serde(default)]
-    pub ollama_model: Option<String>,
-
-    /// Optional task prefix prepended to embedded texts
-    /// (`search_document: ` for nomic-family models; empty for all-minilm).
-    #[serde(default)]
-    pub ollama_prefix: Option<String>,
-
-    /// Vector dimensionality used to size the LanceDB stores.
-    #[serde(default = "default_dims")]
-    pub dims: usize,
+    pub quantization: Option<String>,
 
     /// Chunks per embedding request.
     #[serde(default = "default_batch_size")]
     pub batch_size: usize,
-
-    /// Quantization for candle BGE-M3 weights: `int8` (default), `int4`,
-    /// `none`.
-    #[serde(default)]
-    pub quantization: Option<String>,
 
     /// Target chunk size in tokens (server chunks raw file content it
     /// receives over gRPC).
@@ -175,10 +133,6 @@ pub struct EmbedderConfig {
     /// Whether to keep the embedder's in-memory vector cache warm.
     #[serde(default = "default_cache_enabled")]
     pub cache: bool,
-}
-
-fn default_dims() -> usize {
-    1024
 }
 
 fn default_batch_size() -> usize {
@@ -200,12 +154,7 @@ fn default_cache_enabled() -> bool {
 impl Default for EmbedderConfig {
     fn default() -> Self {
         Self {
-            model: None,
             model_dir: None,
-            ollama_url: None,
-            ollama_model: None,
-            ollama_prefix: None,
-            dims: default_dims(),
             batch_size: default_batch_size(),
             quantization: None,
             max_tokens: default_max_tokens(),
@@ -216,27 +165,13 @@ impl Default for EmbedderConfig {
 }
 
 impl EmbedderConfig {
-    /// The resolved model family (defaults to [`EmbedderModel::BgeM3`]).
-    #[must_use]
-    pub fn resolved_model(&self) -> EmbedderModel {
-        self.model.as_deref().map_or(
-            match (&self.model_dir, &self.ollama_model) {
-                (Some(_), _) | (None, Some(_)) => EmbedderModel::Ollama,
-                (None, None) => EmbedderModel::BgeM3,
-            },
-            EmbedderModel::parse,
-        )
-    }
-
-    /// The configured weight quantization (candle BGE-M3 only).
+    /// The configured weight quantization (INT8 by default).
     #[must_use]
     pub fn resolved_quantization(&self) -> arlm_embedding::embedder::config::Quantization {
-        use arlm_embedding::embedder::config::Quantization;
-        match self.quantization.as_deref() {
-            Some("none") => Quantization::None,
-            Some("int4") => Quantization::Int4,
-            _ => Quantization::Int8,
-        }
+        self.quantization.as_deref().map_or(
+            arlm_embedding::embedder::config::Quantization::Int8,
+            arlm_embedding::embedder::config::Quantization::parse,
+        )
     }
 }
 
@@ -495,7 +430,7 @@ fn default_jaccard_min() -> f32 {
     0.5
 }
 fn default_question_dims() -> usize {
-    1024
+    arlm_embedding::embedder::minilm::HIDDEN_SIZE
 }
 fn default_max_entries() -> usize {
     1_000
@@ -532,8 +467,8 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let cfg = ServerConfig::load_from_path(&d.path().join("absent.toml")).unwrap();
         assert_eq!(cfg.listen_addr, default_listen_addr());
-        assert_eq!(cfg.embedder.dims, default_dims());
         assert_eq!(cfg.embedder.batch_size, default_batch_size());
+        assert!(cfg.embedder.model_dir.is_none());
     }
 
     #[test]
@@ -549,14 +484,16 @@ mod tests {
     #[test]
     fn test_server_config_embedder_chunk_size_applied() {
         let (_d, path) = temp_config(
-            "[embedder]\nmax_tokens = 1024\noverlap_tokens = 128\ndims = 384\nbatch_size = 8\nmodel = \"lightweight\"\ncache = false\n",
+            "[embedder]\nmax_tokens = 1024\noverlap_tokens = 128\nbatch_size = 8\nquantization = \"none\"\ncache = false\n",
         );
         let cfg = ServerConfig::load_from_path(&path).unwrap();
         assert_eq!(cfg.embedder.max_tokens, 1024);
         assert_eq!(cfg.embedder.overlap_tokens, 128);
-        assert_eq!(cfg.embedder.dims, 384);
         assert_eq!(cfg.embedder.batch_size, 8);
-        assert_eq!(cfg.embedder.resolved_model(), EmbedderModel::Lightweight);
+        assert_eq!(
+            cfg.embedder.resolved_quantization(),
+            arlm_embedding::embedder::config::Quantization::None
+        );
         assert!(!cfg.embedder.cache);
     }
 

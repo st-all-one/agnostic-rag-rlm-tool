@@ -5,16 +5,16 @@ use memmap2::Mmap;
 use thiserror::Error;
 
 pub mod batch;
-pub mod bge_m3;
 pub mod cache;
+pub mod common;
 pub mod config;
 pub mod fallback;
 pub mod lightweight;
-pub mod ollama;
+pub mod minilm;
 
 pub use config::{EmbeddingConfig, EmbeddingModel, Quantization, build_embedder};
 pub use lightweight::LightweightEmbedder;
-pub use ollama::OllamaEmbedder;
+pub use minilm::MinilmEmbedder;
 
 /// Errors specific to the embedding subsystem.
 #[derive(Debug, Error)]
@@ -30,9 +30,6 @@ pub enum EmbeddingError {
 
     #[error("tokenizer error: {0}")]
     Tokenizer(String),
-
-    #[error("ollama error: {0}")]
-    Ollama(String),
 
     #[error("model not loaded: {0}")]
     ModelNotLoaded(String),

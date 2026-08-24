@@ -185,7 +185,7 @@ O `arlm-server` é dono do estado. Por padrão (container) os dados vivem em
 /data/
 ├── knowledge.db          # SQLite (WAL, FTS5, metadados)
 ├── knowledge.db-wal      # WAL journal
-└── vectors.lance/        # LanceDB (HNSW vetorial, BGE-M3)
+└── vectors.usearch/      # HNSW vetorial (all-MiniLM-L6-v2)
 ```
 
 Cada projeto é um `buffer` na tabela `buffers` com UUIDv7 único. Isolamento por
@@ -196,7 +196,7 @@ Cada projeto é um `buffer` na tabela `buffers` com UUIDv7 único. Isolamento po
 | Camada | Componentes | Requisitos |
 |--------|-------------|------------|
 | BM25 | FTS5 (SQLite) | Nenhum |
-| Semântica | embeddings BGE-M3 + LanceDB (HNSW) | Modelo BGE-M3 (servidor) |
+| Semântica | embeddings all-MiniLM-L6-v2 (INT8) + usearch (HNSW) | Weights locais (servidor) |
 | RRF | Fusão Reciprocal Rank (BM25 + semântica) | Nenhum |
 
 > O servidor é **LLM-free também no grafo de dependências** (pós-limpeza
@@ -226,12 +226,8 @@ flush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)
 max_batch_size = 50      # linhas por transação de indexação
 
 [embedder]
-model = "ollama"                      # bge-m3 | ollama | lightweight
-# model_dir = "/models/bge-m3"        # p/ bge-m3 (model.safetensors)
-ollama_url = "http://127.0.0.1:11434"
-ollama_model = "all-minilm"
-ollama_prefix = ""                    # "search_document: " p/ família nomic
-dims = 384
+model_dir = "/models/all-MiniLM-L6-v2"  # model.safetensors + tokenizer.json
+quantization = "int8"                 # default; "none" = f32
 batch_size = 64                       # chunks por request de embedding
 max_tokens = 512                      # tamanho máximo de chunk (tokens)
 overlap_tokens = 64                   # sobreposição entre chunks

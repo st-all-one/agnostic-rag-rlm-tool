@@ -174,11 +174,11 @@ fn test_cache_overwrite() {
 // ---- embedder/config.rs ----
 
 #[test]
-fn test_default_is_bge_m3() {
+fn test_default_is_minilm_int8() {
     let cfg = EmbeddingConfig::default();
-    assert_eq!(cfg.model, EmbeddingModel::BgeM3);
-    assert_eq!(cfg.quantization, Quantization::None);
-    assert_eq!(cfg.matryoshka_dims, Some(512));
+    assert_eq!(cfg.model, EmbeddingModel::Minilm);
+    assert_eq!(cfg.quantization, Quantization::Int8);
+    assert!(cfg.model_dir.is_none());
 }
 
 #[test]
@@ -186,7 +186,6 @@ fn test_for_tests_is_lightweight() {
     let cfg = EmbeddingConfig::for_tests();
     assert_eq!(cfg.model, EmbeddingModel::Lightweight);
     assert_eq!(cfg.quantization, Quantization::None);
-    assert_eq!(cfg.matryoshka_dims, Some(256));
 }
 
 #[test]
@@ -196,10 +195,6 @@ fn test_quantization_ggml_dtype() {
         Quantization::Int8.ggml_dtype(),
         Some(candle_core::quantized::GgmlDType::Q8_0)
     );
-    assert_eq!(
-        Quantization::Int4.ggml_dtype(),
-        Some(candle_core::quantized::GgmlDType::Q4_0)
-    );
 }
 
 #[test]
@@ -207,11 +202,11 @@ fn test_lightweight_builds_without_weights() {
     let cfg = EmbeddingConfig::for_tests();
     let embedder = build_embedder(&cfg).expect("build lightweight");
     assert_eq!(embedder.name(), "lightweight");
-    assert_eq!(embedder.dimensions(), 256);
+    assert_eq!(embedder.dimensions(), 384);
 }
 
 #[test]
-fn test_bge_m3_build_requires_model_dir() {
+fn test_minilm_build_requires_model_dir() {
     let cfg = EmbeddingConfig::default();
     let result = build_embedder(&cfg);
     assert!(result.is_err());
