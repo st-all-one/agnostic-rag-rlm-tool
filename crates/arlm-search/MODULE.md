@@ -10,6 +10,7 @@ Motor de busca híbrida do `arlm`: BM25 (FTS5), busca por entidades (regex + FTS
 - `src/entity.rs` — `EntitySearch` (regex determinístico + FTS5 `entities_fts` no `arlm-storage`).
 - `src/semantic.rs` — `SemanticSearch` (usa `arlm_storage::VectorStore`/usearch; score = `1/(1+distance)`).
 - `src/context.rs` — `build_context`/`build_search_results` (token budget, formatos Prompt/Json/Markdown); `load_chunks` resolve `chunks` **ou** `summaries` conforme `is_summary`.
+- `src/qa_cache.rs` — `cosine_similarity` (vetores) + `jaccard_similarity` (multisets de chunk ids) — matemática pura usada pela resolução de hit/tier do QA-Cache (plan 017); cobertas por testes unitários.
 - `src/decay.rs` — `DecayConfig` (decay exponencial de saliência; helpers `refresh_sql`/`age_hours_sql`).
 - `src/hybrid/mod.rs` — `HybridSearch` (campos bm25/entity/semantic/llm_backend/rrf_k/decay; `new`/`with_decay`/`with_llm_backend`/`set_decay`).
 - `src/hybrid/rrf.rs` — `rrf_score` + `rrf_fuse` (matemática pura de fusão, sem I/O).

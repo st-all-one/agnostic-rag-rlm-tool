@@ -31,6 +31,7 @@ src/
 ├── solver.rs              # solve_task / solve_task_repl / PersistentSolver (#2)
 ├── synthesizer.rs         # synthesize / build_children_block + compactação por tokens (#4, #5)
 ├── router.rs              # DepthRouter: seleção de modelo por profundidade
+├── qa_cache.rs            # QA-Cache: `resolve_plan` + `QaThresholds` (plan 017)
 ├── budget.rs              # RunBudget: custo/tokens/erros/tempo (CAS loop p/ f64)
 ├── cache.rs               # ResultCache: TTL + LRU + invalidação por dependência (#10)
 ├── events.rs              # RlmEvent, EventBus (broadcast), EventSink (#7)
@@ -62,6 +63,12 @@ benches/                   # rlm_loop.rs, search.rs (criterion)
 - **#8 SamplingArgs.seed** — campo `seed: Option<u64>` propagado.
 - **#9 Token counter** — heurística `estimate` (chars + pontuação) em vez de split por espaço.
 - **#10 Cache** — invalidação por hash de dependência (`get_dep`/`put_dep`/`invalidate_dep`).
+- **QA-Cache engine (plan 017)** — `qa_cache.rs`: `QaThresholds` (configurável) +
+  `resolve_plan(similarity, jaccard, t)` que mapeia a similaridade de pergunta
+  (cosseno) **e** a checagem secundária (Jaccard de provenance) em um plano de
+  digestão (`digest_k`/`provenance_k`/`tier`), com invariante
+  `provenance_k ≤ digest_k ≤ novel_k`. Puro (sem storage/embedder), reutilizável
+  pelo servidor (lookup) e pelo client (digest-once).
 
 ## Uso
 

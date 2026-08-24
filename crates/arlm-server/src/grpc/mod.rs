@@ -12,9 +12,9 @@
 
 pub mod auth;
 pub mod error;
-pub mod query_cache;
 pub mod index;
 pub mod project;
+pub mod query_cache;
 pub mod runs;
 pub mod search;
 pub mod session;
@@ -241,5 +241,31 @@ impl ArlmService for ArlmGrpcService {
     ) -> Result<Response<InvalidateCacheResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.invalidate_cache");
         query_cache::handle_invalidate_cache(&self.state, request).await
+    }
+
+    // ── Query-Answer Cache (plan 017, client-side digest-once) ────────────
+
+    async fn query_with_cache(
+        &self,
+        request: Request<QueryWithCacheRequest>,
+    ) -> Result<Response<QueryWithCacheResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.query_with_cache");
+        query_cache::handle_query_with_cache(&self.state, request).await
+    }
+
+    async fn store_answer(
+        &self,
+        request: Request<StoreAnswerRequest>,
+    ) -> Result<Response<StoreAnswerResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.store_answer");
+        query_cache::handle_store_answer(&self.state, request).await
+    }
+
+    async fn get_answer_by_id(
+        &self,
+        request: Request<GetAnswerByIdRequest>,
+    ) -> Result<Response<GetAnswerByIdResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.get_answer_by_id");
+        query_cache::handle_get_answer_by_id(&self.state, request).await
     }
 }

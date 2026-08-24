@@ -18,7 +18,11 @@ Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único 
 - `src/sqlite/runs.rs` — `StoredRun`/`ModelUsage`/`NodeCall`/`StoredTrajectory`, `insert_run` (transação com node tree + agregação de custo)/`get_run`/`cancel_run`/`list_runs`/`get_run_model_usage`/`total_cost`/`run_cost`/`insert_trajectory`/`get_trajectories_by_task_hash`; re-exporta `FlatNode`.
 - `src/sqlite/nodes.rs` — `FlatNode` (árvore de nós de run, serializável), `flatten`.
 - `src/sqlite/summaries.rs` — `Summary`, `insert_summary`/`get_summaries`/`get_project_summary`/`get_summary_by_source_hash` (summaries hierárquicos).
+- `src/sqlite/tokens.rs` — **Auth (plan 018):** `AuthTokenRow`/`NewToken`, `create_token`/`revoke_token_by_id`/`revoke_token_by_username`/`revoke_all_tokens`/`list_tokens`, `create_session`/`validate_session` (refresh-token rotation + sessões de curta duração, roles `Admin`/`NonAdmin`; plaintext do refresh nunca é persistido).
+- `src/sqlite/qa_cache.rs` — **QA-Cache (plan 017):** `QaCacheRow`/`StoreAnswerInput`/`StoredAnswer`, `question_hash`/`chunk_content_hash`, `store_answer` (idempotente/reserve-lock), `get_cached_answer`/`get_qa_by_id`/`get_qa_by_cache_id`/`get_qa_by_rowid`, `mark_qa_stale`/`delete_qa`/`touch_qa`, `mark_stale_by_hashes`, `evict_qa`/`evict_all_qa`/`count_qa`/`all_qa_ids`, `list_qa_hashes_for_buffer`, `invalidate_stale_cache_for_buffer`.
+- `src/sqlite/chunks.rs` — `Chunk`/`NewChunk`, `insert_chunk`/...; **adicionei** `get_chunks_with_content` e `chunk_hashes_for_buffer` (usados pela staleness hook do QA-Cache).
 - `src/lance/vectors.rs` — `VectorStore` (usearch), `VectorEntry`, `SearchResult`; `open`/`insert_vectors`/`search_similar`/`count`; filtro por `buffer_id` via `filtered_search`; mapa `chunk_id→buffer_id` persistido em `vectors.meta` ao lado de `vectors.usearch`.
+- `src/qa_vectors.rs` — `QuestionVectorStore` (usearch, espaço B **dedicado** para perguntas, métrica `Cos`); `open`/`insert`/`delete`/`search`/`clear`; chave = `qa_cache.id`.
 
 ## Dependências
 - Internas: nenhuma (crate folha de storage; consumido por `arlm-search`, `arlm-server`, `arlm-cli`).
@@ -40,8 +44,8 @@ CARGO_BUILD_JOBS=4 cargo clippy -p arlm-storage --all-targets -- -D warnings
 ```
 
 ## Migrations
-- `migrations/001_initial.sql` … `migrations/013_server_handlers.sql` (13 ao total), aplicadas idempotentemente e versionadas via tabela `schema_version`.
-- `001` base (chunks, buffers, tasks, findings, history, patterns); `004` runs/custos; `005` trajectories; `006` sessions; `007` result_cache; `008` events; `009` entities; `010` last_accessed_at; `011` UUIDv7 em buffers; `012` summaries; `013` server handlers (runs.project/model, sessions.updated_at, chunks_fts).
+- `migrations/001_initial.sql` … `migrations/016_add_qa_cache.sql` (16 ao total), aplicadas idempotentemente e versionadas via tabela `schema_version`.
+- `001` base (chunks, buffers, tasks, findings, history, patterns); `004` runs/custos; `005` trajectories; `006` sessions; `007` result_cache; `008` events; `009` entities; `010` last_accessed_at; `011` UUIDv7 em buffers; `012` summaries; `013` server handlers (runs.project/model, sessions.updated_at, chunks_fts); `014` FTS5 de summaries; `015` auth (plan 018: `auth_tokens`/`auth_sessions`); `016` QA-Cache (plan 017: `qa_cache` + FTS5 `qa_cache_fts` + triggers).
 - `run_migrations` roda `ANALYZE` ao final para planner stats.
 
 ## Rules

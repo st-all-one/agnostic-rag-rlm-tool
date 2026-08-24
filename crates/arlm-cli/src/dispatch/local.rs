@@ -110,6 +110,7 @@ pub fn run_local(
             backend: cmd_backend,
             model: cmd_model,
             llm,
+            ..
         } => rt.block_on(commands::query::execute(commands::query::QueryConfig {
             question: &question,
             backend: cmd_backend.as_deref().or(backend.as_deref()),
@@ -210,5 +211,8 @@ pub fn run_local(
                 mcp,
             }))
         }
+        Commands::Cache { .. } => Err(anyhow::anyhow!(
+            "`arlm cache` requires a running arlm-server (use --server)",
+        )),
     }
 }

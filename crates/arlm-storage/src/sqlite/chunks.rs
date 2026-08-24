@@ -247,6 +247,77 @@ impl Storage {
         count > 0
     }
 
+    /// Fetch chunks by id (in any order) together with their content, for
+    /// building cache provenance payloads.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_chunks_with_content(&self, ids: &[i64]) -> Result<Vec<(Chunk, Option<String>)>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let mut stmt = c.prepare(
+                "SELECT id, buffer_id, file_path, offset_start, offset_end, line_start, \
+                 line_end, hash, language, chunk_type, token_count, status, created_at, \
+                 last_accessed_at FROM chunks WHERE id = ?1",
+            )?;
+            let mut out = Vec::with_capacity(ids.len());
+            for id in ids {
+                if let Ok(chunk) = stmt.query_row(params![id], |r| {
+                    Ok(Chunk {
+                        id: r.get(0)?,
+                        buffer_id: r.get(1)?,
+                        file_path: r.get(2)?,
+                        offset_start: r.get(3)?,
+                        offset_end: r.get(4)?,
+                        line_start: r.get(5)?,
+                        line_end: r.get(6)?,
+                        hash: r.get(7)?,
+                        language: r.get(8)?,
+                        chunk_type: r.get(9)?,
+                        token_count: r.get(10)?,
+                        status: r.get(11)?,
+                        created_at: r.get(12)?,
+                        last_accessed_at: r.get(13)?,
+                    })
+                }) {
+                    let content = self.get_chunk_content(chunk.id).ok().flatten();
+                    out.push((chunk, content));
+                }
+            }
+            Ok(out)
+        })
+        .context("failed to fetch chunks with content")
+    }
+
+    /// Current chunk-content hashes (sha256 hex) for a buffer, used by the
+    /// query-answer cache staleness hook.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn chunk_hashes_for_buffer(
+        &self,
+        buffer_id: i64,
+    ) -> Result<std::collections::HashSet<String>> {
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let mut stmt = c.prepare("SELECT hash FROM chunks WHERE buffer_id = ?1")?;
+            let rows = stmt
+                .query_map(params![buffer_id], |r| {
+                    let bytes: Vec<u8> = r.get(0)?;
+                    Ok(String::from_utf8_lossy(&bytes).into_owned())
+                })?
+                .filter_map(std::result::Result::ok)
+                .collect();
+            Ok(rows)
+        })
+        .context("failed to list chunk hashes for buffer")
+    }
+
     /// Delete all chunks for a file path.
     ///
     /// # Errors

@@ -10,7 +10,8 @@ Conecta-se a um `arlm-server` via gRPC (`--server`) ou roda localmente.
 - **Parsing:** `clap` derive em `src/cli/` (estrutura de subcomandos desacoplada de `main`).
 - **Dispatch:** `src/dispatch/` resolve a precedência de config (CLI > config > ...)
   e roteia para modo local ou servidor gRPC.
-- **Comandos:** 19 subcomandos, um módulo `commands/<cmd>` cada (alguns subdivididos).
+- **Comandos:** subcomandos (um módulo `commands/<cmd>` cada, alguns subdivididos),
+  incluindo o QA-Cache (plan 017) via `query --qa`/`--cache-id` e `cache invalidate`.
 - **Output:** 4 formatos (`json`, `tree`, `markdown`, `prompt`) em `src/output/`.
 - **Observabilidade:** logs estruturados via `tracing` (`--verbose`) e *timing* de fases
   com `std::time::Instant` (registrado como `elapsed_ms`).
@@ -41,7 +42,7 @@ src/
 │   ├── run/               # engine, setup, live (LiveTree), finalize
 │   ├── serve/             # HTTP/MCP server (handlers, state, logic)
 │   ├── mcp/               # MCP protocol (protocol, session, handlers)
-│   ├── index.rs  search.rs  query.rs  context.rs
+│   ├── index.rs  search.rs  query.rs  context.rs  qa_cache.rs
 │   ├── status.rs history.rs cost.rs session.rs
 │   ├── consolidate.rs decay.rs cancel.rs checkpoints.rs
 │   ├── restore_page.rs wiki.rs entities.rs persist.rs
@@ -59,7 +60,7 @@ tests/                     # testes de integração (sem #[cfg(test)] em src/)
 | `arlm index` | Indexa projeto | Não |
 | `arlm search` | Busca híbrida | Não |
 | `arlm context` | Contexto para agente | Não |
-| `arlm query` | Consulta com RLM | Sim |
+| `arlm query` | Consulta com RLM; `--qa` usa o QA-Cache (plan 017), `--cache-id <id>` lookup direto | Sim* |
 | `arlm run` | Executa RLM recursivo | **Sim** (`--llm` obrigatório) |
 | `arlm status` | Mostra projetos indexados | Não |
 | `arlm history` | Histórico de consultas | Não |
@@ -70,6 +71,7 @@ tests/                     # testes de integração (sem #[cfg(test)] em src/)
 | `arlm decay` | Salience decay | Não |
 | `arlm serve` | HTTP/MCP server | Não |
 | `arlm cancel` | Cancela run | Não |
+| `arlm cache invalidate --cache-id <id>` | Invalida entrada do QA-Cache (plan 017: Stale/Delete + raio) | Não |
 | `arlm checkpoints` | Lista checkpoints | Não |
 | `arlm restore-page` | Restaura wiki page | Não |
 | `arlm wiki` | Gerencia wiki (git) | Não |

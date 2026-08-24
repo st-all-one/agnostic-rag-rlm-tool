@@ -12,6 +12,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   TODO gap #2 — proto validation).
 - `double total_cost = 5` field on `RunResult` (`proto/run.proto`) so the CLI can
   read `run.total_cost` directly (TODO gap #1.a).
+- **Auth (plan 018):** `auth.proto` + `AuthRefresh` RPC (refresh-token rotation +
+  short-lived sessions; roles `Admin`/`NonAdmin`).
+- **Query-Answer Cache (plan 017):** `query_cache.proto` + 4 novos RPCs:
+  `QueryWithCache` (lookup semântico determinístico no servidor), `StoreAnswer`
+  (persiste resposta digerida pelo client), `GetAnswerById` (lookup direto
+  anti-drift por `cache_id` estável), `InvalidateCache` (soft `Stale` / hard
+  `Delete` + `similarity_radius` para invalidar o cluster de erros). Total de
+  RPCs sobe de 18 → **24**.
 
 ### Changed
 - Split the monolithic `proto/arlm.proto` (316 lines) into logical sub-files,

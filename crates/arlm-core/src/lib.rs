@@ -25,6 +25,7 @@ pub mod jsonl_logger;
 pub mod logging;
 pub mod memory;
 pub mod planner;
+pub mod qa_cache;
 pub mod repl;
 pub mod router;
 pub mod sampling;

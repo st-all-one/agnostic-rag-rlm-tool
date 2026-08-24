@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **QA-Cache client (plan 017):** `commands/qa_cache.rs` com `run_ask` (usa
+  `QueryWithCache`; em HIT devolve a resposta sem chamar LLM; em MISS sintetiza
+  top-K com o LLM do usuário via `arlm-llm`/`config.toml`, exibe e dispara
+  `StoreAnswer` fire-and-forget), `run_get` (`GetAnswerById` por `cache_id`) e
+  `run_invalidate` (`InvalidateCache` Stale/Delete + raio).
+- `cli/commands.rs`: `Query` estendido com `--qa`/`--cache-id` e subcomando
+  `Cache { Invalidate | Get }`; `dispatch/server.rs` roteia para `qa_cache`.
+- Auth implícita: o cliente anexa `Authorization: Bearer <session>` obtido via
+  `AuthRefresh` (plan 018) nas chamadas gRPC que exigem autenticação.
+
 ## [0.3.0] - 2026-08-20
 
 ### Added

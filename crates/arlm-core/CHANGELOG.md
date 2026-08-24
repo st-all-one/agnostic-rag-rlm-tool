@@ -7,6 +7,14 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added
+- **QA-Cache engine (plan 017):** `src/qa_cache.rs` com `QaThresholds`
+  (configurável), `QaPlan` e `resolve_plan(similarity, jaccard, t)` — mapeia a
+  similaridade de pergunta (cosseno) **e** a checagem secundária (Jaccard de
+  provenance) em um plano de digestão com widening adaptativo; invariante
+  `provenance_k ≤ digest_k ≤ novel_k` sempre respeitada. Módulo puro (sem
+  storage/embedder), coberto por testes unitários.
+
 ### Adicionado
 - Traits desacoplados `CodeSearch` (`tools.rs`) e `MemoryProvider` (`memory.rs`) para injeção
   de backends de busca/memória sem dependência rígida de outros crates (#1, #2, #3).

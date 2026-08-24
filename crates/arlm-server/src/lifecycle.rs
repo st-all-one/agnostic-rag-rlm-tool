@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
 use arlm_proto::proto::arlm_service_server::ArlmServiceServer;
-use arlm_storage::{Storage, VectorStore};
+use arlm_storage::{QuestionVectorStore, Storage, VectorStore};
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 use tracing::{info, warn};
 
@@ -51,7 +51,18 @@ pub async fn run() -> Result<()> {
         }
     };
 
-    run_server(config, storage, llm, vector_store).await
+    let question_vector_store = match arlm_storage::QuestionVectorStore::open(
+        &config.data_dir,
+        crate::state::embedder_dimension(),
+    ) {
+        Ok(store) => Some(Arc::new(store)),
+        Err(e) => {
+            tracing::warn!(error = %e, "question vector store unavailable, semantic cache lookup disabled");
+            None
+        }
+    };
+
+    run_server(config, storage, llm, vector_store, question_vector_store).await
 }
 
 /// Run the gRPC server with graceful shutdown.
@@ -64,8 +75,15 @@ pub async fn run_server(
     storage: Storage,
     llm: Arc<dyn arlm_llm::LlmBackend + Send + Sync>,
     vector_store: Option<Arc<VectorStore>>,
+    question_vector_store: Option<Arc<QuestionVectorStore>>,
 ) -> Result<()> {
-    let state = AppState::new(storage.clone(), config.clone(), llm, vector_store)?;
+    let state = AppState::new(
+        storage.clone(),
+        config.clone(),
+        llm,
+        vector_store,
+        question_vector_store,
+    )?;
 
     let grpc_service = ArlmServiceServer::new(ArlmGrpcService::new(state));
     let addr = config

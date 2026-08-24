@@ -13,6 +13,17 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
   `Dockerfile.server`.
 - `docker-compose.server.yml` para execução containerizada do servidor (porta
   `50051`, `command: ["up"]`).
+- **Auth (plan 018):** `src/auth/mod.rs` (`authenticate`/`require_admin`, roles
+  `Admin`/`NonAdmin`) + RPC `AuthRefresh`; handlers que escrevem estado exigem
+  `Bearer` válido e `InvalidateCache` exige role `Admin`.
+- **QA-Cache (plan 017):** handlers em `grpc/query_cache.rs` — `QueryWithCache`
+  (busca híbrida + lookup semântico determinístico no `question_vector_store`),
+  `StoreAnswer` (idempotente/reserve-lock, persiste `source_hashes`/`provenance`),
+  `GetAnswerById` (lookup direto anti-drift por `cache_id`), `InvalidateCache`
+  (`Stale`/`Delete` + `similarity_radius`); `QaCacheConfig` (`[qa_cache]`) e
+  worker de eviction LRU em background; hook de staleness em `grpc/index.rs`
+  (marca `stale` por hash de chunk no pós-reindex). O servidor **não** invoca
+  LLM no QA-Cache (digestão roda no client).
 
 ### Alterado
 - Reorganização type-driven: `store.rs` (800 linhas) dividido em
@@ -23,6 +34,9 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
   handlers e operações longas.
 - `AppState` agora carrega `llm: Arc<dyn LlmBackend>` e `EventHub` injetados nos
   handlers (RLM real, sumarização com LLM real, streaming de eventos).
+- `AppState` agora carrega também `question_vector_store: Option<Arc<QuestionVectorStore>>`
+  (espaço B de perguntas, usearch) e `qa_config: QaCacheConfig`; `AppState::new`
+  ganha o parâmetro de vector store e dispara o worker de eviction.
 
 ### Removido
 - Módulo `write_queue` (batched SQLite writer) — código morto, nunca alimentado

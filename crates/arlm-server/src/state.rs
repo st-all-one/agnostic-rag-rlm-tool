@@ -6,11 +6,12 @@ use anyhow::{Context, Result};
 use arlm_core::AbortSignal;
 use arlm_embedding::embedder::{Embedder, bge_m3, fallback};
 use arlm_llm::LlmBackend;
+use arlm_storage::QuestionVectorStore;
 use arlm_storage::Storage;
 use arlm_storage::VectorStore;
 use parking_lot::Mutex;
 
-use crate::config::ServerConfig;
+use crate::config::{QaCacheConfig, ServerConfig};
 use crate::events::EventHub;
 use crate::summarizer;
 use crate::summarizer::SummarizeSender;
@@ -26,11 +27,16 @@ pub struct AppState {
     pub summarize_tx: SummarizeSender,
     /// Optional vector store (LanceDB) used by `IndexProject`.
     pub vector_store: Option<Arc<VectorStore>>,
+    /// Question-vector index (plan 017) for semantic cache lookup, in its own
+    /// cosine space, separate from the chunk vector store.
+    pub question_vector_store: Option<Arc<QuestionVectorStore>>,
     /// Embedder used for chunk (index) and query (search) embeddings.
     /// Real BGE-M3 when `ARLM_MODEL_DIR` points at a directory containing
     /// `model.safetensors` + `tokenizer.json`; otherwise a hash fallback that
     /// keeps the pipeline running without semantic search.
     pub embedder: Arc<dyn Embedder + Send + Sync>,
+    /// Semantic query-answer cache tunables (plan 017).
+    pub qa_config: QaCacheConfig,
     /// Active run abort signals (keyed by run id) for cancellation.
     runs: Arc<Mutex<HashMap<String, AbortSignal>>>,
     started_at: std::time::Instant,
@@ -153,22 +159,29 @@ impl AppState {
         config: ServerConfig,
         llm: Arc<dyn LlmBackend + Send + Sync>,
         vector_store: Option<Arc<VectorStore>>,
+        question_vector_store: Option<Arc<QuestionVectorStore>>,
     ) -> Result<Self> {
         let events = EventHub::new();
         let summarize_tx = summarizer::spawn_worker(storage.clone(), llm.clone(), events.clone());
         let embedder = load_embedder();
+        let qa_config = config.qa_cache.clone();
 
-        Ok(Self {
-            storage,
+        let state = Self {
+            storage: storage.clone(),
             config,
             llm,
             events,
             summarize_tx,
             vector_store,
+            question_vector_store,
             embedder,
+            qa_config: qa_config.clone(),
             runs: Arc::new(Mutex::new(HashMap::new())),
             started_at: std::time::Instant::now(),
-        })
+        };
+
+        spawn_eviction_worker(storage, qa_config);
+        Ok(state)
     }
 
     /// Build the LLM backend from the active configuration.
@@ -210,4 +223,26 @@ impl AppState {
     pub fn uptime_seconds(&self) -> u64 {
         u64::try_from(self.started_at.elapsed().as_secs()).unwrap_or(0)
     }
+}
+
+/// Spawn the background weighted-LRU eviction worker for the semantic cache.
+///
+/// Eviction runs on a fixed interval (disabled when `eviction_interval_ms == 0`)
+/// and is best-effort: any failure is logged and retried next tick.
+fn spawn_eviction_worker(storage: Storage, qa_config: QaCacheConfig) {
+    if qa_config.eviction_interval_ms == 0 {
+        return;
+    }
+    let interval = std::time::Duration::from_millis(qa_config.eviction_interval_ms);
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(interval).await;
+            if let Err(e) = storage.evict_all_qa(
+                qa_config.max_entries_per_project,
+                qa_config.eviction_lambda_ms,
+            ) {
+                tracing::warn!(error = %e, "qa_cache eviction tick failed");
+            }
+        }
+    });
 }

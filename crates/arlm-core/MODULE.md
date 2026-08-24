@@ -18,6 +18,10 @@ injetar backends de busca/memória sem acoplar outros crates.
 - `src/solver.rs` — `solve_task` / `solve_task_repl` / `PersistentSolver` / `StateInspector` (#2).
 - `src/synthesizer.rs` — `synthesize` / `build_children_block` + `compact_children_if_needed` (#4, #5).
 - `src/router.rs` — `DepthRouter`: seleção de modelo por profundidade.
+- `src/qa_cache.rs` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia
+  similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão
+  com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante
+  `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.
 - `src/budget.rs` — `RunBudget`: custo/tokens/erros/tempo (CAS loop para f64).
 - `src/cache.rs` — `ResultCache`: TTL + LRU + invalidação por dependência (#10).
 - `src/events.rs` — `RlmEvent`, `EventBus` (broadcast), `EventSink` (#7).

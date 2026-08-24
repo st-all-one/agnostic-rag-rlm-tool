@@ -140,6 +140,21 @@ pub enum Commands {
         /// Use RLM engine for recursive analysis
         #[arg(long)]
         llm: bool,
+
+        /// Direct lookup of a previously served answer by stable cache id
+        /// (plan 017, anti-drift; no re-digest, no re-index).
+        #[arg(long)]
+        cache_id: Option<String>,
+
+        /// Use the semantic query-answer cache (QueryWithCache + client digest-once).
+        #[arg(long)]
+        qa: bool,
+    },
+
+    /// Semantic query-answer cache management (plan 017)
+    Cache {
+        #[command(subcommand)]
+        cmd: CacheCmd,
     },
 
     /// Build context for an agent task
@@ -261,6 +276,45 @@ pub enum Commands {
         /// Enable MCP (Model Context Protocol) server on /mcp endpoint
         #[arg(long)]
         mcp: bool,
+    },
+}
+
+/// Subcommands of `arlm cache` (plan 017).
+#[derive(Subcommand, Debug)]
+pub enum CacheCmd {
+    /// Invalidate a cached answer (admin-gated on the server).
+    Invalidate {
+        /// Target answer id (`qa_cache.cache_id`). When empty, purges the
+        /// legacy `result_cache` for `--project` (admin).
+        #[arg(long)]
+        cache_id: Option<String>,
+
+        /// Project whose legacy result_cache to purge (admin).
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Hard delete instead of soft stale.
+        #[arg(long)]
+        delete: bool,
+
+        /// Also invalidate nearby questions within this cosine radius
+        /// (error-chain invalidation).
+        #[arg(long)]
+        radius: Option<f32>,
+
+        /// Reason for invalidation (audit).
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Direct lookup of a cached answer by stable id.
+    Get {
+        /// Answer id.
+        #[arg(long)]
+        cache_id: String,
+
+        /// Project scope.
+        #[arg(long)]
+        project: Option<String>,
     },
 }
 

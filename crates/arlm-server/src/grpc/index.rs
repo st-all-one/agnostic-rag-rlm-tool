@@ -194,6 +194,16 @@ pub(crate) async fn handle_index_project(
     .await
     .map_err(internal)?;
 
+    // Phase 4: mark cached answers stale whose source chunks changed/vanished.
+    let storage = state.storage.clone();
+    if let Ok(n) =
+        store::blocking(move || storage.invalidate_stale_cache_for_buffer(buffer_id)).await
+    {
+        if n > 0 {
+            tracing::info!(project = %project, stale_invalidated = n, "qa_cache staleness hook");
+        }
+    }
+
     tracing::info!(
         project = %project,
         files_indexed = distinct_files,

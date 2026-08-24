@@ -7,8 +7,9 @@ para times, expondo uma API gRPC (tonic) consumível por qualquer agente de IA.
 ## Visão geral
 
 O servidor gerencia **projetos (buffers)**, **sessões**, **runs de RLM**, **indexação**
-(chunking + embeddings + LanceDB) e **sumarização hierárquica**, com streaming de
-eventos em tempo real para clientes.
+(chunking + embeddings + usearch), **sumarização hierárquica** e — desde os planos
+018/017 — **autenticação por refresh-token** e um **cache semântico de respostas
+digeridas (QA-Cache)**, com streaming de eventos em tempo real para clientes.
 
 ## Build & Run
 
@@ -59,7 +60,23 @@ model   = "qwen2.5-coder:7b"
 # base_url = "..."        # opcional
 
 # tls_cert / tls_key     # opcionais → habilita TLS
+
+[qa_cache]
+enabled = true
+novel_k = 20              # chunks digeridos numa pergunta nova (client)
+provenance_k = 5          # chunks de provenance devolvidos com a resposta
+sim_high = 0.90           # acima disso → reaproveita + re-digest leve
+sim_floor = 0.40          # abaixo disso → trata como nova (digest completo)
+max_entries_per_project = 1000
+lambda_ms = 86400000      # decaimento do score LRU ponderado
+cache_ttl_ms = 0          # 0 = sem TTL
 ```
+
+> **Auth (plan 018):** os RPCs mutantes (`InvalidateCache`, e qualquer RPC que
+> escreva estado) exigem um `Authorization: Bearer <session>` válido; operações
+> de invalidação exigem role `Admin`. Clientes obtêm a sessão via `AuthRefresh`.
+> O servidor é **determinístico** no QA-Cache: não invoca nenhum LLM — a
+> síntese roda no client (config `arlm-llm` do usuário).
 
 ## Arquitetura
 
@@ -67,13 +84,40 @@ Fluxo unidirecional: `arlm-cli` → `arlm-server` (gRPC) → `arlm-core` (engine
 `arlm-storage` (SQLite + LanceDB) / `arlm-embedding` / `arlm-llm`.
 
 - **Handlers gRPC** (`src/grpc/*`): um arquivo por grupo de RPCs.
+- **`auth`** (`src/auth/mod.rs`): autenticação por refresh-token + sessões de curta
+  duração (plan 018); `authenticate(md, storage)` e `require_admin(ctx)` usados
+  pelos handlers que escrevem estado.
 - **`store`** (`src/store/*`): camada de acesso a dados tipada e segura para o pool.
 - **`summarizer`** (`src/summarizer/*`): engine de sumarização hierárquica em worker
   em background, com streaming de progresso.
+- **QA-Cache (plan 017):** `AppState` carrega `question_vector_store`
+  (`QuestionVectorStore`, usearch, espaço B) + `qa_config` (`QaCacheConfig`) e
+  dispara um worker de eviction LRU em background; `grpc/index.rs` marca entradas
+  `stale` por hash de chunk no pós-reindex.
 - **`events`**: `EventHub` (broadcast) que faz a ponte engine → streams gRPC.
 - **`state`**: `AppState` compartilhado (storage, llm, event hub, vector store,
-  abort signals de runs).
+  question_vector_store, qa_config, abort signals de runs).
 - **`timing`**: `Timer` que emite `elapsed_ms`/`elapsed_us` estruturados via `tracing`.
+
+## Query-Answer Cache (plan 017)
+
+Cache semântico de respostas **digeridas no client** (o servidor não invoca LLM:
+só embedding + SQLite + usearch + ops determinísticas). Fluxo:
+
+1. Cliente → `QueryWithCache(pergunta, project)`. Servidor faz busca híbrida +
+   lookup semântico no `question_vector_store` (espaço B) e decide hit/tier.
+2. **HIT** → devolve `answer_text` + provenance (`source_chunk_ids`); client não
+   chama LLM (0 custo). **MISS** → devolve top-K chunks crus; client faz 1 chamada
+   LLM, exibe e dispara `StoreAnswer` (fire-and-forget).
+3. Cada resposta recebe um `cache_id` (UUIDv7) estável → `GetAnswerById` devolve
+   exatamente a mesma resposta+provenance (anti-drift para sub-agentes).
+4. **Invalidação:** `InvalidateCache` com `mode=Stale` (soft, força re-digest) ou
+   `Delete` (hard), mais `similarity_radius` para invalidar o cluster de perguntas
+   vizinhas (cadeia de erros). Exigido role `Admin`.
+5. **Staleness:** no reindex, chunks cujo hash mudou marcam as entradas de cache
+   dependentes como `stale` → próxima query força re-digest com código fresco.
+
+Configurável via `[qa_cache]` (limiares, `novel_k`, `provenance_k`, eviction).
 
 ## Testes
 

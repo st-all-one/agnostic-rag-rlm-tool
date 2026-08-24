@@ -9,6 +9,7 @@ pub mod history;
 pub mod index;
 pub mod mcp;
 pub mod persist;
+pub mod qa_cache;
 pub mod query;
 pub mod restore_page;
 pub mod run;

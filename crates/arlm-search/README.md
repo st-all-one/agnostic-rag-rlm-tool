@@ -8,6 +8,9 @@ Busca híbrida (BM25 + semântica) com fusão RRF para o arlm.
 - **Entity**: Busca por entidades regex (function names, imports)
 - **Semantic**: Busca por similaridade via usearch (arlm-storage `VectorStore`)
 - **RRF**: Fusão Reciprocal Rank Fusion (k=60)
+- **QA-Cache similarity (plan 017)**: `qa_cache.rs` — `cosine_similarity` e
+  `jaccard_similarity` (checagem secundária anti-falso-positivo: overlap de
+  provenance entre a nova query e o cache).
 - **Dual-layer**: O `HybridSearch` também consulta a tabela `summaries` (FTS5 `summaries_fts`) e marca `is_summary` nos resultados
 - **Context**: Montagem de contexto formatado para LLM com token budget
 
@@ -27,6 +30,7 @@ src/
 │   ├── search.rs   # Orquestração multi-tier async + dual-layer summaries
 │   └── rerank.rs   # LLM rerank (Tier 3)
 ├── context.rs      # build_context, build_search_results, token budget
+├── qa_cache.rs     # Similarity math p/ QA-Cache (cosine + Jaccard)
 └── decay.rs        # Salience decay
 ```
 

@@ -86,11 +86,7 @@ pub fn invalidate_cache(storage: &Storage, project: Option<&str>) -> Result<u64>
     } else {
         "DELETE FROM result_cache"
     };
-    let params: &[&dyn rusqlite::ToSql] = if has_project {
-        &[&project_str]
-    } else {
-        &[]
-    };
+    let params: &[&dyn rusqlite::ToSql] = if has_project { &[&project_str] } else { &[] };
     let rows = conn
         .execute(sql, params)
         .context("failed to invalidate result cache")?;

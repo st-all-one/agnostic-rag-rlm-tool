@@ -27,7 +27,7 @@ use crate::state::AppState;
 use crate::store;
 
 /// Map a project reference (UUID or name) to its numeric buffer id.
-async fn buffer_id_for(state: &AppState, project: &str) -> Result<Option<i64>, Status> {
+pub(crate) async fn buffer_id_for(state: &AppState, project: &str) -> Result<Option<i64>, Status> {
     let project_owned = project.to_string();
     let storage = state.storage.clone();
     store::blocking(move || store::buffer_id_for_project(&storage, &project_owned))
@@ -55,7 +55,7 @@ fn sanitize_fts(query: &str) -> String {
 /// Always runs BM25; adds the `entity`/`vector` tiers according to `tier`.
 /// When the query is a multi-word natural-language question that returns
 /// nothing, a second OR-based BM25 pass recovers relevant chunks.
-async fn hybrid_search(
+pub(crate) async fn hybrid_search(
     state: &AppState,
     buffer_id: i64,
     fts_query: &str,

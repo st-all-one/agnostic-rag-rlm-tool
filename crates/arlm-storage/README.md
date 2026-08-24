@@ -9,6 +9,12 @@ Componente de persistência do arlm — SQLite (metadados, FTS5/BM25) + usearch 
 - **usearch**: Armazenamento de vetores de embedding com índice HNSW single-file (substitui o LanceDB)
 - **Backups**: `Storage::backup()` (`VACUUM INTO`) e `Storage::verify()` (`PRAGMA integrity_check`)
 - **Summaries**: CRUD hierárquico de resumos (file/module/project) em `summaries.rs`
+- **QA-Cache (plan 017)**: `qa_cache.rs` — tabela `qa_cache` + FTS5 + índice vetorial
+  dedicado (`question_vectors`, usearch) para respostas digeridas pelo client;
+  `store_answer` idempotente (reserve-lock), lookup por `(project, question_hash)`,
+  staleness por hash de chunk e eviction LRU ponderado.
+- **Auth tokens (plan 018)**: `tokens.rs` — `auth_tokens`/`auth_sessions` para
+  refresh-token rotation + sessões de curta duração com roles `Admin`/`NonAdmin`.
 - **Single DB**: Todos os projetos compartilham `~/.arlm/knowledge.db`
 - **UUIDv7**: Cada buffer (projeto) tem UUIDv7 único
 
@@ -28,13 +34,18 @@ src/
 │   ├── patterns.rs     # Padrões extraídos
 │   ├── entities.rs     # Busca por entidades
 │   ├── summaries.rs    # CRUD hierárquico de resumos
+│   ├── tokens.rs       # Auth (plan 018): auth_tokens/auth_sessions, refresh + sessões
+│   ├── qa_cache.rs     # QA-Cache (plan 017): qa_cache + lookup/staleness/eviction
 │   └── nodes.rs        # FlatNode (persistência de runs)
 ├── lance/
 │   └── vectors.rs      # VectorStore::open(), insert, search (usearch), SearchResult
+├── qa_vectors.rs       # QuestionVectorStore (usearch, espaço B dedicado p/ perguntas)
 migrations/
 ├── 001_initial.sql
 ├── ...
-└── 011_add_uuid_to_buffers.sql
+├── 014_add_summaries_fts.sql
+├── 015_add_auth.sql
+└── 016_add_qa_cache.sql
 ```
 
 ## Arquitetura de Dados
@@ -138,7 +149,7 @@ PRAGMA locking_mode=EXCLUSIVE;      -- CLI only (open_exclusive)
 
 ## Migrações
 
-Schema versionado com 13 migrações:
+Schema versionado com 16 migrações:
 - `001_initial` — Schema base (chunks, buffers, tasks, findings, history, patterns)
 - `004` — Runs e custos
 - `005` — Trajectories
@@ -150,6 +161,9 @@ Schema versionado com 13 migrações:
 - `011` — UUIDv7 em buffers
 - `012` — Summaries hierárquicos
 - `013` — Server handlers (runs.project/model, sessions.updated_at, chunks_fts)
+- `014` — FTS5 de summaries (`summaries_fts` + triggers)
+- `015` — Auth (plan 018): `auth_tokens` + `auth_sessions` (refresh/sessões)
+- `016` — QA-Cache (plan 017): `qa_cache` + `qa_cache_fts` + triggers
 
 ## Uso Exclusive (CLI)
 
@@ -164,4 +178,6 @@ let storage = Storage::open_exclusive(Path::new("~/.arlm"))?;
 cargo test -p arlm-storage
 ```
 
-48 testes cobrindo: migrações, CRUD de chunks/buffers/tasks/findings/history/patterns/summaries, UUIDv7, backup/verify, FTS5, vector store (usearch) com buffer filter e persistência.
+Testes cobrindo: migrações, CRUD de chunks/buffers/tasks/findings/history/patterns/summaries,
+UUIDv7, backup/verify, FTS5, vector store (usearch) com buffer filter e persistência,
+`qa_cache` (hit/stale/eviction/scoping/reserve-lock) e auth tokens/sessões (plan 018).

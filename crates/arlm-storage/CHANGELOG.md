@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **QA-Cache (plan 017):** `src/sqlite/qa_cache.rs` — tabela `qa_cache` + FTS5
+  `qa_cache_fts` (triggers de sync), com `store_answer` idempotente (reserve-lock
+  por `(project, question_hash)`), lookup exato, staleness por `source_hashes`
+  (`mark_stale_by_hashes`), eviction LRU ponderado (`evict_qa`/`evict_all_qa`) e
+  hooks de invalidação por buffer (`invalidate_stale_cache_for_buffer`).
+- **QA-Cache (plan 017):** `src/qa_vectors.rs` — `QuestionVectorStore` (usearch,
+  métrica `Cos`, espaço B dedicado a perguntas; chave = `qa_cache.id`) para o
+  lookup semântico de cache no servidor.
+- **Auth (plan 018):** `src/sqlite/tokens.rs` — `auth_tokens`/`auth_sessions`,
+  `create_token`/`create_session`/`validate_session`/`revoke_*`/`list_tokens`
+  (refresh-token rotation + sessões de curta duração, roles `Admin`/`NonAdmin`).
+- `src/sqlite/chunks.rs`: `get_chunks_with_content` e `chunk_hashes_for_buffer`
+  (suportam a staleness hook do QA-Cache no reindex).
+- Migrations `015_add_auth.sql` (plan 018) e `016_add_qa_cache.sql` (plan 017).
+
+### Changed
+- `cargo clippy -p arlm-storage --all-targets -- -D warnings` limpo; testes de
+  integração `tests/qa_cache_test.rs` (8 testes) cobrindo hit/scoping/reserve-lock/
+  staleness/eviction/lookup direto/invalidação.
+
 ## [0.3.0] - 2026-08-20
 
 ### Changed

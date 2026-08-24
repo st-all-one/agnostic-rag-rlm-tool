@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **QA-Cache similarity (plan 017):** `src/qa_cache.rs` com `cosine_similarity`
+  (vetores) e `jaccard_similarity` (overlap de provenance) — matemática pura
+  usada pela resolução de hit/tier do cache semântico; coberta por testes
+  unitários (`jaccard_half_overlap`, `jaccard_disjoint_is_zero`, etc.).
+
 ## [0.3.0] - 2026-08-20
 
 ### Added

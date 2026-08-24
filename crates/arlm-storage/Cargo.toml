@@ -29,3 +29,8 @@ uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "qa_cache"
+harness = false

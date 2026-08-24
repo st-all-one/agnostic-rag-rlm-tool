@@ -25,13 +25,21 @@ com streaming de eventos em tempo real para clientes gRPC.
   - `grpc/runs/engine.rs` — spawn do RLM engine + bridge de eventos.
   - `grpc/session.rs` — create/list/get/add_turn.
   - `grpc/summarize.rs` — trigger/get_status/stream_summarize_progress.
+  - `grpc/query_cache.rs` — `AuthRefresh` (plan 018) + `QueryWithCache`/
+    `StoreAnswer`/`GetAnswerById`/`InvalidateCache` (plan 017); lookup semântico
+    determinístico (embed de pergunta com prefixo `search_query:` no espaço B
+    `question_vector_store`), staleness e invalidação (Stale/Delete + raio).
   - `grpc/status.rs` — get_server_status + stream_events.
   - `grpc/error.rs` — mapeamento erro→`Status` (`internal`/`not_found`/...).
 - `src/summarizer/mod.rs` — `SummarizeJob`, `SummaryResult`, `compute_hash`, `estimate_tokens`.
 - `src/summarizer/engine.rs` — `Summarizer` (carrega chunks, chama LLM, persiste).
 - `src/summarizer/{cost,progress,strategy,worker}.rs` — custo, progresso, prompt, worker de background.
 - `src/indexing.rs` — chunking determinístico offline (hash, linguagem, classificação).
-- `src/lifecycle.rs` — `run`/`run_server` (shutdown gracioso, TLS opcional).
+- `src/lifecycle.rs` — `run`/`run_server` (shutdown gracioso, TLS opcional); abre o
+  `QuestionVectorStore` (usearch, espaço B) e repassa para `AppState::new`.
+- `src/auth/mod.rs` — `authenticate(MetadataMap, &Storage) -> Result<AuthContext>` +
+  `require_admin(&AuthContext)`; roles `Admin`/`NonAdmin` (plan 018).
+- `src/qa_vectors` — re-export de `arlm_storage::QuestionVectorStore` (espaço B).
 - `src/timing.rs` — `Timer` com drop que emite `elapsed_ms`/`elapsed_us`.
 - `tests/` — `indexing_tests.rs`, `store_tests.rs`, `summarizer_tests.rs` (22 testes).
 

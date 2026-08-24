@@ -18,6 +18,7 @@ pub mod context;
 pub mod decay;
 pub mod entity;
 pub mod hybrid;
+pub mod qa_cache;
 pub mod semantic;
 pub mod types;
 

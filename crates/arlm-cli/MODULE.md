@@ -31,7 +31,15 @@ com logs estruturados (`tracing`) e *timing* de fases.
   - `mcp/` — `protocol` (JSON-RPC), `session`, `handlers`.
   - `index`, `search`, `query`, `context`, `status`, `history`, `cost`,
     `session`, `consolidate`, `decay`, `cancel`, `checkpoints`,
-    `restore_page`, `wiki`, `entities`, `persist`.
+    `restore_page`, `wiki`, `entities`, `persist`, `qa_cache` (plan 017:
+    `run_ask`/`run_get`/`run_invalidate` orquestrando os RPCs `QueryWithCache`/
+    `GetAnswerById`/`InvalidateCache`; digestão LLM roda localmente via
+    `arlm-llm`/`config.toml` e o `StoreAnswer` é fire-and-forget).
+- `src/cli/commands.rs` — `Commands` enum (inclui `Query` estendido com
+  `cache_id`/`qa` e o subcomando `Cache { CacheCmd::Invalidate | Get }`).
+- `src/dispatch/server.rs` — modo servidor: ramifica `Query` para
+  `run_get`/`run_ask` e despacha `Cache` para `CacheCmd`.
+- `src/dispatch/local.rs` — `Cache` retorna erro em modo local (é server-only).
 - `src/output/` — `mod` (`Format`), `json`, `tree`, `markdown`, `prompt`,
   `live_tree/` (`model` + `render`).
 - `tests/` — testes de integração (um arquivo por módulo); sem `#[cfg(test)]`

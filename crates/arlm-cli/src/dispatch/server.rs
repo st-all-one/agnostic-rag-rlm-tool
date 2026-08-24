@@ -424,7 +424,34 @@ pub fn run_server(
             print!("{rendered}");
             Ok(())
         }
-        Commands::Query { question, .. } => {
+        Commands::Query {
+            question,
+            cache_id,
+            qa,
+            backend: cmd_backend,
+            model: cmd_model,
+            ..
+        } => {
+            if let Some(id) = cache_id {
+                return crate::commands::qa_cache::run_get(
+                    rt,
+                    &mut grpc_client,
+                    &id,
+                    &project_str,
+                    format,
+                );
+            }
+            if qa {
+                return crate::commands::qa_cache::run_ask(
+                    rt,
+                    &mut grpc_client,
+                    &question,
+                    cmd_backend.as_deref(),
+                    cmd_model.as_deref(),
+                    &project_str,
+                    format,
+                );
+            }
             let request = Request::new(arlm_proto::proto::ContextRequest {
                 project: project_str.clone(),
                 task: question.clone(),
@@ -459,6 +486,32 @@ pub fn run_server(
             print!("{rendered}");
             Ok(())
         }
+        Commands::Cache { cmd } => match cmd {
+            crate::cli::commands::CacheCmd::Invalidate {
+                cache_id,
+                project,
+                delete,
+                radius,
+                reason,
+            } => crate::commands::qa_cache::run_invalidate(
+                rt,
+                &mut grpc_client,
+                cache_id.as_deref(),
+                project.as_deref(),
+                delete,
+                radius,
+                reason.as_deref(),
+            ),
+            crate::cli::commands::CacheCmd::Get { cache_id, project } => {
+                crate::commands::qa_cache::run_get(
+                    rt,
+                    &mut grpc_client,
+                    &cache_id,
+                    project.as_deref().unwrap_or(&project_str),
+                    format,
+                )
+            }
+        },
         _ => {
             bail!(
                 "Server mode does not support this command. Supported commands in server mode: \

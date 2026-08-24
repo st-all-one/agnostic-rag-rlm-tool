@@ -4,7 +4,7 @@
 Crate de definições Protobuf + código gerado (prost/tonic) que define o contrato gRPC cliente↔servidor do arlm. É a fonte única da verdade para a comunicação entre `arlm-cli`, `arlm-server` e os eventos de run/summarize.
 
 ## Estrutura
-- `proto/*.proto` — schema dividido em 9 sub-arquivos coesos (cada um < 300 linhas): `project`, `index`, `search`, `context`, `run`, `session`, `summarize`, `server`, `service`. Todos com `package arlm.v1;`.
+- `proto/*.proto` — schema dividido em 11 sub-arquivos coesos (cada um < 300 linhas): `project`, `index`, `search`, `context`, `run`, `session`, `summarize`, `server`, `auth`, `query_cache`, `service`. Todos com `package arlm.v1;`.
 - `build.rs` — `tonic_build::configure().build_server(true).build_client(true).compile_protos(&[...], &["proto"])`; compila os 9 sub-arquivos e emite log estruturado de tempo de execução via `std::time::Instant` + `eprintln!`.
 - `src/lib.rs` — `pub mod proto { include!(concat!(env!("OUT_DIR"), "/arlm.v1.rs")); } pub use proto::*;`. O módulo `proto` carrega `#![allow(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery, dead_code, missing_docs)]` para isolar os lints do código gerado.
 - `tests/proto_contract.rs` — 6 testes de integração validando mensagens, enums, acessores e os módulos de serviço (`arlm_service_{client,server}`).

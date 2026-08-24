@@ -58,4 +58,9 @@ service ArlmService {
   // answers. Requires an authenticated admin session (non-admins get
   // PERMISSION_DENIED). Empty `project` purges all projects.
   rpc InvalidateCache(InvalidateCacheRequest) returns (InvalidateCacheResponse);
+
+  // Query-Answer Cache (plan 017, client-side digest-once).
+  rpc QueryWithCache(QueryWithCacheRequest) returns (QueryWithCacheResponse);
+  rpc StoreAnswer(StoreAnswerRequest) returns (StoreAnswerResponse);
+  rpc GetAnswerById(GetAnswerByIdRequest) returns (GetAnswerByIdResponse);
 }

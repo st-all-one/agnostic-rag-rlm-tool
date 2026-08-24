@@ -25,12 +25,15 @@
 )]
 pub mod fts;
 pub mod lance;
+pub mod qa_vectors;
 pub mod sqlite;
 
 pub use lance::{SearchResult, VectorEntry, VectorStore};
+pub use qa_vectors::QuestionVectorStore;
 pub use sqlite::Role;
 pub use sqlite::Storage;
 pub use sqlite::cache;
+pub use sqlite::qa_cache;
 pub use sqlite::tokens;
 
 #[must_use]
