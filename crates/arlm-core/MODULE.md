@@ -1,21 +1,15 @@
 # arlm-core
 
-> **OBSOLETO (pós planos 017–020):** a seção "Estrutura" abaixo descreve a
-> arquitetura pré-refator, que incluía o engine RLM recursivo (planner → solver →
-> synthesizer). Esse engine **foi removido** do crate. O `arlm-core` agora contém
-> apenas tipos de domínio (`types/`), a resolução de plano do QA-Cache
-> (`qa_cache/`), o trait `MemoryProvider` (`memory.rs`) e logging. O sistema é
-> *on-demand* e *server-first*: o servidor é LLM-free e o cliente usa o LLM do
-> usuário apenas em `query -qa`/`persist`. Veja `plan/019-cli-consolidation.md`.
+> **Limpeza pós-019/020:** os resquícios do engine RLM (`types/`,
+> `memory.rs`/`MemoryProvider`) foram **removidos** junto com a dependência
+> morta `arlm-llm`.
 
 ## O que faz
-Biblioteca de suporte do `arlm`: tipos de domínio compartilhados, resolução de
-plano do QA-Cache (plan 017) e o trait `MemoryProvider`. Não possui engine RLM
-recursivo.
+Biblioteca de suporte do `arlm`: resolução de plano do QA-Cache (plan 017) e
+logging. Não possui engine RLM recursivo nem LLM no grafo de dependências.
 
 ## Estrutura atual
-- `src/lib.rs` — API pública (pub mod / pub use).
-- `src/types/{mod,enums,node,input}.rs` — tipos de domínio (`RlmNode`, `StartRunInput`, `CompactionPolicy`, `RlmBackend`, `Action`, `NodeStatus`).
+- `src/lib.rs` — API pública (pub mod).
 - `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia
   similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão
   com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante
@@ -24,10 +18,7 @@ recursivo.
   plan 020): fonte única do hash canônico de chunk usada pelo client
   (`StoreAnswer.source_hashes`) e pelo server (staleness); re-exportada por
   `arlm-storage`.
-- `src/memory.rs` — trait `MemoryProvider` + `SharedMemory`.
 - `src/logging.rs` — `ScopedTimer` / `Timer` (timing estruturado).
-- `src/concurrency.rs` — `map_concurrent`: fan-out paralelo limitado.
-- `src/docker.rs` — `DockerExecutor`: execução sandboxed.
 - `src/repl.rs` — `CodeExecutor`, `LlmQueryServer`, `find_code_blocks`, `format_repl_result`.
 - `src/guardrails.rs` — detecção de ciclo, normalização, sanitização de subtarefas.
 - `src/logging.rs` — `ScopedTimer` / `Timer`: timing estruturado.
@@ -75,14 +66,10 @@ cargo fmt -p arlm-core -- --check
 ```
 
 ## Migrations
-- N/A — este crate não possui schema de banco próprio; persistência de trajectory/memória é
-  feita por `MemoryProvider` (impl externa, tipicamente `arlm-memory`/`arlm-storage`).
+- N/A — este crate não possui schema de banco próprio.
 
 ## Rules
-- `CodeSearch` e `MemoryProvider` são injetados como `Option<Arc<dyn Trait>>`; quando `None`,
-  o comportamento é honesto (`"search_code not configured"` / sem contexto), nunca placeholder falso.
-- Compaction respeita `CompactionPolicy` (`enabled`, `max_child_tokens`); só compacta quando
-  os filhos excedem ~85% do limite de contexto do modelo.
+- Sem dependência de LLM: quem precisa de LLM é o `arlm-cli` (via `arlm-llm`).
 - `save_trajectory` só é chamado se um `MemoryProvider` estiver configurado.
 - `RootCompactor::summarize_with_llm` usa o `LlmBackend` para resumir; mantém fallback sem LLM.
 - `SamplingArgs.seed`, quando presente, é propagado para a chamada LLM para reprodutibilidade.

@@ -7,6 +7,11 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Removed (limpeza pós-019/020)
+- `src/types/{enums,input,node}.rs` (placeholders vazios do engine RLM) e o
+  trait `MemoryProvider` (`src/memory.rs`) — sem uso em todo o workspace.
+- Dependência morta `arlm-llm` — o crate ficou 100% LLM-free no grafo.
+
 ### Added (auditoria plan 020)
 - `qa_cache::chunk_content_hash(content)` — hash canônico SHA-256 hex do texto
   do chunk, movido do `arlm-storage` para cá: cliente (digest-once

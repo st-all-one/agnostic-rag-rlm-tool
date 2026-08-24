@@ -9,7 +9,6 @@ fn main() -> Result<()> {
         format!("{proto_root}/index.proto"),
         format!("{proto_root}/search.proto"),
         format!("{proto_root}/context.proto"),
-        format!("{proto_root}/session.proto"),
         format!("{proto_root}/server.proto"),
         format!("{proto_root}/auth.proto"),
         format!("{proto_root}/query_cache.proto"),

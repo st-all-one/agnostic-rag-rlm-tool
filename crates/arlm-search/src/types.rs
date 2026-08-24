@@ -5,7 +5,6 @@ pub enum SearchTier {
     Fts,
     Entity,
     Vector,
-    LlmRerank,
 }
 
 impl fmt::Display for SearchTier {
@@ -14,7 +13,6 @@ impl fmt::Display for SearchTier {
             Self::Fts => write!(f, "fts"),
             Self::Entity => write!(f, "entity"),
             Self::Vector => write!(f, "vector"),
-            Self::LlmRerank => write!(f, "llm_rerank"),
         }
     }
 }
@@ -41,9 +39,6 @@ pub struct EntityResult {
 pub struct HybridResult {
     pub chunk_id: i64,
     pub score: f32,
-    /// `true` when `chunk_id` refers to a row in the `summaries` table
-    /// (dual-layer search) rather than the `chunks` table.
-    pub is_summary: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -55,10 +50,6 @@ pub struct SearchResult {
     pub line_end: i64,
     pub content: String,
     pub language: Option<String>,
-    /// `true` when this result comes from the `summaries` table.
-    pub is_summary: bool,
-    /// Scope of the source summary (`file`/`module`/`project`) when `is_summary`.
-    pub summary_scope: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -85,10 +76,6 @@ pub struct ChunkWithText {
     pub line_end: i64,
     pub content: String,
     pub language: Option<String>,
-    /// `true` when this record was resolved from the `summaries` table.
-    pub is_summary: bool,
-    /// Scope of the source summary when `is_summary`.
-    pub summary_scope: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

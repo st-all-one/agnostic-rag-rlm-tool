@@ -199,8 +199,10 @@ Cada projeto é um `buffer` na tabela `buffers` com UUIDv7 único. Isolamento po
 | Semântica | embeddings BGE-M3 + LanceDB (HNSW) | Modelo BGE-M3 (servidor) |
 | RRF | Fusão Reciprocal Rank (BM25 + semântica) | Nenhum |
 
-> Não há mais tier `llm_rerank` no servidor: o servidor é LLM-free. O rerank
-> LLM, quando aplicável, ocorre apenas no cliente (digest de `query -qa`).
+> O servidor é **LLM-free também no grafo de dependências** (pós-limpeza
+> 019/020): sem tier `llm_rerank`, sem camada de summaries e sem compilar
+> qualquer crate de LLM. Digest/rerank por LLM vivem só no cliente
+> (`query -qa`/`persist`, via `arlm-llm`).
 
 ## Configuração
 

@@ -5,7 +5,6 @@
 //! - [`project`]: project management RPCs
 //! - [`index`]: indexing RPC
 //! - [`search`]: search + context building RPCs
-//! - [`session`]: session RPCs
 //! - [`status`]: server status RPCs
 
 pub mod auth;
@@ -16,7 +15,6 @@ pub mod memory;
 pub mod project;
 pub mod query_cache;
 pub mod search;
-pub mod session;
 pub mod status;
 
 use arlm_proto::proto::arlm_service_server::ArlmService;
@@ -94,41 +92,6 @@ impl ArlmService for ArlmGrpcService {
         let _timer = crate::timing::Timer::new("handler.build_context");
         crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         search::handle_build_context(&self.state, request.into_inner()).await
-    }
-
-    // ── Sessions ──────────────────────────────────────────────────────────
-
-    async fn create_session(
-        &self,
-        request: Request<CreateSessionRequest>,
-    ) -> Result<Response<SessionInfo>, Status> {
-        let _timer = crate::timing::Timer::new("handler.create_session");
-        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
-        session::handle_create_session(&self.state, request.into_inner()).await
-    }
-
-    async fn list_sessions(
-        &self,
-        request: Request<String>,
-    ) -> Result<Response<ListSessionsResponse>, Status> {
-        let _timer = crate::timing::Timer::new("handler.list_sessions");
-        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
-        session::handle_list_sessions(&self.state, request.into_inner()).await
-    }
-
-    async fn get_session(&self, request: Request<String>) -> Result<Response<SessionInfo>, Status> {
-        let _timer = crate::timing::Timer::new("handler.get_session");
-        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
-        session::handle_get_session(&self.state, request.into_inner()).await
-    }
-
-    async fn add_session_turn(
-        &self,
-        request: Request<AddSessionTurnRequest>,
-    ) -> Result<Response<SessionTurn>, Status> {
-        let _timer = crate::timing::Timer::new("handler.add_session_turn");
-        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
-        session::handle_add_session_turn(&self.state, request.into_inner()).await
     }
 
     // ── Server status ─────────────────────────────────────────────────────

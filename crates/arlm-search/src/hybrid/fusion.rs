@@ -60,7 +60,6 @@ impl HybridSearch {
                 chunk_id: r.chunk_id,
                 #[allow(clippy::cast_possible_truncation)]
                 score: r.score as f32,
-                is_summary: false,
             })
             .collect();
 
@@ -99,7 +98,6 @@ impl HybridSearch {
         }
 
         let mut chunk_lists: Vec<Vec<HybridResult>> = Vec::with_capacity(buffers.len());
-        let mut summary_lists: Vec<Vec<HybridResult>> = Vec::with_capacity(buffers.len());
 
         for buffer in &buffers {
             match self.bm25.search(query, buffer.id, top_k * 2) {
@@ -110,7 +108,6 @@ impl HybridSearch {
                             chunk_id: r.chunk_id,
                             #[allow(clippy::cast_possible_truncation)]
                             score: r.score as f32,
-                            is_summary: false,
                         })
                         .collect();
                     chunk_lists.push(results);
@@ -123,36 +120,9 @@ impl HybridSearch {
                     );
                 }
             }
-
-            // Dual-layer: recall this buffer's summaries too.
-            match storage.search_summaries(query, buffer.id, top_k * 2) {
-                Ok(summary_hits) => {
-                    let results: Vec<HybridResult> = summary_hits
-                        .into_iter()
-                        .map(|h| HybridResult {
-                            chunk_id: h.id,
-                            score: h.score,
-                            is_summary: true,
-                        })
-                        .collect();
-                    if !results.is_empty() {
-                        summary_lists.push(results);
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        buffer = %buffer.name,
-                        error = %e,
-                        "summary search failed on buffer, skipping"
-                    );
-                }
-            }
         }
 
-        let mut fused: Vec<HybridResult> = Self::rrf_fuse(&chunk_lists, top_k, self.rrf_k)
-            .into_iter()
-            .chain(Self::rrf_fuse(&summary_lists, top_k, self.rrf_k))
-            .collect();
+        let mut fused: Vec<HybridResult> = Self::rrf_fuse(&chunk_lists, top_k, self.rrf_k);
         fused.sort_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)

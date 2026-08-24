@@ -5,20 +5,16 @@
 //! query here goes through [`arlm_storage::Storage::connection`], which works
 //! in both single and pooled modes.
 //!
-//! The module is split by domain (projects, sessions, chunks, summaries)
+//! The module is split by domain (projects, chunks, qa_cache)
 //! so each file stays small, focused and easy to audit independently.
 
 pub mod chunks;
 pub mod projects;
-pub mod sessions;
-pub mod summaries;
 
 use anyhow::{Context, Result};
 
 pub use chunks::*;
 pub use projects::*;
-pub use sessions::*;
-pub use summaries::*;
 
 /// Project (buffer) row.
 #[derive(Debug, Clone)]

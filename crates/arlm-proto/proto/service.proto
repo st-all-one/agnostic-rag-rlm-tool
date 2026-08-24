@@ -8,7 +8,6 @@ import "project.proto";
 import "index.proto";
 import "search.proto";
 import "context.proto";
-import "session.proto";
 import "server.proto";
 import "auth.proto";
 import "query_cache.proto";
@@ -29,10 +28,6 @@ service ArlmService {
   rpc BuildContext(ContextRequest) returns (ContextResponse);
 
   // Sessions
-  rpc CreateSession(CreateSessionRequest) returns (SessionInfo);
-  rpc ListSessions(google.protobuf.StringValue) returns (ListSessionsResponse);
-  rpc GetSession(google.protobuf.StringValue) returns (SessionInfo);
-  rpc AddSessionTurn(AddSessionTurnRequest) returns (SessionTurn);
 
   // Server management
   rpc GetServerStatus(google.protobuf.Empty) returns (ServerStatus);

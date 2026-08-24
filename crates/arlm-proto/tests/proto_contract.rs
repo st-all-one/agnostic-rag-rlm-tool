@@ -5,8 +5,8 @@
 //! as the downstream `arlm-server`/`arlm-cli` crates expect.
 //!
 //! NOTE: messages tied to the removed legacy RLM run/summarize pipeline
-//! (`RunResult`, `RunStatus`, `RunStats`, `SummaryScope`, …) are intentionally
-//! absent — they were deleted in plan 019.
+//! (`RunResult`, `RunStatus`, `RunStats`, `SummaryScope`, `SessionInfo`, …)
+//! are intentionally absent — they were deleted in plans 019/020.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -19,40 +19,10 @@ fn test_search_request_with_hybrid_tier() {
         query: "find auth".into(),
         max_results: 10,
         tier: SearchTier::TierHybrid as i32,
-        include_summaries: true,
-        include_raw: true,
     };
 
     assert_eq!(req.tier, SearchTier::TierHybrid as i32);
     assert_eq!(req.max_results, 10);
-}
-
-#[test]
-fn test_session_info_fields() {
-    let session = SessionInfo {
-        session_id: "s-1".into(),
-        project: "p".into(),
-        title: "t".into(),
-        created_at: None,
-        turn_count: 2,
-    };
-
-    assert_eq!(session.session_id, "s-1");
-    assert_eq!(session.turn_count, 2);
-    assert!(session.created_at.is_none());
-}
-
-#[test]
-fn test_add_session_turn_request_fields() {
-    let req = AddSessionTurnRequest {
-        session_id: "s-1".into(),
-        query: "how?".into(),
-        response: "answer".into(),
-    };
-
-    assert_eq!(req.session_id, "s-1");
-    assert_eq!(req.query, "how?");
-    assert_eq!(req.response, "answer");
 }
 
 #[test]

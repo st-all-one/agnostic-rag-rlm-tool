@@ -42,12 +42,8 @@ fn test_migrations_run() {
         "run_model_usage",
         "node_calls",
         "trajectories",
-        "sessions",
-        "session_contexts",
-        "session_history",
         "result_cache",
         "events",
-        "summaries",
     ] {
         assert!(
             tables.contains(&expected.to_string()),

@@ -194,13 +194,12 @@ pub async fn status_check() -> anyhow::Result<()> {
         .into_inner();
 
     println!(
-        "OK version={} uptime_s={} active_runs={} total_projects={} total_chunks={} total_summaries={}",
+        "OK version={} uptime_s={} active_runs={} total_projects={} total_chunks={}",
         status.version,
         status.uptime_seconds,
         status.active_runs,
         status.total_projects,
         status.total_chunks,
-        status.total_summaries,
     );
     Ok(())
 }

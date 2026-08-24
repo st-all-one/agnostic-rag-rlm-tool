@@ -46,8 +46,6 @@ fn to_proto_results(results: &[arlm_search::SearchResult]) -> Vec<SearchResult> 
             file_path: r.file_path.clone(),
             start_line: r.line_start as i32,
             end_line: r.line_end as i32,
-            is_summary: r.is_summary,
-            summary: None,
         })
         .collect()
 }
@@ -473,8 +471,6 @@ async fn provenance_chunks(state: &AppState, ids: &[String], k: usize) -> Vec<Se
             file_path: c.file_path,
             start_line: c.line_start as i32,
             end_line: c.line_end as i32,
-            is_summary: false,
-            summary: None,
         })
         .collect()
 }

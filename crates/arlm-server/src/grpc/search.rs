@@ -2,7 +2,7 @@
 //!
 //! Both run a unified hybrid search (`arlm_search::HybridSearch`) over the
 //! project's chunks: BM25 (FTS5) is always the base tier, and the `entity`,
-//! `vector` (semantic) and `llm_rerank` tiers are fused on top via Reciprocal
+//! `vector` (semantic) tiers are fused on top via Reciprocal
 //! Rank Fusion (RRF). The semantic tier is powered by the server's embedder
 //! (BGE-M3 when weights are present, otherwise a hash fallback), so vector
 //! search degrades gracefully to BM25 when no vector store is configured.
@@ -87,14 +87,7 @@ pub(crate) async fn hybrid_search(
     };
 
     let mut fused = hybrid
-        .search(
-            fts_query,
-            query_vector,
-            buffer_id,
-            &options,
-            None,
-            Some(&state.storage),
-        )
+        .search(fts_query, query_vector, buffer_id, &options, None)
         .await?;
 
     // Natural-language fix: AND yields nothing on multi-word queries, retry
@@ -105,14 +98,7 @@ pub(crate) async fn hybrid_search(
             .collect::<Vec<_>>()
             .join(" OR ");
         fused = hybrid
-            .search(
-                &or_query,
-                query_vector,
-                buffer_id,
-                &options,
-                None,
-                Some(&state.storage),
-            )
+            .search(&or_query, query_vector, buffer_id, &options, None)
             .await?;
     }
 
@@ -158,8 +144,6 @@ fn to_proto_results(results: &[arlm_search::SearchResult]) -> Vec<SearchResult> 
             file_path: r.file_path.clone(),
             start_line: r.line_start as i32,
             end_line: r.line_end as i32,
-            is_summary: r.is_summary,
-            summary: None,
         })
         .collect()
 }
@@ -223,12 +207,11 @@ pub(crate) async fn handle_search(
         Ok(SearchTier::TierBm25) => HybridTier::Fts,
         Ok(SearchTier::TierEntity) => HybridTier::Entity,
         Ok(SearchTier::TierSemantic) => HybridTier::Vector,
-        Ok(SearchTier::TierHybrid) => HybridTier::LlmRerank,
+        Ok(SearchTier::TierHybrid) => HybridTier::Vector,
         _ => match state.config.search.tier.to_ascii_lowercase().as_str() {
             "fts" | "bm25" => HybridTier::Fts,
             "entity" => HybridTier::Entity,
-            "vector" | "semantic" => HybridTier::Vector,
-            _ => HybridTier::LlmRerank,
+            _ => HybridTier::Vector,
         },
     };
 

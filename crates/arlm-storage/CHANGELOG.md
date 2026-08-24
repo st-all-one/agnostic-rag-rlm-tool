@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Removed (limpeza pós-019/020)
+- Módulo `sqlite/summaries.rs` (`Summary`, `insert_summary`,
+  `search_summaries`, FTS5 `summaries_fts`) e migrations `006_add_sessions`,
+  `012_add_summaries`, `014_add_summaries_fts` — tabelas que ninguém escrevia
+  nem lia em produção; referências em `013_server_handlers` limpas.
+
 ### Added (auditoria plan 020)
 - `Storage::wal_checkpoint()` — checkpoint PASSIVE do WAL para o flusher
   `flush_interval_ms` do server.

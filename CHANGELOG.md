@@ -5,6 +5,25 @@ Este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Removed — limpeza de código morto (pós planos 019/020)
+
+Auditoria pós-consolidação removeu os resquícios que sobraram da arquitetura
+antiga; o grafo do `arlm-server` ficou **100% LLM-free** (nem transitive):
+
+- **arlm-search**: Tier 3 de LLM rerank (`rerank.rs`, `with_llm_backend`,
+  `SearchTier::LlmRerank`) e a camada dual-layer da tabela `summaries`
+  (`is_summary`/`summary_scope`); dependência `arlm-llm` cortada.
+- **proto**: RPCs de Session (`CreateSession`/`ListSessions`/`GetSession`/
+  `AddSessionTurn`) + `session.proto`; campos/mensagens de summaries
+  (`SummaryInfo`, `is_summary`, `include_summaries`, `total_summaries`,
+  `SummarizeStatus`).
+- **arlm-server**: handlers/persistência de sessão, wrapper de summaries e
+  contagem no status.
+- **arlm-storage**: módulo `sqlite/summaries.rs` + migrations
+  006/012/014 (`sessions`, `summaries`, FTS5 de summaries).
+- **arlm-core**: placeholders `types/`, trait `MemoryProvider` e a dependência
+  morta `arlm-llm`.
+
 ### ⚠ BREAKING — plan 020 (consolidação de configuração)
 
 Break **total, sem transição** (decisão D4 do plan 020): os arquivos legados

@@ -56,7 +56,6 @@ fn test_build_context_prompt() {
     let results = vec![HybridResult {
         chunk_id,
         score: 0.85,
-        is_summary: false,
     }];
 
     let ctx = build_context(&storage, &results, OutputFormat::Prompt, None).unwrap();
@@ -74,7 +73,6 @@ fn test_build_context_markdown() {
     let results = vec![HybridResult {
         chunk_id,
         score: 0.90,
-        is_summary: false,
     }];
 
     let ctx = build_context(&storage, &results, OutputFormat::Markdown, None).unwrap();
@@ -90,7 +88,6 @@ fn test_build_context_json() {
     let results = vec![HybridResult {
         chunk_id,
         score: 0.75,
-        is_summary: false,
     }];
 
     let ctx = build_context(&storage, &results, OutputFormat::Json, None).unwrap();
@@ -106,7 +103,6 @@ fn test_build_search_results() {
     let results = vec![HybridResult {
         chunk_id,
         score: 0.95,
-        is_summary: false,
     }];
 
     let search_results = build_search_results(&storage, &results, None).unwrap();
@@ -129,7 +125,6 @@ fn test_load_chunks_missing() {
     let results = vec![HybridResult {
         chunk_id: 999,
         score: 0.5,
-        is_summary: false,
     }];
 
     let chunks = load_chunks(&storage, &results).unwrap();

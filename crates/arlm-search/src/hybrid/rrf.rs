@@ -30,11 +30,7 @@ impl HybridSearch {
 
         let mut fused: Vec<HybridResult> = scores
             .into_iter()
-            .map(|(chunk_id, score)| HybridResult {
-                chunk_id,
-                score,
-                is_summary: false,
-            })
+            .map(|(chunk_id, score)| HybridResult { chunk_id, score })
             .collect();
 
         fused.sort_by(|a, b| {

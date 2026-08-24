@@ -7,7 +7,7 @@
 ## Conversation
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 Analise em profundidade o @plan/020-config-consolidation.md , planeje usando o 'sd' e implemente
 
@@ -373,7 +373,7 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 - URL: file:///projects/my/ai-guides/TMP/agnostic-rlm-rs/plan/020-config-consolidation.md
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -755,7 +755,7 @@ Note: file list is sampled.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -907,7 +907,7 @@ VERSION
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -1236,7 +1236,7 @@ opt-level = 3
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -1321,7 +1321,7 @@ agnostic-rlm-rs-7222 Backlog open Multi-user roadmap (Plano 15)
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -1377,7 +1377,7 @@ agnostic-rlm-rs-c4fe High closed F6.2 Limpar dispatch (remover local.rs) e comma
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -1694,7 +1694,7 @@ O trabalho anterior da sd mostra itens do plano 020 já fechados — preciso ver
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -2005,7 +2005,7 @@ The `user_config.rs` already exists and implements the 2-scope merge. Let me now
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -2108,7 +2108,7 @@ Let me check what the server actually does — how it uses the embedder config, 
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -2323,7 +2323,7 @@ Let me check what the server actually does — how it uses the embedder config, 
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -2383,7 +2383,7 @@ Let me look at:
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -2452,7 +2452,7 @@ Let me look at:
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -3368,7 +3368,7 @@ Let me look at:
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -3460,7 +3460,7 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -3611,7 +3611,7 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -3643,7 +3643,7 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -3683,7 +3683,7 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -3740,7 +3740,7 @@ crates/arlm-cli/src/commands/serve/search_logic.rs:89:    let search_results = a
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -3836,7 +3836,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -4061,7 +4061,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -4284,7 +4284,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -4423,7 +4423,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -4660,7 +4660,7 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -4882,7 +4882,7 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -5173,7 +5173,7 @@ Let me now check grpc/index.rs to see if the server chunks with config.max_token
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -5378,7 +5378,7 @@ Let me batch read several files.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -5518,7 +5518,7 @@ pub fn resolve_backend(
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -5665,7 +5665,7 @@ pub fn resolve_backend(
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -5719,7 +5719,7 @@ session.proto
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -5790,7 +5790,7 @@ output_tree_test.rs
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -6033,7 +6033,7 @@ docker run -d --name arlm-prod -p 50052:50051 -v arlm-data:/data arlm-ollama
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -6099,7 +6099,7 @@ volumes:
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -6292,7 +6292,7 @@ CMD ["up"]
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -6461,7 +6461,7 @@ install_server_docker() {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -6560,7 +6560,7 @@ fn test_client_config_load() {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -6592,7 +6592,7 @@ fn test_client_config_load() {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -6800,7 +6800,7 @@ crates/arlm-cli/src/metrics.rs
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -6833,7 +6833,7 @@ crates/arlm-cli/src/commands/qa_cache.rs:        .map(|c| arlm_storage::qa_cache
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -6934,7 +6934,7 @@ pub(crate) async fn handle_search(
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7136,7 +7136,7 @@ none
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7219,7 +7219,7 @@ none
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7288,7 +7288,7 @@ Criando o planejamento no `sd`:
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7320,7 +7320,7 @@ sd create --title "F9.4 Testes plan 020: merge granular, auth-only-global, legac
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7407,7 +7407,7 @@ agnostic-rlm-rs-ec63 is now blocked by agnostic-rlm-rs-dc90
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7431,7 +7431,7 @@ Wrote file successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7462,7 +7462,7 @@ Next:
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7528,7 +7528,7 @@ crates/arlm-cli/src/commands/serve/mod.rs:48:    let _timer = arlm_core::logging
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7568,7 +7568,7 @@ Now execute F9.1:
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7593,7 +7593,7 @@ Now execute F9.1:
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7620,7 +7620,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7647,7 +7647,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7674,7 +7674,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7701,7 +7701,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7728,7 +7728,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7759,7 +7759,7 @@ Agora mova `chunk_content_hash` para `arlm-core`:
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -7970,7 +7970,7 @@ Agora mova `chunk_content_hash` para `arlm-core`:
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8004,7 +8004,7 @@ Agora mova `chunk_content_hash` para `arlm-core`:
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8031,7 +8031,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8058,7 +8058,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8084,7 +8084,7 @@ crates/arlm-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8144,7 +8144,7 @@ crates/arlm-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8171,7 +8171,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8198,7 +8198,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8227,7 +8227,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8253,7 +8253,7 @@ EXIT: 0
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8280,7 +8280,7 @@ warning: build failed, waiting for other jobs to finish...
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8314,7 +8314,7 @@ error: could not compile `arlm-storage` (lib) due to 1 previous error
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8352,7 +8352,7 @@ error: could not compile `arlm-storage` (lib) due to 1 previous error
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8379,7 +8379,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8407,7 +8407,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8440,7 +8440,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8503,7 +8503,7 @@ F9.1 concluída. Iniciando **F9.2** — schema completo do `server.toml` e wirin
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8530,7 +8530,7 @@ F9.1 concluída. Iniciando **F9.2** — schema completo do `server.toml` e wirin
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8568,7 +8568,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8595,7 +8595,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8622,7 +8622,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8649,7 +8649,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8698,7 +8698,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8727,7 +8727,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8754,7 +8754,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8781,7 +8781,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8808,7 +8808,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8837,7 +8837,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8864,7 +8864,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8891,7 +8891,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8920,7 +8920,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -8947,7 +8947,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9022,7 +9022,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9069,7 +9069,7 @@ The proto `SearchTier` — how does the client send "auto"/unspecified? The CLI 
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9169,7 +9169,7 @@ Alternative: leave tier resolution unchanged (explicit per-request), apply confi
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9196,7 +9196,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9223,7 +9223,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9288,7 +9288,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9312,7 +9312,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9336,7 +9336,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9365,7 +9365,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9453,7 +9453,7 @@ também é resolvido por `~/.arlm/arlm.toml` (`[server].addr`) ou
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9480,7 +9480,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9507,7 +9507,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9534,7 +9534,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9663,7 +9663,7 @@ O `docker-compose.server.yml` monta o volume `arlm-server-data` em `/data`
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9690,7 +9690,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9717,7 +9717,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9744,7 +9744,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9771,7 +9771,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9798,7 +9798,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9826,7 +9826,7 @@ Wrote file successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9853,7 +9853,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9880,7 +9880,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -9906,7 +9906,7 @@ Wrote file successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10037,7 +10037,7 @@ install_cli() {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10064,7 +10064,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10101,7 +10101,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10145,7 +10145,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10172,7 +10172,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10218,7 +10218,7 @@ model = "gpt-4o"
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10275,7 +10275,7 @@ EOF
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10309,7 +10309,7 @@ EOF
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10349,7 +10349,7 @@ addr = "127.0.0.1:50051"
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10415,7 +10415,7 @@ docs/opencode-setup.md:84:arlm server
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10442,7 +10442,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10486,7 +10486,7 @@ client via the user's local LLM.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10513,7 +10513,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10537,7 +10537,7 @@ Dockerfile:# envs ln_*. Paralelismo continua env-tunable (casar com
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10573,7 +10573,7 @@ README.md:260:Arquivos legados `~/.arlm/config.toml` / `.arlm/config.toml` **nã
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10640,7 +10640,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10668,7 +10668,7 @@ ok
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10695,7 +10695,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10722,7 +10722,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10749,7 +10749,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10778,7 +10778,7 @@ error: could not compile `arlm-cli` (lib test) due to 1 previous error
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10805,7 +10805,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10834,7 +10834,7 @@ error: could not compile `arlm-cli` (lib test) due to 1 previous error
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10887,7 +10887,7 @@ help: try using a conversion method
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10914,7 +10914,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10940,7 +10940,7 @@ error: test failed, to rerun pass `-p arlm-cli --lib`
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -10993,7 +10993,7 @@ error: test failed, to rerun pass `-p arlm-cli --lib`
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11029,7 +11029,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11053,7 +11053,7 @@ test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11115,7 +11115,7 @@ Agora os testes de server config e o teste de init (`.arlm.toml` + gitignore, se
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11145,7 +11145,7 @@ fn default_eviction_interval_ms() -> u64 {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11249,7 +11249,7 @@ error: could not compile `arlm-server` (lib test) due to 1 previous error
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11276,7 +11276,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11305,7 +11305,7 @@ error: could not compile `arlm-server` (lib test) due to 1 previous error
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11332,7 +11332,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11363,7 +11363,7 @@ error: test failed, to rerun pass `-p arlm-server --lib`
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11400,7 +11400,7 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; 
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11436,7 +11436,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11460,7 +11460,7 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11488,7 +11488,7 @@ Wrote file successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11519,7 +11519,7 @@ warning: build failed, waiting for other jobs to finish...
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11546,7 +11546,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11578,7 +11578,7 @@ error: test failed, to rerun pass `-p arlm-cli --test init_test`
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11610,7 +11610,7 @@ failures:
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11646,7 +11646,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11670,7 +11670,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11744,7 +11744,7 @@ error: used `unwrap()` on a `Result` value
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11831,7 +11831,7 @@ Dropped refs/stash@{0} (7f346d9a7536a11445994cff4b8236fa5760f3ca)
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11868,7 +11868,7 @@ warning: build failed, waiting for other jobs to finish...
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11920,7 +11920,7 @@ error: could not compile `arlm-cli` (lib) due to 2 previous errors
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11945,7 +11945,7 @@ error: could not compile `arlm-cli` (lib) due to 2 previous errors
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -11978,7 +11978,7 @@ FMT_OK
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12002,7 +12002,7 @@ FMT_OK
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12029,7 +12029,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12069,7 +12069,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12097,7 +12097,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12122,12 +12122,12 @@ O plan 020 estava **parcialmente implementado** (user_config 2-escopos, D2 index
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 o que falta implementar exatamente?
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12235,7 +12235,7 @@ agents/claude-desktop/claude_desktop_config.json:      "args": ["serve", "ln", "
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12283,7 +12283,7 @@ Itens 1–6 são implementáveis agora se quiser; 2 e 4 dependem de decisão de 
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 Resolva os 7 pontos
 Sobre o 2: atualize o proto
@@ -12292,7 +12292,7 @@ Sobre o 4: implemente o necessário
 o ponto 8 é desnecessário
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12483,7 +12483,7 @@ Create todos first.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12511,7 +12511,7 @@ agnostic-rlm-rs-2fdc
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12557,7 +12557,7 @@ crates/arlm-cli/TODO.md:- **STATUS:** ✅ CONCLUÍDO — `map_search_tier` em `d
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12648,7 +12648,7 @@ crates/arlm-server/src/grpc/query_cache.rs:243:        tier_snapshot: Some(
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12675,7 +12675,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12738,7 +12738,7 @@ fn test_session_info_fields() {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12767,7 +12767,7 @@ fn test_session_info_fields() {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12812,7 +12812,7 @@ fn test_session_info_fields() {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12839,7 +12839,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12868,7 +12868,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12895,7 +12895,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -12920,7 +12920,7 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13044,7 +13044,7 @@ P2 done. Now P1: wire `[embedder] cache` into the embedder. Check arlm-embedding
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13114,7 +13114,7 @@ P2 done. Now P1: wire `[embedder] cache` into the embedder. Check arlm-embedding
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13178,7 +13178,7 @@ impl EmbeddingCache {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13292,7 +13292,7 @@ pub trait Embedder: Send + Sync {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13356,7 +13356,7 @@ impl OwnedFile {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13509,7 +13509,7 @@ Vou adicionar um wrapper `CachedEmbedder` em arlm-embedding e consumi-lo no serv
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13562,7 +13562,7 @@ fn bytes_to_embedding(bytes: &[u8], expected_dims: usize) -> EmbeddingResult<Emb
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13715,7 +13715,7 @@ error[E0405]: cannot find trait `Embedder` in this scope
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13743,7 +13743,7 @@ crates/arlm-embedding/src/embedder/cache.rs:261:    use super::*;
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13770,7 +13770,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13795,7 +13795,7 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13824,7 +13824,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13851,7 +13851,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13875,7 +13875,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -13999,7 +13999,7 @@ P1 done. Now P4a: `pool_size`, `flush_interval_ms`, `max_batch_size` — paramet
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14031,7 +14031,7 @@ P1 done. Now P4a: `pool_size`, `flush_interval_ms`, `max_batch_size` — paramet
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14054,7 +14054,7 @@ P1 done. Now P4a: `pool_size`, `flush_interval_ms`, `max_batch_size` — paramet
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14093,7 +14093,7 @@ zsh:1: == not found
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14140,7 +14140,7 @@ crates/arlm-storage/src/sqlite/conn.rs:299:    pub max_size: u32,
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14205,7 +14205,7 @@ impl Storage {
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14270,7 +14270,7 @@ Let me look at conn() and whether get_chunk etc. work under pooled.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14429,7 +14429,7 @@ Implementation details:
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14456,7 +14456,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14500,7 +14500,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14568,7 +14568,7 @@ Wait — I need to check the original doc comment above conn() ("Get a reference
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14595,7 +14595,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14624,7 +14624,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14651,7 +14651,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14678,7 +14678,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14705,7 +14705,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14785,7 +14785,7 @@ zsh:1: == not found
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14828,7 +14828,7 @@ zsh:1: == not found
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14853,7 +14853,7 @@ zsh:1: == not found
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14880,7 +14880,7 @@ crates/arlm-server/src/grpc/index.rs:                store::n_text(&storage, chu
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -14963,7 +14963,7 @@ pub fn insert_chunk_text(storage: &Storage, chunk_id: i64, content: &str) -> Res
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15226,7 +15226,7 @@ pub fn increment_buffer_counts(
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15290,7 +15290,7 @@ StorageConnection::execute closure signature: `conn.execute(|conn| { ... Ok(x) }
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15395,7 +15395,7 @@ done
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15424,7 +15424,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15451,7 +15451,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15478,7 +15478,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15502,7 +15502,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15526,7 +15526,7 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15650,7 +15650,7 @@ P4a done. Now P4b: `[history] retention_days`. Check history storage + maintenan
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15693,7 +15693,7 @@ P4a done. Now P4b: `[history] retention_days`. Check history storage + maintenan
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15730,7 +15730,7 @@ crates/arlm-server/src/grpc/query_cache.rs:213:    crate::grpc::memory::record_q
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15847,7 +15847,7 @@ pub(crate) async fn record_query_history(
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -15923,7 +15923,7 @@ CREATE TABLE IF NOT EXISTS patterns (
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16010,7 +16010,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; fini
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16072,7 +16072,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16099,7 +16099,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16126,7 +16126,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16153,7 +16153,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16178,7 +16178,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16211,7 +16211,7 @@ P4b ok. Agora **P3** — mTLS/TLS no cliente:
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16238,7 +16238,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16265,7 +16265,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16294,7 +16294,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16321,7 +16321,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16348,7 +16348,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16377,7 +16377,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16421,7 +16421,7 @@ error: could not compile `arlm-cli` (lib) due to 2 previous errors
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16448,7 +16448,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16482,7 +16482,7 @@ error: could not compile `arlm-cli` (lib) due to 2 previous errors
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16514,7 +16514,7 @@ error: could not compile `arlm-cli` (lib) due to 2 previous errors
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16551,7 +16551,7 @@ error: could not compile `arlm-cli` (lib) due to 2 previous errors
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16587,7 +16587,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16611,7 +16611,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16649,7 +16649,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16673,7 +16673,7 @@ test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16701,7 +16701,7 @@ Wrote file successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16815,7 +16815,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; fini
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16843,7 +16843,7 @@ Wrote file successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16870,7 +16870,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16897,7 +16897,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16924,7 +16924,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -16960,7 +16960,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17075,7 +17075,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17103,7 +17103,7 @@ Gates finais — testes, fmt, clippy:
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17131,7 +17131,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17184,7 +17184,7 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17209,7 +17209,7 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17234,7 +17234,7 @@ FMT_OK
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17305,7 +17305,7 @@ error: could not compile `arlm-cli` (lib) due to 1 previous error
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17332,7 +17332,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17359,7 +17359,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17386,7 +17386,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17413,7 +17413,7 @@ Edit applied successfully.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17437,7 +17437,7 @@ Edit applied successfully.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17464,7 +17464,7 @@ FMT_OK
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17510,7 +17510,7 @@ Now close the sd issue and sync. Also update STAGING.md? Not required. Done.
 *[patch part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17625,7 +17625,7 @@ Now close the sd issue and sync. Also update STAGING.md? Not required. Done.
 *[step-finish part]*
 
 ### 🤖 Assistant
-*2026-08-24 13:37:57*
+*2026-08-24 13:46:40*
 
 *[step-start part]*
 
@@ -17650,5 +17650,2563 @@ Os 7 pontos resolvidos (issue `agnostic-rlm-rs-07ad` fechada + `sd sync`):
 **P7**: testes de disjunção bidirecionais — user config ignora semântica do `server.toml` (arlm-cli) e server ignora `arlm.toml` (arlm-server).
 
 Gates: **383 testes passed**, `clippy -D warnings` limpo, `fmt --check` OK.
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+Toda documentação foi atualizada? Readms, changelogs, module.md?
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+💭 **Reasoning:**
+
+<details>
+<summary>Click to expand reasoning</summary>
+
+The user asks: "Toda documentação foi atualizada? Readms, changelogs, module.md?"
+
+Let me check all documentation files in the repo for staleness after the changes:
+
+1. README.md (main) — I updated it, but need to verify thoroughly
+2. CHANGELOG.md — created
+3. MODULE.md files — there are per-crate MODULE.md files (I saw arlm-storage/MODULE.md earlier). Need to check:
+   - crates/arlm-storage/MODULE.md — mentions qa_cache functions; does it document conn.rs hybrid mode? wal_checkpoint? purge_history_before?
+   - Other crates' MODULE.md: arlm-cli, arlm-embedding, arlm-server, etc.
+4. docs/ directory — opencode-setup.md updated; check others
+5. agents/README.md — updated
+6. arlm.toml.example — updated
+7. STAGING.md — has historical notes, maybe fine
+8. plan/020 doc itself — no need to update
+
+Let me do a comprehensive scan of all .md files and grep for stale references:
+- `config.toml` legacy references
+- `serve`/`mcp` references
+- `--server` flag
+- ARLM_OLLAMA / ARLM_MODEL_DIR / ARLM_EMBED_BATCH env vars
+- old SearchTier numbering
+- missing new features documentation (pool_size, flush_interval_ms, max_batch_size, retention_days, tls fields, CachedEmbedder)
+
+Let me list all md files and check them.
+
+</details>
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** find . -name "*.md" -not -path "./target/*" -not -path "./ai-guides/*" -not -path "./conversations/*" -not -path "./.git/*" | sort
+
+**Input:**
+```json
+{
+  "command": "find . -name \"*.md\" -not -path \"./target/*\" -not -path \"./ai-guides/*\" -not -path \"./conversations/*\" -not -path \"./.git/*\" | sort"
+}
+```
+
+**Output:**
+```
+./AGENTS.md
+./agents/README.md
+./CHANGELOG.md
+./crates/arlm-cli/CHANGELOG.md
+./crates/arlm-cli/MODULE.md
+./crates/arlm-cli/README.md
+./crates/arlm-cli/TODO.md
+./crates/arlm-core/CHANGELOG.md
+./crates/arlm-core/MODULE.md
+./crates/arlm-core/README.md
+./crates/arlm-core/TODO.md
+./crates/arlm-embedding/CHANGELOG.md
+./crates/arlm-embedding/MODULE.md
+./crates/arlm-embedding/README.md
+./crates/arlm-embedding/TODO.md
+./crates/arlm-llm/CHANGELOG.md
+./crates/arlm-llm/MODULE.md
+./crates/arlm-llm/README.md
+./crates/arlm-llm/TODO.md
+./crates/arlm-memory/CHANGELOG.md
+./crates/arlm-memory/MODULE.md
+./crates/arlm-memory/README.md
+./crates/arlm-memory/TODO.md
+./crates/arlm-proto/CHANGELOG.md
+./crates/arlm-proto/MODULE.md
+./crates/arlm-proto/README.md
+./crates/arlm-proto/TODO.md
+./crates/arlm-search/CHANGELOG.md
+./crates/arlm-search/MODULE.md
+./crates/arlm-search/README.md
+./crates/arlm-search/TODO.md
+./crates/arlm-server/CHANGELOG.md
+./crates/arlm-server/MODULE.md
+./crates/arlm-server/README.md
+./crates/arlm-server/TODO.md
+./crates/arlm-storage/CHANGELOG.md
+./crates/arlm-storage/MODULE.md
+./crates/arlm-storage/README.md
+./crates/arlm-storage/TODO.md
+./docs/opencode-setup.md
+./OLLAMA_EMBED_PROPOSED.md
+./plan/016-server-first-architecture.md
+./plan/017-query-answer-cache.md
+./plan/018-auth-token-management.md
+./plan/019-cli-consolidation.md
+./plan/01_brainstorm.md
+./plan/020-config-consolidation.md
+./plan/02_project_structure.md
+./plan/03_cli_architecture.md
+./plan/04_memory_engine.md
+./plan/05_rlm_orchestrator.md
+./plan/06_storage_layer.md
+./plan/07_embedding_pipeline.md
+./plan/08_hybrid_search.md
+./plan/09_docker_optimization.md
+./plan/10_agent_integration.md
+./plan/11_performance_tuning.md
+./plan/12_budget_cost_tracking.md
+./plan/13_context_management.md
+./plan/14_observability_events.md
+./plan/15_multi_user_roadmap.md
+./plan/16_deterministic_mode.md
+./README.md
+./STAGING.md
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+💭 **Reasoning:**
+
+<details>
+<summary>Click to expand reasoning</summary>
+
+There are per-crate README.md, MODULE.md, CHANGELOG.md, TODO.md files. I need to check them all for staleness. Let me grep across all of them for stale references and check which ones need updates for the new changes.
+
+Key things that changed in this session (both rounds):
+1. Removed: Commands::Serve/MCP/metrics/util::data_dir; CLI deps slimmed
+2. chunk_content_hash moved to arlm-core
+3. ServerConfig: embedder full schema, search, mtls_ca, pool_size/flush_interval_ms/max_batch_size, history retention
+4. state.rs loads embedder from config (no env)
+5. SearchTier UNSPECIFIED=0 renumbering
+6. CachedEmbedder added to arlm-embedding
+7. Storage: open_pooled hybrid mode + wal_checkpoint + purge_history_before
+8. store::insert_chunks_batched
+9. Client TLS fields (tls_ca/tls_cert/tls_key)
+10. CHANGELOG.md root created
+
+Let me grep the per-crate docs for stale content.
+
+</details>
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** rg -ln "serve|/mcp|mcp_handler|--server |ARLM_OLLAMA|ARLM_MODEL_DIR|ARLM_EMBED_BATCH|config\.toml" crates/*/MODULE.md crates/*/README.md crates/*/CHANGELOG.md crates/*/TODO.md docs/*.md OLLAMA_EMBED_PROPOSED.md 2>/dev/null
+
+**Input:**
+```json
+{
+  "command": "rg -ln \"serve|/mcp|mcp_handler|--server |ARLM_OLLAMA|ARLM_MODEL_DIR|ARLM_EMBED_BATCH|config\\.toml\" crates/*/MODULE.md crates/*/README.md crates/*/CHANGELOG.md crates/*/TODO.md docs/*.md OLLAMA_EMBED_PROPOSED.md 2>/dev/null"
+}
+```
+
+**Output:**
+```
+crates/arlm-core/MODULE.md
+crates/arlm-core/README.md
+crates/arlm-search/MODULE.md
+crates/arlm-cli/README.md
+crates/arlm-memory/README.md
+crates/arlm-embedding/README.md
+crates/arlm-proto/MODULE.md
+crates/arlm-llm/CHANGELOG.md
+crates/arlm-server/CHANGELOG.md
+crates/arlm-proto/CHANGELOG.md
+crates/arlm-search/TODO.md
+crates/arlm-proto/TODO.md
+crates/arlm-cli/MODULE.md
+OLLAMA_EMBED_PROPOSED.md
+crates/arlm-server/TODO.md
+crates/arlm-storage/MODULE.md
+docs/opencode-setup.md
+crates/arlm-storage/TODO.md
+crates/arlm-storage/README.md
+crates/arlm-server/MODULE.md
+crates/arlm-embedding/MODULE.md
+crates/arlm-llm/MODULE.md
+crates/arlm-search/README.md
+crates/arlm-proto/README.md
+crates/arlm-memory/MODULE.md
+crates/arlm-cli/CHANGELOG.md
+crates/arlm-core/TODO.md
+crates/arlm-server/README.md
+crates/arlm-storage/CHANGELOG.md
+crates/arlm-cli/TODO.md
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** for f in crates/arlm-cli/README.md crates/arlm-cli/MODULE.md crates/arlm-server/README.md crates/arlm-server/MODULE.md; do echo "########## $f"; cat "$f"; done 2>/dev/null | head -250
+
+**Input:**
+```json
+{
+  "command": "for f in crates/arlm-cli/README.md crates/arlm-cli/MODULE.md crates/arlm-server/README.md crates/arlm-server/MODULE.md; do echo \"########## $f\"; cat \"$f\"; done 2>/dev/null | head -250"
+}
+```
+
+**Output:**
+```
+########## crates/arlm-cli/README.md
+# arlm-cli
+
+Interface de linha de comando para o **arlm** — *on-demand, agent-agnostic RLM*.
+É um **cliente gRPC puro** que se conecta a um `arlm-server` (plano de dados).
+Usa o **LLM local do usuário** (`arlm-llm`) apenas para *digest* (`query -qa`)
+e *summarize* (`persist`); nenhuma outra operação depende de LLM.
+
+## Responsabilidades
+
+- **CLI (lib + bin):** `src/lib.rs` expõe a API pública; `src/main.rs` é um *thin binary*
+  que faz o parsing e delega o dispatch.
+- **Parsing:** `clap` derive em `src/cli/` (estrutura de subcomandos desacoplada de `main`).
+- **Dispatch:** `src/dispatch/` resolve a config do usuário (2 escopos, local > global)
+  e roteia para o servidor gRPC.
+- **Comandos:** subcomandos (`commands/<cmd>`), incluindo o QA-Cache (plan 017) via
+  `query --qa`/`--cache-id` e `memory invalidate`.
+- **Output:** 4 formatos (`json`, `tree`, `markdown`, `prompt`) em `src/output/`.
+- **Observabilidade:** logs estruturados via `tracing` (`--verbose`).
+- **Resiliência de cliente:** retry com backoff, validação de endereço e TLS automático
+  em `src/client.rs`.
+- **Config do usuário (2 escopos):** `src/user_config.rs` lê `~/.arlm/arlm.toml`
+  (global) e `.arlm.toml` (local), com merge granular por campo. `[auth]` é só-global.
+  Arquivos legados `config.toml` **não** são lidos.
+- **Allocator:** mimalloc para performance.
+
+## Estrutura
+
+```
+src/
+├── lib.rs                 # API pública (re-exports)
+├── main.rs                # Thin binary: parse → logging → dispatch
+├── cli/                   # Definição dos argumentos (clap)
+│   ├── mod.rs
+│   ├── root.rs            # Cli, OutputFormatArg
+│   └── commands.rs        # enum Commands
+├── dispatch/              # Roteamento de comandos
+│   ├── mod.rs             # branch para o servidor gRPC
+│   └── server.rs          # modo servidor gRPC (formatado por --format)
+├── client.rs              # gRPC client: retry/backoff, TLS, validação
+├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)
+├── util.rs                # data_dir(), project resolution
+├── commands/              # um módulo por subcomando
+│   ├── mod.rs
+│   ├── index.rs  search.rs  query.rs  qa_cache.rs
+│   ├── memory.rs  persist.rs  history.rs
+│   └── serve/             # arlm server (gRPC/MCP data plane)
+└── output/
+    ├── mod.rs             # Format enum
+    └── json.rs tree.rs markdown.rs prompt.rs
+tests/                     # testes de integração
+```
+
+## Comandos
+
+| Comando | Descrição |
+|---------|-----------|
+| `arlm init [--index] [--no-index]` | Scaffold de `<proj>/.arlm.toml` (gitignored) + index |
+| `arlm index` | Faz stream do texto bruto; o servidor chunk+embed |
+| `arlm search` | Busca híbrida BM25 + semântica (server-side) |
+| `arlm query` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
+| `arlm memory list\|get\|invalidate\|cleanup` | Memória (admin, via RPC) |
+| `arlm persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
+| `arlm history [--limit] [--user]` | Histórico de consultas por usuário |
+| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
+
+> **Removidos (plan 019):** `run`, `context`, `session`, `status`, `cost`,
+> `cancel`, `checkpoints`, `restore-page`, `wiki`, `consolidate` (CLI), `decay`
+> (CLI) e `entities` (CLI). A manutenção server-side é feita por cron + RPC
+> admin `TriggerMaintenance` (e `arlm-server admin consolidate`).
+
+## Flags Principais
+
+### `arlm index`
+
+| Flag | Descrição | Default |
+|------|-----------|---------|
+| `--ignore <pattern>` | Padrões de ignore (glob) | `.env`, `*.pem`, `*.key` |
+
+> O chunking e os embeddings ocorrem **no servidor**. O cliente faz stream do
+> texto bruto (client-streaming gRPC `IndexProject`).
+
+### `arlm search`
+
+| Flag | Descrição | Default |
+|------|-----------|---------|
+| `--top-k <N>` | Número de resultados | 10 |
+| `--file-pattern <pat>` | Filtro por arquivo | — |
+| `--min-score <f>` | Score mínimo | — |
+
+### `arlm query`
+
+| Flag | Descrição | Default |
+|------|-----------|---------|
+| `-qa` | Digere via LLM local do usuário (emite `cache_id`) | off |
+| `--cache-id <id>` | Lookup determinístico 1:1 | — |
+
+## Formatos de Saída
+
+```bash
+arlm search "query" --format json       # JSON estruturado
+arlm search "query" --format tree       # Tabela colorida (default)
+arlm search "query" --format markdown   # Markdown
+arlm search "query" --format prompt      # Prompt para LLM
+```
+
+## Modo Servidor (`--server`)
+
+```bash
+arlm --server 127.0.0.1:50051 search "query"
+arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
+```
+
+- O endereço padrão é lido da seção `[server]` do `~/.arlm/arlm.toml` (global) ou
+  `.arlm.toml` (local, campo `addr`), depois da env `ARLM_SERVER_ADDR`.
+- Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e
+  **TLS automático** quando a URL usa `https://`.
+
+## Flags Globais
+
+```
+--format <fmt>          # json|tree|markdown|prompt
+--server <addr>         # usa gRPC remoto
+--verbose, -v           # logs estruturados (tracing)
+```
+
+## Uso
+
+```bash
+# Inicializar + indexar
+arlm init ./meu-projeto
+
+# Buscar com verbose
+arlm search "bug no login" --verbose
+
+# QA com digest via LLM do usuário (emite cache_id)
+arlm query "analise auth" -qa
+
+# Servidor remoto
+arlm --server 127.0.0.1:50051 search "query"
+```
+
+## Integração com Agentes
+
+### OPencode
+```json
+{
+  "name": "rlm_search",
+  "command": "arlm search \"{{task}}\" --format prompt"
+}
+```
+
+### Cursor
+```json
+{
+  "rlm": {
+    "command": "arlm search \"$ARGUMENTS\" --format prompt"
+  }
+}
+```
+
+## Build
+
+```bash
+cargo build -p arlm-cli                 # Debug
+cargo build --release -p arlm-cli       # Release (otimizado)
+# Binary: ./target/release/arlm
+```
+
+## Testes
+
+```bash
+CARGO_BUILD_JOBS=4 cargo test -p arlm-cli
+```
+
+Testes de integração ficam em `tests/`; não há `#[cfg(test)]` dentro de `src/`.
+########## crates/arlm-cli/MODULE.md
+# arlm-cli
+
+## O que faz
+CLI *agent-agnostic* do `arlm`: faz o parsing de argumentos (clap), resolve a
+configuração do usuário (**2 escopos**: `~/.arlm/arlm.toml` global +
+`.arlm.toml` local, com merge granular por campo) e roteia cada subcomando para
+um `arlm-server` remoto via gRPC (`--server`). É um **cliente gRPC puro**: não
+há modo local. Usa o **LLM local do usuário** (`arlm-llm`) apenas para *digest*
+(`query -qa`) e *summarize* (`persist`). O servidor é um plano de dados puro
+(LLM-free). Renderiza saídas em 4 formatos (`json`, `tree`, `markdown`, `prompt`)
+com logs estruturados (`tracing`).
+
+## Estrutura
+- `src/lib.rs` — API pública (re-exports) + allows de lint (pedantic estilo).
+- `src/main.rs` — *thin binary*: parse → `init_logging` → `dispatch`.
+- `src/cli/` — `Cli`, `Commands`, `OutputFormatArg` (clap derive, desacoplado
+  do entry point).
+- `src/dispatch/` — `mod` (resolução de config + branch para o servidor),
+  `server` (modo gRPC, renderiza respostas conforme `--format`). Não há modo
+  local — todo comando vai para o servidor.
+- `src/client.rs` — `ClientConfig` + `create_client` (retry/backoff, validação
+  de endereço, TLS automático).
+- `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,
+  `[server]`, `[project]`); arquivos legados `config.toml` **não** são lidos.
+- `src/util.rs` — `data_dir()`, resolução de projeto.
+- `src/commands/` — um módulo por subcomando:
+  - `serve/` — `arlm server` (gRPC/MCP data plane).
+  - `index`, `search`, `query`, `qa_cache` (plan 017: `run_ask`/`run_get`/
+    `run_invalidate` orquestrando os RPCs `QueryWithCache`/`GetAnswerById`/
+    `InvalidateCache`; a digestão LLM roda localmente via `arlm-llm`/`user_config`
+    e o `StoreAnswer` é fire-and-forget), `memory` (admin: list/get/invalidate/
+    cleanup → ListMemory/GetCache/InvalidateCache/TriggerMaintenance),
+    `persist` (escreve `wiki/*.md` via LLM do usuário), `history`.
+- `src/cli/commands.rs` — `Commands` enum (inclui `Query` estendido com
+  `cache_id`/`qa` e o subcomando `Memory`).
+- `src/output/` — `mod` (`Format`), `json`, `tree`, `markdown`, `prompt`.
+- `tests/` — testes de integração (um arquivo por módulo); sem `#[cfg(test)]`
+  em `src/`.
+
+## Dependências
+- Internas: `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-memory`,
+  `arlm-llm`, `arlm-embedding`, `arlm-proto`.
+- Externas: `clap` (derive), `tokio` (async), `tonic`/`prost` (gRPC),
+  `axum`/`tower-http` (HTTP/MCP), `tracing`/`tracing-subscriber` (logs),
+  `serde`/`tomoml` (config), `anyhow` (erros), `indicatif`/`console` (UI),
+  `mimalloc` (allocator), `parking_lot` (sync), `uuid`/`chrono`.
+
+## Convenções deste módulo
+- Sem `unwrap`/`expect`/`panic`/`unsafe` em `src/`; use `anyhow` + `?`.
+- Logs estruturados via `tracing` (`info!`/`debug!`/`warn!` com campos) e
+  *timing* via `std::time::Instant` registrado como `elapsed_ms`.
+- Segurança de thread: estado compartilhado é `Send + Sync`
+  (`Arc` + `parking_lot::Mutex`/`RwLock`).
+- Performance: evitar clones desnecessários; `with_capacity` quando o tamanho
+  é conhecido.
+- `dispatch` é o único ponto que conhece a árvore de comandos; `commands::*`
+  expõe `execute(Config)` estável.
+- Testes de API pública ficam em `tests/`; `src/` não contém `#[cfg(test)]`.
+
+## Comandos úteis
+```bash
+CARGO_BUILD_JOBS=4 cargo check   -p arlm-cli --all-targets
+CARGO_BUILD_JOBS=4 cargo clippy   -p arlm-cli --all-targets -- -D warnings
+CARGO_BUILD_JOBS=4 cargo test     -p arlm-cli
+cargo fmt -p arlm-cli -- --check
+```
+
+## Migrations
+- N/A — o crate não possui schema próprio (estado em `arlm-storage`/`arlm-memory`).
+
+## Rules
+- Padrão de produção: `dispatch::dispatch(cli, cfg)` resolve tudo e roteia para
+  o servidor gRPC.
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+💭 **Reasoning:**
+
+<details>
+<summary>Click to expand reasoning</summary>
+
+The per-crate docs are significantly stale:
+
+**crates/arlm-cli/README.md** — stale:
+- Structure lists `util.rs` (deleted), `commands/index.rs search.rs query.rs memory.rs history.rs` (don't exist as separate files; they're handled in dispatch/server.rs), `commands/serve/` (deleted)
+- Commands table: `arlm server` row (removed)
+- "Modo Servidor (`--server`)" section — flag doesn't exist
+- Global flags list `--server <addr>`
+- Usage examples with `--server`
+- Output formats: says default tree; actual default is text/jsonl for content... (root.rs says format option; dispatch defaults Format::Text for search/query, Path otherwise). The doc mentions prompt/tree etc. — partially accurate but let me not overreach; focus on staleness introduced by my changes.
+
+**crates/arlm-cli/MODULE.md** — stale:
+- Mentions `src/util.rs` (deleted)
+- `serve/` command module (deleted)
+- Dependencies list: arlm-storage, arlm-search, arlm-memory, arlm-embedding, axum/tower-http, uuid — all removed
+- Says "sem #[cfg(test)] em src/" — now user_config.rs and config.rs have inline tests! Also server config.rs. This convention claim is stale.
+- `dispatch::dispatch(cli, cfg)` signature changed (cfg loaded inside).
+
+Need to also check arlm-server README/MODULE, arlm-storage MODULE (conn hybrid mode + wal_checkpoint + purge_history_before missing), arlm-embedding MODULE (CachedEmbedder missing), arlm-proto MODULE/README (SearchTier enum values), arll-core MODULE (chunk_content_hash added to qa_cache), plus crate CHANGELOGs (they exist per-crate — should add entries).
+
+Also TODO.md files mention stale stuff but those are historical task lists; lower priority. Let me check the remaining ones quickly.
+
+</details>
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** for f in crates/arlm-server/MODULE.md crates/arlm-server/README.md crates/arlm-storage/MODULE.md crates/arlm-embedding/MODULE.md crates/arlm-proto/MODULE.md crates/arlm-core/MODULE.md; do echo "########## $f"; head -80 "$f"; done 2>/dev/null
+
+**Input:**
+```json
+{
+  "command": "for f in crates/arlm-server/MODULE.md crates/arlm-server/README.md crates/arlm-storage/MODULE.md crates/arlm-embedding/MODULE.md crates/arlm-proto/MODULE.md crates/arlm-core/MODULE.md; do echo \"########## $f\"; head -80 \"$f\"; done 2>/dev/null"
+}
+```
+
+**Output:**
+```
+########## crates/arlm-server/MODULE.md
+# arlm-server
+
+## O que faz
+Servidor gRPC long-running da plataforma arlm: **plano de dados puro, LLM-free**.
+Gerencia projetos (buffers), indexação (chunking + embeddings no servidor +
+LanceDB), busca híbrida, memória/histórico, manutenção (consolidate/decay) e
+QA-Cache — todas operações determinísticas (sem LLM). A digestão/sumarização
+ocorre no cliente (`arlm-cli`) via o LLM do usuário.
+
+## Estrutura
+- `src/main.rs` — entrypoint; subcomandos `up` (padrão), `status` (healthcheck gRPC), `admin consolidate`.
+- `src/lib.rs` — API pública do crate (`ServerConfig`, `AppState`, `run()`).
+- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`).
+- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config, maintenance config).
+- `src/store/mod.rs` — camada de dados tipada; re-exporta os submódulos.
+  - `store/projects.rs` — CRUD de `buffers` + `buffer_id_for_project`.
+  - `store/chunks.rs` — chunks, texts, FTS5, entities, contadores de buffer.
+  - `store/history.rs` — histórico de consultas por usuário.
+- `src/grpc/mod.rs` — dispatcher tonic; um `Timer` por handler.
+  - `grpc/project.rs` — create/list/get_project.
+  - `grpc/index.rs` — index_project (orquestra ingestão; client-streaming de texto).
+  - `grpc/search.rs` — search (BM25 FTS5 + semântica + RRF).
+  - `grpc/memory.rs` — `ListMemory`/`GetCache`/`InvalidateCache` (admin).
+  - `grpc/history.rs` — histórico de consultas (escopado por refresh token).
+  - `grpc/query_cache.rs` — `AuthRefresh` (plan 018) + `QueryWithCache`/
+    `StoreAnswer`/`GetAnswerById`/`InvalidateCache` (plan 017); lookup semântico
+    determinístico (embed de pergunta no espaço B `question_vector_store`),
+    staleness e invalidação (Stale/Delete + raio).
+  - `grpc/admin.rs` — `TriggerMaintenance` (consolidate/decay sob demanda).
+  - `grpc/status.rs` — get_server_status.
+  - `grpc/error.rs` — mapeamento erro→`Status` (`internal`/`not_found`/...).
+- `src/maintenance.rs` — consolidação/decay agendados (cron) + RPC admin.
+- `src/indexing.rs` — chunking determinístico (hash, linguagem, classificação).
+- `src/lifecycle.rs` — `run`/`run_server` (shutdown gracioso, TLS opcional); abre o
+  `QuestionVectorStore` (espaço B) e repassa para `AppState::new`.
+- `src/auth/mod.rs` — `authenticate(MetadataMap, &Storage) -> Result<AuthContext>` +
+  `require_admin(&AuthContext)`; roles `Admin`/`NonAdmin` (plan 018).
+- `src/qa_vectors` — re-export de `arlm_storage::QuestionVectorStore` (espaço B).
+- `src/timing.rs` — `Timer` com drop que emite `elapsed_ms`/`elapsed_us`.
+- `tests/` — `indexing_tests.rs`, `store_tests.rs`.
+
+## Dependências
+- Internas: `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-embedding`,
+  `arlm-memory`, `arlm-llm`, `arlm-proto`.
+- Externas: `tonic`/`prost` (gRPC), `tokio` (async), `rusqlite` (SQLite),
+  `futures`, `parking_lot`, `serde`/`toml` (config), `tracing` (logs), `uuid`,
+  `sha2`, `chrono`.
+
+## Convenções deste módulo
+- Todo acesso SQLite passa por `Storage::connection()` + `conn.execute(closure)`
+  (funciona em modo single e pooled) ou por `store::blocking(...)` para I/O bloqueante
+  fora do runtime async.
+- Handlers são `pub(crate) async fn handle_*` em módulos sob `grpc/`; o `mod.rs`
+  apenas faz o dispatch e cria um `Timer`.
+- Nunca use `.unwrap()`/`expect()` em código de produção — `clippy::unwrap_used`/
+  `clippy::expect_used` = `deny`.
+- Logs estruturados obrigatórios: `tracing::info!(run_id, ...)` com campos tipados.
+- Cada operação longa recebe um `timing::Timer` (drop emite tempo de execução).
+- Handlers de streaming registram um canal no `EventHub` e convertem `ServerEvent`→proto.
+
+## Comandos úteis
+```bash
+# Checagem rápida (12 threads)
+cargo check -p arlm-server
+
+# Testes de integração
+cargo test -p arlm-server
+
+# Lint
+cargo clippy -p arlm-server --all-targets
+
+# Rodar o servidor
+cargo run -p arlm-server -- up
+
+# Healthcheck (precisa de um servidor rodando)
+cargo run -p arlm-server -- status
+```
+
+## Migrations
+O schema é gerenciado por `arlm-storage` (ver `migrations/` do workspace):
+########## crates/arlm-server/README.md
+# arlm-server
+
+Long-running **gRPC server** (plano de dados) para a plataforma
+[arlm](https://github.com/anomalyco/arlm) (Agnostic RLM). Armazena, indexa e
+responde consultas para times, expondo uma API gRPC (tonic) consumível por
+qualquer agente de IA. **É um plano de dados puro e LLM-free**: não invoca
+nenhum LLM (a digestão/sumarização ocorre no cliente, `arlm-cli`, via o LLM do
+usuário).
+
+## Visão geral
+
+O servidor gerencia **projetos (buffers)**, **indexação** (chunking + embeddings
+no servidor + LanceDB), **busca híbrida**, **memória/histórico**, manutenção
+(consolidate/decay por cron + RPC admin) e — desde os planos 018/017 —
+**autenticação por refresh-token** e um **cache semântico de respostas
+digeridas (QA-Cache)**, com operações determinísticas (sem LLM).
+
+## Build & Run
+
+```bash
+# Desenvolvimento
+cargo run -p arlm-server -- up
+
+# Release
+cargo build --release -p arlm-server
+./target/release/arlm-server up
+
+# Checagem e testes (otimizado, 12 threads)
+cargo check -p arlm-server
+cargo test   -p arlm-server
+cargo clippy -p arlm-server --all-targets
+```
+
+### Subcomandos
+
+| Comando | Descrição |
+|----------|-----------|
+| `up`     | (padrão) Carrega config, abre storage, sobe o servidor gRPC. |
+| `status` | Consulta a saúde de um servidor em execução via `GetServerStatus` (usado pelo Docker HEALTHCHECK). |
+
+### Docker
+
+```bash
+# Build + run via compose (porta 50051, comando `up`)
+docker compose -f docker-compose.server.yml up --build
+```
+
+O `Dockerfile.server` expõe a porta `50051` e roda `HEALTHCHECK CMD arlm-server status`.
+
+## Configuração
+
+Arquivo de **host** montado no container (ex.: `./server.toml:/etc/arlm/server.toml`),
+lido de `ARLM_SERVER_CONFIG` ou, por padrão, `/etc/arlm/server.toml`. É um arquivo
+de host e possui **toda** a configuração do plano de dados — **não** há seção
+`[llm]` (o servidor é LLM-free). Exemplo:
+
+```toml
+listen_addr = "127.0.0.1:50051"
+data_dir    = "/data"
+# tls_cert / tls_key     # opcionais → habilita TLS
+
+[embedder]
+max_tokens = 512          # tamanho máximo de chunk (tokens)
+overlap_tokens = 64       # sobreposição entre chunks
+
+[qa_cache]
+enabled = true
+novel_k = 20              # chunks digeridos numa pergunta nova (client)
+provenance_k = 5          # chunks de provenance devolvidos com a resposta
+sim_high = 0.90           # acima disso → reaproveita + re-digest leve
+sim_floor = 0.40          # abaixo disso → trata como nova (digest completo)
+max_entries_per_project = 1000
+lambda_ms = 86400000      # decaimento do score LRU ponderado
+cache_ttl_ms = 0          # 0 = sem TTL
+
+[maintenance]
+interval_secs = 3600
+decay_score_floor = 0.05
+```
+
+########## crates/arlm-storage/MODULE.md
+# arlm-storage
+
+## O que faz
+Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único DB compartilhado isolado por `buffer_id`, mais um vector store embutido (`usearch`, HNSW single-file, L2). Suporta modo single (CLI) e pooled (servidor). CRUD para buffers, chunks, tasks, findings, history, patterns, entities, cache e summaries; backup/verify; e busca semântica por embedding.
+
+> **Removido (plan 019):** as tabelas/código de `runs` (RLM runs), `trajectories`
+> e `sessions` **foram removidos** do crate — o servidor é LLM-free e não há mais
+> runs de RLM nem sessões multi-turn. A tabela `summaries` permanece no schema
+> (legacy), mas não é mais populada server-side.
+
+## Estrutura
+- `src/lib.rs` — API pública (`pub use sqlite::Storage`, `pub use lance::{VectorStore, SearchResult, VectorEntry}`), `#![allow(...)]` de lint no nível do crate (pedantic style pré-existente + `cfg(test)`).
+- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`.
+- `src/sqlite/schema.rs` — `run_migrations` (13 migrations versionadas via `schema_version`), `ANALYZE` pós-migração.
+- `src/sqlite/buffers.rs` — `Buffer`/`NewBuffer`, `insert_buffer` (UUIDv7), `get_buffer`/`get_buffer_by_name`/`get_buffer_by_uuid`/`list_buffers`/`ensure_uuids`/`update_buffer_counts`/`delete_buffer`.
+- `src/sqlite/chunks.rs` — `Chunk`/`NewChunk`, `insert_chunk`/`get_chunk`/`get_chunk_content`/`insert_chunk_content`/`list_chunks`/`count_chunks`/`refresh_last_accessed`/`chunk_exists_by_hash`/`delete_chunks_for_file`/`get_chunks_last_accessed`.
+- `src/sqlite/entities.rs` — `extract_entities` (regex determinístico), `ensure_entities_fts`, `insert_chunk_entities`/`get_chunk_entities`, `search_entities`/`search_entities_all` (BM25 sobre FTS5), `EntityHit`.
+- `src/sqlite/cache.rs` — `get_cached_result`/`put_cached_result`/`invalidate_project_cache` (result_cache).
+- `src/sqlite/findings.rs` — `Finding`, `insert_finding`/`get_findings_for_task`.
+- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`.
+- `src/sqlite/patterns.rs` — `Pattern`, `insert_pattern`/`get_patterns`.
+- `src/sqlite/tasks.rs` — `Task`, `insert_task`/`get_pending_tasks`/`update_task_status`/`complete_task`.
+- `src/sqlite/summaries.rs` — `Summary`, `insert_summary`/`get_summaries`/`get_project_summary`/`get_summary_by_source_hash` (summaries hierárquicos — **legacy**, não populado server-side desde o plan 019).
+
+> **Removido (plan 019):** `src/sqlite/runs.rs` e `src/sqlite/nodes.rs` (runs de
+> RLM e trajectories) **foram excluídos** do crate. O servidor é LLM-free.
+- `src/sqlite/tokens.rs` — **Auth (plan 018):** `AuthTokenRow`/`NewToken`, `create_token`/`revoke_token_by_id`/`revoke_token_by_username`/`revoke_all_tokens`/`list_tokens`, `create_session`/`validate_session` (refresh-token rotation + sessões de curta duração, roles `Admin`/`NonAdmin`; plaintext do refresh nunca é persistido).
+- `src/sqlite/qa_cache.rs` — **QA-Cache (plan 017):** `QaCacheRow`/`StoreAnswerInput`/`StoredAnswer`, `question_hash`/`chunk_content_hash`, `store_answer` (idempotente/reserve-lock), `get_cached_answer`/`get_qa_by_id`/`get_qa_by_cache_id`/`get_qa_by_rowid`, `mark_qa_stale`/`delete_qa`/`touch_qa`, `mark_stale_by_hashes`, `evict_qa`/`evict_all_qa`/`count_qa`/`all_qa_ids`, `list_qa_hashes_for_buffer`, `invalidate_stale_cache_for_buffer`.
+- `src/sqlite/chunks.rs` — `Chunk`/`NewChunk`, `insert_chunk`/...; **adicionei** `get_chunks_with_content` e `chunk_hashes_for_buffer` (usados pela staleness hook do QA-Cache).
+- `src/lance/vectors.rs` — `VectorStore` (usearch), `VectorEntry`, `SearchResult`; `open`/`insert_vectors`/`search_similar`/`count`; filtro por `buffer_id` via `filtered_search`; mapa `chunk_id→buffer_id` persistido em `vectors.meta` ao lado de `vectors.usearch`.
+- `src/qa_vectors.rs` — `QuestionVectorStore` (usearch, espaço B **dedicado** para perguntas, métrica `Cos`); `open`/`insert`/`delete`/`search`/`clear`; chave = `qa_cache.id`.
+
+## Dependências
+- Internas: nenhuma (crate folha de storage; consumido por `arlm-search`, `arlm-server`, `arlm-cli`).
+- Externas (runtime): `rusqlite` (bundled + vtab, FTS5), `usearch` (HNSW single-file), `r2d2`/`r2d2_sqlite` (pool), `anyhow`, `serde`/`serde_json` (meta do vector store + summaries), `sha2`, `zstd`, `chrono`, `tokio` (async), `uuid` (v7), `parking_lot` (Mutex), `regex` (entities), `tracing`.
+- Externas (dev): `tempfile`.
+
+## Convenções deste módulo
+- Sem `unwrap`/`expect`/`panic` em `src/` (deny do workspace); use `anyhow::Result` + `?`. Os testes em `tests/` carregam `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, ...)]` no topo.
+- Modelo single-DB: tudo em `~/.arlm/knowledge.db`; isolamento por `buffer_id` em todas as tabelas.
+- `VectorStore` é `usearch` single-file: `reserve` antes de `add`, `save` após inserção (persiste índice + `vectors.meta`). Buffer filter é feito por predicado durante o `filtered_search` (o usearch não tem metadados nativos).
+- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor (WAL + r2d2, múltiplos readers).
+- `cargo clippy -p arlm-storage --all-targets -- -D warnings` deve passar (allows de pedantic style pré-existente no crate).
+
+## Comandos úteis
+```bash
+CARGO_BUILD_JOBS=4 cargo check  -p arlm-storage --all-targets
+CARGO_BUILD_JOBS=4 cargo test   -p arlm-storage   # 48 testes (src + tests/)
+CARGO_BUILD_JOBS=4 cargo clippy -p arlm-storage --all-targets -- -D warnings
+```
+
+## Migrations
+- `migrations/001_initial.sql` … `migrations/016_add_qa_cache.sql` (16 ao total), aplicadas idempotentemente e versionadas via tabela `schema_version`.
+- `001` base (chunks, buffers, tasks, findings, history, patterns); `004` runs/custos; `005` trajectories; `006` sessions; `007` result_cache; `008` events; `009` entities; `010` last_accessed_at; `011` UUIDv7 em buffers; `012` summaries; `013` server handlers (runs.project/model, sessions.updated_at, chunks_fts); `014` FTS5 de summaries; `015` auth (plan 018: `auth_tokens`/`auth_sessions`); `016` QA-Cache (plan 017: `qa_cache` + FTS5 `qa_cache_fts` + triggers).
+- `run_migrations` roda `ANALYZE` ao final para planner stats.
+
+## Rules
+- Mantenha a API pública estável para consumidores (`Storage`, `VectorStore`, `SearchResult`, `VectorEntry`).
+- Todo acesso a vetores é por `buffer_id` (filtro no `filtered_search`); o mapa `vectors.meta` deve ser sempre salvo junto com `vectors.usearch`.
+- Novas tabelas entram como migration versionada + `run_migrations`; novos CRUD ficam em módulo dedicado em `src/sqlite/`.
+- `insert_chunk`/`insert_chunk_content`/`delete_chunks_for_file` são escritas transacionais por arquivo (chunk + FTS + entities + vectors).
+- Backup = `Storage::backup(dest)` (`VACUUM INTO`, destino não pode existir); verificação = `Storage::verify()` (`PRAGMA integrity_check`).
+########## crates/arlm-embedding/MODULE.md
+# arlm-embedding
+
+## O que faz
+Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em chunks (code/text/markdown/recursive) e os converte em vetores densos para busca semântica. O modelo é configurável — `BgeM3` (candle, produção) ou `Lightweight` (determinístico, sem pesos, para testes) — com quantização INT8/INT4 e truncamento matryoshka opcionais.
+
+## Estrutura
+- `src/lib.rs` — API pública (re-exports), `Timer` de profiling.
+- `src/chunker/mod.rs` — `RawChunk` (zero-copy via `Cow`), trait `ChunkingStrategy`.
+- `src/chunker/code.rs` — chunking AST-aware para código (.rs/.py/.js).
+- `src/chunker/code/util.rs` — helpers: `merge_small_chunks`, `is_structure_start`, `byte_start_line`.
+- `src/chunker/text.rs` — chunking por parágrafos/sentenças.
+- `src/chunker/markdown.rs` — chunking por headings.
+- `src/chunker/recursive.rs` — chunking recursivo por tamanho.
+- `src/embedder/mod.rs` — trait `Embedder`, `Embedding`, `EmbeddingError`, `matryoshka_truncate`.
+- `src/embedder/bge_m3/mod.rs` — `BgeM3Embedder`, re-exports.
+- `src/embedder/bge_m3/model.rs` — `BgeM3Model` (transformer BGE-M3: embeddings + camadas).
+- `src/embedder/bge_m3/attention.rs` — `TransformerLayer`, `SelfAttention`.
+- `src/embedder/bge_m3/weights.rs` — carga de pesos (`QMatMul`, `Projection`).
+- `src/embedder/bge_m3/ops.rs` — `gelu`/`layer_norm`/`masked_fill`/`half_to_f32`.
+- `src/embedder/bge_m3/embedder.rs` — `embed`/`embed_batch` + cache matryoshka.
+- `src/embedder/lightweight.rs` — `LightweightEmbedder` (SHA-256→xorshift→f32, sem pesos).
+- `src/embedder/config.rs` — `EmbeddingConfig`, `EmbeddingModel`, `Quantization`, `build_embedder`.
+- `src/embedder/fallback.rs` — `FallbackEmbedder` (hash-based).
+- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256).
+- `src/embedder/batch.rs` — inferência em lote.
+- `src/pipeline.rs` — `IngestionPipeline` (file→chunks→embeddings), `IngestOptions`, `ChunkedText`, `from_config`.
+- `src/pipeline/files.rs` — `discover_files`, `glob_match`, `is_text_file`, `compress_text`, `compute_hash`.
+
+## Dependências
+- Internas: nenhuma (crate folha de embeddings; consumido por `arlm-search`, `arlm-memory`, `arlm-server`).
+- Externas: `candle-core`/`candle-nn`/`candle-transformers` (inferência BGE-M3, INT8/INT4 via `QMatMul`), `tokenizers`, `memmap2` (leitura zero-copy), `rayon` (chunking paralelo), `rusqlite` (cache), `sha2`/`hex` (chaves), `serde`/`serde_json`, `tracing` (logs), `anyhow`/`thiserror` (erros).
+
+## Convenções deste módulo
+- Sem `unwrap`/`expect`/`panic` em `src/`; use `anyhow::Result`+`?`. Sem `unsafe` (exceto `Mmap::map`/`transmute` com `#[allow]`, sob `deny`).
+- Testes unitários residem em `tests/` (extraídos de `src/`), usando helpers expostos (`pub`/`#[doc(hidden)]`) e `EmbeddingConfig::for_tests()` (Lightweight) — nada de pesos/candle em runtime.
+- `crate::Timer` marca pontos quentes (criação de pipeline, ingest, batch embed) com span + timing.
+- zstd é aplicado no ingest via `IngestOptions::compress` (default `true`); `ChunkedText::compressed` guarda o texto comprimido.
+- `Embedder` é a trait central — novos modelos (ex.: `gte-small`, `e5-small`) implementam-na e entram em `EmbeddingModel`.
+- `matryoshka_truncate(emb, dims)` é a fonte única de truncamento de dimensão.
+
+## Comandos úteis
+```bash
+# Check/clippy/test (use 4 jobs: candle é pesado p/ compilar)
+CARGO_BUILD_JOBS=4 cargo check -p arlm-embedding --all-targets
+CARGO_BUILD_JOBS=4 cargo clippy -p arlm-embedding --all-targets
+CARGO_BUILD_JOBS=4 cargo test   -p arlm-embedding
+
+# Benchmarks
+cargo bench -p arlm-embedding
+```
+
+## Migrations
+- N/A — o crate não possui schema próprio; o cache de embeddings usa SQLite interno gerenciado por `EmbeddingCache`.
+
+## Rules
+- Padrão de produção: `EmbeddingConfig::default()` → `BgeM3`, f32, matryoshka **512**.
+- Padrão de testes: `EmbeddingConfig::for_tests()` → `Lightweight`, matryoshka **256** (sem pesos/candle).
+- `Quantization::None` mantém f32; `Int8`/`Int4` usam `QMatMul` (fallback f32 se o peso não for quantizável).
+- `matryoshka_dims` sempre aplicado no `embed`/`embed_batch` do BGE-M3 (trunca ou preenche com 0.0).
+- Trocar de modelo NÃO altera o tempo de compilação do candle — apenas o peso/runtime de inferência.
+########## crates/arlm-proto/MODULE.md
+# arlm-proto
+
+## O que faz
+Crate de definições Protobuf + código gerado (prost/tonic) que define o contrato gRPC cliente↔servidor do arlm. É a fonte única da verdade para a comunicação entre `arlm-cli` (cliente gRPC puro) e `arlm-server` (plano de dados LLM-free).
+
+## Estrutura
+- `proto/*.proto` — schema dividido em sub-arquivos coesos (cada um < 300 linhas): `project`, `index`, `search`, `context`, `session`, `server`, `auth`, `query_cache`, `service`. Todos com `package arlm.v1;`. (`run.proto` e `summarize.proto` foram removidos — não há mais runs de RLM nem sumarização server-side.)
+- `build.rs` — `tonic_build::configure().build_server(true).build_client(true).compile_protos(&[...], &["proto"])`; compila os sub-arquivos e emite log estruturado de tempo de execução via `std::time::Instant` + `eprintln!`.
+- `src/lib.rs` — `pub mod proto { include!(concat!(env!("OUT_DIR"), "/arlm.v1.rs")); } pub use proto::*;`. O módulo `proto` carrega `#![allow(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery, dead_code, missing_docs)]` para isolar os lints do código gerado.
+- `tests/proto_contract.rs` — 6 testes de integração validando mensagens, enums, acessores e os módulos de serviço (`arlm_service_{client,server}`).
+
+## Dependências
+- Internas: nenhuma (crate folha de contrato; consumido por `arlm-server` e `arlm-cli`).
+- Externas (runtime): `prost`, `prost-types`, `tonic`, `http`.
+- Externas (build): `prost-build`, `tonic-build`.
+
+## Convenções deste módulo
+- O `.proto` é a fonte da verdade; os tipos gerados NÃO são editados à mão (ficam em `OUT_DIR`/`target`).
+- `package arlm.v1` garante versionamento explícito; mudanças breaking exigem novo pacote (ex.: `arlm.v2`).
+- Testes de integração em `tests/` validam o contrato gerado; usam `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]` no topo.
+- Nunca quebrar os caminhos downstream: `arlm_proto::proto::*`,
+  `arlm_proto::proto::arlm_service_server::ArlmService` e
+  `arlm_proto::proto::arlm_service_client::ArlmServiceClient`. Se o nome do
+  módulo gerado mudar (ex.: ao trocar o `package`), usar re-export em `lib.rs`.
+- Sem `unwrap`/`expect`/`panic` em `src/`/`build.rs`; `build.rs` usa `?` sobre `std::io::Result`.
+
+## Comandos úteis
+```bash
+CARGO_BUILD_JOBS=4 cargo check  -p arlm-proto
+CARGO_BUILD_JOBS=4 cargo test   -p arlm-proto   # 6 testes de contrato
+CARGO_BUILD_JOBS=4 cargo clippy -p arlm-proto --all-targets -- -D warnings
+```
+
+## Migrations
+- N/A — o proto não possui schema de banco; versionamento é feito via `package arlm.v1` (e evolução para `arlm.v2` em breaking changes).
+
+## Rules
+- Ao adicionar campo a uma mensagem já construída por literal exaustivo em `arlm-server`/`arlm-cli`, atualizar também o literal correspondente (ou documentar por que não).
+- Mantenha `arlm_proto::proto::*` e `arlm_service_{client,server}` válidos; use re-export em `lib.rs` se o módulo gerado mudar de nome.
+- `build.rs` deve sempre logar `stage=compile_protos duration_ms=... files=...`.
+- Valide o contrato com `cargo test -p arlm-proto` após qualquer mudança no `.proto`.
+########## crates/arlm-core/MODULE.md
+# arlm-core
+
+> **OBSOLETO (pós planos 017–020):** a seção "Estrutura" abaixo descreve a
+> arquitetura pré-refator, que incluía o engine RLM recursivo (planner → solver →
+> synthesizer). Esse engine **foi removido** do crate. O `arlm-core` agora contém
+> apenas tipos de domínio (`types/`), a resolução de plano do QA-Cache
+> (`qa_cache/`), o trait `MemoryProvider` (`memory.rs`) e logging. O sistema é
+> *on-demand* e *server-first*: o servidor é LLM-free e o cliente usa o LLM do
+> usuário apenas em `query -qa`/`persist`. Veja `plan/019-cli-consolidation.md`.
+
+## O que faz
+Biblioteca de suporte do `arlm`: tipos de domínio compartilhados, resolução de
+plano do QA-Cache (plan 017) e o trait `MemoryProvider`. Não possui engine RLM
+recursivo.
+
+## Estrutura atual
+- `src/lib.rs` — API pública (pub mod / pub use).
+- `src/types/{mod,enums,node,input}.rs` — tipos de domínio (`RlmNode`, `StartRunInput`, `CompactionPolicy`, `RlmBackend`, `Action`, `NodeStatus`).
+- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia
+  similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão
+  com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante
+  `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.
+- `src/memory.rs` — trait `MemoryProvider` + `SharedMemory`.
+- `src/logging.rs` — `ScopedTimer` / `Timer` (timing estruturado).
+- `src/concurrency.rs` — `map_concurrent`: fan-out paralelo limitado.
+- `src/docker.rs` — `DockerExecutor`: execução sandboxed.
+- `src/repl.rs` — `CodeExecutor`, `LlmQueryServer`, `find_code_blocks`, `format_repl_result`.
+- `src/guardrails.rs` — detecção de ciclo, normalização, sanitização de subtarefas.
+- `src/logging.rs` — `ScopedTimer` / `Timer`: timing estruturado.
+- `src/jsonl_logger.rs` — writer JSONL append-only (observabilidade).
+- `tests/` — 20 arquivos de teste de integração (um por módulo, 196 testes).
+- `benches/` — `rlm_loop.rs`, `search.rs` (criterion).
+
+## Dependências
+- Internas: `arlm-llm` (abstração de backend LLM).
+- Externas: `anyhow` / `thiserror` (erros, sem unwrap/expect em src), `tokio` + `futures`
+  (async + concorrência limitada), `parking_lot` (Mutex/RwLock p/ cache/router), `serde` /
+  `serde_json` (serialização), `tracing` / `tracing-subscriber` (logs estruturados + timing),
+  `sha2` / `hex` (chaves de cache / hash de dependência), `uuid` / `chrono` (IDs/timestamps),
+  `async-trait` (traits assíncronos).
+
+## Convenções deste módulo
+- Sem `unwrap`/`expect`/`panic` em `src/` (deny-lints do workspace); use `anyhow::Result` + `?`.
+- Sem `unsafe` (forbid).
+- Traits desacoplados: `CodeSearch` e `MemoryProvider` são definidos aqui; impls concretas
+  vivem em outros crates e são injetadas como `Arc<dyn Trait>` (comportamento honesto quando `None`).
+- Thread-safety: atômicos (`AtomicU32`/`AtomicU64`) para contadores; `Arc<str>` para IDs;
+  `EventSink` encapsula `Arc<EventBus>`.
+- Observabilidade: hot paths (`solve_task`, `synthesize`, run de nó, compaction, cache) usam
+  `ScopedTimer` e `tracing` com campos tipados.
+- Testes vivem em `tests/` como integração; arquivos de teste podem conter
+  `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]`.
+
+## Comandos úteis
+```bash
+# Checagem rápida (12 threads)
+cargo check -p arlm-core
+
+# Lint (limpo para este crate; ignora avisos de arlm-llm)
+cargo clippy -p arlm-core --all-targets
+
+# Testes de integração
+cargo test -p arlm-core
+cargo test --test engine_tests -p arlm-core
+
+# Benchmarks
+cargo bench -p arlm-core
+
+# Formatação
+cargo fmt -p arlm-core -- --check
+```
+
+## Migrations
+- N/A — este crate não possui schema de banco próprio; persistência de trajectory/memória é
+  feita por `MemoryProvider` (impl externa, tipicamente `arlm-memory`/`arlm-storage`).
+
+## Rules
+- `CodeSearch` e `MemoryProvider` são injetados como `Option<Arc<dyn Trait>>`; quando `None`,
+  o comportamento é honesto (`"search_code not configured"` / sem contexto), nunca placeholder falso.
+- Compaction respeita `CompactionPolicy` (`enabled`, `max_child_tokens`); só compacta quando
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+💭 **Reasoning:**
+
+<details>
+<summary>Click to expand reasoning</summary>
+
+Now I have a full picture of the stale per-crate docs. The user asked: "Toda documentação foi atualizada? Readms, changelogs, module.md?" — the honest answer is NO. The root README and CHANGELOG were updated, but the per-crate docs are stale:
+
+**Stale items found:**
+
+1. **crates/arlm-cli/README.md**:
+   - Structure lists `util.rs` (deleted), `commands/serve/` (deleted), nonexistent `commands/index.rs search.rs query.rs memory.rs history.rs` files
+   - Commands table has `arlm server` row
+   - "Modo Servidor (`--server`)" section + global flags list `--server <addr>`
+   - Usage examples with `--server`
+   - Says "Testes de integração ficam em tests/; não há #[cfg(test)] dentro de src/" — now false (user_config.rs has inline tests)
+
+2. **crates/arlm-cli/MODULE.md**:
+   - Lists `src/util.rs`, `commands/serve/`
+   - Dependencies: arlm-storage/search/memory/embedding, axum/tower-http, uuid — removed
+   - Claims no #[cfg(test)] in src/
+   - "dispatch::dispatch(cli, cfg)" signature
+
+3. **crates/arlm-server/MODULE.md**: mostly OK; missing new config sections (embedder full schema, search, storage tuning, history), mTLS in lifecycle description says "TLS opcional" — could mention mtls_ca; state.rs embedder from config.
+
+4. **crates/arlm-server/README.md**: config example is OLD format — `[qa_cache] enabled/lambda_ms/cache_ttl_ms` keys don't match actual QaCacheConfig fields (novel_k... eviction_lambda_ms etc.), embedder only max_tokens/overlap_tokens, missing search/storage/history/mtls. Needs update to current schema.
+
+5. **crates/arlm-storage/MODULE.md**: 
+   - conn.rs line mentions open/open_exclusive/open_pooled — should document hybrid pooled mode + wal_checkpoint
+   - history.rs line: add purge_history_before
+   - qa_cache.rs line: chunk_content_hash now re-export from arlm-core
+   - Dependencies: "Internas: nenhuma" — now arlm-core! Must update.
+
+6. **crates/arlm-embedding/MODULE.md**: cache.rs line says only EmbeddingCache — add CachedEmbedder wrapper.
+
+7. **crates/arlm-proto/MODULE.md / README.md**: check if SearchTier enum values documented anywhere; MODULE says tests validate contract (6 tests) — fine; need to note UNSPECIFIED? The proto README lists files; probably fine but let me check quickly for SearchTier references.
+
+8. **Per-crate CHANGELOGs** exist (arlm-cli/CHANGELOG.md etc.) — should add Unreleased entries for the changes affecting each crate:
+   - arlm-cli: serve/mcp/metrics removal, deps slimmed, TLS client fields, chunk_content_hash moved out, init tests
+   - arlm-server: config schema expansion, mTLS, pool hybrid, flusher, batched inserts, history retention, tier unspecified
+   - arlm-storage: open_pooled hybrid, wal_checkpoint, purge_history_before, arlm-core dep, chunk_content_hash re-export
+   - arlm-embedding: CachedEmbedder
+   - arlm-proto: SearchTier renumbering (breaking)
+   - arlm-core: chunk_content_hash added
+   - arlm-search/memory/llm: unaffected this round (search unchanged? arlm-search untouched yes; arlm-memory untouched; arlm-llm untouched)
+
+Let me check the crate CHANGELOG formats first to match style, and check proto README for enum listing. Also check TODO.md files — those are task lists; updating them wholesale isn't necessary but stale claims like "arlm server" could mislead; I'll leave TODOs as historical unless they contain wrong command references that matter. Actually the user explicitly asked "Readms, changelogs, module.md" — so focus on those three types across crates + root. TODO.md not mentioned; skip.
+
+Let me look at one crate CHANGELOG to see format.
+
+</details>
+
+Resposta honesta: **não** — o README raiz e o CHANGELOG raiz foram atualizados, mas os docs por-crate (`MODULE.md`/`README.md`/`CHANGELOG.md`) ainda estão defasados em vários pontos. Deixe-me verificar os formatos e atualizar tudo:
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** head -30 crates/arlm-cli/CHANGELOG.md; echo ===; head -20 crates/arlm-storage/CHANGELOG.md; echo ===; rg -n "SearchTier|TIER_" crates/arlm-proto/README.md crates/arlm-proto/MODULE.md 2>/dev/null | head
+
+**Input:**
+```json
+{
+  "command": "head -30 crates/arlm-cli/CHANGELOG.md; echo ===; head -20 crates/arlm-storage/CHANGELOG.md; echo ===; rg -n \"SearchTier|TIER_\" crates/arlm-proto/README.md crates/arlm-proto/MODULE.md 2>/dev/null | head"
+}
+```
+
+**Output:**
+```
+# Changelog
+
+## [Unreleased]
+
+> **Nota (planos 019/020):** o CLI passou por uma consolidação. Foram **removidos**
+> os subcomandos `run`, `context`, `session`, `status`, `cost`, `cancel`,
+> `checkpoints`, `restore-page`, `wiki`, `consolidate`, `decay` e `entities`, e o
+> modo local — o `arlm-cli` é agora um **cliente gRPC puro**. O servidor
+> (`arlm-server`) é um **plano de dados LLM-free**; o LLM do usuário é usado
+> apenas em `query -qa` (digest) e `persist` (summarize). A config passou a ser
+> 2-escopos (`~/.arlm/arlm.toml` global + `.arlm.toml` local; `[auth]` só-global);
+> `config.toml` legado não é lido. Veja `plan/019-cli-consolidation.md` e
+> `plan/020-config-consolidation.md`.
+
+### Added
+- **QA-Cache client (plan 017):** `commands/qa_cache.rs` com `run_ask` (usa
+  `QueryWithCache`; em HIT devolve a resposta sem chamar LLM; em MISS sintetiza
+  top-K com o LLM do usuário via `arlm-llm`/`config.toml`, exibe e dispara
+  `StoreAnswer` fire-and-forget), `run_get` (`GetAnswerById` por `cache_id`) e
+  `run_invalidate` (`InvalidateCache` Stale/Delete + raio).
+- `cli/commands.rs`: `Query` estendido com `--qa`/`--cache-id` e subcomando
+  `Cache { Invalidate | Get }`; `dispatch/server.rs` roteia para `qa_cache`.
+- Auth implícita: o cliente anexa `Authorization: Bearer <session>` obtido via
+  `AuthRefresh` (plan 018) nas chamadas gRPC que exigem autenticação.
+
+## [0.3.0] - 2026-08-20
+
+### Added
+- Reorganização em **lib + bin**: `src/lib.rs` expõe a API pública; `src/main.rs`
+  é um *thin binary* que faz parse e delega ao `dispatch`.
+zsh:1: == not found
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** sed -n '1,25p' crates/arlm-storage/CHANGELOG.md; echo "---PROTO---"; sed -n '1,20p' crates/arlm-proto/CHANGELOG.md
+
+**Input:**
+```json
+{
+  "command": "sed -n '1,25p' crates/arlm-storage/CHANGELOG.md; echo \"---PROTO---\"; sed -n '1,20p' crates/arlm-proto/CHANGELOG.md"
+}
+```
+
+**Output:**
+```
+# Changelog
+
+## [Unreleased]
+
+### Added
+- **QA-Cache (plan 017):** `src/sqlite/qa_cache.rs` — tabela `qa_cache` + FTS5
+  `qa_cache_fts` (triggers de sync), com `store_answer` idempotente (reserve-lock
+  por `(project, question_hash)`), lookup exato, staleness por `source_hashes`
+  (`mark_stale_by_hashes`), eviction LRU ponderado (`evict_qa`/`evict_all_qa`) e
+  hooks de invalidação por buffer (`invalidate_stale_cache_for_buffer`).
+- **QA-Cache (plan 017):** `src/qa_vectors.rs` — `QuestionVectorStore` (usearch,
+  métrica `Cos`, espaço B dedicado a perguntas; chave = `qa_cache.id`) para o
+  lookup semântico de cache no servidor.
+- **Auth (plan 018):** `src/sqlite/tokens.rs` — `auth_tokens`/`auth_sessions`,
+  `create_token`/`create_session`/`validate_session`/`revoke_*`/`list_tokens`
+  (refresh-token rotation + sessões de curta duração, roles `Admin`/`NonAdmin`).
+- `src/sqlite/chunks.rs`: `get_chunks_with_content` e `chunk_hashes_for_buffer`
+  (suportam a staleness hook do QA-Cache no reindex).
+- Migrations `015_add_auth.sql` (plan 018) e `016_add_qa_cache.sql` (plan 017).
+
+### Changed
+- `cargo clippy -p arlm-storage --all-targets -- -D warnings` limpo; testes de
+  integração `tests/qa_cache_test.rs` (8 testes) cobrindo hit/scoping/reserve-lock/
+  staleness/eviction/lookup direto/invalidação.
+
+---PROTO---
+# Changelog — arlm-proto
+
+All notable changes to the `arlm-proto` crate are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/).
+
+## [Unreleased]
+
+### Added
+- Integration tests in `tests/proto_contract.rs` validating generated messages,
+  enums, field accessors, and the tonic service client/server modules (resolves
+  TODO gap #2 — proto validation).
+
+> **Nota (planos 019/020):** `run.proto` e `summarize.proto` foram **removidos**
+> (o servidor é LLM-free; não há runs de RLM nem sumarização server-side). Os RPCs
+> de memória/histórico/manutenção (`ListMemory`, `GetCache`, `TriggerMaintenance`,
+> `GetHistory`) passaram a existir em `service.proto`. `context.proto`/`session.proto`
+> permanecem mas estão em desuso.
+- **Auth (plan 018):** `auth.proto` + `AuthRefresh` RPC (refresh-token rotation +
+  short-lived sessions; roles `Admin`/`NonAdmin`).
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+💭 **Reasoning:**
+
+<details>
+<summary>Click to expand reasoning</summary>
+
+Now I understand the format. Let me update all stale docs systematically:
+
+1. **crates/arlm-cli/README.md** — rewrite structure/commands/flags sections
+2. **crates/arlm-cli/MODULE.md** — update structure/deps/conventions
+3. **crates/arlm-cli/CHANGELOG.md** — add Unreleased entries (serve removal, TLS fields, deps)
+4. **crates/arlm-server/README.md** — fix config example to current schema
+5. **crates/arlm-server/MODULE.md** — mention new config sections, mTLS, storage tuning, history retention
+6. **crates/arlm-server/CHANGELOG.md** — check and add entries
+7. **crates/arlm-storage/MODULE.md** — conn.rs hybrid mode + wal_checkpoint + purge_history_before + arlm-core dep + chunk_content_hash note
+8. **crates/arlm-storage/CHANGELOG.md** — add entries
+9. **crates/arlm-embedding/MODULE.md** — CachedEmbedder
+10. **crates/arlm-embedding/CHANGELOG.md** — add entry
+11. **crates/arlm-proto/CHANGELOG.md** — SearchTier renumbering entry; MODULE.md maybe mention UNSPECIFIED in conventions? The MODULE doesn't enumerate enum values, fine as-is. README lists proto files only.
+12. **crates/arlm-core/MODULE.md / CHANGELOG.md** — chunk_content_hash added to qa_cache module.
+
+Let me do these edits efficiently. Start with cli README rewrite of stale parts.
+
+</details>
+
+Vou atualizar todos os docs por-crate agora. Começando pelo `arlm-cli`:
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** python3 - <<'PYEOF'
+import re
+
+# ─── crates/arlm-cli/README.md ───
+p = 'crates/arlm-cli/README.md'
+s = open(p).read()
+
+s = s.replace("""```
+src/
+├── lib.rs                 # API pública (re-exports)
+├── main.rs                # Thin binary: parse → logging → dispatch
+├── cli/                   # Definição dos argumentos (clap)
+│   ├── mod.rs
+│   ├── root.rs            # Cli, OutputFormatArg
+│   └── commands.rs        # enum Commands
+├── dispatch/              # Roteamento de comandos
+│   ├── mod.rs             # branch para o servidor gRPC
+│   └── server.rs          # modo servidor gRPC (formatado por --format)
+├── client.rs              # gRPC client: retry/backoff, TLS, validação
+├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)
+├── util.rs                # data_dir(), project resolution
+├── commands/              # um módulo por subcomando
+│   ├── mod.rs
+│   ├── index.rs  search.rs  query.rs  qa_cache.rs
+│   ├── memory.rs  persist.rs  history.rs
+│   └── serve/             # arlm server (gRPC/MCP data plane)
+└── output/
+    ├── mod.rs             # Format enum
+    └── json.rs tree.rs markdown.rs prompt.rs
+tests/                     # testes de integração
+```""",
+"""```
+src/
+├── lib.rs                 # API pública (re-exports)
+├── main.rs                # Thin binary: parse → logging → dispatch
+├── cli/                   # Definição dos argumentos (clap)
+│   ├── mod.rs
+│   ├── root.rs            # Cli, OutputFormatArg
+│   └── commands.rs        # enum Commands
+├── dispatch/              # Roteamento (único ponto que conhece os comandos)
+│   ├── mod.rs             # resolve user_config e delega ao server.rs
+│   └── server.rs          # todos os comandos via gRPC (+ init/index/search helpers)
+├── client.rs              # gRPC client: retry/backoff, TLS/mTLS, validação
+├── auth_client.rs         # AuthRefresh + interceptor Bearer com renovação
+├── backend.rs             # resolve o backend LLM do usuário ([llm.backends])
+├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)
+├── commands/              # módulos de comando
+│   ├── mod.rs
+│   ├── persist.rs         # wiki/*.md via LLM do usuário
+│   └── qa_cache.rs        # plan 017: run_ask/run_get/run_invalidate
+└── output/
+    ├── mod.rs             # Format enum
+    └── json.rs jsonl.rs tree.rs markdown.rs prompt.rs
+tests/                     # testes de integração (+ init/gitignore/disjunção)
+```""")
+
+s = s.replace("""| `arlm history [--limit] [--user]` | Histórico de consultas por usuário |
+| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
+""", """| `arlm history [--limit] [--user]` | Histórico de consultas por usuário |
+
+> **Removido (plan 020):** o subcomando `serve` (HTTP/MCP local) — o CLI é um
+> cliente gRPC puro; quem hospeda o data plane é o binário `arlm-server`.
+""")
+
+s = s.replace("""## Modo Servidor (`--server`)
+
+```bash
+arlm --server 127.0.0.1:50051 search "query"
+arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
+```
+
+- O endereço padrão é lido da seção `[server]` do `~/.arlm/arlm.toml` (global) ou
+  `.arlm.toml` (local, campo `addr`), depois da env `ARLM_SERVER_ADDR`.
+- Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e
+  **TLS automático** quando a URL usa `https://`.
+
+## Flags Globais
+
+```
+--format <fmt>          # json|tree|markdown|prompt
+--server <addr>         # usa gRPC remoto
+--verbose, -v           # logs estruturados (tracing)
+```""",
+"""## Conexão com o Servidor (plan 020)
+
+O alvo é resolvido na ordem: `.arlm.toml` local `[server].addr` →
+`~/.arlm/arlm.toml` global `[server].addr` → env `ARLM_SERVER_ADDR` →
+`127.0.0.1:50051`. Não existe flag `--server` (a config vive nos arquivos).
+
+```toml
+[server]
+addr = "https://arlm.corp.internal:50051"
+tls_ca = "/etc/arlm/tls/ca.crt"          # CA customizada (opcional)
+tls_cert = "/etc/arlm/tls/client.crt"    # mTLS: client cert (opcional,
+tls_key = "/etc/arlm/tls/client.key"     # exige também tls_key)
+```
+
+- Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e
+  **TLS automático** em `https://`; `tls_ca`/`tls_cert`/`tls_key` habilitam
+  CA customizada e mTLS mesmo sem scheme.
+
+## Flags Globais
+
+```
+--format <fmt>          # full_json|path|markdown|text|jsonl
+--project <path>, -p    # escopo do projeto
+--verbose, -v           # logs estruturados (tracing)
+```""")
+
+s = s.replace("""# QA com digest via LLM do usuário (emite cache_id)
+arlm query "analise auth" -qa
+
+# Servidor remoto
+arlm --server 127.0.0.1:50051 search "query"
+```""",
+"""# QA com digest via LLM do usuário (emite cache_id)
+arlm query "analise auth" -qa
+```""")
+
+s = s.replace("""Testes de integração ficam em `tests/`; não há `#[cfg(test)]` dentro de `src/`.""",
+"""Testes de integração ficam em `tests/` (incluindo `init_test.rs`, que valida o
+scaffold do `arlm init` e a ausência de dependências do data plane); testes
+unitários puros vivem em `#[cfg(test)]` inline (ex.: merge da `user_config`).""")
+
+open(p,'w').write(s)
+print("cli README ok")
+PYEOF
+
+**Input:**
+```json
+{
+  "command": "python3 - <<'PYEOF'\nimport re\n\n# ─── crates/arlm-cli/README.md ───\np = 'crates/arlm-cli/README.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"```\nsrc/\n├── lib.rs                 # API pública (re-exports)\n├── main.rs                # Thin binary: parse → logging → dispatch\n├── cli/                   # Definição dos argumentos (clap)\n│   ├── mod.rs\n│   ├── root.rs            # Cli, OutputFormatArg\n│   └── commands.rs        # enum Commands\n├── dispatch/              # Roteamento de comandos\n│   ├── mod.rs             # branch para o servidor gRPC\n│   └── server.rs          # modo servidor gRPC (formatado por --format)\n├── client.rs              # gRPC client: retry/backoff, TLS, validação\n├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)\n├── util.rs                # data_dir(), project resolution\n├── commands/              # um módulo por subcomando\n│   ├── mod.rs\n│   ├── index.rs  search.rs  query.rs  qa_cache.rs\n│   ├── memory.rs  persist.rs  history.rs\n│   └── serve/             # arlm server (gRPC/MCP data plane)\n└── output/\n    ├── mod.rs             # Format enum\n    └── json.rs tree.rs markdown.rs prompt.rs\ntests/                     # testes de integração\n```\"\"\",\n\"\"\"```\nsrc/\n├── lib.rs                 # API pública (re-exports)\n├── main.rs                # Thin binary: parse → logging → dispatch\n├── cli/                   # Definição dos argumentos (clap)\n│   ├── mod.rs\n│   ├── root.rs            # Cli, OutputFormatArg\n│   └── commands.rs        # enum Commands\n├── dispatch/              # Roteamento (único ponto que conhece os comandos)\n│   ├── mod.rs             # resolve user_config e delega ao server.rs\n│   └── server.rs          # todos os comandos via gRPC (+ init/index/search helpers)\n├── client.rs              # gRPC client: retry/backoff, TLS/mTLS, validação\n├── auth_client.rs         # AuthRefresh + interceptor Bearer com renovação\n├── backend.rs             # resolve o backend LLM do usuário ([llm.backends])\n├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)\n├── commands/              # módulos de comando\n│   ├── mod.rs\n│   ├── persist.rs         # wiki/*.md via LLM do usuário\n│   └── qa_cache.rs        # plan 017: run_ask/run_get/run_invalidate\n└── output/\n    ├── mod.rs             # Format enum\n    └── json.rs jsonl.rs tree.rs markdown.rs prompt.rs\ntests/                     # testes de integração (+ init/gitignore/disjunção)\n```\"\"\")\n\ns = s.replace(\"\"\"| `arlm history [--limit] [--user]` | Histórico de consultas por usuário |\n| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |\n\"\"\", \"\"\"| `arlm history [--limit] [--user]` | Histórico de consultas por usuário |\n\n> **Removido (plan 020):** o subcomando `serve` (HTTP/MCP local) — o CLI é um\n> cliente gRPC puro; quem hospeda o data plane é o binário `arlm-server`.\n\"\"\")\n\ns = s.replace(\"\"\"## Modo Servidor (`--server`)\n\n```bash\narlm --server 127.0.0.1:50051 search \"query\"\narlm --server 127.0.0.1:50051 query \"como funciona o login?\" -qa\n```\n\n- O endereço padrão é lido da seção `[server]` do `~/.arlm/arlm.toml` (global) ou\n  `.arlm.toml` (local, campo `addr`), depois da env `ARLM_SERVER_ADDR`.\n- Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e\n  **TLS automático** quando a URL usa `https://`.\n\n## Flags Globais\n\n```\n--format <fmt>          # json|tree|markdown|prompt\n--server <addr>         # usa gRPC remoto\n--verbose, -v           # logs estruturados (tracing)\n```\"\"\",\n\"\"\"## Conexão com o Servidor (plan 020)\n\nO alvo é resolvido na ordem: `.arlm.toml` local `[server].addr` →\n`~/.arlm/arlm.toml` global `[server].addr` → env `ARLM_SERVER_ADDR` →\n`127.0.0.1:50051`. Não existe flag `--server` (a config vive nos arquivos).\n\n```toml\n[server]\naddr = \"https://arlm.corp.internal:50051\"\ntls_ca = \"/etc/arlm/tls/ca.crt\"          # CA customizada (opcional)\ntls_cert = \"/etc/arlm/tls/client.crt\"    # mTLS: client cert (opcional,\ntls_key = \"/etc/arlm/tls/client.key\"     # exige também tls_key)\n```\n\n- Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e\n  **TLS automático** em `https://`; `tls_ca`/`tls_cert`/`tls_key` habilitam\n  CA customizada e mTLS mesmo sem scheme.\n\n## Flags Globais\n\n```\n--format <fmt>          # full_json|path|markdown|text|jsonl\n--project <path>, -p    # escopo do projeto\n--verbose, -v           # logs estruturados (tracing)\n```\"\"\")\n\ns = s.replace(\"\"\"# QA com digest via LLM do usuário (emite cache_id)\narlm query \"analise auth\" -qa\n\n# Servidor remoto\narlm --server 127.0.0.1:50051 search \"query\"\n```\"\"\",\n\"\"\"# QA com digest via LLM do usuário (emite cache_id)\narlm query \"analise auth\" -qa\n```\"\"\")\n\ns = s.replace(\"\"\"Testes de integração ficam em `tests/`; não há `#[cfg(test)]` dentro de `src/`.\"\"\",\n\"\"\"Testes de integração ficam em `tests/` (incluindo `init_test.rs`, que valida o\nscaffold do `arlm init` e a ausência de dependências do data plane); testes\nunitários puros vivem em `#[cfg(test)]` inline (ex.: merge da `user_config`).\"\"\")\n\nopen(p,'w').write(s)\nprint(\"cli README ok\")\nPYEOF"
+}
+```
+
+**Output:**
+```
+cli README ok
+
+```
+
+*[step-finish part]*
+
+*[patch part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** python3 - <<'PYEOF'
+p = 'crates/arlm-cli/MODULE.md'
+s = open(p).read()
+
+s = s.replace("""um `arlm-server` remoto via gRPC (`--server`). É um **cliente gRPC puro**: não
+há modo local.""", """um `arlm-server` remoto via gRPC. É um **cliente gRPC puro**: não há modo local
+(plan 020 removeu o subcomando `serve`/MCP e o data plane local).""")
+
+s = s.replace("""- `src/client.rs` — `ClientConfig` + `create_client` (retry/backoff, validação
+  de endereço, TLS automático).
+- `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,
+  `[server]`, `[project]`); arquivos legados `config.toml` **não** são lidos.
+- `src/util.rs` — `data_dir()`, resolução de projeto.
+- `src/commands/` — um módulo por subcomando:
+  - `serve/` — `arlm server` (gRPC/MCP data plane).
+  - `index`, `search`, `query`, `qa_cache` (plan 017: `run_ask`/`run_get`/
+    `run_invalidate` orquestrando os RPCs `QueryWithCache`/`GetAnswerById`/
+    `InvalidateCache`; a digestão LLM roda localmente via `arlm-llm`/`user_config`
+    e o `StoreAnswer` é fire-and-forget), `memory` (admin: list/get/invalidate/
+    cleanup → ListMemory/GetCache/InvalidateCache/TriggerMaintenance),
+    `persist` (escreve `wiki/*.md` via LLM do usuário), `history`.""",
+"""- `src/auth_client.rs` — `ArlmClient` autenticado (`AuthRefresh` + interceptor
+  Bearer com renovação em background).
+- `src/backend.rs` — resolve o backend LLM do usuário a partir de
+  `[[llm.backends]]` (usado por `query -qa` e `persist`).
+- `src/client.rs` — `ClientConfig` + `connect_channel` (retry/backoff, validação
+  de endereço, TLS automático em `https://` e mTLS via `[server].tls_ca`/
+  `tls_cert`/`tls_key`).
+- `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,
+  `[server]` com knobs TLS, `[project]`); merge granular testado inline;
+  arquivos legados `config.toml` **não** são lidos.
+- `src/commands/` — módulos de comando:
+  - `qa_cache` (plan 017: `run_ask`/`run_get`/`run_invalidate` orquestrando os
+    RPCs `QueryWithCache`/`GetAnswerById`/`InvalidateCache`; a digestão LLM roda
+    localmente via `arlm-llm`/`user_config` e o `StoreAnswer` é fire-and-forget),
+  - `persist` (escreve `wiki/*.md` via LLM do usuário).
+  - `index`, `search`, `query`, `memory` (admin), `history` vivem em
+    `dispatch/server.rs` (streaming de arquivos + renderização).""")
+
+s = s.replace("""## Dependências
+- Internas: `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-memory`,
+  `arlm-llm`, `arlm-embedding`, `arlm-proto`.
+- Externas: `clap` (derive), `tokio` (async), `tonic`/`prost` (gRPC),
+  `axum`/`tower-http` (HTTP/MCP), `tracing`/`tracing-subscriber` (logs),
+  `serde`/`tomoml` (config), `anyhow` (erros), `indicatif`/`console` (UI),
+  `mimalloc` (allocator), `parking_lot` (sync), `uuid`/`chrono`.""",
+"""## Dependências
+- Internas: `arlm-core`, `arlm-llm`, `arlm-proto` (plan 020: sem
+  `arlm-storage`/`arlm-search`/`arlm-memory` — o client nunca abre estado local;
+  guardado por teste em `tests/init_test.rs`).
+- Externas: `clap` (derive), `tokio`/`tokio-stream` (async/streaming),
+  `tonic` (gRPC), `tracing`/`tracing-subscriber` (logs), `serde`/`serde_json`/
+  `toml` (config/saída), `anyhow` (erros), `indicatif`/`console` (UI),
+  `chrono` (timestamps do wiki), `parking_lot` (sync), `mimalloc` (allocator).""")
+
+s = s.replace("""- Testes de API pública ficam em `tests/`; `src/` não contém `#[cfg(test)]`.""",
+"""- Testes de API pública ficam em `tests/`; funções puras críticas (merge da
+  config) têm `#[cfg(test)]` inline com tempdirs.""")
+
+s = s.replace("""- Padrão de produção: `dispatch::dispatch(cli, &rt)` resolve tudo e roteia para
+  o servidor gRPC.""", "")
+s = s.replace("""- Padrão de produção: `dispatch::dispatch(cli, cfg)` resolve tudo e roteia para
+  o servidor gRPC.""",
+"""- Padrão de produção: `dispatch::dispatch(cli, &rt)` carrega a user_config e
+  roteia tudo para o servidor gRPC; nenhum comando abre Storage local.""")
+
+open(p,'w').write(s)
+print("cli MODULE ok")
+
+# ─── arlm-cli CHANGELOG ───
+p = 'crates/arlm-cli/CHANGELOG.md'
+s = open(p).read()
+s = s.replace("""### Added
+- **QA-Cache client (plan 017):**""",
+"""### Changed / Removed (auditoria plan 020)
+- **Removido o subcomando `serve`** (HTTP/MCP local) e todo o resto do data
+  plane local: `commands/serve/`, `commands/mcp/`, `metrics.rs` e `util::data_dir`
+  — o CLI é um **cliente gRPC puro** e não depende mais de `arlm-storage`,
+  `arlm-search`, `arlm-memory`, `axum` nem `tower-http`.
+- **mTLS no cliente:** `[server] tls_ca`/`tls_cert`/`tls_key` na user config
+  (merge granular global→local) alimentam `ClientConfig` (`client.rs`).
+- Endereço resolvido apenas por `.arlm.toml` → `~/.arlm/arlm.toml` → env
+  `ARLM_SERVER_ADDR` (a flag inexistente `--server` saiu da documentação).
+
+### Added
+- Testes inline da `user_config`: merge granular/recursivo, `[auth]` só-global,
+  legados ignorados, precedência de endereço, campos TLS.
+- `tests/init_test.rs`: scaffold do `arlm init` (`.arlm.toml` gitignored,
+  sem credenciais locais) e guarda contra dependências de data plane.
+
+### QA-Cache client (plan 017):""".replace("### QA-Cache client (plan 017):","### Added\n- **QA-Cache client (plan 017):**"))
+
+# fix duplicate "### Added" header if created twice
+s = s.replace("### Added\n- Testes inline da `user_config`", "### Added (auditoria plan 020)\n- Testes inline da `user_config`",1)
+
+open(p,'w').write(s)
+print("cli CHANGELOG ok")
+PYEOF
+
+**Input:**
+```json
+{
+  "command": "python3 - <<'PYEOF'\np = 'crates/arlm-cli/MODULE.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"um `arlm-server` remoto via gRPC (`--server`). É um **cliente gRPC puro**: não\nhá modo local.\"\"\", \"\"\"um `arlm-server` remoto via gRPC. É um **cliente gRPC puro**: não há modo local\n(plan 020 removeu o subcomando `serve`/MCP e o data plane local).\"\"\")\n\ns = s.replace(\"\"\"- `src/client.rs` — `ClientConfig` + `create_client` (retry/backoff, validação\n  de endereço, TLS automático).\n- `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,\n  `[server]`, `[project]`); arquivos legados `config.toml` **não** são lidos.\n- `src/util.rs` — `data_dir()`, resolução de projeto.\n- `src/commands/` — um módulo por subcomando:\n  - `serve/` — `arlm server` (gRPC/MCP data plane).\n  - `index`, `search`, `query`, `qa_cache` (plan 017: `run_ask`/`run_get`/\n    `run_invalidate` orquestrando os RPCs `QueryWithCache`/`GetAnswerById`/\n    `InvalidateCache`; a digestão LLM roda localmente via `arlm-llm`/`user_config`\n    e o `StoreAnswer` é fire-and-forget), `memory` (admin: list/get/invalidate/\n    cleanup → ListMemory/GetCache/InvalidateCache/TriggerMaintenance),\n    `persist` (escreve `wiki/*.md` via LLM do usuário), `history`.\"\"\",\n\"\"\"- `src/auth_client.rs` — `ArlmClient` autenticado (`AuthRefresh` + interceptor\n  Bearer com renovação em background).\n- `src/backend.rs` — resolve o backend LLM do usuário a partir de\n  `[[llm.backends]]` (usado por `query -qa` e `persist`).\n- `src/client.rs` — `ClientConfig` + `connect_channel` (retry/backoff, validação\n  de endereço, TLS automático em `https://` e mTLS via `[server].tls_ca`/\n  `tls_cert`/`tls_key`).\n- `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,\n  `[server]` com knobs TLS, `[project]`); merge granular testado inline;\n  arquivos legados `config.toml` **não** são lidos.\n- `src/commands/` — módulos de comando:\n  - `qa_cache` (plan 017: `run_ask`/`run_get`/`run_invalidate` orquestrando os\n    RPCs `QueryWithCache`/`GetAnswerById`/`InvalidateCache`; a digestão LLM roda\n    localmente via `arlm-llm`/`user_config` e o `StoreAnswer` é fire-and-forget),\n  - `persist` (escreve `wiki/*.md` via LLM do usuário).\n  - `index`, `search`, `query`, `memory` (admin), `history` vivem em\n    `dispatch/server.rs` (streaming de arquivos + renderização).\"\"\")\n\ns = s.replace(\"\"\"## Dependências\n- Internas: `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-memory`,\n  `arlm-llm`, `arlm-embedding`, `arlm-proto`.\n- Externas: `clap` (derive), `tokio` (async), `tonic`/`prost` (gRPC),\n  `axum`/`tower-http` (HTTP/MCP), `tracing`/`tracing-subscriber` (logs),\n  `serde`/`tomoml` (config), `anyhow` (erros), `indicatif`/`console` (UI),\n  `mimalloc` (allocator), `parking_lot` (sync), `uuid`/`chrono`.\"\"\",\n\"\"\"## Dependências\n- Internas: `arlm-core`, `arlm-llm`, `arlm-proto` (plan 020: sem\n  `arlm-storage`/`arlm-search`/`arlm-memory` — o client nunca abre estado local;\n  guardado por teste em `tests/init_test.rs`).\n- Externas: `clap` (derive), `tokio`/`tokio-stream` (async/streaming),\n  `tonic` (gRPC), `tracing`/`tracing-subscriber` (logs), `serde`/`serde_json`/\n  `toml` (config/saída), `anyhow` (erros), `indicatif`/`console` (UI),\n  `chrono` (timestamps do wiki), `parking_lot` (sync), `mimalloc` (allocator).\"\"\")\n\ns = s.replace(\"\"\"- Testes de API pública ficam em `tests/`; `src/` não contém `#[cfg(test)]`.\"\"\",\n\"\"\"- Testes de API pública ficam em `tests/`; funções puras críticas (merge da\n  config) têm `#[cfg(test)]` inline com tempdirs.\"\"\")\n\ns = s.replace(\"\"\"- Padrão de produção: `dispatch::dispatch(cli, &rt)` resolve tudo e roteia para\n  o servidor gRPC.\"\"\", \"\")\ns = s.replace(\"\"\"- Padrão de produção: `dispatch::dispatch(cli, cfg)` resolve tudo e roteia para\n  o servidor gRPC.\"\"\",\n\"\"\"- Padrão de produção: `dispatch::dispatch(cli, &rt)` carrega a user_config e\n  roteia tudo para o servidor gRPC; nenhum comando abre Storage local.\"\"\")\n\nopen(p,'w').write(s)\nprint(\"cli MODULE ok\")\n\n# ─── arlm-cli CHANGELOG ───\np = 'crates/arlm-cli/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"\"\"### Added\n- **QA-Cache client (plan 017):**\"\"\",\n\"\"\"### Changed / Removed (auditoria plan 020)\n- **Removido o subcomando `serve`** (HTTP/MCP local) e todo o resto do data\n  plane local: `commands/serve/`, `commands/mcp/`, `metrics.rs` e `util::data_dir`\n  — o CLI é um **cliente gRPC puro** e não depende mais de `arlm-storage`,\n  `arlm-search`, `arlm-memory`, `axum` nem `tower-http`.\n- **mTLS no cliente:** `[server] tls_ca`/`tls_cert`/`tls_key` na user config\n  (merge granular global→local) alimentam `ClientConfig` (`client.rs`).\n- Endereço resolvido apenas por `.arlm.toml` → `~/.arlm/arlm.toml` → env\n  `ARLM_SERVER_ADDR` (a flag inexistente `--server` saiu da documentação).\n\n### Added\n- Testes inline da `user_config`: merge granular/recursivo, `[auth]` só-global,\n  legados ignorados, precedência de endereço, campos TLS.\n- `tests/init_test.rs`: scaffold do `arlm init` (`.arlm.toml` gitignored,\n  sem credenciais locais) e guarda contra dependências de data plane.\n\n### QA-Cache client (plan 017):\"\"\".replace(\"### QA-Cache client (plan 017):\",\"### Added\\n- **QA-Cache client (plan 017):**\"))\n\n# fix duplicate \"### Added\" header if created twice\ns = s.replace(\"### Added\\n- Testes inline da `user_config`\", \"### Added (auditoria plan 020)\\n- Testes inline da `user_config`\",1)\n\nopen(p,'w').write(s)\nprint(\"cli CHANGELOG ok\")\nPYEOF"
+}
+```
+
+**Output:**
+```
+cli MODULE ok
+cli CHANGELOG ok
+
+```
+
+*[step-finish part]*
+
+*[patch part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** head -60 crates/arlm-cli/CHANGELOG.md
+
+**Input:**
+```json
+{
+  "command": "head -60 crates/arlm-cli/CHANGELOG.md"
+}
+```
+
+**Output:**
+```
+# Changelog
+
+## [Unreleased]
+
+> **Nota (planos 019/020):** o CLI passou por uma consolidação. Foram **removidos**
+> os subcomandos `run`, `context`, `session`, `status`, `cost`, `cancel`,
+> `checkpoints`, `restore-page`, `wiki`, `consolidate`, `decay` e `entities`, e o
+> modo local — o `arlm-cli` é agora um **cliente gRPC puro**. O servidor
+> (`arlm-server`) é um **plano de dados LLM-free**; o LLM do usuário é usado
+> apenas em `query -qa` (digest) e `persist` (summarize). A config passou a ser
+> 2-escopos (`~/.arlm/arlm.toml` global + `.arlm.toml` local; `[auth]` só-global);
+> `config.toml` legado não é lido. Veja `plan/019-cli-consolidation.md` e
+> `plan/020-config-consolidation.md`.
+
+### Changed / Removed (auditoria plan 020)
+- **Removido o subcomando `serve`** (HTTP/MCP local) e todo o resto do data
+  plane local: `commands/serve/`, `commands/mcp/`, `metrics.rs` e `util::data_dir`
+  — o CLI é um **cliente gRPC puro** e não depende mais de `arlm-storage`,
+  `arlm-search`, `arlm-memory`, `axum` nem `tower-http`.
+- **mTLS no cliente:** `[server] tls_ca`/`tls_cert`/`tls_key` na user config
+  (merge granular global→local) alimentam `ClientConfig` (`client.rs`).
+- Endereço resolvido apenas por `.arlm.toml` → `~/.arlm/arlm.toml` → env
+  `ARLM_SERVER_ADDR` (a flag inexistente `--server` saiu da documentação).
+
+### Added (auditoria plan 020)
+- Testes inline da `user_config`: merge granular/recursivo, `[auth]` só-global,
+  legados ignorados, precedência de endereço, campos TLS.
+- `tests/init_test.rs`: scaffold do `arlm init` (`.arlm.toml` gitignored,
+  sem credenciais locais) e guarda contra dependências de data plane.
+
+### Added
+- **QA-Cache client (plan 017):** `commands/qa_cache.rs` com `run_ask` (usa
+  `QueryWithCache`; em HIT devolve a resposta sem chamar LLM; em MISS sintetiza
+  top-K com o LLM do usuário via `arlm-llm`/`config.toml`, exibe e dispara
+  `StoreAnswer` fire-and-forget), `run_get` (`GetAnswerById` por `cache_id`) e
+  `run_invalidate` (`InvalidateCache` Stale/Delete + raio).
+- `cli/commands.rs`: `Query` estendido com `--qa`/`--cache-id` e subcomando
+  `Cache { Invalidate | Get }`; `dispatch/server.rs` roteia para `qa_cache`.
+- Auth implícita: o cliente anexa `Authorization: Bearer <session>` obtido via
+  `AuthRefresh` (plan 018) nas chamadas gRPC que exigem autenticação.
+
+## [0.3.0] - 2026-08-20
+
+### Added
+- Reorganização em **lib + bin**: `src/lib.rs` expõe a API pública; `src/main.rs`
+  é um *thin binary* que faz parse e delega ao `dispatch`.
+- Módulo `cli/` desacoplado: definição dos argumentos (`Cli`, `Commands`,
+  `SessionAction`, `parse_tool_arg`) separada do entry point.
+- Módulo `dispatch/` (`mod`/`local`/`server`) com resolução de precedência de
+  config e roteamento local/servidor.
+- `commands/run/`, `commands/serve/`, `commands/mcp/` e `output/live_tree/`
+  divididos em módulos menores (<300 linhas), type-driven, com logs
+  estruturados (`tracing`) e *timing* de fases (`elapsed_ms`).
+- Testes de `#[cfg(test)]` extraídos de `src/` para `tests/` (26 arquivos de
+  integração); `src/` não contém mais testes inline.
+- `--persist` em `run`, `search` e `context` (salva output no wiki).
+- `--llm` obrigatório em `run` (erro claro sem a flag).
+- Cliente gRPC resiliente: retry com backoff exponencial, validação de
+  endereço e TLS automático (`https://`).
+- Seção `[server]` no `config.toml` (`addr`) lida pelo `ClientConfig::load()`.
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+Agora `arlm-server` (README config example + MODULE + CHANGELOG):
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** sed -n '80,140p' crates/arlm-server/README.md
+
+**Input:**
+```json
+{
+  "command": "sed -n '80,140p' crates/arlm-server/README.md"
+}
+```
+
+**Output:**
+```
+
+> **Auth (plan 018):** os RPCs mutantes (`InvalidateCache`, e qualquer RPC que
+> escreva estado) exigem um `Authorization: Bearer <session>` válido; operações
+> de invalidação exigem role `Admin`. Clientes obtêm a sessão via `AuthRefresh`.
+> O servidor é **LLM-free**: nenhum LLM é invocado aqui — a síntese (digest/
+> summarize) roda no client (config `arlm-llm` do usuário).
+
+## Arquitetura
+
+Fluxo: `arlm-cli` → `arlm-server` (gRPC, plano de dados) → `arlm-storage`
+(SQLite + LanceDB) / `arlm-embedding` (chunking + embeddings) / `arlm-memory`
+(memória, histórico, manutenção). Sem `arlm-core` engine nem `arlm-llm` no
+servidor.
+
+- **Handlers gRPC** (`src/grpc/*`): um arquivo por grupo de RPCs
+  (`index`, `search`, `query_cache`, `memory`, `history`, `status`, `admin`).
+- **`auth`** (`src/auth/mod.rs`): autenticação por refresh-token + sessões de curta
+  duração (plan 018); `authenticate(md, storage)` e `require_admin(ctx)` usados
+  pelos handlers que escrevem estado.
+- **`store`** (`src/store/*`): camada de acesso a dados tipada e segura para o pool.
+- **QA-Cache (plan 017):** `AppState` carrega `question_vector_store`
+  (`QuestionVectorStore`, espaço B) + `qa_config` (`QaCacheConfig`) e
+  dispara um worker de eviction LRU em background; `grpc/index.rs` marca entradas
+  `stale` por hash de chunk no pós-reindex.
+- **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)
+  e RPC admin `TriggerMaintenance`.
+- **`state`**: `AppState` compartilhado (storage, embedder, vector store,
+  question_vector_store, qa_config, maintenance config).
+- **`timing`**: `Timer` que emite `elapsed_ms`/`elapsed_us` estruturados via `tracing`.
+
+## Query-Answer Cache (plan 017)
+
+Cache semântico de respostas **digeridas no client** (o servidor não invoca LLM:
+só embedding + SQLite + usearch + ops determinísticas). Fluxo:
+
+1. Cliente → `QueryWithCache(pergunta, project)`. Servidor faz busca híbrida +
+   lookup semântico no `question_vector_store` (espaço B) e decide hit/tier.
+2. **HIT** → devolve `answer_text` + provenance (`source_chunk_ids`); client não
+   chama LLM (0 custo). **MISS** → devolve top-K chunks crus; client faz 1 chamada
+   LLM, exibe e dispara `StoreAnswer` (fire-and-forget).
+3. Cada resposta recebe um `cache_id` (UUIDv7) estável → `GetAnswerById` devolve
+   exatamente a mesma resposta+provenance (anti-drift para sub-agentes).
+4. **Invalidação:** `InvalidateCache` com `mode=Stale` (soft, força re-digest) ou
+   `Delete` (hard), mais `similarity_radius` para invalidar o cluster de perguntas
+   vizinhas (cadeia de erros). Exigido role `Admin`.
+5. **Staleness:** no reindex, chunks cujo hash mudou marcam as entradas de cache
+   dependentes como `stale` → próxima query força re-digest com código fresco.
+
+Configurável via `[qa_cache]` (limiares, `novel_k`, `provenance_k`, eviction).
+
+## Testes
+
+Os testes de integração vivem em `tests/` (fora de `src/`):
+
+- `tests/indexing_tests.rs` — chunking, linguagem, hashing.
+- `tests/store_tests.rs` — CRUD de projetos/memória/histórico.
+
+## Licença
+
+Idêntica ao workspace (MIT/Apache-2.0).
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** python3 - <<'PYEOF'
+p = 'crates/arlm-server/README.md'
+s = open(p).read()
+
+s = s.replace("""```toml
+listen_addr = "127.0.0.1:50051"
+data_dir    = "/data"
+# tls_cert / tls_key     # opcionais → habilita TLS
+
+[embedder]
+max_tokens = 512          # tamanho máximo de chunk (tokens)
+overlap_tokens = 64       # sobreposição entre chunks
+
+[qa_cache]
+enabled = true
+novel_k = 20              # chunks digeridos numa pergunta nova (client)
+provenance_k = 5          # chunks de provenance devolvidos com a resposta
+sim_high = 0.90           # acima disso → reaproveita + re-digest leve
+sim_floor = 0.40          # abaixo disso → trata como nova (digest completo)
+max_entries_per_project = 1000
+lambda_ms = 86400000      # decaimento do score LRU ponderado
+cache_ttl_ms = 0          # 0 = sem TTL
+
+[maintenance]
+interval_secs = 3600
+decay_score_floor = 0.05
+```""",
+"""```toml
+listen_addr = "127.0.0.1:50051"   # env ARLM_SERVER_ADDR sobrescreve
+data_dir = "/data/arlm"           # env ARLM_DATA_DIR sobrescreve
+
+# tls_cert = "/etc/arlm/tls/server.crt"   # opcional → habilita TLS
+# tls_key  = "/etc/arlm/tls/server.key"
+# mtls_ca  = "/etc/arlm/tls/ca.crt"       # exige client cert (mTLS)
+
+pool_size = 4            # pool de escrita SQLite (1 = single-mode)
+flush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)
+max_batch_size = 50      # linhas por transação de indexação
+
+[embedder]
+model = "ollama"                      # bge-m3 | ollama | lightweight
+# model_dir = "/models/bge-m3"        # p/ bge-m3 (model.safetensors)
+ollama_url = "http://127.0.0.1:11434"
+ollama_model = "all-minilm"
+ollama_prefix = ""                    # "search_document: " p/ família nomic
+dims = 384
+batch_size = 64                       # chunks por request de embedding
+max_tokens = 512                      # tamanho máximo de chunk (tokens)
+overlap_tokens = 64                   # sobreposição entre chunks
+cache = true                          # cache SQLite de embeddings
+
+[search]
+tier = "hybrid"                       # default p/ SEARCH_TIER_UNSPECIFIED
+top_k = 10                            # quando o request omite max_results
+max_tokens = 8000                     # budget do contexto
+
+[qa_cache]
+novel_k = 20              # chunks digeridos numa pergunta nova (client)
+provenance_k = 5          # chunks de provenance devolvidos com a resposta
+sim_high = 0.90           # acima disso → hit de alta confiança
+sim_floor = 0.40          # abaixo disso → nova pergunta (digest completo)
+tier_steps = [0.90, 0.80, 0.70, 0.60, 0.50]
+jaccard_min = 0.5
+question_vector_dims = 1024
+max_entries_per_project = 1000
+eviction_lambda_ms = 604800000
+eviction_interval_ms = 60000
+
+[maintenance]
+interval_secs = 3600                  # 0 = desliga o ticker
+decay_score_floor = 0.05
+
+[history]
+retention_days = 90                   # purge no ticker; 0 = mantém
+```
+
+> Os knobs de embedding vivem **apenas** aqui — as envs `ARLM_OLLAMA_*`,
+> `ARLM_MODEL_DIR` e `ARLM_EMBED_BATCH` foram substituídas pelo `[embedder]`
+> do `server.toml` (plan 020).""")
+
+s = s.replace("""- **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)
+  e RPC admin `TriggerMaintenance`.""",
+"""- **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)
+  + purge de histórico (`[history] retention_days`) e RPC admin
+  `TriggerMaintenance`.""")
+
+open(p,'w').write(s)
+print("server README ok")
+PYEOF
+
+**Input:**
+```json
+{
+  "command": "python3 - <<'PYEOF'\np = 'crates/arlm-server/README.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"```toml\nlisten_addr = \"127.0.0.1:50051\"\ndata_dir    = \"/data\"\n# tls_cert / tls_key     # opcionais → habilita TLS\n\n[embedder]\nmax_tokens = 512          # tamanho máximo de chunk (tokens)\noverlap_tokens = 64       # sobreposição entre chunks\n\n[qa_cache]\nenabled = true\nnovel_k = 20              # chunks digeridos numa pergunta nova (client)\nprovenance_k = 5          # chunks de provenance devolvidos com a resposta\nsim_high = 0.90           # acima disso → reaproveita + re-digest leve\nsim_floor = 0.40          # abaixo disso → trata como nova (digest completo)\nmax_entries_per_project = 1000\nlambda_ms = 86400000      # decaimento do score LRU ponderado\ncache_ttl_ms = 0          # 0 = sem TTL\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.05\n```\"\"\",\n\"\"\"```toml\nlisten_addr = \"127.0.0.1:50051\"   # env ARLM_SERVER_ADDR sobrescreve\ndata_dir = \"/data/arlm\"           # env ARLM_DATA_DIR sobrescreve\n\n# tls_cert = \"/etc/arlm/tls/server.crt\"   # opcional → habilita TLS\n# tls_key  = \"/etc/arlm/tls/server.key\"\n# mtls_ca  = \"/etc/arlm/tls/ca.crt\"       # exige client cert (mTLS)\n\npool_size = 4            # pool de escrita SQLite (1 = single-mode)\nflush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)\nmax_batch_size = 50      # linhas por transação de indexação\n\n[embedder]\nmodel = \"ollama\"                      # bge-m3 | ollama | lightweight\n# model_dir = \"/models/bge-m3\"        # p/ bge-m3 (model.safetensors)\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                    # \"search_document: \" p/ família nomic\ndims = 384\nbatch_size = 64                       # chunks por request de embedding\nmax_tokens = 512                      # tamanho máximo de chunk (tokens)\noverlap_tokens = 64                   # sobreposição entre chunks\ncache = true                          # cache SQLite de embeddings\n\n[search]\ntier = \"hybrid\"                       # default p/ SEARCH_TIER_UNSPECIFIED\ntop_k = 10                            # quando o request omite max_results\nmax_tokens = 8000                     # budget do contexto\n\n[qa_cache]\nnovel_k = 20              # chunks digeridos numa pergunta nova (client)\nprovenance_k = 5          # chunks de provenance devolvidos com a resposta\nsim_high = 0.90           # acima disso → hit de alta confiança\nsim_floor = 0.40          # abaixo disso → nova pergunta (digest completo)\ntier_steps = [0.90, 0.80, 0.70, 0.60, 0.50]\njaccard_min = 0.5\nquestion_vector_dims = 1024\nmax_entries_per_project = 1000\neviction_lambda_ms = 604800000\neviction_interval_ms = 60000\n\n[maintenance]\ninterval_secs = 3600                  # 0 = desliga o ticker\ndecay_score_floor = 0.05\n\n[history]\nretention_days = 90                   # purge no ticker; 0 = mantém\n```\n\n> Os knobs de embedding vivem **apenas** aqui — as envs `ARLM_OLLAMA_*`,\n> `ARLM_MODEL_DIR` e `ARLM_EMBED_BATCH` foram substituídas pelo `[embedder]`\n> do `server.toml` (plan 020).\"\"\")\n\ns = s.replace(\"\"\"- **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)\n  e RPC admin `TriggerMaintenance`.\"\"\",\n\"\"\"- **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)\n  + purge de histórico (`[history] retention_days`) e RPC admin\n  `TriggerMaintenance`.\"\"\")\n\nopen(p,'w').write(s)\nprint(\"server README ok\")\nPYEOF"
+}
+```
+
+**Output:**
+```
+server README ok
+
+```
+
+*[step-finish part]*
+
+*[patch part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** python3 - <<'PYEOF'
+p = 'crates/arlm-server/MODULE.md'
+s = open(p).read()
+
+s = s.replace("""- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`).
+- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config, maintenance config).""",
+"""- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`):
+  listen/TLS/`mtls_ca`, storage (`pool_size`, `flush_interval_ms`,
+  `max_batch_size`), `[embedder]` (model/model_dir/ollama_*/dims/batch_size/
+  max_tokens/overlap_tokens/cache), `[search]` (tier/top_k/max_tokens),
+  `[qa_cache]`, `[maintenance]`, `[history] retention_days`. Load de
+  `ARLM_SERVER_CONFIG` (default `/etc/arlm/server.toml`) + overrides
+  `ARLM_SERVER_ADDR`/`ARLM_DATA_DIR`.
+- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config,
+  maintenance config); `load_embedder(&EmbedderConfig)` constrói o embedder da
+  config (bge-m3/ollama/lightweight) e `wrap_with_cache` habilita o
+  `CachedEmbedder` quando `[embedder].cache = true`.""")
+
+s = s.replace("""- `src/lifecycle.rs` — `run`/`run_server` (shutdown gracioso, TLS opcional); abre o
+  `QuestionVectorStore` (espaço B) e repassa para `AppState::new`.""",
+"""- `src/lifecycle.rs` — `run`/`run_server`: shutdown gracioso, TLS + mTLS
+  (`client_ca_root`), storage pooled híbrido (`pool_size > 1` →
+  `Storage::open_pooled`), flusher de WAL (`flush_interval_ms` →
+  `wal_checkpoint(PASSIVE)`) e ticker de manutenção com purge de histórico
+  (`retention_days`). Abre os vector stores (espaço A/B) e repassa para
+  `AppState::new`.""")
+
+s = s.replace("""  - `grpc/index.rs` — index_project (orquestra ingestão; client-streaming de texto).
+  - `grpc/search.rs` — search (BM25 FTS5 + semântica + RRF).""",
+"""  - `grpc/index.rs` — index_project (client-streaming de texto; server chunka
+    com `[embedder].max_tokens` e persiste em transações de `max_batch_size`;
+    embed em lotes de `[embedder].batch_size`).
+  - `grpc/search.rs` — search/context (BM25 FTS5 + semântica + RRF; defaults de
+    `[search]` aplicados a tier não informado, top_k e budget de contexto).""")
+
+open(p,'w').write(s)
+print("server MODULE ok")
+
+# ─── arlm-server CHANGELOG ───
+p = 'crates/arlm-server/CHANGELOG.md'
+s = open(p).read()
+s = s.replace("## [Unreleased]\n", """## [Unreleased]
+
+### Added (auditoria plan 020)
+- **Schema completo do `server.toml`:** `[embedder]` com
+  `model`/`model_dir`/`ollama_url`/`ollama_model`/`ollama_prefix`/`dims`/
+  `batch_size`/`quantization`/`cache`; `[search]` (`tier`/`top_k`/`max_tokens`);
+  storage tuning (`pool_size`, `flush_interval_ms`, `max_batch_size`);
+  `mtls_ca` (mTLS via `client_ca_root`) e `[history] retention_days`.
+- **Embedder pela config:** `state::load_embedder(&EmbedderConfig)` substitui as
+  envs `ARLM_MODEL_DIR`/`ARLM_OLLAMA_*`; `CachedEmbedder` ativado por
+  `[embedder].cache` (cache SQLite por hash, degrada sem falhar).
+- **Storage híbrido:** `pool_size > 1` abre `open_pooled` (escritas no pool +
+  conexão compartilhada p/ leituras); flusher de WAL checkpoint PASSIVE;
+  indexação grava em transações de `max_batch_size` linhas
+  (`store::insert_chunks_batched`).
+- **Purge de histórico** pelo ticker de manutenção (`[history] retention_days`,
+  default 90; 0 = mantém).
+
+### Changed (auditoria plan 020)
+- Proto `SearchTier` renumerado: `SEARCH_TIER_UNSPECIFIED = 0` (tiers 1–4);
+  requests sem tier resolvem para `[search].tier` do `server.toml`.
+- `admin create-refresh` aponta para `~/.arlm/arlm.toml [auth]`.
+""",1)
+open(p,'w').write(s)
+print("server CHANGELOG ok")
+PYEOF
+
+**Input:**
+```json
+{
+  "command": "python3 - <<'PYEOF'\np = 'crates/arlm-server/MODULE.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`).\n- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config, maintenance config).\"\"\",\n\"\"\"- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`):\n  listen/TLS/`mtls_ca`, storage (`pool_size`, `flush_interval_ms`,\n  `max_batch_size`), `[embedder]` (model/model_dir/ollama_*/dims/batch_size/\n  max_tokens/overlap_tokens/cache), `[search]` (tier/top_k/max_tokens),\n  `[qa_cache]`, `[maintenance]`, `[history] retention_days`. Load de\n  `ARLM_SERVER_CONFIG` (default `/etc/arlm/server.toml`) + overrides\n  `ARLM_SERVER_ADDR`/`ARLM_DATA_DIR`.\n- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config,\n  maintenance config); `load_embedder(&EmbedderConfig)` constrói o embedder da\n  config (bge-m3/ollama/lightweight) e `wrap_with_cache` habilita o\n  `CachedEmbedder` quando `[embedder].cache = true`.\"\"\")\n\ns = s.replace(\"\"\"- `src/lifecycle.rs` — `run`/`run_server` (shutdown gracioso, TLS opcional); abre o\n  `QuestionVectorStore` (espaço B) e repassa para `AppState::new`.\"\"\",\n\"\"\"- `src/lifecycle.rs` — `run`/`run_server`: shutdown gracioso, TLS + mTLS\n  (`client_ca_root`), storage pooled híbrido (`pool_size > 1` →\n  `Storage::open_pooled`), flusher de WAL (`flush_interval_ms` →\n  `wal_checkpoint(PASSIVE)`) e ticker de manutenção com purge de histórico\n  (`retention_days`). Abre os vector stores (espaço A/B) e repassa para\n  `AppState::new`.\"\"\")\n\ns = s.replace(\"\"\"  - `grpc/index.rs` — index_project (orquestra ingestão; client-streaming de texto).\n  - `grpc/search.rs` — search (BM25 FTS5 + semântica + RRF).\"\"\",\n\"\"\"  - `grpc/index.rs` — index_project (client-streaming de texto; server chunka\n    com `[embedder].max_tokens` e persiste em transações de `max_batch_size`;\n    embed em lotes de `[embedder].batch_size`).\n  - `grpc/search.rs` — search/context (BM25 FTS5 + semântica + RRF; defaults de\n    `[search]` aplicados a tier não informado, top_k e budget de contexto).\"\"\")\n\nopen(p,'w').write(s)\nprint(\"server MODULE ok\")\n\n# ─── arlm-server CHANGELOG ───\np = 'crates/arlm-server/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"## [Unreleased]\\n\", \"\"\"## [Unreleased]\n\n### Added (auditoria plan 020)\n- **Schema completo do `server.toml`:** `[embedder]` com\n  `model`/`model_dir`/`ollama_url`/`ollama_model`/`ollama_prefix`/`dims`/\n  `batch_size`/`quantization`/`cache`; `[search]` (`tier`/`top_k`/`max_tokens`);\n  storage tuning (`pool_size`, `flush_interval_ms`, `max_batch_size`);\n  `mtls_ca` (mTLS via `client_ca_root`) e `[history] retention_days`.\n- **Embedder pela config:** `state::load_embedder(&EmbedderConfig)` substitui as\n  envs `ARLM_MODEL_DIR`/`ARLM_OLLAMA_*`; `CachedEmbedder` ativado por\n  `[embedder].cache` (cache SQLite por hash, degrada sem falhar).\n- **Storage híbrido:** `pool_size > 1` abre `open_pooled` (escritas no pool +\n  conexão compartilhada p/ leituras); flusher de WAL checkpoint PASSIVE;\n  indexação grava em transações de `max_batch_size` linhas\n  (`store::insert_chunks_batched`).\n- **Purge de histórico** pelo ticker de manutenção (`[history] retention_days`,\n  default 90; 0 = mantém).\n\n### Changed (auditoria plan 020)\n- Proto `SearchTier` renumerado: `SEARCH_TIER_UNSPECIFIED = 0` (tiers 1–4);\n  requests sem tier resolvem para `[search].tier` do `server.toml`.\n- `admin create-refresh` aponta para `~/.arlm/arlm.toml [auth]`.\n\"\"\",1)\nopen(p,'w').write(s)\nprint(\"server CHANGELOG ok\")\nPYEOF"
+}
+```
+
+**Output:**
+```
+server MODULE ok
+server CHANGELOG ok
+
+```
+
+*[step-finish part]*
+
+*[patch part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** python3 - <<'PYEOF'
+# ─── arlm-storage MODULE ───
+p = 'crates/arlm-storage/MODULE.md'
+s = open(p).read()
+
+s = s.replace("- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`.",
+"- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, `wal_checkpoint(PASSIVE)` (flush de WAL, plan 020) e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`. `open_pooled` é **híbrido**: pool r2d2 para escritas (`connection()`) + conexão compartilhada dedicada para os read helpers (`conn()`), válidos nos dois modos.")
+
+s = s.replace("- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`.",
+"- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`/`purge_history_before` (retenção `[history] retention_days` do server, plan 020; testado inline).")
+
+s = s.replace("`question_hash`/`chunk_content_hash`,", "`question_hash`/`chunk_content_hash` (re-export de `arlm_core::qa_cache::chunk_content_hash` — cliente e servidor compartilham a mesma implementação, plan 020),")
+
+s = s.replace("""## Dependências
+- Internas: nenhuma (crate folha de storage; consumido por `arlm-search`, `arlm-server`, `arlm-cli`).""",
+"""## Dependências
+- Internas: `arlm-core` (hash canônico de chunk compartilhado com o client; plan 020).""")
+
+s = s.replace("- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor (WAL + r2d2, múltiplos readers).",
+"- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor híbrido (WAL + r2d2 p/ escritas concorrentes + shared conn p/ leituras; plan 020 `pool_size`).")
+
+open(p,'w').write(s)
+print("storage MODULE ok")
+
+# ─── arlm-storage CHANGELOG ───
+p = 'crates/arlm-storage/CHANGELOG.md'
+s = open(p).read()
+s = s.replace("## [Unreleased]\n", """## [Unreleased]
+
+### Added (auditoria plan 020)
+- `Storage::wal_checkpoint()` — checkpoint PASSIVE do WAL para o flusher
+  `flush_interval_ms` do server.
+- `Storage::purge_history_before(cutoff)` — retenção de histórico
+  (`[history] retention_days`), com teste unitário.
+
+### Changed (auditoria plan 020)
+- `open_pooled` tornou-se **híbrido**: mantém a conexão compartilhada além do
+  pool, então `conn()` (read helpers) funciona em ambos os modos — habilita
+  `pool_size > 1` no server sem reescrever os read paths.
+- `chunk_content_hash` agora é re-export de `arlm_core::qa_cache` (fonte única
+  compartilhada com o client gRPC puro).
+""",1)
+open(p,'w').write(s)
+print("storage CHANGELOG ok")
+
+# ─── arlm-embedding MODULE + CHANGELOG ───
+p = 'crates/arlm-embedding/MODULE.md'
+s = open(p).read()
+s = s.replace("- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256).",
+"- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256) + **`CachedEmbedder`** (wrapper da trait `Embedder`: hits pulam inferência, batch com mistos hit/miss, falhas de cache degradam a pass-through; ativado por `server.toml [embedder].cache = true`).")
+open(p,'w').write(s)
+
+p = 'crates/arlm-embedding/CHANGELOG.md'
+s = open(p).read()
+if s.rstrip().startswith('#'):
+    marker = "## [Unreleased]"
+    if marker in s:
+        s = s.replace(marker, marker + "\n\n### Added (auditoria plan 020)\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed). Consumido pelo `arlm-server` quando `server.toml [embedder].cache = true`.\n",1)
+    else:
+        s = s.replace("# Changelog", "# Changelog\n\n## [Unreleased]\n\n### Added\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed).\n",1)
+    open(p,'w').write(s)
+    print("embedding CHANGELOG ok")
+else:
+    print("embedding CHANGELOG vazio?")
+
+print("embedding MODULE ok")
+PYEOF
+
+**Input:**
+```json
+{
+  "command": "python3 - <<'PYEOF'\n# ─── arlm-storage MODULE ───\np = 'crates/arlm-storage/MODULE.md'\ns = open(p).read()\n\ns = s.replace(\"- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`.\",\n\"- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, `wal_checkpoint(PASSIVE)` (flush de WAL, plan 020) e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`. `open_pooled` é **híbrido**: pool r2d2 para escritas (`connection()`) + conexão compartilhada dedicada para os read helpers (`conn()`), válidos nos dois modos.\")\n\ns = s.replace(\"- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`.\",\n\"- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`/`purge_history_before` (retenção `[history] retention_days` do server, plan 020; testado inline).\")\n\ns = s.replace(\"`question_hash`/`chunk_content_hash`,\", \"`question_hash`/`chunk_content_hash` (re-export de `arlm_core::qa_cache::chunk_content_hash` — cliente e servidor compartilham a mesma implementação, plan 020),\")\n\ns = s.replace(\"\"\"## Dependências\n- Internas: nenhuma (crate folha de storage; consumido por `arlm-search`, `arlm-server`, `arlm-cli`).\"\"\",\n\"\"\"## Dependências\n- Internas: `arlm-core` (hash canônico de chunk compartilhado com o client; plan 020).\"\"\")\n\ns = s.replace(\"- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor (WAL + r2d2, múltiplos readers).\",\n\"- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor híbrido (WAL + r2d2 p/ escritas concorrentes + shared conn p/ leituras; plan 020 `pool_size`).\")\n\nopen(p,'w').write(s)\nprint(\"storage MODULE ok\")\n\n# ─── arlm-storage CHANGELOG ───\np = 'crates/arlm-storage/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"## [Unreleased]\\n\", \"\"\"## [Unreleased]\n\n### Added (auditoria plan 020)\n- `Storage::wal_checkpoint()` — checkpoint PASSIVE do WAL para o flusher\n  `flush_interval_ms` do server.\n- `Storage::purge_history_before(cutoff)` — retenção de histórico\n  (`[history] retention_days`), com teste unitário.\n\n### Changed (auditoria plan 020)\n- `open_pooled` tornou-se **híbrido**: mantém a conexão compartilhada além do\n  pool, então `conn()` (read helpers) funciona em ambos os modos — habilita\n  `pool_size > 1` no server sem reescrever os read paths.\n- `chunk_content_hash` agora é re-export de `arlm_core::qa_cache` (fonte única\n  compartilhada com o client gRPC puro).\n\"\"\",1)\nopen(p,'w').write(s)\nprint(\"storage CHANGELOG ok\")\n\n# ─── arlm-embedding MODULE + CHANGELOG ───\np = 'crates/arlm-embedding/MODULE.md'\ns = open(p).read()\ns = s.replace(\"- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256).\",\n\"- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256) + **`CachedEmbedder`** (wrapper da trait `Embedder`: hits pulam inferência, batch com mistos hit/miss, falhas de cache degradam a pass-through; ativado por `server.toml [embedder].cache = true`).\")\nopen(p,'w').write(s)\n\np = 'crates/arlm-embedding/CHANGELOG.md'\ns = open(p).read()\nif s.rstrip().startswith('#'):\n    marker = \"## [Unreleased]\"\n    if marker in s:\n        s = s.replace(marker, marker + \"\\n\\n### Added (auditoria plan 020)\\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed). Consumido pelo `arlm-server` quando `server.toml [embedder].cache = true`.\\n\",1)\n    else:\n        s = s.replace(\"# Changelog\", \"# Changelog\\n\\n## [Unreleased]\\n\\n### Added\\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed).\\n\",1)\n    open(p,'w').write(s)\n    print(\"embedding CHANGELOG ok\")\nelse:\n    print(\"embedding CHANGELOG vazio?\")\n\nprint(\"embedding MODULE ok\")\nPYEOF"
+}
+```
+
+**Output:**
+```
+storage MODULE ok
+storage CHANGELOG ok
+embedding CHANGELOG ok
+embedding MODULE ok
+
+```
+
+*[step-finish part]*
+
+*[patch part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** head -20 crates/arlm-embedding/CHANGELOG.md; echo "===CORE==="; head -25 crates/arlm-core/CHANGELOG.md
+
+**Input:**
+```json
+{
+  "command": "head -20 crates/arlm-embedding/CHANGELOG.md; echo \"===CORE===\"; head -25 crates/arlm-core/CHANGELOG.md"
+}
+```
+
+**Output:**
+```
+# Changelog
+
+## [0.4.0] - 2026-08-20
+
+### Changed
+- **Regularização do crate** (processo de 8 etapas):
+  - Testes unitários inline de `src/` extraídos para `tests/`
+    (`chunker_test.rs`, `embedder_test.rs`, `bge_m3_test.rs`, `pipeline_test.rs`) — 78 testes.
+  - Arquivos grandes (>300 linhas) divididos:
+    - `embedder/bge_m3.rs` → `bge_m3/{mod,model,attention,weights,ops,embedder}.rs`.
+    - `pipeline.rs` → `pipeline.rs` + `pipeline/files.rs` (discover/hash/compress/glob).
+    - `chunker/code.rs` → `chunker/code.rs` + `chunker/code/util.rs`.
+  - `crate::Timer` (span + timing) adicionado em pontos quentes (pipeline_new, pipeline_ingest, batch_embed_uncached).
+  - `cargo clippy --all-targets` sem warnings (pedantic limpo).
+
+### Added
+- zstd agora é **efeito no pipeline de ingest**: `ChunkedText::compressed: Option<Vec<u8>>`
+  preenchido por `compress_text` quando `IngestOptions::compress` está ativo (default `true`).
+- Helpers expostos para os testes: `chunker::code::{is_structure_start, merge_small_chunks}`,
+  `pipeline::glob_match`, `bge_m3::{gelu, layer_norm, masked_fill, half_to_f32, apply_matryoshka}`,
+===CORE===
+# Changelog
+
+Todas as mudanças notáveis deste crate são documentadas neste arquivo.
+
+O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
+e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
+
+## [Unreleased]
+
+### Added
+- **QA-Cache engine (plan 017):** `src/qa_cache.rs` com `QaThresholds`
+  (configurável), `QaPlan` e `resolve_plan(similarity, jaccard, t)` — mapeia a
+  similaridade de pergunta (cosseno) **e** a checagem secundária (Jaccard de
+  provenance) em um plano de digestão com widening adaptativo; invariante
+  `provenance_k ≤ digest_k ≤ novel_k` sempre respeitada. Módulo puro (sem
+  storage/embedder), coberto por testes unitários.
+
+### Adicionado
+- Traits desacoplados `CodeSearch` (`tools.rs`) e `MemoryProvider` (`memory.rs`) para injeção
+  de backends de busca/memória sem dependência rígida de outros crates (#1, #2, #3).
+- `EventSink` (`events.rs`): wrapper thread-safe sobre `Arc<EventBus>` (#7).
+- `RootCompactor::summarize_with_llm` para sumarização LLM das saídas acumuladas (#6).
+- `compact_children_if_needed` no `synthesizer` com compaction por tokens respeitando
+  `CompactionPolicy` (#4, #5).
+- `SamplingArgs.seed: Option<u64>` propagado para as chamadas LLM (#8).
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+💭 **Reasoning:**
+
+<details>
+<summary>Click to expand reasoning</summary>
+
+The embedding CHANGELOG had no `[Unreleased]` section — my script's fallback replaced "# Changelog" adding Unreleased. Let me verify what it did (it printed "embedding CHANGELOG ok" — need to check whether marker existed; the output shows `## [0.4.0]` directly after header, so no [Unreleased]; the fallback branch added one after "# Changelog"). Let me verify, then add arlm-core entries (chunk_content_hash) and proto entry (SearchTier). Then check remaining stale docs: docs/opencode-setup.md (already fixed), OLLAMA_EMBED_PROPOSED.md (historical proposal doc — probably fine to leave as historical), STAGING.md (has historical note already), agents/README.md (fixed), root README (done).
+
+Also crates/arlm-proto/MODULE.md mentions "6 testes de integração" — now still 6? proto_contract.rs had 6 tests; unchanged count. Fine.
+
+Check embedding changelog result.
+
+</details>
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** head -12 crates/arlm-embedding/CHANGELOG.md
+
+**Input:**
+```json
+{
+  "command": "head -12 crates/arlm-embedding/CHANGELOG.md"
+}
+```
+
+**Output:**
+```
+# Changelog
+
+## [0.4.0] - 2026-08-20
+
+### Changed
+- **Regularização do crate** (processo de 8 etapas):
+  - Testes unitários inline de `src/` extraídos para `tests/`
+    (`chunker_test.rs`, `embedder_test.rs`, `bge_m3_test.rs`, `pipeline_test.rs`) — 78 testes.
+  - Arquivos grandes (>300 linhas) divididos:
+    - `embedder/bge_m3.rs` → `bge_m3/{mod,model,attention,weights,ops,embedder}.rs`.
+    - `pipeline.rs` → `pipeline.rs` + `pipeline/files.rs` (discover/hash/compress/glob).
+    - `chunker/code.rs` → `chunker/code.rs` + `chunker/code/util.rs`.
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: edit
+**Status:** completed
+**Title:** crates/arlm-embedding/CHANGELOG.md
+
+**Input:**
+```json
+{
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-embedding/CHANGELOG.md",
+  "newString": "# Changelog\n\n## [Unreleased]\n\n### Added\n- **`CachedEmbedder`** (`src/embedder/cache.rs`): wrapper da trait `Embedder`\n  com cache SQLite por hash de conteúdo — hit pula a inferência; batch suporta\n  misto hit/miss; erros de cache degradam para pass-through (nunca falham o\n  embed). Consumido pelo `arlm-server` quando `server.toml [embedder].cache =\n  true` (plan 020), com testes unitários.\n\n## [0.4.0] - 2026-08-20",
+  "oldString": "# Changelog\n\n## [0.4.0] - 2026-08-20"
+}
+```
+
+**Output:**
+```
+Edit applied successfully.
+```
+
+*[step-finish part]*
+
+*[patch part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** python3 - <<'PYEOF'
+# ─── arlm-core CHANGELOG + MODULE ───
+p = 'crates/arlm-core/CHANGELOG.md'
+s = open(p).read()
+s = s.replace("""## [Unreleased]
+
+### Added
+- **QA-Cache engine (plan 017):**""",
+"""## [Unreleased]
+
+### Added (auditoria plan 020)
+- `qa_cache::chunk_content_hash(content)` — hash canônico SHA-256 hex do texto
+  do chunk, movido do `arlm-storage` para cá: cliente (digest-once
+  `StoreAnswer.source_hashes`) e servidor (staleness) compartilham a mesma
+  implementação sem o client depender de storage. Re-exportado pelo storage.
+
+### Added
+- **QA-Cache engine (plan 017):**""",1)
+open(p,'w').write(s)
+print("core CHANGELOG ok")
+
+p = 'crates/arlm-core/MODULE.md'
+s = open(p).read()
+s = s.replace("""- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia""",
+"""- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia""")
+s = s.replace("""  similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão
+  com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante
+  `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.""",
+"""  similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão
+  com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante
+  `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.
+- `src/qa_cache/mod.rs` também abriga **`chunk_content_hash`** (SHA-256 hex,
+  plan 020): fonte única do hash canônico de chunk usada pelo client
+  (`StoreAnswer.source_hashes`) e pelo server (staleness); re-exportada por
+  `arlm-storage`.""")
+
+open(p,'w').write(s)
+print("core MODULE ok")
+
+# ─── arlm-proto CHANGELOG ───
+p = 'crates/arlm-proto/CHANGELOG.md'
+s = open(p).read()
+s = s.replace("## [Unreleased]\n", """## [Unreleased]
+
+### Changed (auditoria plan 020 — BREAKING)
+- `SearchTier` renumerado: **`SEARCH_TIER_UNSPECIFIED = 0`** é o wire-default e
+  o servidor resolve para o seu `[search].tier`; tiers explícitos passam a ser
+  `TIER_BM25 = 1`, `TIER_SEMANTIC = 2`, `TIER_HYBRID = 3`, `TIER_ENTITY = 4`.
+  Clientes/servidores antigos em versões mistas verão tiers trocados — alinhe
+  as duas pontas (política break-total dos planos 019/020).
+- Contrato (`tests/proto_contract.rs`) atualizado para os novos valores.
+""",1)
+open(p,'w').write(s)
+print("proto CHANGELOG ok")
+PYEOF
+
+**Input:**
+```json
+{
+  "command": "python3 - <<'PYEOF'\n# ─── arlm-core CHANGELOG + MODULE ───\np = 'crates/arlm-core/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"\"\"## [Unreleased]\n\n### Added\n- **QA-Cache engine (plan 017):**\"\"\",\n\"\"\"## [Unreleased]\n\n### Added (auditoria plan 020)\n- `qa_cache::chunk_content_hash(content)` — hash canônico SHA-256 hex do texto\n  do chunk, movido do `arlm-storage` para cá: cliente (digest-once\n  `StoreAnswer.source_hashes`) e servidor (staleness) compartilham a mesma\n  implementação sem o client depender de storage. Re-exportado pelo storage.\n\n### Added\n- **QA-Cache engine (plan 017):**\"\"\",1)\nopen(p,'w').write(s)\nprint(\"core CHANGELOG ok\")\n\np = 'crates/arlm-core/MODULE.md'\ns = open(p).read()\ns = s.replace(\"\"\"- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia\"\"\",\n\"\"\"- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia\"\"\")\ns = s.replace(\"\"\"  similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão\n  com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante\n  `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.\"\"\",\n\"\"\"  similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão\n  com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante\n  `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.\n- `src/qa_cache/mod.rs` também abriga **`chunk_content_hash`** (SHA-256 hex,\n  plan 020): fonte única do hash canônico de chunk usada pelo client\n  (`StoreAnswer.source_hashes`) e pelo server (staleness); re-exportada por\n  `arlm-storage`.\"\"\")\n\nopen(p,'w').write(s)\nprint(\"core MODULE ok\")\n\n# ─── arlm-proto CHANGELOG ───\np = 'crates/arlm-proto/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"## [Unreleased]\\n\", \"\"\"## [Unreleased]\n\n### Changed (auditoria plan 020 — BREAKING)\n- `SearchTier` renumerado: **`SEARCH_TIER_UNSPECIFIED = 0`** é o wire-default e\n  o servidor resolve para o seu `[search].tier`; tiers explícitos passam a ser\n  `TIER_BM25 = 1`, `TIER_SEMANTIC = 2`, `TIER_HYBRID = 3`, `TIER_ENTITY = 4`.\n  Clientes/servidores antigos em versões mistas verão tiers trocados — alinhe\n  as duas pontas (política break-total dos planos 019/020).\n- Contrato (`tests/proto_contract.rs`) atualizado para os novos valores.\n\"\"\",1)\nopen(p,'w').write(s)\nprint(\"proto CHANGELOG ok\")\nPYEOF"
+}
+```
+
+**Output:**
+```
+core CHANGELOG ok
+core MODULE ok
+proto CHANGELOG ok
+
+```
+
+*[step-finish part]*
+
+*[patch part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+💭 **Reasoning:**
+
+<details>
+<summary>Click to expand reasoning</summary>
+
+Now check remaining stale docs:
+1. crates/arlm-search/README.md, MODULE.md, TODO.md — grep matched them for stale terms; check what they contain
+2. crates/arlm-memory/README.md, arlm-llm/MODULE.md, etc.
+3. OLLAMA_EMBED_PROPOSED.md — historical proposal, probably fine
+4. docs/opencode-setup.md — fixed earlier
+
+Let me grep the specific matches in the remaining files to see if they're actually stale or just historical mentions.
+
+</details>
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** for f in crates/arlm-search/README.md crates/arlm-search/MODULE.md crates/arlm-search/TODO.md crates/arlm-memory/README.md crates/arlm-llm/MODULE.md crates/arlm-core/README.md crates/arlm-embedding/README.md crates/arlm-proto/README.md crates/arll-proto/TODO.md crates/arlm-storage/README.md docs/opencode-setup.md OLLAMA_EMBED_PROPOSED.md; do [ -f "$f" ] && echo "##### $f" && rg -n "serve|/mcp|--server |ARLM_OLLAMA|ARLM_MODEL_DIR|ARLM_EMBED_BATCH|config\.toml" "$f" | head -6; done 2>/dev/null
+
+**Input:**
+```json
+{
+  "command": "for f in crates/arlm-search/README.md crates/arlm-search/MODULE.md crates/arlm-search/TODO.md crates/arlm-memory/README.md crates/arlm-llm/MODULE.md crates/arlm-core/README.md crates/arlm-embedding/README.md crates/arlm-proto/README.md crates/arll-proto/TODO.md crates/arlm-storage/README.md docs/opencode-setup.md OLLAMA_EMBED_PROPOSED.md; do [ -f \"$f\" ] && echo \"##### $f\" && rg -n \"serve|/mcp|--server |ARLM_OLLAMA|ARLM_MODEL_DIR|ARLM_EMBED_BATCH|config\\.toml\" \"$f\" | head -6; done 2>/dev/null"
+}
+```
+
+**Output:**
+```
+##### crates/arlm-search/README.md
+17:  pelo servidor (não há sumarizador server-side).
+20:> O servidor (`arlm-server`) é LLM-free. A busca híbrida (BM25 + semântica + RRF)
+##### crates/arlm-search/MODULE.md
+6:> **LLM-free server (plan 019):** o `arlm-server` não invoca LLM, então o rerank
+8:> também não é mais populada server-side (sem sumarizador). O rerank/LLM, quando
+##### crates/arlm-search/TODO.md
+13:> não é usado server-side e a tabela `summaries` não é mais populada (sem
+14:> sumarizador server-side). Veja `plan/019-cli-consolidation.md`.
+##### crates/arlm-memory/README.md
+10:- **Consolidation**: Limpeza e merge de memória (manutenção server-side)
+11:- **Decay**: Decaimento de saliência (manutenção server-side)
+48:// Consolidação (manutenção server-side, via cron ou RPC admin)
+##### crates/arlm-llm/MODULE.md
+25:  `arlm-server` é LLM-free, portanto **não** usa `arlm-llm`).
+##### crates/arlm-core/README.md
+5:de biblioteca de suporte usada por `arlm-cli` e `arlm-server`.
+45:> `arlm` é hoje *on-demand* e *server-first*: o servidor é um plano de dados
+##### crates/arlm-embedding/README.md
+79:glob_match("*.pem", "server.pem")    // true
+##### crates/arlm-proto/README.md
+25:├── server.proto       # ServerStatus, ServerStatusRequest
+39:`arlm_proto::proto::*`, `arlm_proto::proto::arlm_service_server::ArlmService` e
+55:use arlm_proto::proto::arlm_service_server::ArlmService;
+69:  há mais runs de RLM nem sumarização server-side). `context.proto`/`session.proto`
+##### crates/arlm-storage/README.md
+14:  `store_answer` idempotente (reserve-lock), lookup por `(project, question_hash)`,
+183:`qa_cache` (hit/stale/eviction/scoping/reserve-lock) e auth tokens/sessões (plan 018).
+##### docs/opencode-setup.md
+66:Index a project directory. The client streams raw file text to the server, which
+80:Instead of CLI tools, run the `arlm-server` data plane (pure gRPC; plan 020
+84:# Start the gRPC data-plane server
+85:arlm-server up          # or: docker compose -f docker-compose.server.yml up -d
+91:The server is LLM-free — digest/summarize happen on the client via the user's
+97:`.arlm.toml` (gitignored) and identifies the project for the server. The server
+##### OLLAMA_EMBED_PROPOSED.md
+1:# Plano: Ollama + arlm-server em container único (embeddings 100% locais)
+3:> Estado alvo: **cliente → gRPC arlm-server → Ollama (mesmo container)**. O
+10:- **Parte A** — `Dockerfile` único (Ollama + arlm-server + modelo bakeado).
+11:- **Parte B** — correções no `arlm-server` (onde, o quê, por quê) para liberar
+18:1. **Um único container.** Ollama e arlm-server no mesmo `PID namespace`;
+25:   - arlm-server: `buffer_unordered(N)` disparando lotes de `embed_batch`.
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+💭 **Reasoning:**
+
+<details>
+<summary>Click to expand reasoning</summary>
+
+These remaining matches are all legitimate (server-side mentions, "arlm-server" containing "serve" substring, etc.) — no actual staleness. The `OLLAMA_EMBED_PROPOSED.md` is a historical proposal doc that mentions env vars ARLM_OLLAMA — it's a design proposal document, historical by nature. Let me check if it needs a note. Earlier grep showed OLLAMA_EMBED_PROPOSED.md matched "ARLM_OLLAMA" — since the Dockerfile no longer sets those envs, a reader might follow stale instructions. Add a short header note pointing to server.toml [embedder].
+
+Also check arlm-storage/README.md more thoroughly for open_pooled/hybrid description, and crates/arlm-cli/TODO.md which mentioned map_search_tier (historical). TODOs are historical task lists; skip per user's focus.
+
+Let me:
+1. Check storage README for stale pooled description.
+2. Add note to OLLAMA_EMBED_PROPOSED.md header.
+3. Final verification sweep + gates re-run (docs only, but cheap to re-verify nothing broke).
+4. sd sync.
+
+</details>
+
+Os demais matches são legítimos ("server-side", substrings de `arlm-server`). Falta verificar o README do storage e anotar o doc histórico do Ollama:
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** rg -n "open_pooled|pooled|single|conn\(\)" crates/arlm-storage/README.md | head -8; sed -n '1,8p' OLLAMA_EMBED_PROPOSED.md
+
+**Input:**
+```json
+{
+  "command": "rg -n \"open_pooled|pooled|single|conn\\(\\)\" crates/arlm-storage/README.md | head -8; sed -n '1,8p' OLLAMA_EMBED_PROPOSED.md"
+}
+```
+
+**Output:**
+```
+3:Componente de persistência do arlm — SQLite (metadados, FTS5/BM25) + usearch (vetores HNSW, single-file).
+9:- **usearch**: Armazenamento de vetores de embedding com índice HNSW single-file (substitui o LanceDB)
+94:// Abrir storage (single DB compartilhado)
+171:// Para CLI single-process (elimina arquivo -shm)
+# Plano: Ollama + arlm-server em container único (embeddings 100% locais)
+
+> Estado alvo: **cliente → gRPC arlm-server → Ollama (mesmo container)**. O
+> servidor recebe o texto cru, faz chunking/digestão/indexação e responde
+> buscas híbridas (BM25 + semântico) usando o Ollama embutido. Máxima
+> performance = sem rede entre serviços + Ollama servindo embeddings em
+> paralelo.
+
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** sed -n '90,110p' crates/arlm-storage/README.md; sed -n '165,180p' crates/arlm-storage/README.md
+
+**Input:**
+```json
+{
+  "command": "sed -n '90,110p' crates/arlm-storage/README.md; sed -n '165,180p' crates/arlm-storage/README.md"
+}
+```
+
+**Output:**
+```
+```rust
+use arlm_storage::{Storage, VectorStore};
+use arlm_storage::sqlite::buffers::NewBuffer;
+
+// Abrir storage (single DB compartilhado)
+let storage = Storage::open(Path::new("~/.arlm"))?;
+
+// Inserir buffer (projeto)
+let buffer_id = storage.insert_buffer(&NewBuffer {
+    name: "meu-projeto".to_string(),
+    path: "/path/to/project".to_string(),
+})?;
+
+// Inserir chunk
+let chunk_id = storage.insert_chunk(&NewChunk {
+    buffer_id,
+    file_path: "src/main.rs".to_string(),
+    offset_start: 0,
+    offset_end: 100,
+    line_start: 1,
+    line_end: 10,
+- `015` — Auth (plan 018): `auth_tokens` + `auth_sessions` (refresh/sessões)
+- `016` — QA-Cache (plan 017): `qa_cache` + `qa_cache_fts` + triggers
+
+## Uso Exclusive (CLI)
+
+```rust
+// Para CLI single-process (elimina arquivo -shm)
+let storage = Storage::open_exclusive(Path::new("~/.arlm"))?;
+```
+
+## Testes
+
+```bash
+cargo test -p arlm-storage
+```
+
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: edit
+**Status:** completed
+**Title:** crates/arlm-storage/README.md
+
+**Input:**
+```json
+{
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/README.md",
+  "newString": "## Uso Exclusive (CLI)\n\n```rust\n// Para CLI single-process (elimina arquivo -shm)\nlet storage = Storage::open_exclusive(Path::new(\"~/.arlm\"))?;\n```\n\n## Uso Pooled Híbrido (server, plan 020)\n\n```rust\n// pool_size > 1 no server.toml: escritas concorrentes via pool (connection()),\n// leituras na conexão compartilhada dedicada (conn()) — válido em ambos os modos.\nlet storage = Storage::open_pooled(Path::new(\"/data/arlm\"), 4)?;\n\n// Flusher de WAL do server (`flush_interval_ms`):\nstorage.wal_checkpoint()?;\n\n// Retenção de histórico (`[history] retention_days`):\nlet removed = storage.purge_history_before(cutoff_unix)?;\n```\n\n## Testes\n\n```bash\ncargo test -p arlm-storage\n```\n",
+  "oldString": "## Uso Exclusive (CLI)\n\n```rust\n// Para CLI single-process (elimina arquivo -shm)\nlet storage = Storage::open_exclusive(Path::new(\"~/.arlm\"))?;\n```\n\n## Testes\n\n```bash\ncargo test -p arlm-storage\n```\n"
+}
+```
+
+**Output:**
+```
+Edit applied successfully.
+```
+
+*[step-finish part]*
+
+*[patch part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: edit
+**Status:** completed
+**Title:** OLLAMA_EMBED_PROPOSED.md
+
+**Input:**
+```json
+{
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/OLLAMA_EMBED_PROPOSED.md",
+  "newString": "# Plano: Ollama + arlm-server em container único (embeddings 100% locais)\n\n> **NOTA (plan 020):** as envs `ARLM_OLLAMA_*`/`ARLM_MODEL_DIR`/`ARLM_EMBED_BATCH`\n> citadas abaixo foram **substituídas pela seção `[embedder]` do `server.toml`**\n> (montado em `/etc/arlm/server.toml`). Este documento é histórico — a parte B\n> (batch/concurrency) continua válida; a config de modelo agora é só TOML.\n\n> Estado alvo: **cliente → gRPC arlm-server → Ollama (mesmo container)**. O\n> servidor recebe o texto cru, faz chunking/digestão/indexação e responde\n> buscas híbridas (BM25 + semântico) usando o Ollama embutido. Máxima\n> performance = sem rede entre serviços + Ollama servindo embeddings em\n> paralelo.\n\n",
+  "oldString": "# Plano: Ollama + arlm-server em container único (embeddings 100% locais)\n\n> Estado alvo: **cliente → gRPC arlm-server → Ollama (mesmo container)**. O\n> servidor recebe o texto cru, faz chunking/digestão/indexação e responde\n> buscas híbridas (BM25 + semântico) usando o Ollama embutido. Máxima\n> performance = sem rede entre serviços + Ollama servindo embeddings em\n> paralelo.\n\n"
+}
+```
+
+**Output:**
+```
+Edit applied successfully.
+```
+
+*[step-finish part]*
+
+*[patch part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+Verificação final de referências obsoletas restantes nos docs ativos:
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** rg -n "arlm server|arlm serve|--server [0-9]|ARLM_OLLAMA_MODEL=|/root/.arlm/config" README.md docs/ agents/*.md agents/*/*.json crates/*/README.md crates/*/MODULE.md install.sh docker/ 2>/dev/null | grep -v "OLLAMA_EMBED_PROPOSED\|histor" | head
+
+**Input:**
+```json
+{
+  "command": "rg -n \"arlm server|arlm serve|--server [0-9]|ARLM_OLLAMA_MODEL=|/root/.arlm/config\" README.md docs/ agents/*.md agents/*/*.json crates/*/README.md crates/*/MODULE.md install.sh docker/ 2>/dev/null | grep -v \"OLLAMA_EMBED_PROPOSED\\|histor\" | head"
+}
+```
+
+**Output:**
+```
+agents/claude-desktop/claude_desktop_config.json:3:  "_arlm_note": "Plan 020 removed `arlm serve --mcp` (the CLI is a pure gRPC client). Claude Desktop cannot speak gRPC natively; to consume arlm from Claude Desktop, run arlm-server (docker-compose.server.yml) and use the arlm CLI via a local bridge/proxy. See agents/README.md."
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+💭 **Reasoning:**
+
+<details>
+<summary>Click to expand reasoning</summary>
+
+Only the intentional note remains. Now run the gates once more (docs don't affect code, but cheap sanity), then sd sync.
+
+</details>
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** cargo check --workspace 2>&1 | tail -1; cargo test --workspace --no-fail-fast 2>&1 | grep -oE "[0-9]+ passed" | awk '{s+=$1} END {print s" tests ok"}'; cargo fmt -- --check >/dev/null 2>&1 && echo FMT_OK; git status --short | head -25
+
+**Input:**
+```json
+{
+  "command": "cargo check --workspace 2>&1 | tail -1; cargo test --workspace --no-fail-fast 2>&1 | grep -oE \"[0-9]+ passed\" | awk '{s+=$1} END {print s\" tests ok\"}'; cargo fmt -- --check >/dev/null 2>&1 && echo FMT_OK; git status --short | head -25"
+}
+```
+
+**Output:**
+```
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.67s
+383 tests ok
+FMT_OK
+ M Cargo.lock
+ M Dockerfile
+ M OLLAMA_EMBED_PROPOSED.md
+ M README.md
+ M STAGING.md
+ M agents/README.md
+ M agents/claude-desktop/claude_desktop_config.json
+ M arlm.toml.example
+ D config.toml.example
+ M crates/arlm-cli/CHANGELOG.md
+ M crates/arlm-cli/Cargo.toml
+ M crates/arlm-cli/MODULE.md
+ M crates/arlm-cli/README.md
+ M crates/arlm-cli/src/cli/commands.rs
+ M crates/arlm-cli/src/client.rs
+ D crates/arlm-cli/src/commands/mcp/handlers.rs
+ D crates/arlm-cli/src/commands/mcp/mod.rs
+ D crates/arlm-cli/src/commands/mcp/protocol.rs
+ D crates/arlm-cli/src/commands/mcp/session.rs
+ M crates/arlm-cli/src/commands/mod.rs
+ M crates/arlm-cli/src/commands/qa_cache.rs
+ D crates/arlm-cli/src/commands/serve/handlers.rs
+ D crates/arlm-cli/src/commands/serve/index_logic.rs
+ D crates/arlm-cli/src/commands/serve/mod.rs
+ D crates/arlm-cli/src/commands/serve/requests.rs
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** sd sync 2>&1 | tail -1
+
+**Input:**
+```json
+{
+  "command": "sd sync 2>&1 | tail -1"
+}
+```
+
+**Output:**
+```
+✓ No changes to commit.
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** git add -A && git commit -m "DOCS: Atualiza documentação por-crate (README/MODULE/CHANGELOG) pós plan 020
+
+- arlm-cli: estrutura sem serve/mcp/util, deps slim, seção de conexão/TLS
+- arlm-server: schema server.toml completo (embedder/search/storage/history/mtls)
+- arlm-storage: open_pooled híbrido, wal_checkpoint, purge_history_before
+- arlm-embedding: CachedEmbedder; arlm-core: chunk_content_hash
+- arlm-proto: SearchTier UNSPECIFIED (breaking)
+- OLLAMA_EMBED_PROPOSED: nota histórica apontando [embedder] do server.toml" 2>&1 | tail -2
+
+**Input:**
+```json
+{
+  "command": "git add -A && git commit -m \"DOCS: Atualiza documentação por-crate (README/MODULE/CHANGELOG) pós plan 020\n\n- arlm-cli: estrutura sem serve/mcp/util, deps slim, seção de conexão/TLS\n- arlm-server: schema server.toml completo (embedder/search/storage/history/mtls)\n- arlm-storage: open_pooled híbrido, wal_checkpoint, purge_history_before\n- arlm-embedding: CachedEmbedder; arlm-core: chunk_content_hash\n- arlm-proto: SearchTier UNSPECIFIED (breaking)\n- OLLAMA_EMBED_PROPOSED: nota histórica apontando [embedder] do server.toml\" 2>&1 | tail -2"
+}
+```
+
+**Output:**
+```
+ create mode 100644 crates/arlm-cli/tests/init_test.rs
+ delete mode 100644 crates/arlm-cli/tests/metrics_test.rs
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+#### 🔧 Tool: bash
+**Status:** completed
+**Title:** sd sync 2>&1 | tail -1; git log --oneline -3
+
+**Input:**
+```json
+{
+  "command": "sd sync 2>&1 | tail -1; git log --oneline -3"
+}
+```
+
+**Output:**
+```
+✓ No changes to commit.
+2f5a904 gpg: Assinatura feita em seg 24 ago 2026 13:46:16 -03
+gpg:        usando a chave RSA de 5706DBAF44C6BFACD956C08050DAD117C24CF001
+gpg: Assinatura válida de "st-all-one (One) <stallone.developer@gmail.com>" [plena]
+DOCS: Atualiza documentação por-crate (README/MODULE/CHANGELOG) pós plan 020
+ba78e5c gpg: Assinatura feita em seg 24 ago 2026 13:37:28 -03
+gpg:        usando a chave RSA de 5706DBAF44C6BFACD956C08050DAD117C24CF001
+gpg: Assinatura válida de "st-all-one (One) <stallone.developer@gmail.com>" [plena]
+seeds: sync 2026-08-24
+c82b611 gpg: Assinatura feita em seg 24 ago 2026 13:06:02 -03
+gpg:        usando a chave RSA de 5706DBAF44C6BFACD956C08050DAD117C24CF001
+gpg: Assinatura válida de "st-all-one (One) <stallone.developer@gmail.com>" [plena]
+seeds: sync 2026-08-24
+
+```
+
+*[step-finish part]*
+
+### 🤖 Assistant
+*2026-08-24 13:46:40*
+
+*[step-start part]*
+
+Agora sim — a documentação estava **parcialmente** defasada e foi toda atualizada:
+
+## O que estava faltando (encontrado e corrigido)
+
+**`arlm-cli/README.md`** — estrutura ainda listava `util.rs`, `commands/serve/`, arquivos de comando inexistentes; tabela com `arlm server`; seção inteira "Modo Servidor (`--server`)" com flag inexistente. Reescrito: estrutura real, seção "Conexão com o Servidor" com resolução `.arlm.toml → global → env` + knobs TLS/mTLS.
+
+**`arlm-cli/MODULE.md`** — dependências antigas (`arlm-storage/search/memory/embedding`, axum, uuid) e convenção falsa de "sem `#[cfg(test)]` em src/". Corrigido para as deps reais (core/llm/proto) e testes inline da user_config.
+
+**`arlm-server/README.md`** — exemplo de `server.toml` com chaves que **não existem** no schema (`[qa_cache] enabled/lambda_ms/cache_ttl_ms`). Atualizado para o schema atual completo (storage tuning, `[embedder]`, `[search]`, `[history]`).
+
+**`arlm-storage/{MODULE,README}.md`** — documentados o pooled híbrido, `wal_checkpoint()`, `purge_history_before()` e a nova dependência de `arlm-core`.
+
+**CHANGELOGs por-crate** — entradas `[Unreleased]` adicionadas onde cada crate foi tocado: cli (remoção do data plane), server (schema completo + mTLS), storage (híbrido/checkpoint/purge), embedding (`CachedEmbedder`), core (`chunk_content_hash`), proto (**breaking**: renumeração `SearchTier`).
+
+**Extras**: nota histórica no `OLLAMA_EMBED_PROPOSED.md` apontando para `[embedder]` do server.toml.
+
+Gates re-verificados: 383 testes OK, fmt/clippy limpos. Commit `2f5a904`.
 
 *[step-finish part]*

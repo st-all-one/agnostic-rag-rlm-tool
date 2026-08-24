@@ -12,7 +12,6 @@ fn test_search_tier_display() {
     assert_eq!(SearchTier::Fts.to_string(), "fts");
     assert_eq!(SearchTier::Entity.to_string(), "entity");
     assert_eq!(SearchTier::Vector.to_string(), "vector");
-    assert_eq!(SearchTier::LlmRerank.to_string(), "llm_rerank");
 }
 
 #[test]
@@ -27,7 +26,6 @@ fn test_hybrid_result_clone() {
     let r = HybridResult {
         chunk_id: 1,
         score: 0.5,
-        is_summary: false,
     };
     let r2 = r.clone();
     assert_eq!(r.chunk_id, r2.chunk_id);

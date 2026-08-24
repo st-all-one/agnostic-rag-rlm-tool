@@ -420,7 +420,6 @@ fn run_search(
         query: query.to_string(),
         max_results: top_k as i32,
         tier: map_search_tier(tier) as i32,
-        ..Default::default()
     });
     let response = rt.block_on(client.search(request))?;
     let mut results = response.into_inner().results;

@@ -30,12 +30,10 @@ fn test_rrf_fuse_single_list() {
         HybridResult {
             chunk_id: 1,
             score: 0.9,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 2,
             score: 0.8,
-            is_summary: false,
         },
     ];
 
@@ -50,17 +48,14 @@ fn test_rrf_fuse_multiple_lists() {
         HybridResult {
             chunk_id: 1,
             score: 0.9,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 2,
             score: 0.8,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 3,
             score: 0.7,
-            is_summary: false,
         },
     ];
 
@@ -68,17 +63,14 @@ fn test_rrf_fuse_multiple_lists() {
         HybridResult {
             chunk_id: 2,
             score: 0.95,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 1,
             score: 0.85,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 4,
             score: 0.75,
-            is_summary: false,
         },
     ];
 
@@ -103,7 +95,6 @@ fn test_rrf_fuse_top_k_limit() {
         .map(|i| HybridResult {
             chunk_id: i,
             score: 1.0 - i as f32 * 0.01,
-            is_summary: false,
         })
         .collect();
 
@@ -122,12 +113,10 @@ fn test_rrf_fuse_disjoint_results() {
     let list1 = vec![HybridResult {
         chunk_id: 1,
         score: 0.9,
-        is_summary: false,
     }];
     let list2 = vec![HybridResult {
         chunk_id: 2,
         score: 0.9,
-        is_summary: false,
     }];
 
     let fused = HybridSearch::rrf_fuse(&[list1, list2], 10, 60.0);
@@ -144,12 +133,10 @@ fn test_rrf_fuse_overlapping_high_rank_wins() {
         HybridResult {
             chunk_id: 1,
             score: 0.9,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 2,
             score: 0.8,
-            is_summary: false,
         },
     ];
 
@@ -157,12 +144,10 @@ fn test_rrf_fuse_overlapping_high_rank_wins() {
         HybridResult {
             chunk_id: 1,
             score: 0.95,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 3,
             score: 0.7,
-            is_summary: false,
         },
     ];
 
@@ -177,17 +162,14 @@ fn test_rrf_fuse_bm25_entity_fusion() {
         HybridResult {
             chunk_id: 1,
             score: 0.9,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 2,
             score: 0.8,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 3,
             score: 0.7,
-            is_summary: false,
         },
     ];
 
@@ -195,12 +177,10 @@ fn test_rrf_fuse_bm25_entity_fusion() {
         HybridResult {
             chunk_id: 2,
             score: 0.95,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 4,
             score: 0.85,
-            is_summary: false,
         },
     ];
 
@@ -218,12 +198,10 @@ fn test_apply_decay_no_ages() {
         HybridResult {
             chunk_id: 1,
             score: 1.0,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 2,
             score: 0.5,
-            is_summary: false,
         },
     ];
 
@@ -241,12 +219,10 @@ fn test_apply_decay_with_ages() {
         HybridResult {
             chunk_id: 1,
             score: 1.0,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 2,
             score: 1.0,
-            is_summary: false,
         },
     ];
 
@@ -270,12 +246,10 @@ fn test_apply_decay_reorders_by_freshness() {
         HybridResult {
             chunk_id: 2,
             score: 0.9,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 1,
             score: 0.5,
-            is_summary: false,
         },
     ];
 
@@ -297,12 +271,10 @@ fn test_apply_decay_disabled() {
         HybridResult {
             chunk_id: 1,
             score: 1.0,
-            is_summary: false,
         },
         HybridResult {
             chunk_id: 2,
             score: 0.5,
-            is_summary: false,
         },
     ];
 
@@ -336,51 +308,4 @@ fn test_hybrid_search_with_decay_builder() {
     let (hybrid, _storage, _tmp) = setup();
     let hybrid = hybrid.with_decay(DecayConfig::new(0.05));
     assert!((hybrid.decay().lambda - 0.05).abs() < f64::EPSILON);
-}
-
-#[tokio::test]
-async fn test_dual_layer_summaries() {
-    let tmp = TempDir::new().unwrap();
-    let storage = Storage::open(tmp.path()).unwrap();
-    let buffer = storage
-        .insert_buffer(&NewBuffer {
-            name: "p".into(),
-            path: "/p".into(),
-        })
-        .unwrap();
-    let sid = storage
-        .insert_summary(
-            buffer,
-            "zzmodule router guards the api endpoint",
-            "module",
-            None,
-            None,
-            0.9,
-            None,
-            None,
-        )
-        .unwrap();
-    assert!(sid > 0);
-
-    let direct = storage.search_summaries("zzmodule", buffer, 10).unwrap();
-    assert!(
-        !direct.is_empty(),
-        "search_summaries should find the summary"
-    );
-
-    let bm25 = Bm25Search::new(&storage).unwrap();
-    let hybrid = HybridSearch::new(bm25, None, None);
-    let options = SearchOptions {
-        tier: SearchTier::Entity,
-        top_k: 10,
-    };
-
-    let results = hybrid
-        .search("zzmodule", None, buffer, &options, None, Some(&storage))
-        .await
-        .unwrap();
-
-    let summaries: Vec<&HybridResult> = results.iter().filter(|r| r.is_summary).collect();
-    assert!(!summaries.is_empty(), "expected a summary result");
-    assert!(summaries.iter().all(|r| r.chunk_id > 0));
 }

@@ -1,11 +1,11 @@
 # arlm-storage
 
 ## O que faz
-Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único DB compartilhado isolado por `buffer_id`, mais um vector store embutido (`usearch`, HNSW single-file, L2). Suporta modo single (CLI) e pooled (servidor). CRUD para buffers, chunks, tasks, findings, history, patterns, entities, cache e summaries; backup/verify; e busca semântica por embedding.
+Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único DB compartilhado isolado por `buffer_id`, mais um vector store embutido (`usearch`, HNSW single-file, L2). Suporta modo single (CLI) e pooled (servidor). CRUD para buffers, chunks, tasks, findings, history, patterns, entities e qa-cache; backup/verify; e busca semântica por embedding.
 
 > **Removido (plan 019):** as tabelas/código de `runs` (RLM runs), `trajectories`
-> e `sessions` **foram removidos** do crate — o servidor é LLM-free e não há mais
-> runs de RLM nem sessões multi-turn. A tabela `summaries` permanece no schema
+> e `sessions`/`summaries` **foram removidos** do crate — o servidor é LLM-free
+> e não há mais runs de RLM, sessões multi-turn nem camada de summaries
 > (legacy), mas não é mais populada server-side.
 
 ## Estrutura
@@ -20,7 +20,6 @@ Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único 
 - `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`/`purge_history_before` (retenção `[history] retention_days` do server, plan 020; testado inline).
 - `src/sqlite/patterns.rs` — `Pattern`, `insert_pattern`/`get_patterns`.
 - `src/sqlite/tasks.rs` — `Task`, `insert_task`/`get_pending_tasks`/`update_task_status`/`complete_task`.
-- `src/sqlite/summaries.rs` — `Summary`, `insert_summary`/`get_summaries`/`get_project_summary`/`get_summary_by_source_hash` (summaries hierárquicos — **legacy**, não populado server-side desde o plan 019).
 
 > **Removido (plan 019):** `src/sqlite/runs.rs` e `src/sqlite/nodes.rs` (runs de
 > RLM e trajectories) **foram excluídos** do crate. O servidor é LLM-free.
@@ -32,7 +31,7 @@ Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único 
 
 ## Dependências
 - Internas: `arlm-core` (hash canônico de chunk compartilhado com o client; plan 020).
-- Externas (runtime): `rusqlite` (bundled + vtab, FTS5), `usearch` (HNSW single-file), `r2d2`/`r2d2_sqlite` (pool), `anyhow`, `serde`/`serde_json` (meta do vector store + summaries), `sha2`, `zstd`, `chrono`, `tokio` (async), `uuid` (v7), `parking_lot` (Mutex), `regex` (entities), `tracing`.
+- Externas (runtime): `rusqlite` (bundled + vtab, FTS5), `usearch` (HNSW single-file), `r2d2`/`r2d2_sqlite` (pool), `anyhow`, `serde`/`serde_json` (meta do vector store), `sha2`, `zstd`, `chrono`, `tokio` (async), `uuid` (v7), `parking_lot` (Mutex), `regex` (entities), `tracing`.
 - Externas (dev): `tempfile`.
 
 ## Convenções deste módulo
@@ -51,7 +50,7 @@ CARGO_BUILD_JOBS=4 cargo clippy -p arlm-storage --all-targets -- -D warnings
 
 ## Migrations
 - `migrations/001_initial.sql` … `migrations/016_add_qa_cache.sql` (16 ao total), aplicadas idempotentemente e versionadas via tabela `schema_version`.
-- `001` base (chunks, buffers, tasks, findings, history, patterns); `004` runs/custos; `005` trajectories; `006` sessions; `007` result_cache; `008` events; `009` entities; `010` last_accessed_at; `011` UUIDv7 em buffers; `012` summaries; `013` server handlers (runs.project/model, sessions.updated_at, chunks_fts); `014` FTS5 de summaries; `015` auth (plan 018: `auth_tokens`/`auth_sessions`); `016` QA-Cache (plan 017: `qa_cache` + FTS5 `qa_cache_fts` + triggers).
+- `001` base (chunks, buffers, tasks, findings, history, patterns); `004` runs/custos; `005` trajectories; `007` result_cache; `008` events; `009` entities; `010` last_accessed_at; `011` UUIDv7 em buffers; `013` server handlers (runs.project/model, chunks_fts); `015` auth (plan 018: `auth_tokens`/`auth_sessions`); `016` QA-Cache (plan 017: `qa_cache` + FTS5 `qa_cache_fts` + triggers).
 - `run_migrations` roda `ANALYZE` ao final para planner stats.
 
 ## Rules

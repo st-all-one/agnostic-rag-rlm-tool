@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Removed (limpeza pós-019/020) — BREAKING
+- **Tier 3 de LLM rerank**: `hybrid/rerank.rs`, `with_llm_backend`, campo
+  `llm_backend` e consts `RERANK_*`; `SearchTier::LlmRerank` removido do enum.
+- **Camada dual-layer de summaries**: leituras de `summaries`/`get_summary` em
+  `hybrid/search.rs`, `fusion.rs` e `context.rs`; campos `is_summary`
+  (`HybridResult`/`SearchResult`/`ChunkWithText`) e `summary_scope`.
+- Parâmetro morto `storage: Option<&Storage>` de `HybridSearch::search`.
+- Dependência `arlm-llm` — com isso o `arlm-server` não compila mais nenhum
+  crate de LLM transitivamente.
+
 ### Added
 - **QA-Cache similarity (plan 017):** `src/qa_cache.rs` com `cosine_similarity`
   (vetores) e `jaccard_similarity` (overlap de provenance) — matemática pura

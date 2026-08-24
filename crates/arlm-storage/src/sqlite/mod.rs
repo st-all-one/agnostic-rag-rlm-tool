@@ -8,7 +8,6 @@ pub mod history;
 pub mod patterns;
 pub mod qa_cache;
 pub mod schema;
-pub mod summaries;
 pub mod tasks;
 pub mod tokens;
 

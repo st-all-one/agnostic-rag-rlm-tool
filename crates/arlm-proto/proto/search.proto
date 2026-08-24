@@ -8,8 +8,7 @@ message SearchRequest {
   string query = 2;
   int32 max_results = 3;
   SearchTier tier = 4;
-  bool include_summaries = 5;  // default: true
-  bool include_raw = 6;        // default: true
+  reserved 5, 6; // removed: include_summaries, include_raw (plan 019/020: no summaries layer)
 }
 
 enum SearchTier {
@@ -29,14 +28,6 @@ message SearchResult {
   string file_path = 4;
   int32 start_line = 5;
   int32 end_line = 6;
-  bool is_summary = 7;
-  SummaryInfo summary = 8;
-}
-
-message SummaryInfo {
-  string summary_text = 1;
-  int64 raw_chunk_count = 2;
-  float confidence = 3;
 }
 
 message SearchResponse {

@@ -139,7 +139,6 @@ name = "arlm-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arlm-llm",
  "async-trait",
  "chrono",
  "futures",
@@ -242,7 +241,6 @@ name = "arlm-search"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arlm-llm",
  "arlm-storage",
  "parking_lot",
  "rusqlite",

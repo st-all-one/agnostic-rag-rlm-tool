@@ -91,8 +91,6 @@ pub fn build_search_results(
                     line_end: c.line_end,
                     content: c.content.clone(),
                     language: c.language.clone(),
-                    is_summary: c.is_summary,
-                    summary_scope: c.summary_scope.clone(),
                 })
         })
         .collect();
@@ -117,31 +115,11 @@ pub fn load_chunks(storage: &Storage, results: &[HybridResult]) -> Result<Vec<Ch
     let start = Instant::now();
     let mut chunks = Vec::with_capacity(results.len());
 
-    for hr in results {
-        if hr.is_summary {
-            // Dual-layer: resolve from the `summaries` table instead of `chunks`.
-            if let Some(summary) = storage.get_summary(hr.chunk_id)? {
-                chunks.push(ChunkWithText {
-                    id: summary.id,
-                    buffer_id: summary.buffer_id,
-                    file_path: format!("summary/{}", summary.scope),
-                    line_start: 0,
-                    line_end: 0,
-                    content: summary.content,
-                    language: None,
-                    is_summary: true,
-                    summary_scope: Some(summary.scope),
-                });
-            }
-            continue;
-        }
-
-        let chunk = storage
-            .get_chunk(hr.chunk_id)
-            .context("failed to get chunk")?;
+    for chunk_id in results.iter().map(|hr| hr.chunk_id) {
+        let chunk = storage.get_chunk(chunk_id).context("failed to get chunk")?;
 
         let content = storage
-            .get_chunk_content(hr.chunk_id)
+            .get_chunk_content(chunk_id)
             .context("failed to get chunk content")?;
 
         if let Some(c) = chunk {
@@ -153,8 +131,6 @@ pub fn load_chunks(storage: &Storage, results: &[HybridResult]) -> Result<Vec<Ch
                 line_end: c.line_end,
                 content: content.unwrap_or_default(),
                 language: c.language,
-                is_summary: false,
-                summary_scope: None,
             });
         }
     }

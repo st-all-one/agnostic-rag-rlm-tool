@@ -7,6 +7,13 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Removed (limpeza pós-019/020)
+- Handlers gRPC de sessão (`grpc/session.rs`) e persistência
+  (`store/sessions.rs`) — nenhum cliente chama mais esses RPCs.
+- Wrapper de summaries (`store/summaries.rs`) e contagem no `GetServerStatus`;
+  status deixou de reportar `total_summaries`.
+- Grafo de dependências 100% LLM-free (`arlm-llm` nem transitive).
+
 ### Added (auditoria plan 020)
 - **Schema completo do `server.toml`:** `[embedder]` com
   `model`/`model_dir`/`ollama_url`/`ollama_model`/`ollama_prefix`/`dims`/

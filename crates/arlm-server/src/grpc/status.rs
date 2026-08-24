@@ -21,20 +21,14 @@ pub(crate) async fn handle_get_server_status(
             conn.query_row("SELECT COUNT(*) FROM chunks", [], |row| row.get(0))
                 .map_err(anyhow::Error::from)
         })?;
-        let summaries = store::count_all_summaries(&storage)?;
-        Ok((projects.len(), chunks, summaries))
+        Ok((projects.len(), chunks))
     })
     .await
     .map_err(crate::grpc::error::internal)?;
 
-    let (total_projects, total_chunks, total_summaries) = stats;
+    let (total_projects, total_chunks) = stats;
 
-    tracing::info!(
-        total_projects,
-        total_chunks,
-        total_summaries,
-        "server status queried"
-    );
+    tracing::info!(total_projects, total_chunks, "server status queried");
 
     Ok(Response::new(ServerStatus {
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -42,8 +36,6 @@ pub(crate) async fn handle_get_server_status(
         active_runs: 0,
         total_projects: i32::try_from(total_projects).unwrap_or(i32::MAX),
         total_chunks,
-        total_summaries,
         write_queue: None,
-        summarize: None,
     }))
 }

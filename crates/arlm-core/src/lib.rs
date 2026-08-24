@@ -14,12 +14,7 @@
     )
 )]
 pub mod logging;
-pub mod memory;
 pub mod qa_cache;
-pub mod types;
-
-pub use memory::MemoryProvider;
-pub use types::*;
 
 #[must_use]
 pub fn version() -> &'static str {

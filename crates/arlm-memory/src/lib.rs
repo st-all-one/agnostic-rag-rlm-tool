@@ -23,7 +23,6 @@ pub mod project;
 pub mod transfer;
 pub mod watch;
 
-pub use arlm_core::memory::MemoryProvider;
 pub use consolidation::{ConsolidateOptions, ConsolidateResult, ConsolidationEngine};
 pub use decay::{DecayConfig, SalienceInput, compute_salience, should_evict};
 pub use engine::{

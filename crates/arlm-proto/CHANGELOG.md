@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Removed (limpeza pós-019/020) — BREAKING
+- `session.proto` inteiro + RPCs `CreateSession`/`ListSessions`/`GetSession`/
+  `AddSessionTurn` do `ArlmService` — superfície órfã desde o plan 019.
+- Mensagem `SummaryInfo` e campos `SearchResult.is_summary`(7)/`.summary`(8);
+  knobs `SearchRequest.include_summaries`(5)/`include_raw`(6); campos
+  `ServerStatus.total_summaries`(6)/`.summarize`(8) + mensagem
+  `SummarizeStatus` (reservados os números de campo).
+
 ### Changed (auditoria plan 020 — BREAKING)
 - `SearchTier` renumerado: **`SEARCH_TIER_UNSPECIFIED = 0`** é o wire-default e
   o servidor resolve para o seu `[search].tier`; tiers explícitos passam a ser
