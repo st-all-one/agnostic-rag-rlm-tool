@@ -1,0 +1,46 @@
+[package]
+name = "arags-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Long-running gRPC data-plane server for arags (Agnostic RAG Server)"
+
+[[bin]]
+name = "arags-server"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+arags-core.workspace = true
+arags-storage.workspace = true
+arags-search.workspace = true
+arags-embedding.workspace = true
+arags-memory.workspace = true
+arags-proto.workspace = true
+rusqlite.workspace = true
+clap.workspace = true
+tonic.workspace = true
+prost.workspace = true
+prost-types.workspace = true
+tokio.workspace = true
+tokio-stream = { version = "0.1", features = ["sync"] }
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+parking_lot.workspace = true
+futures.workspace = true
+rayon.workspace = true
+sha2.workspace = true
+hex.workspace = true
+zstd.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

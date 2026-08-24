@@ -1,15 +1,15 @@
 # =============================================================================
-# arlm — Configuração GLOBAL do usuário (plan 020)
+# arags — Configuração GLOBAL do usuário (plan 020)
 # =============================================================================
-# Arquivo: ~/.arlm/arlm.toml  (criado pelo install.sh a partir deste exemplo)
+# Arquivo: ~/.arags/arags.toml  (criado pelo install.sh a partir deste exemplo)
 #
 # Escopos:
-#   - Global:   ~/.arlm/arlm.toml  → [auth] + [llm] + [server] addr
-#   - Local:    <repo>/.arlm.toml  → overrides por projeto ([project], etc.),
-#                 gerado por `arlm init` e gitignored.
+#   - Global:   ~/.arags/arags.toml  → [auth] + [llm] + [server] addr
+#   - Local:    <repo>/.arags.toml  → overrides por projeto ([project], etc.),
+#                 gerado por `arags init` e gitignored.
 # O merge é granular campo a campo (local > global). `[auth]` existe SOMENTE
-# no global — se presente no local, é ignorado. Os legados ~/.arlm/config.toml
-# e .arlm/config.toml NÃO são lidos (break total, plan 020).
+# no global — se presente no local, é ignorado. Os legados ~/.arags/config.toml
+# e .arags/config.toml NÃO são lidos (break total, plan 020).
 #
 # -----------------------------------------------------------------------------
 # Campos disponíveis por backend ([[llm.backends]]):
@@ -104,7 +104,7 @@ model = "mimo"
 # =============================================================================
 # Auth (plan 018) — cliente gRPC
 # =============================================================================
-# O refresh token é gerado pelo admin do server (arlm-server admin create-refresh)
+# O refresh token é gerado pelo admin do server (arags-server admin create-refresh)
 # e colado aqui. O CLI troca ele por session tokens de 5 min automaticamente.
 # Armazenado em plaintext neste arquivo (protegido por permissão 0600).
 
@@ -114,6 +114,6 @@ username = "dev1"
 
 [server]
 addr = "127.0.0.1:50051"
-# tls_ca = "/etc/arlm/tls/ca.crt"      # CA customizada (além das system roots)
-# tls_cert = "/etc/arlm/tls/client.crt" # mTLS: exige também tls_key
-# tls_key = "/etc/arlm/tls/client.key"
+# tls_ca = "/etc/arags/tls/ca.crt"      # CA customizada (além das system roots)
+# tls_cert = "/etc/arags/tls/client.crt" # mTLS: exige também tls_key
+# tls_key = "/etc/arags/tls/client.key"

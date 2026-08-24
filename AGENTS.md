@@ -1,20 +1,20 @@
-# AGENTS.md — arlm (Agnostic RLM)
+# AGENTS.md — arags (Agnostic RAG Server)
 
 ## Project Overview
 
-`arlm` is a Rust CLI tool implementing an on-demand, agent-agnostic RLM for processing massive codebases. It indexes files, stores embeddings, and performs hybrid search (BM25 + semantic) to provide context for LLM-based agents. The CLI is agent-agnostic — any AI agent (OPencode, Cursor, Pi, Aider) can consume its output.
+`arags` is a Rust CLI tool implementing an on-demand, agent-agnostic optimized RAG server for processing massive codebases. It indexes files, stores embeddings, and performs hybrid search (BM25 + semantic) to provide context for LLM-based agents. The CLI is agent-agnostic — any AI agent (OPencode, Cursor, Pi, Aider) can consume its output.
 
-**Philosophy:** on-demand, agent-agnostic, server-side processing. There is **no recursive RLM loop** and **no server LLM**. The server (`arlm-server`) is a pure data plane (index/search/query/memory/history) reached over gRPC; the client (`arlm-cli`) is a pure gRPC client that only uses the **user's local LLM** (`arlm-llm`) for digest (`query -qa`) and summarize (`persist`).
+**Philosophy:** on-demand, agent-agnostic, server-side processing. There is **no recursive agent loop** and **no server LLM**. The server (`arags-server`) is a pure data plane (index/search/query/memory/history) reached over gRPC; the client (`arags-cli`) is a pure gRPC client that only uses the **user's local LLM** (`arags-llm`) for digest (`query -qa`) and summarize (`persist`).
 
 **Architecture:** 9-crate Cargo workspace, server-first:
 ```
-arlm-cli  ──gRPC──▶  arlm-server (data plane, LLM-free)
+arags-cli  ──gRPC──▶  arags-server (data plane, LLM-free)
    │                        │
-   │ uses user LLM          ├─ arlm-storage (SQLite FTS5/BM25 + LanceDB HNSW)
-   │ (query -qa, persist)   ├─ arlm-search (hybrid BM25 + semantic + RRF)
-   │                        ├─ arlm-embedding (chunking + candle all-MiniLM-L6-v2)
-   │                        └─ arlm-memory (memory, history, maintenance)
-   └─ arlm-core, arlm-llm, arlm-proto
+   │ uses user LLM          ├─ arags-storage (SQLite FTS5/BM25 + LanceDB HNSW)
+   │ (query -qa, persist)   ├─ arags-search (hybrid BM25 + semantic + RRF)
+   │                        ├─ arags-embedding (chunking + candle all-MiniLM-L6-v2)
+   │                        └─ arags-memory (memory, history, maintenance)
+   └─ arags-core, arags-llm, arags-proto
 ```
 
 **Tech Stack:**
@@ -60,13 +60,13 @@ benches/
 ### Crate Responsibilities
 | Crate | Role |
 |-------|------|
-| `arlm-cli` | Binary entry point, clap parsing, output formatting; pure gRPC client |
-| `arlm-core` | Shared types, client config (2-scope user config), dispatch, output formatting; no RLM engine |
-| `arlm-storage` | SQLite (metadata, FTS5) + LanceDB (vectors), dual transactions |
-| `arlm-embedding` | Chunking strategies (code/text/markdown), native candle all-MiniLM-L6-v2 embedder (fixed model, server-side) |
-| `arlm-search` | Hybrid search (BM25 + semantic + RRF fusion) |
-| `arlm-memory` | Multi-project memory, knowledge base, history, server maintenance (consolidate/decay) |
-| `arlm-llm` | LLM backend abstraction (OpenAI, Anthropic, Ollama, Gemini) — used by client only |
+| `arags-cli` | Binary entry point, clap parsing, output formatting; pure gRPC client |
+| `arags-core` | Shared types, client config (2-scope user config), dispatch, output formatting; no LLM, no recursion |
+| `arags-storage` | SQLite (metadata, FTS5) + LanceDB (vectors), dual transactions |
+| `arags-embedding` | Chunking strategies (code/text/markdown), native candle all-MiniLM-L6-v2 embedder (fixed model, server-side) |
+| `arags-search` | Hybrid search (BM25 + semantic + RRF fusion) |
+| `arags-memory` | Multi-project memory, knowledge base, history, server maintenance (consolidate/decay) |
+| `arags-llm` | LLM backend abstraction (OpenAI, Anthropic, Ollama, Gemini) — used by client only |
 
 ## Testing Strategy
 
@@ -79,7 +79,7 @@ cargo test
 cargo test --test integration_test
 
 # Single crate tests
-cargo test -p arlm-storage
+cargo test -p arags-storage
 
 # With output
 cargo test -- --show-output
@@ -189,7 +189,7 @@ create → open → in_progress → closed
 ### Creating Issues for This Project
 ```bash
 # Example: new crate setup
-sd create --title "Setup arlm-storage crate" --type task --priority 1 --label "crate-setup"
+sd create --title "Setup arags-storage crate" --type task --priority 1 --label "crate-setup"
 
 # Example: feature implementation
 sd create --title "Implement BM25 search via FTS5" --type feature --priority 2 --label "search,storage"
@@ -248,7 +248,7 @@ cargo run -- <args>            # Run with args
 SQLITE3_FLAGS="-DSQLITE_DIRECT_OVERFLOW_READ -DSQLITE_ENABLE_BATCH_ATOMIC_WRITE -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1" cargo build --release
 
 # Release binary location
-./target/release/arlm
+./target/release/arags
 
 # Cross-compile for specific CPU (when deploy target is known)
 # .cargo/config.toml:

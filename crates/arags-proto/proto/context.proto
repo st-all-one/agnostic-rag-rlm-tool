@@ -1,0 +1,26 @@
+syntax = "proto3";
+package arags.v1;
+
+import "search.proto";
+
+// ── Context Building ──
+
+message ContextRequest {
+  string project = 1;
+  string task = 2;
+  int32 max_tokens = 3;
+  bool prefer_summaries = 4;  // default: true
+}
+
+message ContextResponse {
+  string context = 1;
+  repeated SearchResult sources = 2;
+  ContextStats stats = 3;
+}
+
+message ContextStats {
+  int32 total_tokens = 1;
+  int32 raw_chunks_included = 2;
+  int32 summary_chunks_included = 3;
+  float summary_ratio = 4;  // 0.0 = all raw, 1.0 = all summaries
+}

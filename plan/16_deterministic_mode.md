@@ -1,22 +1,22 @@
-# Modo Determinístico — arlm sem LLM obrigatória
+# Modo Determinístico — arags sem LLM obrigatória
 
 ## Visão Geral
 
-O arlm funciona como ferramenta **pura e determinística** por padrão. LLM é um
+O arags funciona como ferramenta **pura e determinística** por padrão. LLM é um
 **opt-in explícito** via `--llm` para operações que precisam de raciocínio
-(por exemplo, `arlm run`). Busca, contexto, indexação e persistência são
+(por exemplo, `arags run`). Busca, contexto, indexação e persistência são
 operaciones puramente determinísticas com latência previsível.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    Modo Determinístico (padrão)                      │
 │                                                                     │
-│  arlm index ./projeto        → indexação (Rayon + memmap)          │
-│  arlm search "query"         → FTS5 + entity RRF                   │
-│  arlm context "task"         → chunks formatados + prompt          │
-│  arlm persist --format md    → markdown no projeto                 │
-│  arlm consolidate            → regra: merge duplicatas             │
-│  arlm decay                  → regra: saliência → evição           │
+│  arags index ./projeto        → indexação (Rayon + memmap)          │
+│  arags search "query"         → FTS5 + entity RRF                   │
+│  arags context "task"         → chunks formatados + prompt          │
+│  arags persist --format md    → markdown no projeto                 │
+│  arags consolidate            → regra: merge duplicatas             │
+│  arags decay                  → regra: saliência → evição           │
 │                                                                     │
 │  Latência: ~5–50ms por operação (sem I/O de rede)                  │
 │  Dependências: NENHUMA API key, NENHUM modelo carregado            │
@@ -25,10 +25,10 @@ operaciones puramente determinísticas com latência previsível.
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    Modo LLM (opt-in via --llm)                       │
 │                                                                     │
-│  arlm run "tarefa" --llm      → RLM recursivo (Planner→Solver→Synth)│
-│  arlm consolidate --llm       → consolidação por LLM               │
-│  arlm search "q" --llm        → rerank por LLM                    │
-│  arlm context "t" --llm       → contexto enriquecido por LLM       │
+│  arags run "tarefa" --llm      → RLM recursivo (Planner→Solver→Synth)│
+│  arags consolidate --llm       → consolidação por LLM               │
+│  arags search "q" --llm        → rerank por LLM                    │
+│  arags context "t" --llm       → contexto enriquecido por LLM       │
 │                                                                     │
 │  Requer: --backend + --model OU variáveis de ambiente               │
 │  Custo: controlado por --max-budget / --max-tokens                  │
@@ -37,7 +37,7 @@ operaciones puramente determinísticas com latência previsível.
 
 ## Princípio de Design
 
-> O arlm é uma ferramenta de **memória e busca** com capacidade opcional de
+> O arags é uma ferramenta de **memória e busca** com capacidade opcional de
 > **raciocínio recursivo**. A busca não depende de LLM. A memória não depende
 > de LLM. O engine recursivo é o único componente que precisa de LLM, e é
 > ativado explicitamente.
@@ -46,20 +46,20 @@ Isso significa:
 
 | Componente | Padrão (sem --llm) | Com --llm |
 |-----------|-------------------|-----------|
-| `arlm index` | Chunking Rayon + embedding local (opcional) | Igual |
-| `arlm search` | FTS5 BM25 + entity RRF | + vector RRF + rerank LLM |
-| `arlm context` | Chunks formatados como prompt | + contexto enriquecido por LLM |
-| `arlm run` | **ERRO: requer --llm** | RLM recursivo completo |
-| `arlm consolidate` | Regra: merge por hash + dedup | + consolidação LLM |
-| `arlm persist` | Markdown auto-gerado | + LLM rewrite |
-| `arlm decay` | Fórmula de saliência (puro) | Igual |
+| `arags index` | Chunking Rayon + embedding local (opcional) | Igual |
+| `arags search` | FTS5 BM25 + entity RRF | + vector RRF + rerank LLM |
+| `arags context` | Chunks formatados como prompt | + contexto enriquecido por LLM |
+| `arags run` | **ERRO: requer --llm** | RLM recursivo completo |
+| `arags consolidate` | Regra: merge por hash + dedup | + consolidação LLM |
+| `arags persist` | Markdown auto-gerado | + LLM rewrite |
+| `arags decay` | Fórmula de saliência (puro) | Igual |
 
 ## 1. Modo de Busca: Tiers de LLM
 
 ### Tier 0: FTS5 Puro (sem embeddings)
 
 ```bash
-arlm search "validate_token" --project ./x --tier fts
+arags search "validate_token" --project ./x --tier fts
 ```
 
 - Apenas BM25 via SQLite FTS5
@@ -70,9 +70,9 @@ arlm search "validate_token" --project ./x --tier fts
 ### Tier 1: FTS5 + Entity RRF (padrão)
 
 ```bash
-arlm search "validate_token" --project ./x
+arags search "validate_token" --project ./x
 # equivalente a:
-arlm search "validate_token" --project ./x --tier entity
+arags search "validate_token" --project ./x --tier entity
 ```
 
 - BM25 + entity match (lexical, sem embedding)
@@ -84,7 +84,7 @@ arlm search "validate_token" --project ./x --tier entity
 ### Tier 2: FTS5 + Entity + Vector RRF (com embeddings)
 
 ```bash
-arlm search "bug de autenticação" --project ./x --tier vector
+arags search "bug de autenticação" --project ./x --tier vector
 ```
 
 - BM25 + entity + usearch HNSW vector search
@@ -96,7 +96,7 @@ arlm search "bug de autenticação" --project ./x --tier vector
 ### Tier 3: Tier 2 + LLM Rerank
 
 ```bash
-arlm search "bug de autenticação" --project ./x --llm
+arags search "bug de autenticação" --project ./x --llm
 ```
 
 - Tier 2 + LLM reranking dos top-30 candidatos
@@ -107,7 +107,7 @@ arlm search "bug de autenticação" --project ./x --llm
 ### Implementação
 
 ```rust
-// crates/arlm-search/src/lib.rs
+// crates/arags-search/src/lib.rs
 
 pub enum SearchTier {
     /// BM25 only (~5ms)
@@ -181,10 +181,10 @@ projeto, criando uma wiki inspectável, git-versionada, e editável à mão.
 
 ```
 projeto/
-├── .arlm/
+├── .arags/
 │   ├── wiki/
 │   │   ├── _global/
-│   │   │   └── rules.md              ← regras do projeto (arlm persist --scope global)
+│   │   │   └── rules.md              ← regras do projeto (arags persist --scope global)
 │   │   ├── searches/
 │   │   │   └── 2024-01-15_bug-login.md  ← busca persistida
 │   │   ├── analyses/
@@ -201,24 +201,24 @@ projeto/
 
 ```bash
 # Persiste o resultado de uma busca
-arlm search "bug de login" --project ./x --persist
-# → salva em .arlm/wiki/searches/2024-01-15_bug-login.md
+arags search "bug de login" --project ./x --persist
+# → salva em .arags/wiki/searches/2024-01-15_bug-login.md
 
 # Persiste contexto formatado
-arlm context "analise auth" --project ./x --persist
-# → salva em .arlm/wiki/analyses/001-auth-analysis.md
+arags context "analise auth" --project ./x --persist
+# → salva em .arags/wiki/analyses/001-auth-analysis.md
 
 # Persiste resultado de run RLM (com --llm)
-arlm run "analise completa" --project ./x --llm --persist
-# → salva em .arlm/wiki/analyses/002-full-analysis.md
+arags run "analise completa" --project ./x --llm --persist
+# → salva em .arags/wiki/analyses/002-full-analysis.md
 
 # Persiste nota manual
-arlm persist --path "decisions/0007-db.md" --body "# Decidimos usar Postgres\n\n..."
-# → salva em .arlm/wiki/decisions/0007-db.md
+arags persist --path "decisions/0007-db.md" --body "# Decidimos usar Postgres\n\n..."
+# → salva em .arags/wiki/decisions/0007-db.md
 
 # Persiste sessão
-arlm session persist s_abc123
-# → salva em .arlm/wiki/sessions/s_abc123.md
+arags session persist s_abc123
+# → salva em .arags/wiki/sessions/s_abc123.md
 ```
 
 ### Formato do Markdown
@@ -294,7 +294,7 @@ Inspirada no ai-memory, cada página persistida tem um score de saliência que
 decai com o tempo e é reforçado por acessos:
 
 ```rust
-// crates/arlm-memory/src/decay.rs
+// crates/arags-memory/src/decay.rs
 
 pub struct DecayConfig {
     pub lambda: f64,          // 0.02 — taxa de decaimento temporal
@@ -337,16 +337,16 @@ pub fn compute_salience(
 
 ```bash
 # Roda decay (dry run)
-arlm decay --project ./x --dry-run
+arags decay --project ./x --dry-run
 
 # Roda decay (aplica)
-arlm decay --project ./x
+arags decay --project ./x
 
 # Decay global
-arlm decay --all
+arags decay --all
 
 # Hard delete de tombstones antigas
-arlm decay --purge --older-than 180d
+arags decay --purge --older-than 180d
 ```
 
 ### Implementação
@@ -389,7 +389,7 @@ impl MemoryEngine {
 Na indexação, cada chunk recebe entidades extraídas por regra (sem LLM):
 
 ```rust
-// crates/arlm-embedding/src/entities.rs
+// crates/arags-embedding/src/entities.rs
 
 pub fn extract_entities(chunk: &Chunk, file_path: &str) -> Vec<String> {
     let mut entities = Vec::new();
@@ -474,12 +474,12 @@ CREATE VIRTUAL TABLE entities_fts USING fts5(
 ### Git Integration
 
 ```bash
-# .arlm/wiki/ é um git repo independente
-arlm persist --path "decisions/001-db.md" --body "..." --git-commit
+# .arags/wiki/ é um git repo independente
+arags persist --path "decisions/001-db.md" --body "..." --git-commit
 # → salva + git commit automaticamente
 
 # ou commit manual
-cd .arlm/wiki && git add . && git commit -m "persist: busca de bug de login"
+cd .arags/wiki && git add . && git commit -m "persist: busca de bug de login"
 ```
 
 ### Supersession Chain
@@ -501,10 +501,10 @@ Migramos de SQLite para Postgres...
 
 ```bash
 # Lista commits recentes da wiki
-arlm checkpoints --project ./x
+arags checkpoints --project ./x
 
 # Restaura uma página de um commit anterior
-arlm restore-page --path "decisions/001-db.md" --from abc123
+arags restore-page --path "decisions/001-db.md" --from abc123
 ```
 
 ## 6. CLI Atualizado
@@ -515,7 +515,7 @@ arlm restore-page --path "decisions/001-db.md" --from abc123
 --project <path>          # Caminho do projeto
 --format <fmt>            # json|tree|markdown|prompt
 --persist                 # Salva output como markdown no projeto
---persist-path <path>     # Path customizado dentro de .arlm/wiki/
+--persist-path <path>     # Path customizado dentro de .arags/wiki/
 --tier <tier>             # fts|entity|vector (padrão: entity)
 --llm                     # Ativa modo LLM (requer --backend + --model)
 --verbose                 # Output detalhado
@@ -537,42 +537,42 @@ arlm restore-page --path "decisions/001-db.md" --from abc123
 
 ```bash
 # Persist manual
-arlm persist --path "rules/no-unwrap.md" --body "# Regra: não usar unwrap\n\n..."
+arags persist --path "rules/no-unwrap.md" --body "# Regra: não usar unwrap\n\n..."
 
 # Decay
-arlm decay --project ./x [--dry-run] [--purge]
+arags decay --project ./x [--dry-run] [--purge]
 
 # Checkpoints da wiki
-arlm checkpoints --project ./x
+arags checkpoints --project ./x
 
 # Restore de página
-arlm restore-page --path "decisions/001-db.md" --from <rev>
+arags restore-page --path "decisions/001-db.md" --from <rev>
 
 # Entities de um projeto
-arlm entities --project ./x [--top 50]
+arags entities --project ./x [--top 50]
 ```
 
 ### Comandos com --llm (opt-in)
 
 ```bash
 # RLM recursivo (SÓ com --llm)
-arlm run "analise completa" --project ./x --llm --backend openai --model gpt-4
+arags run "analise completa" --project ./x --llm --backend openai --model gpt-4
 
 # Consolidação LLM
-arlm consolidate --project ./x --llm
+arags consolidate --project ./x --llm
 
 # Busca com rerank LLM
-arlm search "bug complexo" --project ./x --llm
+arags search "bug complexo" --project ./x --llm
 
 # Contexto enriquecido por LLM
-arlm context "tarefa" --project ./x --llm
+arags context "tarefa" --project ./x --llm
 ```
 
 ## 7. Fluxo Completo: Indexação → Busca → Persist
 
 ```
 1. Indexação (determinística)
-   arlm index ./projeto
+   arags index ./projeto
    │
    ├── memmap2 lê arquivos
    ├── Rayon chunka em paralelo
@@ -581,29 +581,29 @@ arlm context "tarefa" --project ./x --llm
    └── SQLite + usearch write
 
 2. Busca (determinística, padrão)
-   arlm search "validate_token" --project ./x
+   arags search "validate_token" --project ./x
    │
    ├── FTS5 BM25 (~5ms)
    ├── Entity match RRF (~3ms)
    └── fused results (~8ms total)
 
 3. Contexto (determinístico)
-   arlm context "analise auth" --project ./x --format prompt
+   arags context "analise auth" --project ./x --format prompt
    │
    ├── busca híbrida (tier entity)
    ├── formata chunks como prompt
    └── output pronto para agente
 
 4. Persist (determinístico)
-   arlm search "bug login" --persist
+   arags search "bug login" --persist
    │
    ├── busca híbrida
    ├── gera markdown com frontmatter
-   ├── salva em .arlm/wiki/searches/
+   ├── salva em .arags/wiki/searches/
    └── (opcional) git commit
 
 5. Decay (determinístico)
-   arlm decay --project ./x
+   arags decay --project ./x
    │
    ├── calcula salience de cada página
    ├── evicted < cold_threshold → tombstone
@@ -614,7 +614,7 @@ arlm context "tarefa" --project ./x --llm
 
 ```
 1. Run RLM (só com --llm)
-   arlm run "analise completa" --project ./x --llm --backend openai --model gpt-4
+   arags run "analise completa" --project ./x --llm --backend openai --model gpt-4
    │
    ├── Engine recursivo (Planner→Solver→Synthesizer)
    ├── Budget tracking (USD/tokens/errors/time)
@@ -623,14 +623,14 @@ arlm context "tarefa" --project ./x --llm
    └── resultado + árvore + custo
 
 2. Consolidação LLM
-   arlm consolidate --project ./x --llm
+   arags consolidate --project ./x --llm
    │
    ├── LLM reescreve sessões em páginas coerentes
    ├── Extrai decisions/gotchas/rules
-   └── salva em .arlm/wiki/
+   └── salva em .arags/wiki/
 
 3. Search + LLM rerank
-   arlm search "bug complexo" --project ./x --llm
+   arags search "bug complexo" --project ./x --llm
    │
    ├── Tier 2: BM25 + entity + vector (~21ms)
    ├── LLM rerank top-30 (~200ms)
@@ -658,19 +658,19 @@ arlm context "tarefa" --project ./x --llm
 
 ```bash
 # Antes (LLM obrigatório):
-arlm search "query" --backend openai  # ← não deveria precisar de backend
+arags search "query" --backend openai  # ← não deveria precisar de backend
 
 # Depois (padrão determinístico):
-arlm search "query"  # ← funciona sem LLM
+arags search "query"  # ← funciona sem LLM
 
 # Se quiser LLM:
-arlm search "query" --llm  # ← explícito
+arags search "query" --llm  # ← explícito
 ```
 
 ### Config TOML
 
 ```toml
-# ~/.arlm/config.toml
+# ~/.arags/config.toml
 
 [defaults]
 format = "json"
@@ -685,7 +685,7 @@ cold_threshold = 0.20
 hard_delete_days = 180
 
 [persist]
-git_commit = true         # auto-commit no .arlm/wiki/
+git_commit = true         # auto-commit no .arags/wiki/
 auto_persist_searches = false
 auto_persist_analyses = true
 
@@ -693,6 +693,6 @@ auto_persist_analyses = true
 [llm]
 # backend e model ficam nas flags --backend/--model
 # ou variáveis de ambiente
-# ARLM_BACKEND=openai
-# ARLM_MODEL=gpt-4
+# ARAGS_BACKEND=openai
+# ARAGS_MODEL=gpt-4
 ```

@@ -1,20 +1,20 @@
 {
   "commands": {
-    "rlm": {
-      "command": "arlm context \"$ARGUMENTS\" --project . --format prompt",
-      "description": "Search project context with RLM"
+    "arags-search": {
+      "command": "arags search \"$ARGUMENTS\" --project . --format jsonl",
+      "description": "Search code with hybrid RAG search"
     },
-    "rlm-search": {
-      "command": "arlm search \"$ARGUMENTS\" --project . --format json",
-      "description": "Search code with RLM"
+    "arags-context": {
+      "command": "arags search \"$ARGUMENTS\" --project . --format text",
+      "description": "Retrieve project context as prompt text"
     },
-    "rlm-analyze": {
-      "command": "arlm run \"$ARGUMENTS\" --project . --depth 3 --format tree",
-      "description": "Analyze with RLM recursively"
+    "arags-query": {
+      "command": "arags query \"$ARGUMENTS\" --qa",
+      "description": "Analytical QA digest via the user's local LLM"
     },
-    "rlm-index": {
-      "command": "arlm index .",
-      "description": "Index project for RLM search"
+    "arags-index": {
+      "command": "arags init && arags index .",
+      "description": "Index project for RAG search"
     }
   }
 }

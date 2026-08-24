@@ -2,13 +2,13 @@
 
 ## Visão Geral
 
-Este plano cobre **como o arlm expõe seu progresso** (eventos), **evita trabalho duplicado** (caching), e **mede uso por agente** (métricas). Inspirado no `--live` tree do pi-rlm, nos callbacks do RLM original, e nos gaps identificados na análise.
+Este plano cobre **como o arags expõe seu progresso** (eventos), **evita trabalho duplicado** (caching), e **mede uso por agente** (métricas). Inspirado no `--live` tree do pi-rlm, nos callbacks do RLM original, e nos gaps identificados na análise.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                       Observability                             │
 │                                                                │
-│  arlm-core (engine)                                            │
+│  arags-core (engine)                                            │
 │    │  emite EventBus events (tipados)                          │
 │    ▼                                                           │
 │  ┌────────────────────────────────────────────────────────┐    │
@@ -28,7 +28,7 @@ Este plano cobre **como o arlm expõe seu progresso** (eventos), **evita trabalh
 │  subtask_hash → resultado reutilizado em runs futuras          │
 │                                                                │
 │  Métricas Prometheus (por agente):                             │
-│  arlm_requests_total, arlm_cost_total, arlm_nodes_total...     │
+│  arags_requests_total, arags_cost_total, arags_nodes_total...     │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -37,7 +37,7 @@ Este plano cobre **como o arlm expõe seu progresso** (eventos), **evita trabalh
 ### Tipos de Evento
 
 ```rust
-// crates/arlm-core/src/events.rs
+// crates/arags-core/src/events.rs
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize)]
@@ -276,7 +276,7 @@ impl JsonlEventLogger {
 Renderização em tempo real da árvore, como o pi-rlm faz, mas em Rust puro.
 
 ```rust
-// crates/arlm-cli/src/live.rs
+// crates/arags-cli/src/live.rs
 pub struct LiveTree {
     nodes: HashMap<String, LiveNode>,
     root: Option<String>,
@@ -388,10 +388,10 @@ impl LiveTree {
 
 ```bash
 # Live tree mode (padrão interativo)
-arlm run "tarefa" --live
+arags run "tarefa" --live
 
 # Live tree via HTTP (SSE)
-arlm serve --port 8080
+arags serve --port 8080
 curl -N http://localhost:8080/events/stream/<run_id>
 ```
 
@@ -400,7 +400,7 @@ curl -N http://localhost:8080/events/stream/<run_id>
 ### SSE Endpoint
 
 ```rust
-// crates/arlm-cli/src/serve.rs
+// crates/arags-cli/src/serve.rs
 async fn stream_events(
     State(state): State<Arc<AppState>>,
     Path(run_id): Path<String>,
@@ -502,26 +502,26 @@ result_cache.put(&task, &project, &response);
 ### Métricas por Agente
 
 ```rust
-// crates/arlm-cli/src/metrics.rs
+// crates/arags-cli/src/metrics.rs
 use prometheus::{Registry, IntCounterVec, HistogramVec, GaugeVec};
 
-pub struct ArlmMetrics {
+pub struct AragsMetrics {
     registry: Registry,
 
     // Por agente (labels: agent)
-    requests: IntCounterVec,          // arlm_requests_total{agent}
-    cost_usd: GaugeVec,               // arlm_cost_usd{agent}
-    tokens: GaugeVec,                 // arlm_tokens_total{agent}
-    nodes: IntCounterVec,             // arlm_nodes_total{agent}
-    duration: HistogramVec,           // arlm_run_duration_seconds{agent}
-    cache_hits: IntCounterVec,        // arlm_cache_hits_total{agent}
+    requests: IntCounterVec,          // arags_requests_total{agent}
+    cost_usd: GaugeVec,               // arags_cost_usd{agent}
+    tokens: GaugeVec,                 // arags_tokens_total{agent}
+    nodes: IntCounterVec,             // arags_nodes_total{agent}
+    duration: HistogramVec,           // arags_run_duration_seconds{agent}
+    cache_hits: IntCounterVec,        // arags_cache_hits_total{agent}
 
     // Por operação
-    search_duration: HistogramVec,    // arlm_search_duration_seconds{op}
-    chunks_indexed: IntCounterVec,    // arlm_chunks_indexed_total{language}
+    search_duration: HistogramVec,    // arags_search_duration_seconds{op}
+    chunks_indexed: IntCounterVec,    // arags_chunks_indexed_total{language}
 }
 
-impl ArlmMetrics {
+impl AragsMetrics {
     pub fn new() -> Self {
         let registry = Registry::new();
         // ... registro de todas as métricas ...
@@ -559,16 +559,16 @@ async fn metrics(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 
 // Prometheus config
 // scrape_configs:
-//   - job_name: arlm
+//   - job_name: arags
 //     static_configs:
-//       - targets: ['arlm-server:8080']
+//       - targets: ['arags-server:8080']
 ```
 
 ### Exemplo de Dashboard (Grafana)
 
 ```
 ┌─────────────────────────────────────────────────┐
-│ arlm — Uso por Agente (30d)                     │
+│ arags — Uso por Agente (30d)                     │
 ├─────────────────────────────────────────────────┤
 │ ██████ opencode   $3.42  8.2M tokens  128 runs │
 │ ████  pi         $1.18  2.1M tokens   45 runs │
@@ -586,13 +586,13 @@ Cada chamada identifica qual agente está usando:
 
 ```bash
 # Via CLI flag
-arlm run "tarefa" --agent opencode
+arags run "tarefa" --agent opencode
 
 # Via env var (agentes configuram uma vez)
-export ARLM_AGENT=opencode
+export ARAGS_AGENT=opencode
 
 # Via HTTP header
-curl -H "X-ARLM-Agent: cursor" http://localhost:8080/run ...
+curl -H "X-ARAGS-Agent: cursor" http://localhost:8080/run ...
 
 # Via config por projeto
 [projects."meu-app"]
@@ -603,12 +603,12 @@ O agente é salvo em: `runs.agent`, `trajectories.agent`, e nos labels das métr
 
 ## Resumo de Integração
 
-| Conceito | Onde entra no arlm |
+| Conceito | Onde entra no arags |
 |----------|--------------------|
 | Callbacks RLM (`on_iteration_start`...) | `RlmEvent::*` no `EventBus` |
 | pi-rlm `--live` tree | `LiveTree` + `--live` flag |
 | pi-rlm events.jsonl | `JsonlEventLogger` |
 | SSE streaming | `/events/stream/<run_id>` no serve mode |
 | Pi-RLM "result caching missing" | `ResultCache` + `result_cache` table |
-| Métricas de treinamento (07) | `ArlmMetrics` + `/metrics` |
+| Métricas de treinamento (07) | `AragsMetrics` + `/metrics` |
 | Accountability multi-agente | `agent` label em tudo |

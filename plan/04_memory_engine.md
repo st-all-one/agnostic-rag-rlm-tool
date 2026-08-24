@@ -2,11 +2,11 @@
 
 ## Visão Geral
 
-O `arlm-memory` é o sistema de memória persistente que permite múltiplos agentes compartilhar conhecimento acumulado sobre projetos. Diferente de memória de contexto (janela de LLM), esta memória é **permanente, indexada, e consultável**.
+O `arags-memory` é o sistema de memória persistente que permite múltiplos agentes compartilhar conhecimento acumulado sobre projetos. Diferente de memória de contexto (janela de LLM), esta memória é **permanente, indexada, e consultável**.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                   arlm-memory                                │
+│                   arags-memory                                │
 │                                                              │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
 │  │ Project  │  │Knowledge │  │ History  │  │ Watch    │    │
@@ -14,7 +14,7 @@ O `arlm-memory` é o sistema de memória persistente que permite múltiplos agen
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘    │
 │       │              │              │              │          │
 │  ┌────▼──────────────▼──────────────▼──────────────▼────┐    │
-│  │              arlm-storage (SQLite + usearch)         │    │
+│  │              arags-storage (SQLite + usearch)         │    │
 │  └──────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -26,7 +26,7 @@ O `arlm-memory` é o sistema de memória persistente que permite múltiplos agen
 Um projeto é um diretório de código indexado. Cada projeto tem seu próprio knowledge base local.
 
 ```
-~/.arlm/
+~/.arags/
 ├── config.toml                    ← Configuração global
 ├── projects/
 │   ├── meu-projeto-a/
@@ -72,7 +72,7 @@ Múltiplos agentes podem acessar a mesma knowledge base:
      └────────────────┼────────────────┘
                       │
               ┌───────▼───────┐
-              │  arlm serve   │
+              │  arags serve   │
               │  (port 8080)  │
               └───────┬───────┘
                       │
@@ -89,7 +89,7 @@ Múltiplos agentes podem acessar a mesma knowledge base:
 ### Indexação
 
 ```rust
-// Interface do arlm-memory
+// Interface do arags-memory
 pub struct MemoryEngine {
     storage: Storage,
     embedder: Embedder,
@@ -280,7 +280,7 @@ impl MemoryEngine {
 ```
 1. Agente pergunta: "qual a causa do bug de login?"
    │
-2. CLI: arlm context "causa do bug de login" --project ./x --format prompt
+2. CLI: arags context "causa do bug de login" --project ./x --format prompt
    │
 3. Memory Engine:
    │  a. Embedding da pergunta (candle, ~5ms)
@@ -299,7 +299,7 @@ impl MemoryEngine {
 
 ## Aprendizado com Trajectórias (Planos 12-14)
 
-A memória não é só passiva (index + busca) — o arlm **aprende** com cada run RLM:
+A memória não é só passiva (index + busca) — o arags **aprende** com cada run RLM:
 
 ### Reuso de Estratégias
 
@@ -385,10 +385,10 @@ impl MemoryEngine {
 ### CLI
 
 ```bash
-arlm session create "Análise do auth" --project ./meu-app   # → s_abc123
-arlm session add-context s_abc123 --file src/auth/login.rs   # → context_0
-arlm run "explique token validation" --session s_abc123
-arlm session resume s_abc123
+arags session create "Análise do auth" --project ./meu-app   # → s_abc123
+arags session add-context s_abc123 --file src/auth/login.rs   # → context_0
+arags run "explique token validation" --session s_abc123
+arags session resume s_abc123
 ```
 
 ## Guarantees de Consistência
@@ -403,13 +403,13 @@ arlm session resume s_abc123
 
 - **SQLite:** WAL journal em disco, crash-safe
 - **usearch:** Fragmentos persistentes em disco
-- **Backup:** `arlm backup --project ./x --to /backup/`
+- **Backup:** `arags backup --project ./x --to /backup/`
 
 ### Integridade
 
 - **Hash verification:** SHA256 de cada chunk
 - **Schema versioning:** Migrações automáticas
-- **Corruption detection:** `arlm verify --project ./x`
+- **Corruption detection:** `arags verify --project ./x`
 
 ## Wiki Persist (Plano 16)
 
@@ -422,7 +422,7 @@ criando uma wiki inspectável, git-versionada, e editável à mão.
 
 ```
 projeto/
-├── .arlm/
+├── .arags/
 │   ├── wiki/
 │   │   ├── _global/
 │   │   │   └── rules.md
@@ -475,7 +475,7 @@ impl MemoryEngine {
         metadata: PageMetadata,
     ) -> Result<()> {
         // 1. Cria frontmatter YAML
-        // 2. Escreve em .arlm/wiki/<path>
+        // 2. Escreve em .arags/wiki/<path>
         // 3. Indexa no SQLite (FTS5 + entities)
         // 4. (opcional) git commit
     }

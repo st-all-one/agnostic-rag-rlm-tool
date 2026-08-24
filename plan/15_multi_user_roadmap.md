@@ -2,7 +2,7 @@
 
 ## Contexto
 
-O `arlm` foi desenhado para uso **local individual** (1 dev, vários projetos). Para operar como **servidor Docker compartilhado** por 5-10 devs, as features abaixo são necessárias. Este arquivo documenta **o que precisa ser adicionado** — não substitui os planos existentes, que continuam corretos para o cenário local.
+O `arags` foi desenhado para uso **local individual** (1 dev, vários projetos). Para operar como **servidor Docker compartilhado** por 5-10 devs, as features abaixo são necessárias. Este arquivo documenta **o que precisa ser adicionado** — não substitui os planos existentes, que continuam corretos para o cenário local.
 
 ## Avaliação do Cenário Atual
 
@@ -77,7 +77,7 @@ Alternativa: mover embeddings para tabela SQLite (BLOB f32) e usar usearch apena
 Sem auth, qualquer dev pode ler/modificar projetos de outros.
 
 ```toml
-# ~/.arlm/server.toml
+# ~/.arags/server.toml
 [auth]
 type = "api_key"  # | "none" (local)
 
@@ -95,7 +95,7 @@ projects = ["projeto-b", "projeto-c"]
 ```rust
 // Middleware de auth
 async fn authenticate(headers: HeaderMap) -> Result<User> {
-    let key = headers.get("X-ARLM-KEY")
+    let key = headers.get("X-ARAGS-KEY")
         .ok_or(Unauthorized)?;
     config.find_user(&key)
         .ok_or(Unauthorized)
@@ -115,7 +115,7 @@ async fn authorize(user: &User, project: &str) -> Result<()> {
 
 #### 4. Runs Assíncronas + SSE
 
-`arlm run` gasta 10-60s em LLM calls. Bloquear HTTP response por isso é inaceitável.
+`arags run` gasta 10-60s em LLM calls. Bloquear HTTP response por isso é inaceitável.
 
 ```rust
 // POST /run → retorna run_id imediatamente
@@ -166,7 +166,7 @@ CREATE TABLE embedding_cache (
 #### 7. Budget Global por Projeto
 
 ```toml
-# ~/.arlm/server.toml
+# ~/.arags/server.toml
 [projects."projeto-a"]
 max_daily_cost = 5.00     # USD
 max_monthly_cost = 50.00
@@ -180,11 +180,11 @@ max_daily_cost = 2.00
 
 ```rust
 // Métricas expostas em /metrics (Prometheus)
-arlm_requests_total{user="alice", project="projeto-a"}
-arlm_search_duration_seconds{project="projeto-a"}
-arlm_embedding_queue_size
-arlm_index_jobs_pending
-arlm_cost_total{user="alice", project="projeto-a"}
+arags_requests_total{user="alice", project="projeto-a"}
+arags_search_duration_seconds{project="projeto-a"}
+arags_embedding_queue_size
+arags_index_jobs_pending
+arags_cost_total{user="alice", project="projeto-a"}
 ```
 
 #### 9. Logs Estruturados por Usuário
@@ -205,7 +205,7 @@ info!(
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    arlm-server                          │
+│                    arags-server                          │
 │                                                         │
 │  ┌─────────┐  ┌──────────┐  ┌───────────┐             │
 │  │  Auth   │  │  Rate    │  │  Queue    │             │
@@ -234,7 +234,7 @@ info!(
         ↕ HTTP ↕
 ┌───────────────────────────────────────────┐
 │  Dev A (OPencode)  │  Dev B (Cursor)      │
-│  X-ARLM-KEY: abc   │  X-ARLM-KEY: def    │
+│  X-ARAGS-KEY: abc   │  X-ARAGS-KEY: def    │
 └───────────────────────────────────────────┘
 ```
 
@@ -242,25 +242,25 @@ info!(
 
 ```yaml
 services:
-  arlm-server:
+  arags-server:
     build: .
     ports: ["8080:8080"]
     volumes:
-      - arlm-data:/home/arlm/.arlm
+      - arags-data:/home/arags/.arags
       - projects:/projects:ro
     environment:
-      - ARLM_SERVER_CONFIG=/home/arlm/.arlm/server.toml
-      - ARLM_WORKERS=2           # Index workers
-      - ARLM_EMBEDDING_SEM=4     # Max embedding concorrentes
+      - ARAGS_SERVER_CONFIG=/home/arags/.arags/server.toml
+      - ARAGS_WORKERS=2           # Index workers
+      - ARAGS_EMBEDDING_SEM=4     # Max embedding concorrentes
     deploy:
       resources:
         limits: { memory: 4G, cpus: '4' }
 
-  arlm-embedder:
+  arags-embedder:
     build: .
     command: ["serve", "--embedder-only", "--port", "8081"]
     volumes:
-      - arlm-data:/home/arlm/.arlm
+      - arags-data:/home/arags/.arags
     deploy:
       replicas: 2
       resources:
@@ -282,4 +282,4 @@ services:
 
 ## Nota sobre o Cenário Local
 
-Nenhuma das features acima é necessária para uso local. O plano atual (14 arquivos) está completo e correto para 1 dev com vários projetos. As mudanças acima são **aditivas** — criam uma camada `arlm-server` sobre o core existente, sem modificar o comportamento da CLI local.
+Nenhuma das features acima é necessária para uso local. O plano atual (14 arquivos) está completo e correto para 1 dev com vários projetos. As mudanças acima são **aditivas** — criam uma camada `arags-server` sobre o core existente, sem modificar o comportamento da CLI local.

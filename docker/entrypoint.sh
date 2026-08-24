@@ -17,5 +17,5 @@ ollama pull all-minilm || true
 # 4) Mantem o Ollama vivo; encerra tudo junto no sinal de saida.
 trap 'kill $OLLAMA_PID 2>/dev/null || true' EXIT TERM INT
 
-# 5) arlm-server em foreground (PID 1 do container).
-exec arlm-server
+# 5) arags-server em foreground (PID 1 do container).
+exec arags-server

@@ -78,13 +78,13 @@ prost = "0.13"
 prost-types = "0.13"
 
 # Internal crates
-arlm-storage = { path = "crates/arlm-storage" }
-arlm-embedding = { path = "crates/arlm-embedding" }
-arlm-search = { path = "crates/arlm-search" }
-arlm-llm = { path = "crates/arlm-llm" }
-arlm-memory = { path = "crates/arlm-memory" }
-arlm-core = { path = "crates/arlm-core" }
-arlm-proto = { path = "crates/arlm-proto" }
+arags-storage = { path = "crates/arags-storage" }
+arags-embedding = { path = "crates/arags-embedding" }
+arags-search = { path = "crates/arags-search" }
+arags-llm = { path = "crates/arags-llm" }
+arags-memory = { path = "crates/arags-memory" }
+arags-core = { path = "crates/arags-core" }
+arags-proto = { path = "crates/arags-proto" }
 
 # Testing
 tempfile = "3"

@@ -2,19 +2,19 @@
 
 ## Visão Geral
 
-O projeto `arlm` (Agnostic RLM) é um Cargo workspace com 7 crates, cada um com responsabilidade única. A separação permite compilação paralela, testes isolados, e binários mínimos.
+O projeto `arags` (Agnostic RLM) é um Cargo workspace com 7 crates, cada um com responsabilidade única. A separação permite compilação paralela, testes isolados, e binários mínimos.
 
 ```
-arlm/
+arags/
 ├── Cargo.toml                  ← Workspace root
 ├── crates/
-│   ├── arlm-cli/              ← Binário CLI (clap)
-│   ├── arlm-core/             ← Engine RLM (planner/solver/synthesizer)
-│   ├── arlm-storage/          ← SQLite + usearch (persistência)
-│   ├── arlm-embedding/        ← Chunking + embedding (candle + BGE-M3)
-│   ├── arlm-search/           ← Busca híbrida (BM25 + semântico + RRF)
-│   ├── arlm-memory/           ← Sistema de memória externa
-│   └── arlm-llm/              ← Abstração de backends LLM
+│   ├── arags-cli/              ← Binário CLI (clap)
+│   ├── arags-core/             ← Engine RLM (planner/solver/synthesizer)
+│   ├── arags-storage/          ← SQLite + usearch (persistência)
+│   ├── arags-embedding/        ← Chunking + embedding (candle + BGE-M3)
+│   ├── arags-search/           ← Busca híbrida (BM25 + semântico + RRF)
+│   ├── arags-memory/           ← Sistema de memória externa
+│   └── arags-llm/              ← Abstração de backends LLM
 ├── docker/
 │   ├── Dockerfile             ← Build multi-stage
 │   ├── Dockerfile.slim        ← Imagem minimalista
@@ -42,7 +42,7 @@ version = "0.1.0"
 edition = "2024"          # Rust 1.97 — Edition 2024 (default)
 rust-version = "1.85"
 license = "MPL-2.0"
-repository = "https://github.com/user/arlm"
+repository = "https://github.com/user/arags"
 
 # Lints consistentes no workspace inteiro (guia Rust: clippy pedantic)
 [lints.workspace]
@@ -115,28 +115,28 @@ opt-level = 3
 # rustflags = ["-C", "target-cpu=native"]   # CPU do deploy conhecido → ganho direto
 ```
 
-## Crate: arlm-cli
+## Crate: arags-cli
 
 **Responsabilidade:** Binário CLI, parsing de argumentos, output formatado.
 
 ```
-crates/arlm-cli/
+crates/arags-cli/
 ├── Cargo.toml
 ├── src/
 │   ├── main.rs              ← Entry point
 │   ├── commands/
 │   │   ├── mod.rs
-│   │   ├── run.rs           ← arlm run "tarefa"
-│   │   ├── index.rs         ← arlm index ./projeto
-│   │   ├── search.rs        ← arlm search "query"
-│   │   ├── query.rs         ← arlm query "pergunta" --project ./x
-│   │   ├── context.rs       ← arlm context "tarefa" --project ./x
-│   │   ├── status.rs        ← arlm status
-│   │   ├── history.rs       ← arlm history
-│   │   ├── cost.rs          ← arlm cost --by agent [plan 12]
-│   │   ├── session.rs       ← arlm session create/resume [plan 13]
-│   │   ├── consolidate.rs   ← arlm consolidate
-│   │   └── serve.rs         ← arlm serve (HTTP + SSE + /metrics)
+│   │   ├── run.rs           ← arags run "tarefa"
+│   │   ├── index.rs         ← arags index ./projeto
+│   │   ├── search.rs        ← arags search "query"
+│   │   ├── query.rs         ← arags query "pergunta" --project ./x
+│   │   ├── context.rs       ← arags context "tarefa" --project ./x
+│   │   ├── status.rs        ← arags status
+│   │   ├── history.rs       ← arags history
+│   │   ├── cost.rs          ← arags cost --by agent [plan 12]
+│   │   ├── session.rs       ← arags session create/resume [plan 13]
+│   │   ├── consolidate.rs   ← arags consolidate
+│   │   └── serve.rs         ← arags serve (HTTP + SSE + /metrics)
 │   ├── output/
 │   │   ├── mod.rs
 │   │   ├── json.rs          ← Output JSON
@@ -149,14 +149,14 @@ crates/arlm-cli/
 └── Cargo.toml
 ```
 
-**Dependências:** `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-memory`, `arlm-llm`, `clap`, `indicatif`, `console`, `prometheus`, `axum`
+**Dependências:** `arags-core`, `arags-storage`, `arags-search`, `arags-memory`, `arags-llm`, `clap`, `indicatif`, `console`, `prometheus`, `axum`
 
-## Crate: arlm-core
+## Crate: arags-core
 
 **Responsabilidade:** Engine RLM recursivo (planner/solver/synthesizer). O coração do sistema.
 
 ```
-crates/arlm-core/
+crates/arags-core/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs
@@ -175,14 +175,14 @@ crates/arlm-core/
 └── Cargo.toml
 ```
 
-**Dependências:** `arlm-llm`, `arlm-search`, `arlm-storage`, `anyhow`, `serde`, `tracing`, `tokio`, `futures`, `parking_lot`, `tokio-sync`
+**Dependências:** `arags-llm`, `arags-search`, `arags-storage`, `anyhow`, `serde`, `tracing`, `tokio`, `futures`, `parking_lot`, `tokio-sync`
 
-## Crate: arlm-storage
+## Crate: arags-storage
 
 **Responsabilidade:** Persistência SQLite (metadados, FTS5, estado) + usearch (vetores).
 
 ```
-crates/arlm-storage/
+crates/arags-storage/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs
@@ -210,12 +210,12 @@ crates/arlm-storage/
 
 **Dependências:** `rusqlite`, `usearch`, `arrow`, `arrow-array`, `sha2`, `anyhow`, `tracing`, `parking_lot`
 
-## Crate: arlm-embedding
+## Crate: arags-embedding
 
 **Responsabilidade:** Chunking de código/texto + geração de embeddings via candle.
 
 ```
-crates/arlm-embedding/
+crates/arags-embedding/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs
@@ -238,16 +238,16 @@ crates/arlm-embedding/
 
 **Dependências:** `candle-core`, `candle-transformers`, `candle-nn`, `tokenizers`, `memmap2`, `rayon`, `zstd`, `sha2`, `parking_lot`
 
-## Crate: arlm-search
+## Crate: arags-search
 
 **Responsabilidade:** Busca híbrida (BM25 via FTS5 + semântico + RRF fusion).
 
 ```
-crates/arlm-search/
+crates/arags-search/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs
-│   ├── bm25.rs              ← Busca BM25 via SQLite FTS5 (no arlm-storage)
+│   ├── bm25.rs              ← Busca BM25 via SQLite FTS5 (no arags-storage)
 │   ├── semantic.rs          ← Busca semântica via usearch
 │   ├── hybrid.rs            ← Fusão RRF
 │   ├── context.rs           ← Montagem de contexto para LLM
@@ -255,14 +255,14 @@ crates/arlm-search/
 └── Cargo.toml
 ```
 
-**Dependências:** `arlm-storage`, `arlm-embedding`, `usearch`, `serde`, `anyhow`
+**Dependências:** `arags-storage`, `arags-embedding`, `usearch`, `serde`, `anyhow`
 
-## Crate: arlm-memory
+## Crate: arags-memory
 
 **Responsabilidade:** Sistema de memória externa (multi-projeto, histórico, consolidação).
 
 ```
-crates/arlm-memory/
+crates/arags-memory/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs
@@ -277,14 +277,14 @@ crates/arlm-memory/
 └── Cargo.toml
 ```
 
-**Dependências:** `arlm-storage`, `arlm-embedding`, `arlm-search`, `notify` (inotify), `chrono`, `serde`, `anyhow`
+**Dependências:** `arags-storage`, `arags-embedding`, `arags-search`, `notify` (inotify), `chrono`, `serde`, `anyhow`
 
-## Crate: arlm-llm
+## Crate: arags-llm
 
 **Responsabilidade:** Abstração unificada de backends LLM (OpenAI, Anthropic, Ollama, etc).
 
 ```
-crates/arlm-llm/
+crates/arags-llm/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs
@@ -309,45 +309,45 @@ crates/arlm-llm/
 ```
 Compilação paralela (cargo build --workspace):
 
-arlm-llm          ←─ (sem deps internas)
+arags-llm          ←─ (sem deps internas)
     ↓
-arlm-storage      ←─ (sem deps internas)
+arags-storage      ←─ (sem deps internas)
     ↓
-arlm-embedding    ←─ (sem deps internas)
+arags-embedding    ←─ (sem deps internas)
     ↓
-arlm-search       ←─ arlm-storage, arlm-embedding
+arags-search       ←─ arags-storage, arags-embedding
     ↓
-arlm-memory       ←─ arlm-storage, arlm-embedding, arlm-search
+arags-memory       ←─ arags-storage, arags-embedding, arags-search
     ↓
-arlm-core         ←─ arlm-llm, arlm-search, arlm-memory
+arags-core         ←─ arags-llm, arags-search, arags-memory
     ↓
-arlm-cli          ←─ arlm-core, arlm-storage, arlm-search, arlm-memory, arlm-llm
+arags-cli          ←─ arags-core, arags-storage, arags-search, arags-memory, arags-llm
 ```
 
 ## Justificativa das Dependências
 
 | Crate | Dependência | Por quê |
 |-------|------------|---------|
-| arlm-storage | rusqlite (bundled) | SQLite estático, sem dependência do sistema |
-| arlm-storage | usearch | Vetores + HNSW embedding |
-| arlm-embedding | candle-core | Inferência local, sem Python |
-| arlm-embedding | memmap2 | Zero-copy I/O para arquivos grandes |
-| arlm-embedding | rayon | Paralelismo de dados para chunking |
-| arlm-embedding | zstd | Compressão de texto em disco |
-| arlm-search | rusqlite (FTS5) | BM25 via FTS5 (já no arlm-storage) |
-| arlm-core | tokio | Async para chamadas LLM |
-| arlm-core | parking_lot | Mutex/RwLock mais rápido que std |
-| arlm-core | tokio-sync | Broadcast channel do EventBus [plan 14] |
-| arlm-llm | tiktoken-rs | Contagem precisa de tokens [plan 13] |
-| arlm-cli | prometheus | Métricas por agente [plan 14] |
-| arlm-cli | axum | HTTP + SSE + /metrics no serve mode [plan 14] |
-| arlm-cli | indicatif | Barras de progresso |
-| arlm-cli | console | Cores e formatação no terminal |
-| arlm-cli | mimalloc | Allocator global leve p/ binary embarcado (guia Rust) |
+| arags-storage | rusqlite (bundled) | SQLite estático, sem dependência do sistema |
+| arags-storage | usearch | Vetores + HNSW embedding |
+| arags-embedding | candle-core | Inferência local, sem Python |
+| arags-embedding | memmap2 | Zero-copy I/O para arquivos grandes |
+| arags-embedding | rayon | Paralelismo de dados para chunking |
+| arags-embedding | zstd | Compressão de texto em disco |
+| arags-search | rusqlite (FTS5) | BM25 via FTS5 (já no arags-storage) |
+| arags-core | tokio | Async para chamadas LLM |
+| arags-core | parking_lot | Mutex/RwLock mais rápido que std |
+| arags-core | tokio-sync | Broadcast channel do EventBus [plan 14] |
+| arags-llm | tiktoken-rs | Contagem precisa de tokens [plan 13] |
+| arags-cli | prometheus | Métricas por agente [plan 14] |
+| arags-cli | axum | HTTP + SSE + /metrics no serve mode [plan 14] |
+| arags-cli | indicatif | Barras de progresso |
+| arags-cli | console | Cores e formatação no terminal |
+| arags-cli | mimalloc | Allocator global leve p/ binary embarcado (guia Rust) |
 
 ## Build Optimization (Rust 2024 — guia Rust)
 
-O arlm é **embarcado** e roda num CPU de deploy conhecido — habilitar otimizações
+O arags é **embarcado** e roda num CPU de deploy conhecido — habilitar otimizações
 que o guia Rust recomenda para single-binaries:
 
 ### `target-cpu=native`
@@ -371,11 +371,11 @@ trocar por `target-cpu=x86-64-v3` (AVX2) ou omitir.
 
 ### Allocator Global
 
-`arlm-cli` (e `serve`), seta o allocator `mimalloc` no binary — menos alocação/
+`arags-cli` (e `serve`), seta o allocator `mimalloc` no binary — menos alocação/
 fragmentação que glibc, ideal para ingestão de 100MB+ e inferência local:
 
 ```rust
-// crates/arlm-cli/src/main.rs
+// crates/arags-cli/src/main.rs
 use mimalloc::MiMalloc;
 
 #[global_allocator]

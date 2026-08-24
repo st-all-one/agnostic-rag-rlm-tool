@@ -1,7 +1,7 @@
 {
-  "name": "arlm-pi-extension",
+  "name": "arags-pi-extension",
   "version": "0.1.0",
-  "description": "RLM integration for Pi Agent",
+  "description": "ARAGS (Agnostic RAG Server) integration for Pi Agent",
   "pi": {
     "extensions": ["./index.ts"]
   },

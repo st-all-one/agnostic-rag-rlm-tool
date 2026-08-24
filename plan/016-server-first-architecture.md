@@ -2,7 +2,7 @@
 
 ## Context
 
-The current architecture is CLI-first: every command (run, search, index, query) opens its own SQLite connection, does work, and exits. The `arlm serve` HTTP server is a secondary feature that re-opens Storage on every request.
+The current architecture is CLI-first: every command (run, search, index, query) opens its own SQLite connection, does work, and exits. The `arags serve` HTTP server is a secondary feature that re-opens Storage on every request.
 
 This plan flips the model: the **server is the primary process** (long-running, always-on), and the **CLI becomes a thin gRPC client** that communicates with it. This enables:
 
@@ -18,7 +18,7 @@ This plan flips the model: the **server is the primary process** (long-running, 
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                   arlm-server                    │
+│                   arags-server                    │
 │            (long-running, always-on)             │
 │                                                  │
 │  ┌──────────┐  ┌──────────┐  ┌───────────────┐ │
@@ -39,7 +39,7 @@ This plan flips the model: the **server is the primary process** (long-running, 
                     gRPC (protobuf)
                          │
 ┌────────────────────────┴───────────────────────┐
-│                   arlm-cli                      │
+│                   arags-cli                      │
 │              (thin gRPC client)                 │
 │                                                  │
 │  ┌────────────┐  ┌────────────┐  ┌───────────┐ │
@@ -54,7 +54,7 @@ This plan flips the model: the **server is the primary process** (long-running, 
 
 ---
 
-## New Crate: `arlm-proto`
+## New Crate: `arags-proto`
 
 **Responsibility:** Protobuf definitions and generated Rust types for client-server communication.
 
@@ -62,7 +62,7 @@ This plan flips the model: the **server is the primary process** (long-running, 
 
 ```protobuf
 syntax = "proto3";
-package arlm;
+package arags;
 
 // ── Project Management ──
 
@@ -312,7 +312,7 @@ message SummarizeStatus {
 
 // ── gRPC Service ──
 
-service ArlmService {
+service AragsService {
   // Project management
   rpc CreateProject(CreateProjectRequest) returns (ProjectInfo);
   rpc ListProjects(google.protobuf.Empty) returns (ListProjectsResponse);
@@ -350,18 +350,18 @@ service ArlmService {
 
 ### Generated types
 
-Use `prost-build` in `build.rs` to generate Rust types from `.proto` files. Expose generated types via `pub mod proto { include!(concat!(env!("OUT_DIR"), "/arlm.rs")); }`.
+Use `prost-build` in `build.rs` to generate Rust types from `.proto` files. Expose generated types via `pub mod proto { include!(concat!(env!("OUT_DIR"), "/arags.rs")); }`.
 
 ---
 
-## New Crate: `arlm-server`
+## New Crate: `arags-server`
 
 **Responsibility:** Long-running server process that owns all state.
 
 ### Module Structure
 
 ```
-arlm-server/src/
+arags-server/src/
 ├── main.rs              # Entry point, signal handling, graceful shutdown
 ├── config.rs            # Server configuration (TOML)
 ├── state.rs             # AppState: shared state across handlers
@@ -383,10 +383,10 @@ arlm-server/src/
 │   ├── cost.rs          # Cost estimation for summarization
 │   └── progress.rs      # Progress tracking and streaming
 ├── commands/
-│   ├── up.rs            # arlm-server up (start server)
-│   ├── down.rs          # arlm-server down (graceful shutdown)
-│   ├── status.rs        # arlm-server status (health + stats)
-│   └── logs.rs          # arlm-server logs (tracing subscriber)
+│   ├── up.rs            # arags-server up (start server)
+│   ├── down.rs          # arags-server down (graceful shutdown)
+│   ├── status.rs        # arags-server status (health + stats)
+│   └── logs.rs          # arags-server logs (tracing subscriber)
 └── lifecycle.rs         # Server startup, shutdown, signal handling
 ```
 
@@ -399,7 +399,7 @@ pub struct AppState {
     pub event_bus: EventBus,        // Singleton, persists across runs
     pub write_queue: WriteQueue,    // Batched write operations
     pub summarizer: Summarizer,     // Background summarization engine
-    pub metrics: ArlmMetrics,       // Persistent metrics
+    pub metrics: AragsMetrics,       // Persistent metrics
     pub config: ServerConfig,       // Loaded from TOML
 }
 ```
@@ -410,21 +410,21 @@ O servidor é gerenciado via comandos CLI dedicados:
 
 ```bash
 # Native
-arlm-server up                    # foreground (bloqueia terminal)
-arlm-server up --daemon           # background (detach)
-arlm-server down                  # graceful shutdown (envia SIGTERM)
-arlm-server status                # verifica se está rodando + stats
-arlm-server logs                  # logs estruturados (tracing)
-arlm-server logs -f               # follow em tempo real
-arlm-server logs --level debug    # filtrar por nível
+arags-server up                    # foreground (bloqueia terminal)
+arags-server up --daemon           # background (detach)
+arags-server down                  # graceful shutdown (envia SIGTERM)
+arags-server status                # verifica se está rodando + stats
+arags-server logs                  # logs estruturados (tracing)
+arags-server logs -f               # follow em tempo real
+arags-server logs --level debug    # filtrar por nível
 
 # Docker
-docker run -d --name arlm \\
+docker run -d --name arags \\
   -p 50051:50051 \\
-  -v arlm-data:/data \\
-  arlm-server:latest
-docker stop arlm
-docker logs -f arlm
+  -v arags-data:/data \\
+  arags-server:latest
+docker stop arags
+docker logs -f arags
 ```
 
 #### Lifecycle Internals
@@ -449,17 +449,17 @@ async fn main() -> Result<()> {
     write_queue.start();
     summarizer.start();
 
-    // Write PID file for `arlm-server status` / `arlm-server down`
+    // Write PID file for `arags-server status` / `arags-server down`
     std::fs::write(config.pid_file(), std::process::id().to_string())?;
 
     // Build gRPC server
-    let grpc_service = ArlmGrpcService::new(state.clone());
+    let grpc_service = AragsGrpcService::new(state.clone());
     let addr = config.listen_addr.parse()?;
     let server = tonic::transport::Server::builder()
         .add_service(grpc_service)
         .serve_with_shutdown(addr, shutdown_signal())?;
 
-    info!(addr = %addr, "arlm-server listening");
+    info!(addr = %addr, "arags-server listening");
     server.await?;
 
     // Graceful shutdown
@@ -487,19 +487,19 @@ async fn shutdown_signal() {
 Ordem de resolução do endereço do servidor:
 
 ```
-1. .arlm/config.toml (local, sobrescreve global)
-2. ~/.arlm/config.toml (global)
-3. ARLM_SERVER_ADDR env var
+1. .arags/config.toml (local, sobrescreve global)
+2. ~/.arags/config.toml (global)
+3. ARAGS_SERVER_ADDR env var
 4. Fallback: 127.0.0.1:50051
 ```
 
-#### Config Global (`~/.arlm/config.toml`)
+#### Config Global (`~/.arags/config.toml`)
 
 ```toml
 [server]
 addr = "127.0.0.1:50051"
 # Para servidor remoto:
-# addr = "arlm.myteam.com:50051"
+# addr = "arags.myteam.com:50051"
 
 [server.tls]
 enabled = false
@@ -507,19 +507,19 @@ enabled = false
 # key_path = "/path/to/key.pem"
 ```
 
-#### Config Local (`.arlm/config.toml`)
+#### Config Local (`.arags/config.toml`)
 
 ```toml
 [server]
 # Sobrescreve config global para este projeto
-addr = "arlm.myteam.com:50051"
+addr = "arags.myteam.com:50051"
 ```
 
 #### Env Var
 
 ```bash
-export ARLM_SERVER_ADDR="arlm.myteam.com:50051"
-arlm search "autenticação"  # usa o endereço do env
+export ARAGS_SERVER_ADDR="arags.myteam.com:50051"
+arags search "autenticação"  # usa o endereço do env
 ```
 
 ### Write Queue
@@ -550,7 +550,7 @@ Runs automatically after indexing completes. **Never sends more than ~8K tokens 
 #### Cascade Flow
 
 ```
-arlm index .  (30K linhas, 150 arquivos)
+arags index .  (30K linhas, 150 arquivos)
     │
     ├── 1. Chunking (sem LLM, custo $0)
     │      30K linhas → 600 chunks → SQLite
@@ -603,7 +603,7 @@ Re-index:
 Quando alguém busca, retorna ambos os tipos:
 
 ```
-arlm search "autenticação"
+arags search "autenticação"
 
 Resultados:
   1. [SUMMARY] "módulo auth/ - Gerencia autenticação JWT..."
@@ -628,7 +628,7 @@ Resultado: contexto rico e denso, não poluído com código irrelevante.
 
 ---
 
-## Refactor: `arlm-storage` (SQLite Connection Pool)
+## Refactor: `arags-storage` (SQLite Connection Pool)
 
 ### Changes to `conn.rs`
 
@@ -660,7 +660,7 @@ enum StorageConn<'a> {
 
 ### Migration Order
 
-1. Add `r2d2` + `r2d2-sqlite` to `arlm-storage/Cargo.toml`
+1. Add `r2d2` + `r2d2-sqlite` to `arags-storage/Cargo.toml`
 2. Refactor `conn.rs`: add `open_pooled()`, internal `get_conn()` abstraction
 3. Move PRAGMAs to connection factory (run on each new pooled connection)
 4. Run migrations once at startup before pool creation
@@ -683,14 +683,14 @@ enum StorageConn<'a> {
 | `history.rs` | Same (~5 methods) |
 | `patterns.rs` | Same (~3 methods) |
 | `cache.rs` | Same (~3 methods) |
-| `arlm-search/bm25.rs` | Remove `Arc<Mutex<Connection>>`, use pool (~8 methods) |
+| `arags-search/bm25.rs` | Remove `Arc<Mutex<Connection>>`, use pool (~8 methods) |
 | `Cargo.toml` | Add `r2d2`, `r2d2-sqlite` |
 
 **~70+ methods touched across ~12 files.**
 
 ---
 
-## Refactor: `arlm-cli` (Thin Client)
+## Refactor: `arags-cli` (Thin Client)
 
 ### What Gets Removed
 
@@ -707,48 +707,48 @@ enum StorageConn<'a> {
 
 | Component | Purpose |
 |-----------|---------|
-| `arlm-proto` dependency | Generated protobuf types |
+| `arags-proto` dependency | Generated protobuf types |
 | gRPC client setup | Connect to server at startup |
-| Server address config | `~/.arlm/config.toml` `[server]` section |
+| Server address config | `~/.arags/config.toml` `[server]` section |
 
 ### Command Migration
 
 | Current Command | New Behavior |
 |----------------|--------------|
-| `arlm index <path>` | gRPC `IndexProject` → server indexes |
-| `arlm search <query>` | gRPC `Search` → server searches |
-| `arlm run <task>` | gRPC `StartRun` → server executes |
-| `arlm context <task>` | gRPC `BuildContext` → server builds |
-| `arlm status` | gRPC `GetServerStatus` |
-| `arlm session ...` | gRPC session methods |
-| `arlm serve` | **Becomes primary**: starts the server |
-| `arlm query` | gRPC `Search` + context assembly |
-| `arlm history` | gRPC session history |
-| `arlm cost` | gRPC `GetServerStatus` (cost stats) |
+| `arags index <path>` | gRPC `IndexProject` → server indexes |
+| `arags search <query>` | gRPC `Search` → server searches |
+| `arags run <task>` | gRPC `StartRun` → server executes |
+| `arags context <task>` | gRPC `BuildContext` → server builds |
+| `arags status` | gRPC `GetServerStatus` |
+| `arags session ...` | gRPC session methods |
+| `arags serve` | **Becomes primary**: starts the server |
+| `arags query` | gRPC `Search` + context assembly |
+| `arags history` | gRPC session history |
+| `arags cost` | gRPC `GetServerStatus` (cost stats) |
 
 ### CLI Config Addition
 
 ```toml
-# ~/.arlm/config.toml (global)
+# ~/.arags/config.toml (global)
 [server]
 addr = "127.0.0.1:50051"
 # Para servidor remoto:
-# addr = "arlm.myteam.com:50051"
+# addr = "arags.myteam.com:50051"
 
 [server.tls]
 enabled = false
 # cert_path = "/path/to/cert.pem"
 # key_path = "/path/to/key.pem"
 
-# .arlm/config.toml (local, sobrescreve global)
+# .arags/config.toml (local, sobrescreve global)
 [server]
-addr = "arlm.myteam.com:50051"
+addr = "arags.myteam.com:50051"
 ```
 
 Ordem de resolução:
-1. `.arlm/config.toml` (local)
-2. `~/.arlm/config.toml` (global)
-3. `ARLM_SERVER_ADDR` env var
+1. `.arags/config.toml` (local)
+2. `~/.arags/config.toml` (global)
+3. `ARAGS_SERVER_ADDR` env var
 4. Fallback: `127.0.0.1:50051`
 
 ---
@@ -993,17 +993,17 @@ impl WriteQueue {
 
 | Crate | Purpose | Key Dependencies |
 |-------|---------|-----------------|
-| `arlm-proto` | Protobuf definitions + generated types | `prost`, `prost-build`, `tonic-build` |
-| `arlm-server` | Long-running server process | `tonic`, `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-embedding`, `arlm-memory`, `arlm-llm` |
+| `arags-proto` | Protobuf definitions + generated types | `prost`, `prost-build`, `tonic-build` |
+| `arags-server` | Long-running server process | `tonic`, `arags-core`, `arags-storage`, `arags-search`, `arags-embedding`, `arags-memory`, `arags-llm` |
 
 ### Updated crates
 
 | Crate | New Dependencies | Changes |
 |-------|-----------------|---------|
-| `arlm-storage` | `r2d2`, `r2d2-sqlite` | Connection pool, dual-layer schema |
-| `arlm-cli` | `arlm-proto`, `tonic` | Thin gRPC client, remove REPL |
-| `arlm-search` | (none) | Search summaries table |
-| `arlm-core` | (none) | Remove `solve_task_repl` |
+| `arags-storage` | `r2d2`, `r2d2-sqlite` | Connection pool, dual-layer schema |
+| `arags-cli` | `arags-proto`, `tonic` | Thin gRPC client, remove REPL |
+| `arags-search` | (none) | Search summaries table |
+| `arags-core` | (none) | Remove `solve_task_repl` |
 
 ### Removed
 
@@ -1019,34 +1019,34 @@ impl WriteQueue {
 
 ## Implementation Phases
 
-### Phase 1: arlm-proto crate (1-2 hours)
+### Phase 1: arags-proto crate (1-2 hours)
 
-1. Create `crates/arlm-proto/` with `Cargo.toml`
-2. Write `proto/arlm.proto` with all message/service definitions
+1. Create `crates/arags-proto/` with `Cargo.toml`
+2. Write `proto/arags.proto` with all message/service definitions
 3. Create `build.rs` with `tonic_build` + `prost_build`
-4. Verify generation: `cargo check -p arlm-proto`
+4. Verify generation: `cargo check -p arags-proto`
 5. Add workspace member
 
 ### Phase 2: SQLite connection pool (2-3 hours)
 
-1. Add `r2d2`, `r2d2-sqlite` to `arlm-storage/Cargo.toml`
+1. Add `r2d2`, `r2d2-sqlite` to `arags-storage/Cargo.toml`
 2. Refactor `conn.rs`: add `open_pooled()`, `get_conn()` abstraction
 3. Create `Summaries` table schema (migration 10)
 4. Update all 11 sub-modules to use `get_conn()?`
 5. Add explicit transactions for multi-statement operations
 6. Update `Bm25Search` to pull from pool
-7. Verify: `cargo test -p arlm-storage`
-8. Verify: `cargo test -p arlm-search`
+7. Verify: `cargo test -p arags-storage`
+8. Verify: `cargo test -p arags-search`
 
-### Phase 3: arlm-server crate (3-4 hours)
+### Phase 3: arags-server crate (3-4 hours)
 
-1. Create `crates/arlm-server/` with `Cargo.toml`
+1. Create `crates/arags-server/` with `Cargo.toml`
 2. Implement `state.rs` (AppState)
 3. Implement `write_queue/` (batched writes)
 4. Implement `grpc/` handlers (one at a time)
 5. Implement `lifecycle.rs` (startup, shutdown)
 6. Implement `main.rs` (entry point)
-7. Verify: `cargo check -p arlm-server`
+7. Verify: `cargo check -p arags-server`
 8. Manual test: start server, run gRPC calls with `grpcurl` or similar
 
 ### Phase 4: Summarizer (2-3 hours)
@@ -1057,17 +1057,17 @@ impl WriteQueue {
 4. Integrate with indexing pipeline (auto-summarize after index)
 5. Update `HybridSearch` to search summaries
 6. Update `BuildContext` to prefer summaries
-7. Verify: `cargo test -p arlm-server`
+7. Verify: `cargo test -p arags-server`
 
-### Phase 5: arlm-cli refactor (2-3 hours)
+### Phase 5: arags-cli refactor (2-3 hours)
 
-1. Add `arlm-proto` and `tonic` dependencies
+1. Add `arags-proto` and `tonic` dependencies
 2. Create gRPC client module (`client.rs`)
 3. Refactor each command to use gRPC client
 4. Remove REPL (`repl.rs`, `CodeExecutor`, `--repl` flag)
 5. Remove direct `Storage::open()` from all commands
 6. Add `[server]` config section
-7. Verify: `cargo test -p arlm-cli`
+7. Verify: `cargo test -p arags-cli`
 8. Verify: `cargo clippy --workspace`
 
 ### Phase 6: Cleanup & Migration (1 hour)
@@ -1099,8 +1099,8 @@ impl WriteQueue {
 
 ## Success Criteria
 
-- [ ] `arlm-server up` starts server, `arlm-server down` stops it gracefully
-- [ ] `arlm-server status` shows health + stats (projects, chunks, summaries)
+- [ ] `arags-server up` starts server, `arags-server down` stops it gracefully
+- [ ] `arags-server status` shows health + stats (projects, chunks, summaries)
 - [ ] CLI connects to server via gRPC and executes all 19 commands
 - [ ] SQLite connection pool handles 10+ concurrent requests without contention
 - [ ] Write queue batches writes and flushes within 100ms
@@ -1112,4 +1112,4 @@ impl WriteQueue {
 - [ ] All existing tests pass (170+ tests)
 - [ ] No clippy warnings in new code
 - [ ] Config resolution: local → global → env → fallback
-- [ ] Docker support: `docker run arlm-server:latest` works
+- [ ] Docker support: `docker run arags-server:latest` works

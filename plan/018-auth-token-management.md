@@ -10,7 +10,7 @@ O plano 017 (cache semântico de respostas) introduz, para equipes, operações 
 
 Este plano é **executado antes do 017** para já deixar a estrutura de auth pronta e extensiva; o `InvalidateCache` do 017 passa a ser **admin-gated** por este sistema.
 
-Princípio: o foco é o **refresh token** (longo, seguro, guardado no `~/.arlm/config.toml` do client). A partir dele o CLI gerencia sozinho **session tokens de 5 min**, sem interferência do usuário.
+Princípio: o foco é o **refresh token** (longo, seguro, guardado no `~/.arags/config.toml` do client). A partir dele o CLI gerencia sozinho **session tokens de 5 min**, sem interferência do usuário.
 
 ---
 
@@ -35,14 +35,14 @@ Princípio: o foco é o **refresh token** (longo, seguro, guardado no `~/.arlm/c
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Client (arlm-cli) — config.toml: [auth] username + refresh_token
+│  Client (arags-cli) — config.toml: [auth] username + refresh_token
 │                                                                │
 │  Refresh(refresh_token) ──gRPC──► Server                      │
 │  ◄── session_token (5 min, bearer)                            │
 │  toda RPC leva: Authorization: Bearer <session>                │
 └──────────────────────────────────────────────────────────────┘
                             │
-                            ▼  arlm-server (interceptor)
+                            ▼  arags-server (interceptor)
 ┌──────────────────────────────────────────────────────────────┐
 │  • Refresh: hash(refresh) → tokens(não revogado) → cria session│
 │  • RPCs admin (InvalidateCache): exige role=admin             │
@@ -51,7 +51,7 @@ Princípio: o foco é o **refresh token** (longo, seguro, guardado no `~/.arlm/c
 └──────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────┐
-│  arlm-server INTERNAL CLI (container, DB direto, SEM gRPC)     │
+│  arags-server INTERNAL CLI (container, DB direto, SEM gRPC)     │
 │   • admin create-refresh --username X --role admin → imprime   │
 │   • admin revoke --id/--username → revoga refresh (+ sessions) │
 │   • admin prune-tokens → revoga TODOS os tokens (vazamento)    │
@@ -62,7 +62,7 @@ Princípio: o foco é o **refresh token** (longo, seguro, guardado no `~/.arlm/c
 
 ## Data Model
 
-### Tabela `tokens` (refresh tokens) — `arlm-storage`
+### Tabela `tokens` (refresh tokens) — `arags-storage`
 
 | Coluna | Tipo | Papel |
 |---|---|---|
@@ -79,7 +79,7 @@ Princípio: o foco é o **refresh token** (longo, seguro, guardado no `~/.arlm/c
 
 Refresh tokens expiram em **1 ano** (a menos que revogados antes).
 
-### Tabela `sessions` (session tokens de 5 min) — `arlm-storage`
+### Tabela `sessions` (session tokens de 5 min) — `arags-storage`
 
 | Coluna | Tipo | Papel |
 |---|---|---|
@@ -109,19 +109,19 @@ Validação de session: `expires_at > now` **e** `tokens.revoked = 0` **e** `tok
 
 ## Server Internal CLI (container-only)
 
-Subcomando do binário `arlm-server` que abre `Storage` **diretamente** (não via gRPC, sem auth — só faz sentido dentro do container/com acesso ao FS). Não exposto em gRPC (evita escalada de privilégio pela rede).
+Subcomando do binário `arags-server` que abre `Storage` **diretamente** (não via gRPC, sem auth — só faz sentido dentro do container/com acesso ao FS). Não exposto em gRPC (evita escalada de privilégio pela rede).
 
-- `arlm-server admin create-refresh --username <u> --role <admin|non_admin>` → gera e imprime o refresh token.
-- `arlm-server admin revoke --id <token_id>` (ou `--username <u>`) → revoga aquele refresh (+ sessions).
-- `arlm-server admin prune-tokens` → revoga **todos** os tokens + limpa sessions (resposta a vazamento crítico).
+- `arags-server admin create-refresh --username <u> --role <admin|non_admin>` → gera e imprime o refresh token.
+- `arags-server admin revoke --id <token_id>` (ou `--username <u>`) → revoga aquele refresh (+ sessions).
+- `arags-server admin prune-tokens` → revoga **todos** os tokens + limpa sessions (resposta a vazamento crítico).
 
-> "Só executável dentro do container": o binário valida que está rodando com acesso ao `ARLM_DATA_DIR`/DB local; o gRPC **não** expõe `CreateToken`/`Revoke`/`Prune`. O caminho de rede só tem `AuthRefresh` (troca refresh→session) e as RPCs de negócio já gateadas.
+> "Só executável dentro do container": o binário valida que está rodando com acesso ao `ARAGS_DATA_DIR`/DB local; o gRPC **não** expõe `CreateToken`/`Revoke`/`Prune`. O caminho de rede só tem `AuthRefresh` (troca refresh→session) e as RPCs de negócio já gateadas.
 
 ---
 
 ## Config.toml (auth section)
 
-`~/.arlm/config.toml` (criado por `install.sh`):
+`~/.arags/config.toml` (criado por `install.sh`):
 
 ```toml
 [auth]
@@ -129,13 +129,13 @@ username = "dev1"
 refresh_token = "<token grande gerado pelo admin create-refresh>"
 ```
 
-O `arlm-cli` lê `[auth]`, faz `AuthRefresh` automático e anexa o bearer. O `refresh_token` plaintext vive só aqui (client-side) e no momento da criação (impresso).
+O `arags-cli` lê `[auth]`, faz `AuthRefresh` automático e anexa o bearer. O `refresh_token` plaintext vive só aqui (client-side) e no momento da criação (impresso).
 
 ---
 
 ## CLI auto session management
 
-- No `arlm-cli`: módulo `auth_client` que, na inicialização (ou ao receber `UNAUTHENTICATED`), chama `AuthRefresh`, cacheia o session token com TTL de 5 min e renova proativamente (~4 min).
+- No `arags-cli`: módulo `auth_client` que, na inicialização (ou ao receber `UNAUTHENTICATED`), chama `AuthRefresh`, cacheia o session token com TTL de 5 min e renova proativamente (~4 min).
 - Todas as chamadas gRPC anexam `Authorization: Bearer <session>` via interceptor/outbound metadata.
 - Sem interferência do usuário: o fluxo de `query`/`cache invalidate` continua igual, o token é transparente.
 
@@ -143,7 +143,7 @@ O `arlm-cli` lê `[auth]`, faz `AuthRefresh` automático e anexa o bearer. O `re
 
 ## Security
 
-- **Refresh token**: 128 bytes CSPRNG → hex (256 chars) ou base64url; armazenado **só** como `SHA-256(refresh + pepper)`. Pepper via env `ARLM_TOKEN_PEPPER` (opcional).
+- **Refresh token**: 128 bytes CSPRNG → hex (256 chars) ou base64url; armazenado **só** como `SHA-256(refresh + pepper)`. Pepper via env `ARAGS_TOKEN_PEPPER` (opcional).
 - **Session 5 min**: janela curta limita blast radius; revogar refresh mata sessions ativas.
 - **prune-tokens**: gesto de emergência para vazamento — força todo mundo a re-autenticar.
 - **Token management fora do gRPC**: só CLI interno (container) cria/revoga → sem escalada remota.
@@ -155,12 +155,12 @@ O `arlm-cli` lê `[auth]`, faz `AuthRefresh` automático e anexa o bearer. O `re
 
 | Componente | Crate | Arquivo(s) |
 |---|---|---|
-| Tabelas `tokens` + `sessions` + migrações + CRUD/validate | `arlm-storage` | `src/store/tokens.rs` (novo) |
-| Auth core (hash, pepper, `Role`, interceptor) | `arlm-server` | `src/auth/mod.rs` (novo) |
-| `AuthRefresh` RPC | `arlm-proto`, `arlm-server` | `proto/arlm.proto`, `grpc/auth.rs` (novo) |
-| Server internal CLI (container) | `arlm-server` | `src/cli/admin.rs` (novo, direct Storage) |
-| Config.toml `[auth]` + CLI auto session | `arlm-cli` + `arlm-llm` (config) | `config.rs` (`AuthConfig`), `src/auth_client.rs` (novo) |
-| Gate admin em `InvalidateCache` (plan 017) | `arlm-server` | interceptor + `grpc/query_cache.rs` |
+| Tabelas `tokens` + `sessions` + migrações + CRUD/validate | `arags-storage` | `src/store/tokens.rs` (novo) |
+| Auth core (hash, pepper, `Role`, interceptor) | `arags-server` | `src/auth/mod.rs` (novo) |
+| `AuthRefresh` RPC | `arags-proto`, `arags-server` | `proto/arags.proto`, `grpc/auth.rs` (novo) |
+| Server internal CLI (container) | `arags-server` | `src/cli/admin.rs` (novo, direct Storage) |
+| Config.toml `[auth]` + CLI auto session | `arags-cli` + `arags-llm` (config) | `config.rs` (`AuthConfig`), `src/auth_client.rs` (novo) |
+| Gate admin em `InvalidateCache` (plan 017) | `arags-server` | interceptor + `grpc/query_cache.rs` |
 | Testes | `tests/` | `auth_test.rs` |
 
 ---
@@ -194,7 +194,7 @@ O `arlm-cli` lê `[auth]`, faz `AuthRefresh` automático e anexa o bearer. O `re
 | Risco | Mitigação |
 |---|---|
 | Refresh token em plaintext no config.toml do client | é inevitável (credential do client); protegido por permissão de arquivo 0600; rotação via `prune-tokens` |
-| Pepper ausente | `ARLM_TOKEN_PEPPER` opcional; sem ele, hash ainda evita vazamento de plaintext no DB |
+| Pepper ausente | `ARAGS_TOKEN_PEPPER` opcional; sem ele, hash ainda evita vazamento de plaintext no DB |
 | Session token vazado | janela de 5 min; revogar refresh mata sessions |
 | Escalada remota de token mgmt | `CreateToken`/`Revoke`/`Prune` **não** expostos em gRPC (só CLI interno) |
 | `prune-tokens` acidental | exigir confirmação/flag no CLI interno |
@@ -216,17 +216,17 @@ O `arlm-cli` lê `[auth]`, faz `AuthRefresh` automático e anexa o bearer. O `re
   e os RPCs de health (`GetServerStatus`, `StreamEvents`) ficam isentos. O mesmo
   `Role`/`AuthContext`/`require_admin` é reutilizado.
 - **Token de 128 bytes** (hex 256 chars) via `getrandom`, hasheado com `SHA-256(+pepper)`
-  (`ARLM_TOKEN_PEPPER` opcional). Validade de refresh = 1 ano; session = 5 min.
+  (`ARAGS_TOKEN_PEPPER` opcional). Validade de refresh = 1 ano; session = 5 min.
 - **CLI**: `auth_client::connect` faz `AuthRefresh` e anexa `Bearer` via interceptor de
   cliente, com renovação proativa a cada 4 min (tarefa em background). Sem `[auth]` no
   config, o cliente não envia header (server rejeita com `UNAUTHENTICATED`).
-- **Internal CLI**: `arlm-server admin create-refresh|revoke|prune-tokens` abre o
+- **Internal CLI**: `arags-server admin create-refresh|revoke|prune-tokens` abre o
   `Storage` direto (sem gRPC), então não há escalada remota de gestão de tokens.
 - **Gate admin em `InvalidateCache` (plan 017):** o RPC `InvalidateCache`
   (`proto/query_cache.proto`, handler `grpc/query_cache.rs`) exige sessão válida
   **e** `role=admin` via `authenticate` + `require_admin`. Non-admin recebe
   `PERMISSION_DENIED`; sessão ausente recebe `UNAUTHENTICATED`. Opera sobre a
-  tabela `result_cache` já existente via `arlm_storage::cache::invalidate_cache`
+  tabela `result_cache` já existente via `arags_storage::cache::invalidate_cache`
   (purge por `project` ou total quando `project` vazio), retornando
   `invalidated_by` para auditoria. Preparação para o plan 017; o preenchimento
   e a leitura do cache semântico propriamente ditos vêm no plan 017.

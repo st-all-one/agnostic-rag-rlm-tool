@@ -2,14 +2,14 @@
 
 ## Visão Geral
 
-O `arlm` é agnóstico a agentes — qualquer agente de IA pode usá-lo via CLI ou HTTP. Cada agente tem seu padrão de integração, mas todos compartilham a mesma memória central.
+O `arags` é agnóstico a agentes — qualquer agente de IA pode usá-lo via CLI ou HTTP. Cada agente tem seu padrão de integração, mas todos compartilham a mesma memória central.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                  Memória Compartilhada                        │
 │                                                              │
-│  ~/.arlm/projects/meu-projeto/knowledge.db                  │
-│  ~/.arlm/projects/meu-projeto/vectors.lance                 │
+│  ~/.arags/projects/meu-projeto/knowledge.db                  │
+│  ~/.arags/projects/meu-projeto/vectors.lance                 │
 │                                                              │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │
 │  │OPencode  │ │Pi Agent  │ │ Cursor   │ │  Aider   │       │
@@ -21,7 +21,7 @@ O `arlm` é agnóstico a agentes — qualquer agente de IA pode usá-lo via CLI 
 │       └─────────────┴─────────────┴─────────────┘            │
 │                         │                                    │
 │                   ┌─────▼─────┐                              │
-│                   │   arlm    │                              │
+│                   │   arags    │                              │
 │                   │   CLI/    │                              │
 │                   │   HTTP    │                              │
 │                   └───────────┘                              │
@@ -51,7 +51,7 @@ O `arlm` é agnóstico a agentes — qualquer agente de IA pode usá-lo via CLI 
           "description": "Formato do output"
         }
       },
-      "command": "arlm context \"{{task}}\" --project {{cwd}} --format {{format}}"
+      "command": "arags context \"{{task}}\" --project {{cwd}} --format {{format}}"
     },
     {
       "name": "rlm_search",
@@ -67,7 +67,7 @@ O `arlm` é agnóstico a agentes — qualquer agente de IA pode usá-lo via CLI 
           "description": "Número de resultados"
         }
       },
-      "command": "arlm search \"{{query}}\" --project {{cwd}} --top-k {{top_k}} --format json"
+      "command": "arags search \"{{query}}\" --project {{cwd}} --top-k {{top_k}} --format json"
     },
     {
       "name": "rlm_run",
@@ -83,7 +83,7 @@ O `arlm` é agnóstico a agentes — qualquer agente de IA pode usá-lo via CLI 
           "description": "Profundidade máxima de recursão"
         }
       },
-      "command": "arlm run \"{{task}}\" --project {{cwd}} --depth {{depth}} --format tree"
+      "command": "arags run \"{{task}}\" --project {{cwd}} --depth {{depth}} --format tree"
     }
   ]
 }
@@ -96,7 +96,7 @@ Usuário: "Analise o bug de login no meu projeto"
 
 OPencode internamente:
 1. Chama tool rlm_context com task="bug de login"
-2. arlm retorna contexto formatado como prompt
+2. arags retorna contexto formatado como prompt
 3. OPencode usa o contexto para entender o problema
 4. OPencode resolve o bug usando o código relevante encontrado
 ```
@@ -121,7 +121,7 @@ export default function activate(pi: ExtensionAPI) {
     },
     execute: async (params) => {
       const result = execSync(
-        `arlm context "${params.task}" --project ${process.cwd()} --format ${params.format}`,
+        `arags context "${params.task}" --project ${process.cwd()} --format ${params.format}`,
         { encoding: "utf-8" }
       );
       return result;
@@ -138,7 +138,7 @@ export default function activate(pi: ExtensionAPI) {
     },
     execute: async (params) => {
       const result = execSync(
-        `arlm search "${params.query}" --project ${process.cwd()} --top-k ${params.top_k} --format json`,
+        `arags search "${params.query}" --project ${process.cwd()} --top-k ${params.top_k} --format json`,
         { encoding: "utf-8" }
       );
       return JSON.parse(result);
@@ -155,7 +155,7 @@ export default function activate(pi: ExtensionAPI) {
     },
     execute: async (params) => {
       const result = execSync(
-        `arlm run "${params.task}" --project ${process.cwd()} --depth ${params.depth} --format json`,
+        `arags run "${params.task}" --project ${process.cwd()} --depth ${params.depth} --format json`,
         { encoding: "utf-8" }
       );
       return JSON.parse(result);
@@ -168,7 +168,7 @@ export default function activate(pi: ExtensionAPI) {
 
 ```json
 {
-  "name": "arlm-pi-extension",
+  "name": "arags-pi-extension",
   "version": "0.1.0",
   "pi": {
     "extensions": ["./index.ts"]
@@ -186,15 +186,15 @@ export default function activate(pi: ExtensionAPI) {
 {
   "commands": {
     "rlm": {
-      "command": "arlm context \"$ARGUMENTS\" --project . --format prompt",
+      "command": "arags context \"$ARGUMENTS\" --project . --format prompt",
       "description": "Search project context with RLM"
     },
     "rlm-search": {
-      "command": "arlm search \"$ARGUMENTS\" --project . --format json",
+      "command": "arags search \"$ARGUMENTS\" --project . --format json",
       "description": "Search code with RLM"
     },
     "rlm-analyze": {
-      "command": "arlm run \"$ARGUMENTS\" --project . --depth 3 --format tree",
+      "command": "arags run \"$ARGUMENTS\" --project . --depth 3 --format tree",
       "description": "Analyze with RLM recursively"
     }
   }
@@ -205,7 +205,7 @@ export default function activate(pi: ExtensionAPI) {
 
 ```
 /rlm bug no login
-→ Cursor executa: arlm context "bug no login" --project . --format prompt
+→ Cursor executa: arags context "bug no login" --project . --format prompt
 → Output é injetado no contexto do Cursor
 ```
 
@@ -216,12 +216,12 @@ export default function activate(pi: ExtensionAPI) {
 ```yaml
 # .aider.conf.yml
 rlm_context:
-  command: "arlm context \"{question}\" --project . --format prompt"
+  command: "arags context \"{question}\" --project . --format prompt"
   inject: true
   priority: 10
 
 rlm_search:
-  command: "arlm search \"{question}\" --project . --format json"
+  command: "arags search \"{question}\" --project . --format json"
   inject: false
   priority: 20
 ```
@@ -236,7 +236,7 @@ import json
 def on_question(question: str, **kwargs):
     # Busca contexto RLM
     result = subprocess.run(
-        ["arlm", "context", question, "--project", ".", "--format", "json"],
+        ["arags", "context", question, "--project", ".", "--format", "json"],
         capture_output=True,
         text=True
     )
@@ -259,11 +259,11 @@ def on_question(question: str, **kwargs):
 // ~/.claude/claude_desktop_config.json
 {
   "mcpServers": {
-    "arlm": {
-      "command": "arlm",
+    "arags": {
+      "command": "arags",
       "args": ["serve", "--mcp", "--port", "8080"],
       "env": {
-        "ARLM_PROJECT": "/home/user/projetos/meu-app"
+        "ARAGS_PROJECT": "/home/user/projetos/meu-app"
       }
     }
   }
@@ -273,7 +273,7 @@ def on_question(question: str, **kwargs):
 ### MCP Tools
 
 ```rust
-// No arlm serve --mcp
+// No arags serve --mcp
 pub fn mcp_tools() -> Vec<McpTool> {
     vec![
         McpTool {
@@ -309,7 +309,7 @@ pub fn mcp_tools() -> Vec<McpTool> {
 
 ```bash
 # Servidor
-arlm serve --port 8080 --host 0.0.0.0
+arags serve --port 8080 --host 0.0.0.0
 
 # Endpoints
 POST /context    → Contexto para agente
@@ -346,9 +346,9 @@ curl -s http://localhost:8080/run \
 2. OPencode recebe a tarefa
 
 3. OPencode chama tool rlm_context:
-   arlm context "bug de login" --project ./meu-app --format prompt
+   arags context "bug de login" --project ./meu-app --format prompt
 
-4. arlm executa:
+4. arags executa:
    a. Embedding da query (5ms)
    b. Busca semântica usearch (10ms)
    c. Busca BM25 SQLite (5ms)
@@ -357,7 +357,7 @@ curl -s http://localhost:8080/run \
    f. Montagem do prompt (2ms)
    Total: ~28ms
 
-5. arlm retorna contexto formatado:
+5. arags retorna contexto formatado:
    "## Contexto do Projeto: meu-app
     ### Arquivos Relevantes
     [chunk 1] src/auth/login.rs (score: 0.89)
@@ -370,10 +370,10 @@ curl -s http://localhost:8080/run \
    - Resolve o bug
 
 7. OPencode opcionalmente salva o resultado:
-   arlm save-finding "bug de login" "token não verificado" --project ./meu-app
+   arags save-finding "bug de login" "token não verificado" --project ./meu-app
 
 8. Próxima vez que alguém perguntar sobre login:
-   arlm context "login" --project ./meu-app
+   arags context "login" --project ./meu-app
    → Inclui o histórico do bug resolvido
 ```
 
@@ -381,13 +381,13 @@ curl -s http://localhost:8080/run \
 
 ```bash
 # Agente A (OPencode) indexa o projeto
-arlm index ./meu-app --backend openai
+arags index ./meu-app --backend openai
 
 # Agente B (Pi) já pode usar o mesmo knowledge base
-arlm context "bug de login" --project ./meu-app
+arags context "bug de login" --project ./meu-app
 
 # Agente C (Cursor) também
-arlm search "validate_token" --project ./meu-app
+arags search "validate_token" --project ./meu-app
 
 # Todos compartilham:
 # - Mesmos chunks
@@ -402,23 +402,23 @@ arlm search "validate_token" --project ./meu-app
 
 ```bash
 # Cada projeto tem seu próprio knowledge base
-~/.arlm/projects/projeto-a/  # Isolado
-~/.arlm/projects/projeto-b/  # Isolado
+~/.arags/projects/projeto-a/  # Isolado
+~/.arags/projects/projeto-b/  # Isolado
 
 # Agentes não podem acessar projetos que não indexaram
-arlm context "tarefa" --project ./projeto-a  # OK
-arlm context "tarefa" --project ./projeto-c  # Erro: não indexado
+arags context "tarefa" --project ./projeto-a  # OK
+arags context "tarefa" --project ./projeto-c  # Erro: não indexado
 ```
 
 ### Controle de acesso (futuro)
 
 ```bash
 # API keys por projeto
-arlm config set projeto-a.api_key sk-abc123
+arags config set projeto-a.api_key sk-abc123
 
 # Rate limiting
-arlm config set projeto-a.max_requests_per_minute 60
+arags config set projeto-a.max_requests_per_minute 60
 
 # Audit log
-arlm config set projeto-a.audit_log true
+arags config set projeto-a.audit_log true
 ```

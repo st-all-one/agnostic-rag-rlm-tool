@@ -2,13 +2,13 @@
 
 ## Visão Geral
 
-O `arlm-search` suporta 4 tiers de busca, do mais rápido (FTS5 puro) ao mais
+O `arags-search` suporta 4 tiers de busca, do mais rápido (FTS5 puro) ao mais
 preciso (LLM rerank). O tier padrão é **entity** (BM25 + entity RRF), que não
 precisa de embeddings nem de LLM.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    arlm-search                                │
+│                    arags-search                                │
 │                                                              │
 │  Tier 0 (fts):     BM25 (FTS5) ──► results                  │
 │  Tier 1 (entity):  BM25 + Entity RRF ──► results (padrão)   │

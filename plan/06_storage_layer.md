@@ -2,11 +2,11 @@
 
 ## Visão Geral
 
-O `arlm-storage` gerencia toda persistência: SQLite para metadados/FTS5/estado, usearch para vetores. A separação permite que cada sistema seja especialista no que faz melhor.
+O `arags-storage` gerencia toda persistência: SQLite para metadados/FTS5/estado, usearch para vetores. A separação permite que cada sistema seja especialista no que faz melhor.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                    arlm-storage                           │
+│                    arags-storage                           │
 │                                                          │
 │  ┌──────────────────────┐  ┌──────────────────────────┐  │
 │  │      SQLite          │  │       usearch            │  │

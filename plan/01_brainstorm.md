@@ -1,7 +1,7 @@
 1. Visão Geral da Arquitetura (Camadas)
 
 A arquitetura é organizada em 5 camadas principais, com fluxo de dados
-estritamente unidirecional. **Princípio fundamental:** o arlm é
+estritamente unidirecional. **Princípio fundamental:** o arags é
 determinístico por padrão. LLM é opt-in via `--llm`.
 
 text
@@ -207,26 +207,26 @@ Essa arquitetura garante que o rlm-cli seja uma bomba de desempenho: navegação
 
 ## 9. Filosofia Determinística (Plano 16)
 
-O arlm é **pura e determinística por padrão**. LLM é opt-in via `--llm`.
+O arags é **pura e determinística por padrão**. LLM é opt-in via `--llm`.
 
 ### O que funciona SEM LLM (padrão)
 
 | Comando | Latência | O que faz |
 |---------|----------|-----------|
-| `arlm index` | ~30s/10k arquivos | Chunking Rayon + entity extraction |
-| `arlm search` | ~5–21ms | FTS5 + entity RRF (+ vector se embeddings existem) |
-| `arlm context` | ~10ms | Chunks formatados como prompt |
-| `arlm persist` | ~5ms | Salva output como markdown |
-| `arlm decay` | ~50ms | Fórmula de saliência (puro math) |
-| `arlm consolidate` | ~100ms | Merge por hash + dedup |
+| `arags index` | ~30s/10k arquivos | Chunking Rayon + entity extraction |
+| `arags search` | ~5–21ms | FTS5 + entity RRF (+ vector se embeddings existem) |
+| `arags context` | ~10ms | Chunks formatados como prompt |
+| `arags persist` | ~5ms | Salva output como markdown |
+| `arags decay` | ~50ms | Fórmula de saliência (puro math) |
+| `arags consolidate` | ~100ms | Merge por hash + dedup |
 
 ### O que REQUER --llm
 
 | Comando | Flag | O que faz |
 |---------|------|-----------|
-| `arlm run` | `--llm` | RLM recursivo (Planner→Solver→Synthesizer) |
-| `arlm consolidate --llm` | `--llm` | Consolidação por LLM (páginas coerentes) |
-| `arlm search --llm` | `--llm` | Rerank por LLM dos candidatos |
+| `arags run` | `--llm` | RLM recursivo (Planner→Solver→Synthesizer) |
+| `arags consolidate --llm` | `--llm` | Consolidação por LLM (páginas coerentes) |
+| `arags search --llm` | `--llm` | Rerank por LLM dos candidatos |
 
 ### Por que isso importa
 

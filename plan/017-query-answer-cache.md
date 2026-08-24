@@ -4,14 +4,14 @@
 
 O summarizer hierárquico atual (`file → module → project`) é uma **agregação pré-computada e estática** que não faz sentido para desenvolvimento iterativo:
 
-- `Summarizer::summarize` (`crates/arlm-server/src/summarizer/engine.rs:53`) recarrega **todos** os chunks do buffer e re-sumariza **todo** o projeto a cada rodada de `summarize`, incondicionalmente.
-- `insert_summary` (`crates/arlm-server/src/store/summaries.rs:90`) é um `INSERT` puro, sem `ON CONFLICT` → rodar duas vezes **duplica** linhas.
-- `estimate_incremental_cost` (`crates/arlm-server/src/summarizer/cost.rs:55`) existe mas **nunca é chamado** → o caminho incremental foi planejado e não conectado.
+- `Summarizer::summarize` (`crates/arags-server/src/summarizer/engine.rs:53`) recarrega **todos** os chunks do buffer e re-sumariza **todo** o projeto a cada rodada de `summarize`, incondicionalmente.
+- `insert_summary` (`crates/arags-server/src/store/summaries.rs:90`) é um `INSERT` puro, sem `ON CONFLICT` → rodar duas vezes **duplica** linhas.
+- `estimate_incremental_cost` (`crates/arags-server/src/summarizer/cost.rs:55`) existe mas **nunca é chamado** → o caminho incremental foi planejado e não conectado.
 - O servidor carrega `LlmBackend` **só** para sumarizar (`engine.rs:243`), duplicando o LLM que o agente consumidor (Continue/Aider/Cline) já possui.
 
 Este plano substitui a hierarquia estática por um **cache semântico de respostas digeridas na hora da query**, com duas decisões de arquitetura:
 
-1. **A digestão (síntese por LLM) roda no CLIENT**, usando o LLM do próprio usuário (configurado em `~/.arlm/config.toml` via `arlm-llm`). O servidor **não aciona nenhum LLM** — ele apenas armazena e processa **deterministicamente** (embedding, FTS, hashes, RRF).
+1. **A digestão (síntese por LLM) roda no CLIENT**, usando o LLM do próprio usuário (configurado em `~/.arags/config.toml` via `arags-llm`). O servidor **não aciona nenhum LLM** — ele apenas armazena e processa **deterministicamente** (embedding, FTS, hashes, RRF).
 2. **O armazenamento vetorial usa `usearch`** (HNSW single-file, mais enxuto e plenamente capaz para o escopo; o projeto migrou do LanceDB para o usearch).
 
 Isso descentraliza custo/modelo, mantém o servidor enxuto e é coerente com o princípio "agent-agnostic" do projeto. A digestão sob demanda é a materialização do padrão do `rlm_guide` (Sub-LLM digere chunks *pela necessidade de informação*), agora no client.
@@ -48,7 +48,7 @@ Este plano **já incorpora as correções** discutidas:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Client (arlm-cli) — USA O LLM DO USUÁRIO (config.toml)        │
+│  Client (arags-cli) — USA O LLM DO USUÁRIO (config.toml)        │
 │                                                                │
 │  1. QueryWithCache(pergunta, project)  ──gRPC──►  Server       │
 │  6. ◄── HIT: answer+provenance  (0 LLM no client)              │
@@ -60,7 +60,7 @@ Este plano **já incorpora as correções** discutidas:
                             │
                             ▼  (server = DETERMINÍSTICO, sem LLM)
 ┌──────────────────────────────────────────────────────────────┐
-│  arlm-server                                                   │
+│  arags-server                                                   │
 │  • embed(query) + HybridSearch (BM25+entity+vector) → top-K    │
 │  • embed(pergunta) espaço B (usearch question_vectors)         │
 │  • lookup cache (cosseno + checagem secundária) → tier         │
@@ -73,7 +73,7 @@ Este plano **já incorpora as correções** discutidas:
 
 ## Data Model
 
-### Tabela `qa_cache` (SQLite, `arlm-storage`)
+### Tabela `qa_cache` (SQLite, `arags-storage`)
 
 | Coluna | Tipo | Papel |
 |---|---|---|
@@ -161,7 +161,7 @@ Cosseno de pergunta é necessário mas **insuficiente** (falso-positivo: "onde �
 
 Cada entrada guarda `source_hashes` (hash de conteúdo de cada chunk usado).
 
-- No `reindex`/`lifecycle` (`crates/arlm-server/src/lifecycle.rs`), após atualizar chunks, computa-se o diff de hashes por buffer (determinístico, server-side).
+- No `reindex`/`lifecycle` (`crates/arags-server/src/lifecycle.rs`), após atualizar chunks, computa-se o diff de hashes por buffer (determinístico, server-side).
 - Toda entrada de `qa_cache` cujo `source_hashes` contiver **qualquer** chunk que mudou/sumiu → marcada `stale=1` e `confidence=0`.
 - Hit em entrada stale força **re-digest completo** no client (trata como MISS), regenerando a resposta com chunks frescos.
 - Garante que, após refatoração de 5k linhas, respostas afetadas são automaticamente invalidadas.
@@ -179,13 +179,13 @@ Cada entrada guarda `source_hashes` (hash de conteúdo de cada chunk usado).
 ## Provenance
 
 - `source_chunk_ids` + `file_path` devolvidos junto da resposta para o agente consumidor poder (a) fundamentar e (b) permitir invalidação.
-- No `build_context`/`build_search_results` (`crates/arlm-search/src/context.rs`), entradas de cache são resolvidas como `is_cache_answer` para montar o prompt.
+- No `build_context`/`build_search_results` (`crates/arags-search/src/context.rs`), entradas de cache são resolvidas como `is_cache_answer` para montar o prompt.
 
 ---
 
 ## Resposta com ID estável e lookup direto (anti-drift)
 
-Toda resposta servida recebe um **`cache_id` (UUIDv7)** no momento da criação (no `StoreAnswer`, server-side, via `uuid::Uuid::now_v7()` — padrão do projeto, ver `crates/arlm-server/src/grpc/summarize.rs:27`). O `cache_id` é **distinto do `id` (rowid)** e é o identificador estável da resposta.
+Toda resposta servida recebe um **`cache_id` (UUIDv7)** no momento da criação (no `StoreAnswer`, server-side, via `uuid::Uuid::now_v7()` — padrão do projeto, ver `crates/arags-server/src/grpc/summarize.rs:27`). O `cache_id` é **distinto do `id` (rowid)** e é o identificador estável da resposta.
 
 ### Por quê
 
@@ -195,7 +195,7 @@ Um agente orquestrador (Root LLM) faz a consulta, recebe a resposta **+ `cache_i
 
 1. **Todo served response inclui `cache_id`**, independente do formato de output (Prompt/Json/Markdown) e independente de ser HIT ou MISS (no MISS, o `StoreAnswer` retorna o `cache_id` recém-criado ao client).
 2. **Lookup direto (`GetAnswerById`)**: RPC que recebe `cache_id` (+ `buffer_id`/`project` p/ escopo) e devolve `answer_text` + `source_chunk_ids` + `cache_id` **1:1**, **sem** tocar em indexação, embedding, busca híbrida ou LLM. É o caminho de "contexto determinístico e reproduzível".
-3. O CLI expõe esse lookup direto (ex: `arlm query --cache-id <uuidv7>`), que **não passa** pelo sistema de index/retrieval — apenas retorna a resposta salva.
+3. O CLI expõe esse lookup direto (ex: `arags query --cache-id <uuidv7>`), que **não passa** pelo sistema de index/retrieval — apenas retorna a resposta salva.
 4. `GetAnswerById` também serve para o orquestrador re-obter sua própria resposta sem custo.
 
 ---
@@ -215,7 +215,7 @@ Cenário: um dev alucina ao sumarizar "como proteger senhas?"; a resposta vira b
 
 ### CLI
 
-`arlm cache invalidate --cache-id <uuidv7> [--radius 0.85] [--delete] [--reason "alucinacao"]`
+`arags cache invalidate --cache-id <uuidv7> [--radius 0.85] [--delete] [--reason "alucinacao"]`
 
 ### Privilégio
 
@@ -239,20 +239,20 @@ Em time fechado, qualquer client pode invalidar. Em multi-user restrito (plan 01
 
 | Componente | Crate | Arquivo(s) |
 |---|---|---|
-| Schema `qa_cache` + FTS + `usearch` `question_vectors` + `evict()` | `arlm-storage` | `src/store/qa_cache.rs` (novo) + migração |
-| Embed de pergunta (prefixo task, espaço B) | `arlm-embedding` | `embedder/mod.rs` (`embed_query`) |
-| Lookup + checagem secundária | `arlm-search` | `src/qa_cache.rs` (novo) |
-| Engine de widening adaptativo | `arlm-core` | `src/qa_cache/mod.rs` (novo) |
-| **Digest-once (LLM) — CLIENT** | `arlm-cli` (via `arlm-llm` + `config.toml`) | `src/commands/query_cache.rs` (novo) |
-| Invalidation no reindex (determinístico) | `arlm-server` | `lifecycle.rs` + hook pós-index |
-| Eviction | `arlm-storage` | `src/store/qa_cache.rs` (`evict`) |
-| `StoreAnswer` RPC (server, determinístico) | `arlm-proto`, `arlm-server` | `proto/arlm.proto`, `grpc/query_cache.rs` |
-| Config (thresholds/dims/eviction) | `arlm-server` + `arlm-cli` | `config.rs` (`QaCacheConfig`) + user LLM config |
-| `GetAnswerById` (lookup direto 1:1, anti-drift) | `arlm-proto`, `arlm-server`, `arlm-cli` | `proto/arlm.proto`, `grpc/query_cache.rs`, `cli/commands.rs` (`--cache-id`) |
-| `InvalidateCache` (reset manual: single + cluster por raio) | `arlm-proto`, `arlm-server`, `arlm-cli` | `proto/arlm.proto`, `grpc/query_cache.rs` (Stale/Delete + `similarity_radius` via `usearch`), `cli/commands.rs` (`cache invalidate`) |
+| Schema `qa_cache` + FTS + `usearch` `question_vectors` + `evict()` | `arags-storage` | `src/store/qa_cache.rs` (novo) + migração |
+| Embed de pergunta (prefixo task, espaço B) | `arags-embedding` | `embedder/mod.rs` (`embed_query`) |
+| Lookup + checagem secundária | `arags-search` | `src/qa_cache.rs` (novo) |
+| Engine de widening adaptativo | `arags-core` | `src/qa_cache/mod.rs` (novo) |
+| **Digest-once (LLM) — CLIENT** | `arags-cli` (via `arags-llm` + `config.toml`) | `src/commands/query_cache.rs` (novo) |
+| Invalidation no reindex (determinístico) | `arags-server` | `lifecycle.rs` + hook pós-index |
+| Eviction | `arags-storage` | `src/store/qa_cache.rs` (`evict`) |
+| `StoreAnswer` RPC (server, determinístico) | `arags-proto`, `arags-server` | `proto/arags.proto`, `grpc/query_cache.rs` |
+| Config (thresholds/dims/eviction) | `arags-server` + `arags-cli` | `config.rs` (`QaCacheConfig`) + user LLM config |
+| `GetAnswerById` (lookup direto 1:1, anti-drift) | `arags-proto`, `arags-server`, `arags-cli` | `proto/arags.proto`, `grpc/query_cache.rs`, `cli/commands.rs` (`--cache-id`) |
+| `InvalidateCache` (reset manual: single + cluster por raio) | `arags-proto`, `arags-server`, `arags-cli` | `proto/arags.proto`, `grpc/query_cache.rs` (Stale/Delete + `similarity_radius` via `usearch`), `cli/commands.rs` (`cache invalidate`) |
 | Testes/bench | `tests/`, `benches/` | `qa_cache_test.rs`, `qa_cache_bench.rs` |
 
-> Nota: o servidor **não** precisa de `LlmBackend` para este fluxo. O `arlm-server/src/summarizer/` torna-se obsoleto para o cache (pode ser mantido como legado ou removido).
+> Nota: o servidor **não** precisa de `LlmBackend` para este fluxo. O `arags-server/src/summarizer/` torna-se obsoleto para o cache (pode ser mantido como legado ou removido).
 
 ---
 
@@ -262,7 +262,7 @@ Em time fechado, qualquer client pode invalidar. Em multi-user restrito (plan 01
 2. **Embedding**: `embed_query` com prefixo de task no espaço B.
 3. **Lookup**: busca por cosseno + checagem secundária (Jaccard/overlap).
 4. **Adaptive engine**: mapear `s` → tier → `(digest_k, provenance_k)`.
-5. **Digest-once (CLIENT)**: síntese LLM de top-K (usa `arlm-llm` + config.toml) → `answer` + provenance + hashes; exibe e dispara `StoreAnswer` fire-and-forget.
+5. **Digest-once (CLIENT)**: síntese LLM de top-K (usa `arags-llm` + config.toml) → `answer` + provenance + hashes; exibe e dispara `StoreAnswer` fire-and-forget.
 6. **Invalidation**: hook em `lifecycle` pós-reindex marcando `stale`.
 7. **Eviction**: LRU ponderado em background.
 8. **Config**: `QaCacheConfig` + LLM do usuário no client.

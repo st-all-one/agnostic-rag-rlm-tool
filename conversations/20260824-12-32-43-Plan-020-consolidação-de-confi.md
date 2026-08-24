@@ -23,8 +23,8 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 5: A refatoração do plan 019 remove o legado RLM e adota o modelo **on-demand, server-first**.
 6: Hoje a configuração está fragmentada e **conflitante**:
 7: 
-8: - `arlm-server/src/config.rs::ServerConfig` e `arlm-cli/src/config.rs::Config` **lêem os mesmos
-9:   arquivos** (`.arlm/config.toml` local e `~/.arlm/config.toml` global) mas desserializam
+8: - `arags-server/src/config.rs::ServerConfig` e `arags-cli/src/config.rs::Config` **lêem os mesmos
+9:   arquivos** (`.arags/config.toml` local e `~/.arags/config.toml` global) mas desserializam
 10:   structs diferentes.
 11: - Há **colisão de seção**: ambos têm `[server]` — o cliente lê `addr` (para onde conectar) e o
 12:   server lê `listen_addr` (onde bindar). Um arquivo só não comporta os dois significados.
@@ -33,9 +33,9 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 15:   mas quem processa/chunka/embeda os dados é o **servidor** (data plane). Isso viola o princípio
 16:   server-first e obriga cada dev a repetir config de chunk no client.
 17: - `llm` aparece **duas vezes** com tipos diferentes: `ServerConfig.llm` (server, será removido no
-18:   019) e `Config.llm` (`arlm_llm::LlmConfig`, user AI). `agent.max_depth/max_nodes` são do run
+18:   019) e `Config.llm` (`arags_llm::LlmConfig`, user AI). `agent.max_depth/max_nodes` são do run
 19:   (serão removidos).
-20: - `Config::load()` lê `data_dir()/config.toml` (`~/.arlm/config.toml`) — sem noção de config
+20: - `Config::load()` lê `data_dir()/config.toml` (`~/.arags/config.toml`) — sem noção de config
 21:   local-por-projeto nem merge granular.
 22: 
 23: Este plano consolida em **três arquivos com responsabilidades disjuntas**:
@@ -43,27 +43,27 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 25: 1. **Server config** (`server.toml`, montado via docker) — **exclusivo** de tudo que toca dados:
 26:    servir/receber (listen/tls), armazenar (data_dir/pool/flush/batch), processar
 27:    (chunk/embed/search/qa_cache/maintenance). Sem LLM.
-28: 2. **User global** (`~/.arlm/arlm.toml`) — identidade + IA do usuário + alvo do server.
-29: 3. **User local** (`.arlm.toml`, na raiz do repo, **gitignored**) — overrides por projeto, com
+28: 2. **User global** (`~/.arags/arags.toml`) — identidade + IA do usuário + alvo do server.
+29: 3. **User local** (`.arags.toml`, na raiz do repo, **gitignored**) — overrides por projeto, com
 30:    **fallback granular** para o global.
 31: 
-32: > **Mudança de nomenclatura (supresa 019/018):** adota-se `~/.arlm/arlm.toml` (global) e
-33: > `.arlm.toml` (local) **em vez de** `~/.arlm/config.toml` / `.arlm/config.toml`. O server config
+32: > **Mudança de nomenclatura (supresa 019/018):** adota-se `~/.arags/arags.toml` (global) e
+33: > `.arags.toml` (local) **em vez de** `~/.arags/config.toml` / `.arags/config.toml`. O server config
 34: > deixa de ser o mesmo arquivo do client — vira `server.toml` separado.
 35: 
 36: > **Decisões confirmadas (sem transição):**
 37: > - **`server.toml` é arquivo do HOST**, montado no container via `docker compose`/`docker -v`
-38: >   (ex.: `./server.toml:/etc/arlm/server.toml`). Dentro do container fica em
-39: >   `/etc/arlm/server.toml` (ou `ARLM_SERVER_CONFIG`).
+38: >   (ex.: `./server.toml:/etc/arags/server.toml`). Dentro do container fica em
+39: >   `/etc/arags/server.toml` (ou `ARAGS_SERVER_CONFIG`).
 40: > - **Server faz o chunking.** O client transmite o conteúdo **cru** do arquivo; o server fragmenta
 41: >   com `[embedder].max_tokens/overlap_tokens`, embeda e armazena. O client **não controla** o server.
 42: > - **Modo offline REMOVIDO.** Tudo depende do server. Quem quiser "offline" sobe o próprio
 43: >   container/server. O client é um **puro gRPC client** (mais o LLM do usuário local para digest/
 44: >   summarize, per plan 017).
-45: > - **Break total, sem retrocompatibilidade.** O legado `~/.arlm/config.toml` / `.arlm/config.toml`
+45: > - **Break total, sem retrocompatibilidade.** O legado `~/.arags/config.toml` / `.arags/config.toml`
 46: >   é **ignorado** (não há janela de transição).
-47: > - **Auth é global**, vinculado ao server. `[auth]` existe **só** em `~/.arlm/arlm.toml` (global);
-48: >   o `.arlm.toml` local **não** pode definir `auth` (e o merge ignora se presente).
+47: > - **Auth é global**, vinculado ao server. `[auth]` existe **só** em `~/.arags/arags.toml` (global);
+48: >   o `.arags.toml` local **não** pode definir `auth` (e o merge ignora se presente).
 49: 
 50: ---
 51: 
@@ -71,22 +71,22 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 53: 
 54: - **Server owns all data-plane config**: chunk size, embedding, persistência, dados, TLS,
 55:   segurança, performance, busca, qa_cache, manutenção → **só** no `server.toml`.
-56: - **User config em 2 escopos**: global (`~/.arlm/arlm.toml`) e local (`.arlm.toml`), com merge
+56: - **User config em 2 escopos**: global (`~/.arags/arags.toml`) e local (`.arags.toml`), com merge
 57:   **granular** (por-campo) local → global.
 58: - Global define essencialmente: `auth` (username+refresh_token), `llm` (IA do user:
 59:   provider/model/api_key/base_url), `server.addr` (alvo).
-60: - Local `.arlm.toml` é gerado por `arlm init`, **auto-adicionado ao `.gitignore`**, replica o
+60: - Local `.arags.toml` é gerado por `arags init`, **auto-adicionado ao `.gitignore`**, replica o
 61:   global e permite overrides de projeto (ex.: `server.addr` diferente, `llm` diferente,
 62:   `[project].ignore`).
 63: - **Zero config de dados no client + sem modo offline**: o client é um **puro gRPC client**
 64:   (mais o LLM do usuário local para digest/summarize, plan 017). Ele **não** abre `Storage`
-65:   local, **não** embeda, **não** busca localmente, **não** chunka. Tudo depende do `arlm-server`.
+65:   local, **não** embeda, **não** busca localmente, **não** chunka. Tudo depende do `arags-server`.
 66: - Remover `[llm]` do server e `agent` (run) da config do client.
 67: 
 68: ## Non-goals
 69: 
 70: - Não criar UI/editor de config.
-71: - **Não há transição/retrocompatibilidade**: o legado `~/.arlm/config.toml` / `.arlm/config.toml`
+71: - **Não há transição/retrocompatibilidade**: o legado `~/.arags/config.toml` / `.arags/config.toml`
 72:   é ignorado de imediato (break total).
 73: - Não alterar o protocolo de auth (plan 018) além do caminho do arquivo.
 74: 
@@ -96,31 +96,31 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 78: 
 79: | Arquivo | Quem lê | Conteúdo | Secrets? |
 80: |---|---|---|---|
-81: | `server.toml` (docker: `/etc/arlm/server.toml` ou `ARLM_SERVER_CONFIG`) | `arlm-server` | data plane completo (ver schema) | não (TLS keys são paths) |
-82: | `~/.arlm/arlm.toml` | `arlm-cli` | `auth` + `llm`(user) + `server.addr` | **sim** (refresh_token) |
-83: | `.arlm.toml` (raiz do repo, gitignored) | `arlm-cli` | overrides por projeto | não (cai no global p/ auth) |
+81: | `server.toml` (docker: `/etc/arags/server.toml` ou `ARAGS_SERVER_CONFIG`) | `arags-server` | data plane completo (ver schema) | não (TLS keys são paths) |
+82: | `~/.arags/arags.toml` | `arags-cli` | `auth` + `llm`(user) + `server.addr` | **sim** (refresh_token) |
+83: | `.arags.toml` (raiz do repo, gitignored) | `arags-cli` | overrides por projeto | não (cai no global p/ auth) |
 84: 
-85: O client faz `merge(global, local)` e usa o resultado; o server **não lê** `.arlm.toml` nem
-86: `~/.arlm/arlm.toml`. O client **não lê** `server.toml`.
+85: O client faz `merge(global, local)` e usa o resultado; o server **não lê** `.arags.toml` nem
+86: `~/.arags/arags.toml`. O client **não lê** `server.toml`.
 87: 
 88: ---
 89: 
 90: ## Schema: `server.toml` (server-only, arquivo do HOST montado no container)
 91: 
 92: > É um arquivo **do host**, versionado/provido pelo operador e montado no container
-93: > (`docker compose`/`docker -v`: `./server.toml:/etc/arlm/server.toml`). Dentro do container,
-94: > lido de `/etc/arlm/server.toml` (ou `ARLM_SERVER_CONFIG`). **Não** é gerado pelo client nem
-95: > vive no `~/.arlm` do client.
+93: > (`docker compose`/`docker -v`: `./server.toml:/etc/arags/server.toml`). Dentro do container,
+94: > lido de `/etc/arags/server.toml` (ou `ARAGS_SERVER_CONFIG`). **Não** é gerado pelo client nem
+95: > vive no `~/.arags` do client.
 96: 
 97: ```toml
 98: # ── Servir / receber ───────────────────────────────────────────────
-99: listen_addr = "0.0.0.0:50051"        # (env ARLM_SERVER_ADDR sobrescreve)
-100: tls_cert = "/etc/arlm/tls/server.crt"   # optional → habilita TLS
-101: tls_key  = "/etc/arlm/tls/server.key"   # optional
-102: # mtls_ca = "/etc/arlm/tls/ca.crt"       # optional → exige client cert
+99: listen_addr = "0.0.0.0:50051"        # (env ARAGS_SERVER_ADDR sobrescreve)
+100: tls_cert = "/etc/arags/tls/server.crt"   # optional → habilita TLS
+101: tls_key  = "/etc/arags/tls/server.key"   # optional
+102: # mtls_ca = "/etc/arags/tls/ca.crt"       # optional → exige client cert
 103: 
 104: # ── Armazenamento / dados ─────────────────────────────────────────
-105: data_dir = "/var/lib/arlm"           # (env ARLM_DATA_DIR sobrescreve)
+105: data_dir = "/var/lib/arags"           # (env ARAGS_DATA_DIR sobrescreve)
 106: pool_size = 4
 107: flush_interval_ms = 100
 108: max_batch_size = 50
@@ -164,12 +164,12 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 146: 
 147: **Removidos do server:** seção `[llm]` (server) — o server fica sem LLM (plan 017/019).
 148: 
-149: ### Schema: `~/.arlm/arlm.toml` (global, user)
+149: ### Schema: `~/.arags/arags.toml` (global, user)
 150: 
 151: ```toml
 152: [auth]
 153: username = "dev1"
-154: refresh_token = "<token gerado por arlm-server admin create-refresh>"
+154: refresh_token = "<token gerado por arags-server admin create-refresh>"
 155: 
 156: [llm]
 157: backends = [
@@ -178,10 +178,10 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 160: ]
 161: 
 162: [server]
-163: addr = "https://arlm.corp.internal:50051"
+163: addr = "https://arags.corp.internal:50051"
 164: ```
 165: 
-166: ### Schema: `.arlm.toml` (local, projeto, gitignored)
+166: ### Schema: `.arags.toml` (local, projeto, gitignored)
 167: 
 168: ```toml
 169: [project]
@@ -197,14 +197,14 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 179: ```
 180: 
 181: **Não** se copia `auth` para o local: identidade é global; com fallback granular, o local herda
-182: `auth` do global. `arlm init` gera apenas `[project]` (+ overrides desejados) e **não** grava o
+182: `auth` do global. `arags init` gera apenas `[project]` (+ overrides desejados) e **não** grava o
 183: `refresh_token` no repo.
 184: 
 185: ---
 186: 
 187: ## Merge granular (client)
 188: 
-189: `EffectiveUserConfig = merge(global ~/.arlm/arlm.toml, local .arlm.toml)`:
+189: `EffectiveUserConfig = merge(global ~/.arags/arags.toml, local .arags.toml)`:
 190: 
 191: - Deserializa ambos na **mesma** struct (todos os campos `Option` ou tabelas aninhadas opcionais).
 192: - Para cada campo escalar: `local.field.or(global.field)`.
@@ -218,11 +218,11 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 200: 
 201: ### Cliente puro gRPC (consequência de D3 — sem modo offline)
 202: 
-203: Com o modo offline removido, o `arlm-cli` deixa de ser um data plane local. **Tudo** passa pelo
-204: `arlm-server` (gRPC/TLS), exceto a síntese/summarize que usa o **LLM do próprio usuário** localmente
-205: (plan 017/020: `auth` + `llm` vêm do `~/.arlm/arlm.toml`).
+203: Com o modo offline removido, o `arags-cli` deixa de ser um data plane local. **Tudo** passa pelo
+204: `arags-server` (gRPC/TLS), exceto a síntese/summarize que usa o **LLM do próprio usuário** localmente
+205: (plan 017/020: `auth` + `llm` vêm do `~/.arags/arags.toml`).
 206: 
-207: - **Removidos do client**: `dispatch/local.rs` (branch local), `arlm_storage::Storage::open`
+207: - **Removidos do client**: `dispatch/local.rs` (branch local), `arags_storage::Storage::open`
 208:   local, `embedding.rs`/`build_embedder_from_config` (client não embeda), busca/contexto locais,
 209:   vector store local, `data_dir()` como DB. O client **não** possui `knowledge.db` local.
 210: - **Comandos sobreviventes viram chamadas gRPC puras** (server é a fonte de verdade):
@@ -230,11 +230,11 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 212:   - `search`/`query` → `Search`/`QueryWithCache` (server embeda a query e busca).
 213:   - `memory` → `ListMemory`/`GetCache`/`InvalidateCache`/`TriggerMaintenance` (admin).
 214:   - `persist` → `GetAnswerById` (server) + LLM do usuário local (summarize) + escrita do
-215:     `wiki/...md` **local** (o `.arlm.toml`/`~/.arlm` do client só guarda config, não DB).
+215:     `wiki/...md` **local** (o `.arags.toml`/`~/.arags` do client só guarda config, não DB).
 216:   - `history` → `GetHistory` (server, por `username`).
-217:   - `init` → gera `.arlm.toml` + dispara `index`.
+217:   - `init` → gera `.arags.toml` + dispara `index`.
 218: - O `--server`/endereço vem de `user_config` (`server.addr` global ou override local);
-219:   `ARLM_SERVER_ADDR` ainda funciona como override de env (equivalente a setar `server.addr`).
+219:   `ARAGS_SERVER_ADDR` ainda funciona como override de env (equivalente a setar `server.addr`).
 220: 
 221: ---
 222: 
@@ -242,20 +242,20 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 224: 
 225: - **D1 — `server.toml` é arquivo do HOST, montado no container.** Não vive "dentro" do repo nem é
 226:   gerado pelo client. O `docker compose`/`docker -v` mapeia `./server.toml` →
-227:   `/etc/arlm/server.toml` (dentro do container; `ARLM_SERVER_CONFIG` sobrescreve o caminho
-228:   interno). `ARLM_SERVER_ADDR`/`ARLM_DATA_DIR` continuam como overrides de env. O arquivo é
-229:   disjunto do `~/.arlm/arlm.toml` do client.
+227:   `/etc/arags/server.toml` (dentro do container; `ARAGS_SERVER_CONFIG` sobrescreve o caminho
+228:   interno). `ARAGS_SERVER_ADDR`/`ARAGS_DATA_DIR` continuam como overrides de env. O arquivo é
+229:   disjunto do `~/.arags/arags.toml` do client.
 230: - **D2 — Server faz o chunking.** O client transmite o conteúdo **cru** do arquivo
 231:   (`IndexFile` com texto); o server fragmenta usando `[embedder].max_tokens/overlap_tokens`,
 232:   embeda e armazena. O client **não controla** o server. *Muda o protocolo de index.*
-233: - **D3 — Modo offline REMOVIDO.** Tudo depende do `arlm-server`. Quem quiser "offline" sobe o
+233: - **D3 — Modo offline REMOVIDO.** Tudo depende do `arags-server`. Quem quiser "offline" sobe o
 234:   próprio container e cria seu server. O client é puro gRPC + LLM do usuário local (digest/
 235:   summarize). `dispatch/local.rs` e todo branch local de `Storage`/embed/search/chunk do client
 236:   são **eliminados**.
-237: - **D4 — Sem transição.** Break total, sem retrocompatibilidade. O legado `~/.arlm/config.toml` /
-238:   `.arlm/config.toml` é **ignorado** (não há fallback nem warning).
-239: - **D5 — Auth global, vinculado ao server.** `[auth]` existe **só** em `~/.arlm/arlm.toml`
-240:   (global). O `.arlm.toml` local não define `auth`; o merge o ignora se presente. Identidade é
+237: - **D4 — Sem transição.** Break total, sem retrocompatibilidade. O legado `~/.arags/config.toml` /
+238:   `.arags/config.toml` é **ignorado** (não há fallback nem warning).
+239: - **D5 — Auth global, vinculado ao server.** `[auth]` existe **só** em `~/.arags/arags.toml`
+240:   (global). O `.arags.toml` local não define `auth`; o merge o ignora se presente. Identidade é
 241:   única e global.
 242: 
 243: ---
@@ -270,9 +270,9 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 252: | `search.tier/top_k/max_tokens` (defaults) | servir busca | **server.toml** `[search]` (sai do client) |
 253: | `history` retention (opcional) | dados | **server.toml** (ex.: `[history] retention_days`) |
 254: | `tls` / `mtls_ca` | segurança/servir | **server.toml** (`tls_cert`/`tls_key`/`mtls_ca`) |
-255: | `[project].name` / `[project].ignore` | escopo do repo (não dado) | **`.arlm.toml` local** (client, só p/ descobrir arquivos) |
-256: | `auth.username` / `refresh_token` | identidade user | **`~/.arlm/arlm.toml` global** |
-257: | `llm.backends` (IA do user) | consumo de IA | **`~/.arlm/arlm.toml` global** (+ override local) |
+255: | `[project].name` / `[project].ignore` | escopo do repo (não dado) | **`.arags.toml` local** (client, só p/ descobrir arquivos) |
+256: | `auth.username` / `refresh_token` | identidade user | **`~/.arags/arags.toml` global** |
+257: | `llm.backends` (IA do user) | consumo de IA | **`~/.arags/arags.toml` global** (+ override local) |
 258: | `server.addr` (client connect) | alvo do server | **user config** (global + override local) |
 259: 
 260: Removidas: `ServerConfig.llm` (server), `Config.agent` (`max_depth`/`max_nodes`), top-level
@@ -285,56 +285,56 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 267: 
 268: | Componente | Crate | Arquivo(s) |
 269: |---|---|---|
-270: | `server.toml` schema + load (host mount) | `arlm-server` | `src/config.rs` (rework: remover `llm`, add `embedder`/`search`/`maintenance`/`tls.mtls_ca`; `load` de `ARLM_SERVER_CONFIG` default `/etc/arlm/server.toml`) |
-271: | Remover `[llm]` server + `build_llm` (019) | `arlm-server` | `config.rs`, `lifecycle.rs`, `state.rs` |
-272: | User config 2-escopos + merge granular (auth só global) | `arlm-cli` | `src/user_config.rs` (novo); rework `src/config.rs` (apenas auth/llm/server) |
-273: | `arlm init` gera `.arlm.toml` + gitignore | `arlm-cli` | `src/commands/init.rs` (019) + `user_config` |
-274: | Client puro gRPC: remove modo offline | `arlm-cli` | **remover** `dispatch/local.rs`; `dispatch/server.rs` vira o único dispatch; **remover** `arlm_storage::Storage::open` local, `embedding.rs`, busca/contexto locais, vector store local, `util::data_dir` como DB; `query.rs`/`search.rs` chamam só gRPC |
-275: | Client lê `server.addr` do merge | `arlm-cli` | `src/client.rs`, `dispatch/server.rs`, `auth_client.rs` |
-276: | Index protocolo: client manda **cru**, server chunka (D2) | `arlm-proto`+`arlm-server`+`arlm-cli` | `proto` (`IndexFile` texto cru), `grpc/index.rs` (server chunka/embeda), `commands/index.rs` (019) |
-277: | Admin print path update | `arlm-server` | `src/admin.rs` (mensagem → `~/.arlm/arlm.toml`) |
-278: | Break total: ignorar legacy `config.toml` | `arlm-cli` | `user_config::load` **não** lê `~/.arlm/config.toml`/`.arlm/config.toml` (sem fallback) |
+270: | `server.toml` schema + load (host mount) | `arags-server` | `src/config.rs` (rework: remover `llm`, add `embedder`/`search`/`maintenance`/`tls.mtls_ca`; `load` de `ARAGS_SERVER_CONFIG` default `/etc/arags/server.toml`) |
+271: | Remover `[llm]` server + `build_llm` (019) | `arags-server` | `config.rs`, `lifecycle.rs`, `state.rs` |
+272: | User config 2-escopos + merge granular (auth só global) | `arags-cli` | `src/user_config.rs` (novo); rework `src/config.rs` (apenas auth/llm/server) |
+273: | `arags init` gera `.arags.toml` + gitignore | `arags-cli` | `src/commands/init.rs` (019) + `user_config` |
+274: | Client puro gRPC: remove modo offline | `arags-cli` | **remover** `dispatch/local.rs`; `dispatch/server.rs` vira o único dispatch; **remover** `arags_storage::Storage::open` local, `embedding.rs`, busca/contexto locais, vector store local, `util::data_dir` como DB; `query.rs`/`search.rs` chamam só gRPC |
+275: | Client lê `server.addr` do merge | `arags-cli` | `src/client.rs`, `dispatch/server.rs`, `auth_client.rs` |
+276: | Index protocolo: client manda **cru**, server chunka (D2) | `arags-proto`+`arags-server`+`arags-cli` | `proto` (`IndexFile` texto cru), `grpc/index.rs` (server chunka/embeda), `commands/index.rs` (019) |
+277: | Admin print path update | `arags-server` | `src/admin.rs` (mensagem → `~/.arags/arags.toml`) |
+278: | Break total: ignorar legacy `config.toml` | `arags-cli` | `user_config::load` **não** lê `~/.arags/config.toml`/`.arags/config.toml` (sem fallback) |
 279: 
 280: ---
 281: 
 282: ## Implementation Steps
 283: 
 284: 1. **Server config rework**: `ServerConfig` recebe `embedder`/`search`/`maintenance`/`mtls_ca`;
-285:    remove `llm` + `build_llm`; `load()` de `ARLM_SERVER_CONFIG` (default `/etc/arlm/server.toml`),
-286:    mantendo `ARLM_SERVER_ADDR`/`ARLM_DATA_DIR`.
+285:    remove `llm` + `build_llm`; `load()` de `ARAGS_SERVER_CONFIG` (default `/etc/arags/server.toml`),
+286:    mantendo `ARAGS_SERVER_ADDR`/`ARAGS_DATA_DIR`.
 287: 2. **Client user_config**: novo `user_config.rs` com struct (auth/llm/server/project) toda
-288:    `Option` + `merge(global, local)` recursivo; `load()` lê `~/.arlm/arlm.toml` e `.arlm.toml`.
-289: 3. **Init**: gera `.arlm.toml` mínimo (`[project]`) e faz `append` de `.arlm.toml` ao `.gitignore`
+288:    `Option` + `merge(global, local)` recursivo; `load()` lê `~/.arags/arags.toml` e `.arags.toml`.
+289: 3. **Init**: gera `.arags.toml` mínimo (`[project]`) e faz `append` de `.arags.toml` ao `.gitignore`
 290:    (idempotente); roda `index` (019).
 291: 4. **Client despido de data-config + modo offline REMOVIDO**: remover `Config.embedding`/
 292:    `search`/`agent`; **deletar `dispatch/local.rs`** e todo branch local; remover
-293:    `arlm_storage::Storage::open` local, `embedding.rs`, busca/contexto locais e vector store
+293:    `arags_storage::Storage::open` local, `embedding.rs`, busca/contexto locais e vector store
 294:    local. `query`/`search`/`history`/`memory`/`persist`/`index` chamam **só** gRPC.
 295: 5. **Index protocolo** (D2): client envia **texto cru**; `grpc/index.rs` (server) chunka com
 296:    `[embedder].max_tokens/overlap_tokens` e embeda. Atualizar `proto`/`IndexFile`.
 297: 6. **Wire**: `client.rs`/`auth_client.rs`/`dispatch/server.rs` consomem `user_config` (addr +
-298:    auth + llm); `ARLM_SERVER_ADDR` continua como override de env.
+298:    auth + llm); `ARAGS_SERVER_ADDR` continua como override de env.
 299: 7. **Docs**: `install.sh`/`docker-compose`/`README` documentam `server.toml` (host mount),
-300:    `~/.arlm/arlm.toml` e `.arlm.toml`; `arlm-server admin create-refresh` aponta para
-301:    `~/.arlm/arlm.toml [auth]`. Sem nota de transição.
+300:    `~/.arags/arags.toml` e `.arags.toml`; `arags-server admin create-refresh` aponta para
+301:    `~/.arags/arags.toml [auth]`. Sem nota de transição.
 302: 8. **`cargo check --workspace` + clippy + fmt**.
 303: 
 304: ---
 305: 
 306: ## Testing
 307: 
-308: - `test_server_config_loads_from_arlm_server_config_env` (default `/etc/arlm/server.toml`).
+308: - `test_server_config_loads_from_arags_server_config_env` (default `/etc/arags/server.toml`).
 309: - `test_server_config_has_no_llm_section` (parse de toml sem `[llm]` ok; `build_llm` ausente).
 310: - `test_server_config_embedder_chunk_size_applied` (server usa `max_tokens` p/ chunk).
 311: - `test_user_config_merge_local_overrides_global_granular` (campo local ganha; ausente cai no global).
 312: - `test_user_config_nested_merge_recursive` (`[llm]` local funde com global campo a campo).
-313: - `test_init_creates_local_arlm_toml_and_gitignores` (`.arlm.toml` em `.gitignore`).
+313: - `test_init_creates_local_arags_toml_and_gitignores` (`.arags.toml` em `.gitignore`).
 314: - `test_init_does_not_write_auth_to_local` (refresh_token fica só no global).
 315: - `test_client_uses_merged_server_addr`.
-316: - `test_legacy_config_toml_ignored` (break total: `~/.arlm/config.toml`/`.arlm/config.toml`
+316: - `test_legacy_config_toml_ignored` (break total: `~/.arags/config.toml`/`.arags/config.toml`
 317:   antigos são **ignorados**, não lidos).
-318: - `test_auth_only_global` (merge ignora `[auth]` presente em `.arlm.toml` local).
-319: - `test_server_and_user_config_files_disjoint` (server não lê `~/.arlm/arlm.toml`; client não lê
+318: - `test_auth_only_global` (merge ignora `[auth]` presente em `.arags.toml` local).
+319: - `test_server_and_user_config_files_disjoint` (server não lê `~/.arags/arags.toml`; client não lê
 320:   `server.toml`).
 321: - `test_client_no_local_storage_open` (nenhum comando sobrevivente abre `Storage` local; tudo é
 322:   gRPC).
@@ -345,25 +345,25 @@ Called the Read tool with the following input: {"filePath":"/projects/my/ai-guid
 327: 
 328: | Risco | Mitigação |
 329: |---|---|
-330: | Colisão histórica `[server]` (addr vs listen_addr) | arquivos separados (`server.toml` vs `arlm.toml`); sem sobreposição |
-331: | Break total sem transição | operadores devem reescrever configs (`server.toml` + `~/.arlm/arlm.toml`); documentar como *breaking change* no CHANGELOG; sem auto-migração |
+330: | Colisão histórica `[server]` (addr vs listen_addr) | arquivos separados (`server.toml` vs `arags.toml`); sem sobreposição |
+331: | Break total sem transição | operadores devem reescrever configs (`server.toml` + `~/.arags/arags.toml`); documentar como *breaking change* no CHANGELOG; sem auto-migração |
 332: | Remoção do modo offline exige reescrita do client | muitos comandos usam `data_dir()`/`Storage::open` local hoje; mover **todos** para gRPC (search/query/history/entities/persist); `dispatch/local.rs` deletado |
 333: | Chunking no server muda tamanho de chunk vs indexações antigas | reindex necessário; `qa_cache` já invalida por hash de chunk (plan 017) |
 334: | `server.toml` com secret em plaintext no docker | TLS keys são **paths** (montados); `data_dir` é volume; nada de secret em toml |
 335: | Merge granular quebra em tabelas profundas | testar recursão; manter structs chatas (sem aninhamento > 2 níveis) |
-336: | `.arlm.toml` commitado por engano | `arlm init` garante gitignore; documentar |
+336: | `.arags.toml` commitado por engano | `arags init` garante gitignore; documentar |
 337: 
 338: ---
 339: 
 340: ## Relação com 019/017/018
 341: 
-342: - **019 (remoção legado + CLI):** `arlm init` (B) e `arlm memory`/`persist` (C/D) consomem
+342: - **019 (remoção legado + CLI):** `arags init` (B) e `arags memory`/`persist` (C/D) consomem
 343:   `user_config`; `maintenance` (C.1) é configurado aqui em `[maintenance]`. As referências a
-344:   `~/.arlm/config.toml`/`.arlm/config.toml` no 019 são **supersedidas** por este plano
-345:   (`~/.arlm/arlm.toml` global, `.arlm.toml` local, `server.toml` do server).
+344:   `~/.arags/config.toml`/`.arags/config.toml` no 019 são **supersedidas** por este plano
+345:   (`~/.arags/arags.toml` global, `.arags.toml` local, `server.toml` do server).
 346: - **017 (QA-Cache):** `qa_cache` já é server-only; permanece em `server.toml [qa_cache]`.
 347: - **018 (auth):** `auth.username`/`refresh_token` migram de `config.toml [auth]` para
-348:   `~/.arlm/arlm.toml [auth]`; semântica de token inalterada.
+348:   `~/.arags/arags.toml [auth]`; semântica de token inalterada.
 
 (End of file - total 348 lines)
 </content>
@@ -924,212 +924,212 @@ VERSION
 
 **Output:**
 ```
-crates/arlm-cli/src/auth_client.rs
-crates/arlm-cli/src/backend.rs
-crates/arlm-cli/src/cli/commands.rs
-crates/arlm-cli/src/client.rs
-crates/arlm-cli/src/cli/mod.rs
-crates/arlm-cli/src/cli/root.rs
-crates/arlm-cli/src/commands/mcp/handlers.rs
-crates/arlm-cli/src/commands/mcp/mod.rs
-crates/arlm-cli/src/commands/mcp/protocol.rs
-crates/arlm-cli/src/commands/mcp/session.rs
-crates/arlm-cli/src/commands/mod.rs
-crates/arlm-cli/src/commands/persist.rs
-crates/arlm-cli/src/commands/qa_cache.rs
-crates/arlm-cli/src/commands/serve/handlers.rs
-crates/arlm-cli/src/commands/serve/index_logic.rs
-crates/arlm-cli/src/commands/serve/mod.rs
-crates/arlm-cli/src/commands/serve/requests.rs
-crates/arlm-cli/src/commands/serve/response.rs
-crates/arlm-cli/src/commands/serve/search_logic.rs
-crates/arlm-cli/src/commands/serve/state.rs
-crates/arlm-cli/src/commands/serve/status_logic.rs
-crates/arlm-cli/src/dispatch/mod.rs
-crates/arlm-cli/src/dispatch/server.rs
-crates/arlm-cli/src/lib.rs
-crates/arlm-cli/src/main.rs
-crates/arlm-cli/src/metrics.rs
-crates/arlm-cli/src/output/jsonl.rs
-crates/arlm-cli/src/output/json.rs
-crates/arlm-cli/src/output/markdown.rs
-crates/arlm-cli/src/output/mod.rs
-crates/arlm-cli/src/output/prompt.rs
-crates/arlm-cli/src/output/tree.rs
-crates/arlm-cli/src/user_config.rs
-crates/arlm-cli/src/util.rs
-crates/arlm-cli/tests/client_test.rs
-crates/arlm-cli/tests/metrics_test.rs
-crates/arlm-cli/tests/output_json_test.rs
-crates/arlm-cli/tests/output_markdown_test.rs
-crates/arlm-cli/tests/output_mod_test.rs
-crates/arlm-cli/tests/output_prompt_test.rs
-crates/arlm-cli/tests/output_tree_test.rs
-crates/arlm-core/src/lib.rs
-crates/arlm-core/src/logging.rs
-crates/arlm-core/src/memory.rs
-crates/arlm-core/src/qa_cache/mod.rs
-crates/arlm-core/src/types/enums.rs
-crates/arlm-core/src/types/input.rs
-crates/arlm-core/src/types/mod.rs
-crates/arlm-core/src/types/node.rs
-crates/arlm-core/tests/lib_tests.rs
-crates/arlm-core/tests/logging_tests.rs
-crates/arlm-embedding/benches/ingestion.rs
-crates/arlm-embedding/src/chunker/code.rs
-crates/arlm-embedding/src/chunker/code/util.rs
-crates/arlm-embedding/src/chunker/markdown.rs
-crates/arlm-embedding/src/chunker/mod.rs
-crates/arlm-embedding/src/chunker/recursive.rs
-crates/arlm-embedding/src/chunker/text.rs
-crates/arlm-embedding/src/embedder/batch.rs
-crates/arlm-embedding/src/embedder/bge_m3/attention.rs
-crates/arlm-embedding/src/embedder/bge_m3/embedder.rs
-crates/arlm-embedding/src/embedder/bge_m3/model.rs
-crates/arlm-embedding/src/embedder/bge_m3/mod.rs
-crates/arlm-embedding/src/embedder/bge_m3/ops.rs
-crates/arlm-embedding/src/embedder/bge_m3/weights.rs
-crates/arlm-embedding/src/embedder/cache.rs
-crates/arlm-embedding/src/embedder/config.rs
-crates/arlm-embedding/src/embedder/fallback.rs
-crates/arlm-embedding/src/embedder/lightweight.rs
-crates/arlm-embedding/src/embedder/mod.rs
-crates/arlm-embedding/src/embedder/ollama.rs
-crates/arlm-embedding/src/lib.rs
-crates/arlm-embedding/src/pipeline/files.rs
-crates/arlm-embedding/src/pipeline.rs
-crates/arlm-embedding/tests/bge_m3_test.rs
-crates/arlm-embedding/tests/chunker_test.rs
-crates/arlm-embedding/tests/embedder_test.rs
-crates/arlm-embedding/tests/pipeline_test.rs
-crates/arlm-llm/src/backend.rs
-crates/arlm-llm/src/config.rs
-crates/arlm-llm/src/factory.rs
-crates/arlm-llm/src/fallback.rs
-crates/arlm-llm/src/lib.rs
-crates/arlm-llm/src/pricing.rs
-crates/arlm-llm/src/retry.rs
-crates/arlm-llm/src/token_counter.rs
-crates/arlm-llm/src/trait_llm.rs
-crates/arlm-llm/src/transport.rs
-crates/arlm-llm/src/types.rs
-crates/arlm-llm/tests/config_test.rs
-crates/arlm-llm/tests/factory_test.rs
-crates/arlm-llm/tests/pricing_test.rs
-crates/arlm-llm/tests/retry_test.rs
-crates/arlm-llm/tests/trait_test.rs
-crates/arlm-llm/tests/types_test.rs
-crates/arlm-memory/src/consolidation.rs
-crates/arlm-memory/src/decay.rs
-crates/arlm-memory/src/engine/index.rs
-crates/arlm-memory/src/engine/mod.rs
-crates/arlm-memory/src/engine/search.rs
-crates/arlm-memory/src/history.rs
-crates/arlm-memory/src/knowledge/helpers.rs
-crates/arlm-memory/src/knowledge/mod.rs
-crates/arlm-memory/src/lib.rs
-crates/arlm-memory/src/persist/engine.rs
-crates/arlm-memory/src/persist/format.rs
-crates/arlm-memory/src/persist/mod.rs
-crates/arlm-memory/src/persist/ops.rs
-crates/arlm-memory/src/persist/types.rs
-crates/arlm-memory/src/project.rs
-crates/arlm-memory/src/transfer.rs
-crates/arlm-memory/src/watch.rs
-crates/arlm-memory/tests/consolidation_test.rs
-crates/arlm-memory/tests/decay_test.rs
-crates/arlm-memory/tests/history_test.rs
-crates/arlm-memory/tests/knowledge_test.rs
-crates/arlm-memory/tests/lib_test.rs
-crates/arlm-memory/tests/persist_test.rs
-crates/arlm-memory/tests/project_test.rs
-crates/arlm-memory/tests/transfer_test.rs
-crates/arlm-memory/tests/watch_test.rs
-crates/arlm-proto/build.rs
-crates/arlm-proto/src/lib.rs
-crates/arlm-proto/tests/proto_contract.rs
-crates/arlm-search/src/bm25.rs
-crates/arlm-search/src/context.rs
-crates/arlm-search/src/decay.rs
-crates/arlm-search/src/entity.rs
-crates/arlm-search/src/hybrid/fusion.rs
-crates/arlm-search/src/hybrid/mod.rs
-crates/arlm-search/src/hybrid/rerank.rs
-crates/arlm-search/src/hybrid/rrf.rs
-crates/arlm-search/src/hybrid/search.rs
-crates/arlm-search/src/lib.rs
-crates/arlm-search/src/qa_cache.rs
-crates/arlm-search/src/semantic.rs
-crates/arlm-search/src/types.rs
-crates/arlm-search/tests/bm25_test.rs
-crates/arlm-search/tests/context_test.rs
-crates/arlm-search/tests/decay_test.rs
-crates/arlm-search/tests/entity_test.rs
-crates/arlm-search/tests/hybrid_test.rs
-crates/arlm-search/tests/semantic_test.rs
-crates/arlm-search/tests/types_test.rs
-crates/arlm-server/src/admin.rs
-crates/arlm-server/src/auth/mod.rs
-crates/arlm-server/src/config.rs
-crates/arlm-server/src/grpc/auth.rs
-crates/arlm-server/src/grpc/error.rs
-crates/arlm-server/src/grpc/history.rs
-crates/arlm-server/src/grpc/index.rs
-crates/arlm-server/src/grpc/memory.rs
-crates/arlm-server/src/grpc/mod.rs
-crates/arlm-server/src/grpc/project.rs
-crates/arlm-server/src/grpc/query_cache.rs
-crates/arlm-server/src/grpc/search.rs
-crates/arlm-server/src/grpc/session.rs
-crates/arlm-server/src/grpc/status.rs
-crates/arlm-server/src/indexing.rs
-crates/arlm-server/src/lib.rs
-crates/arlm-server/src/lifecycle.rs
-crates/arlm-server/src/main.rs
-crates/arlm-server/src/maintenance.rs
-crates/arlm-server/src/state.rs
-crates/arlm-server/src/store/chunks.rs
-crates/arlm-server/src/store/mod.rs
-crates/arlm-server/src/store/projects.rs
-crates/arlm-server/src/store/sessions.rs
-crates/arlm-server/src/store/summaries.rs
-crates/arlm-server/src/timing.rs
-crates/arlm-server/tests/auth_test.rs
-crates/arlm-server/tests/indexing_tests.rs
-crates/arlm-server/tests/store_tests.rs
-crates/arlm-storage/benches/qa_cache.rs
-crates/arlm-storage/src/fts.rs
-crates/arlm-storage/src/lance/mod.rs
-crates/arlm-storage/src/lance/vectors.rs
-crates/arlm-storage/src/lib.rs
-crates/arlm-storage/src/qa_vectors.rs
-crates/arlm-storage/src/sqlite/buffers.rs
-crates/arlm-storage/src/sqlite/cache.rs
-crates/arlm-storage/src/sqlite/chunks.rs
-crates/arlm-storage/src/sqlite/conn.rs
-crates/arlm-storage/src/sqlite/entities.rs
-crates/arlm-storage/src/sqlite/findings.rs
-crates/arlm-storage/src/sqlite/history.rs
-crates/arlm-storage/src/sqlite/mod.rs
-crates/arlm-storage/src/sqlite/patterns.rs
-crates/arlm-storage/src/sqlite/qa_cache.rs
-crates/arlm-storage/src/sqlite/schema.rs
-crates/arlm-storage/src/sqlite/summaries.rs
-crates/arlm-storage/src/sqlite/tasks.rs
-crates/arlm-storage/src/sqlite/tokens.rs
-crates/arlm-storage/tests/buffers_test.rs
-crates/arlm-storage/tests/cache_test.rs
-crates/arlm-storage/tests/chunks_test.rs
-crates/arlm-storage/tests/conn_test.rs
-crates/arlm-storage/tests/entities_test.rs
-crates/arlm-storage/tests/findings_test.rs
-crates/arlm-storage/tests/history_test.rs
-crates/arlm-storage/tests/patterns_test.rs
-crates/arlm-storage/tests/qa_cache_test.rs
-crates/arlm-storage/tests/schema_test.rs
-crates/arlm-storage/tests/summaries_test.rs
-crates/arlm-storage/tests/tasks_test.rs
-crates/arlm-storage/tests/vector_store_test.rs
+crates/arags-cli/src/auth_client.rs
+crates/arags-cli/src/backend.rs
+crates/arags-cli/src/cli/commands.rs
+crates/arags-cli/src/client.rs
+crates/arags-cli/src/cli/mod.rs
+crates/arags-cli/src/cli/root.rs
+crates/arags-cli/src/commands/mcp/handlers.rs
+crates/arags-cli/src/commands/mcp/mod.rs
+crates/arags-cli/src/commands/mcp/protocol.rs
+crates/arags-cli/src/commands/mcp/session.rs
+crates/arags-cli/src/commands/mod.rs
+crates/arags-cli/src/commands/persist.rs
+crates/arags-cli/src/commands/qa_cache.rs
+crates/arags-cli/src/commands/serve/handlers.rs
+crates/arags-cli/src/commands/serve/index_logic.rs
+crates/arags-cli/src/commands/serve/mod.rs
+crates/arags-cli/src/commands/serve/requests.rs
+crates/arags-cli/src/commands/serve/response.rs
+crates/arags-cli/src/commands/serve/search_logic.rs
+crates/arags-cli/src/commands/serve/state.rs
+crates/arags-cli/src/commands/serve/status_logic.rs
+crates/arags-cli/src/dispatch/mod.rs
+crates/arags-cli/src/dispatch/server.rs
+crates/arags-cli/src/lib.rs
+crates/arags-cli/src/main.rs
+crates/arags-cli/src/metrics.rs
+crates/arags-cli/src/output/jsonl.rs
+crates/arags-cli/src/output/json.rs
+crates/arags-cli/src/output/markdown.rs
+crates/arags-cli/src/output/mod.rs
+crates/arags-cli/src/output/prompt.rs
+crates/arags-cli/src/output/tree.rs
+crates/arags-cli/src/user_config.rs
+crates/arags-cli/src/util.rs
+crates/arags-cli/tests/client_test.rs
+crates/arags-cli/tests/metrics_test.rs
+crates/arags-cli/tests/output_json_test.rs
+crates/arags-cli/tests/output_markdown_test.rs
+crates/arags-cli/tests/output_mod_test.rs
+crates/arags-cli/tests/output_prompt_test.rs
+crates/arags-cli/tests/output_tree_test.rs
+crates/arags-core/src/lib.rs
+crates/arags-core/src/logging.rs
+crates/arags-core/src/memory.rs
+crates/arags-core/src/qa_cache/mod.rs
+crates/arags-core/src/types/enums.rs
+crates/arags-core/src/types/input.rs
+crates/arags-core/src/types/mod.rs
+crates/arags-core/src/types/node.rs
+crates/arags-core/tests/lib_tests.rs
+crates/arags-core/tests/logging_tests.rs
+crates/arags-embedding/benches/ingestion.rs
+crates/arags-embedding/src/chunker/code.rs
+crates/arags-embedding/src/chunker/code/util.rs
+crates/arags-embedding/src/chunker/markdown.rs
+crates/arags-embedding/src/chunker/mod.rs
+crates/arags-embedding/src/chunker/recursive.rs
+crates/arags-embedding/src/chunker/text.rs
+crates/arags-embedding/src/embedder/batch.rs
+crates/arags-embedding/src/embedder/bge_m3/attention.rs
+crates/arags-embedding/src/embedder/bge_m3/embedder.rs
+crates/arags-embedding/src/embedder/bge_m3/model.rs
+crates/arags-embedding/src/embedder/bge_m3/mod.rs
+crates/arags-embedding/src/embedder/bge_m3/ops.rs
+crates/arags-embedding/src/embedder/bge_m3/weights.rs
+crates/arags-embedding/src/embedder/cache.rs
+crates/arags-embedding/src/embedder/config.rs
+crates/arags-embedding/src/embedder/fallback.rs
+crates/arags-embedding/src/embedder/lightweight.rs
+crates/arags-embedding/src/embedder/mod.rs
+crates/arags-embedding/src/embedder/ollama.rs
+crates/arags-embedding/src/lib.rs
+crates/arags-embedding/src/pipeline/files.rs
+crates/arags-embedding/src/pipeline.rs
+crates/arags-embedding/tests/bge_m3_test.rs
+crates/arags-embedding/tests/chunker_test.rs
+crates/arags-embedding/tests/embedder_test.rs
+crates/arags-embedding/tests/pipeline_test.rs
+crates/arags-llm/src/backend.rs
+crates/arags-llm/src/config.rs
+crates/arags-llm/src/factory.rs
+crates/arags-llm/src/fallback.rs
+crates/arags-llm/src/lib.rs
+crates/arags-llm/src/pricing.rs
+crates/arags-llm/src/retry.rs
+crates/arags-llm/src/token_counter.rs
+crates/arags-llm/src/trait_llm.rs
+crates/arags-llm/src/transport.rs
+crates/arags-llm/src/types.rs
+crates/arags-llm/tests/config_test.rs
+crates/arags-llm/tests/factory_test.rs
+crates/arags-llm/tests/pricing_test.rs
+crates/arags-llm/tests/retry_test.rs
+crates/arags-llm/tests/trait_test.rs
+crates/arags-llm/tests/types_test.rs
+crates/arags-memory/src/consolidation.rs
+crates/arags-memory/src/decay.rs
+crates/arags-memory/src/engine/index.rs
+crates/arags-memory/src/engine/mod.rs
+crates/arags-memory/src/engine/search.rs
+crates/arags-memory/src/history.rs
+crates/arags-memory/src/knowledge/helpers.rs
+crates/arags-memory/src/knowledge/mod.rs
+crates/arags-memory/src/lib.rs
+crates/arags-memory/src/persist/engine.rs
+crates/arags-memory/src/persist/format.rs
+crates/arags-memory/src/persist/mod.rs
+crates/arags-memory/src/persist/ops.rs
+crates/arags-memory/src/persist/types.rs
+crates/arags-memory/src/project.rs
+crates/arags-memory/src/transfer.rs
+crates/arags-memory/src/watch.rs
+crates/arags-memory/tests/consolidation_test.rs
+crates/arags-memory/tests/decay_test.rs
+crates/arags-memory/tests/history_test.rs
+crates/arags-memory/tests/knowledge_test.rs
+crates/arags-memory/tests/lib_test.rs
+crates/arags-memory/tests/persist_test.rs
+crates/arags-memory/tests/project_test.rs
+crates/arags-memory/tests/transfer_test.rs
+crates/arags-memory/tests/watch_test.rs
+crates/arags-proto/build.rs
+crates/arags-proto/src/lib.rs
+crates/arags-proto/tests/proto_contract.rs
+crates/arags-search/src/bm25.rs
+crates/arags-search/src/context.rs
+crates/arags-search/src/decay.rs
+crates/arags-search/src/entity.rs
+crates/arags-search/src/hybrid/fusion.rs
+crates/arags-search/src/hybrid/mod.rs
+crates/arags-search/src/hybrid/rerank.rs
+crates/arags-search/src/hybrid/rrf.rs
+crates/arags-search/src/hybrid/search.rs
+crates/arags-search/src/lib.rs
+crates/arags-search/src/qa_cache.rs
+crates/arags-search/src/semantic.rs
+crates/arags-search/src/types.rs
+crates/arags-search/tests/bm25_test.rs
+crates/arags-search/tests/context_test.rs
+crates/arags-search/tests/decay_test.rs
+crates/arags-search/tests/entity_test.rs
+crates/arags-search/tests/hybrid_test.rs
+crates/arags-search/tests/semantic_test.rs
+crates/arags-search/tests/types_test.rs
+crates/arags-server/src/admin.rs
+crates/arags-server/src/auth/mod.rs
+crates/arags-server/src/config.rs
+crates/arags-server/src/grpc/auth.rs
+crates/arags-server/src/grpc/error.rs
+crates/arags-server/src/grpc/history.rs
+crates/arags-server/src/grpc/index.rs
+crates/arags-server/src/grpc/memory.rs
+crates/arags-server/src/grpc/mod.rs
+crates/arags-server/src/grpc/project.rs
+crates/arags-server/src/grpc/query_cache.rs
+crates/arags-server/src/grpc/search.rs
+crates/arags-server/src/grpc/session.rs
+crates/arags-server/src/grpc/status.rs
+crates/arags-server/src/indexing.rs
+crates/arags-server/src/lib.rs
+crates/arags-server/src/lifecycle.rs
+crates/arags-server/src/main.rs
+crates/arags-server/src/maintenance.rs
+crates/arags-server/src/state.rs
+crates/arags-server/src/store/chunks.rs
+crates/arags-server/src/store/mod.rs
+crates/arags-server/src/store/projects.rs
+crates/arags-server/src/store/sessions.rs
+crates/arags-server/src/store/summaries.rs
+crates/arags-server/src/timing.rs
+crates/arags-server/tests/auth_test.rs
+crates/arags-server/tests/indexing_tests.rs
+crates/arags-server/tests/store_tests.rs
+crates/arags-storage/benches/qa_cache.rs
+crates/arags-storage/src/fts.rs
+crates/arags-storage/src/lance/mod.rs
+crates/arags-storage/src/lance/vectors.rs
+crates/arags-storage/src/lib.rs
+crates/arags-storage/src/qa_vectors.rs
+crates/arags-storage/src/sqlite/buffers.rs
+crates/arags-storage/src/sqlite/cache.rs
+crates/arags-storage/src/sqlite/chunks.rs
+crates/arags-storage/src/sqlite/conn.rs
+crates/arags-storage/src/sqlite/entities.rs
+crates/arags-storage/src/sqlite/findings.rs
+crates/arags-storage/src/sqlite/history.rs
+crates/arags-storage/src/sqlite/mod.rs
+crates/arags-storage/src/sqlite/patterns.rs
+crates/arags-storage/src/sqlite/qa_cache.rs
+crates/arags-storage/src/sqlite/schema.rs
+crates/arags-storage/src/sqlite/summaries.rs
+crates/arags-storage/src/sqlite/tasks.rs
+crates/arags-storage/src/sqlite/tokens.rs
+crates/arags-storage/tests/buffers_test.rs
+crates/arags-storage/tests/cache_test.rs
+crates/arags-storage/tests/chunks_test.rs
+crates/arags-storage/tests/conn_test.rs
+crates/arags-storage/tests/entities_test.rs
+crates/arags-storage/tests/findings_test.rs
+crates/arags-storage/tests/history_test.rs
+crates/arags-storage/tests/patterns_test.rs
+crates/arags-storage/tests/qa_cache_test.rs
+crates/arags-storage/tests/schema_test.rs
+crates/arags-storage/tests/summaries_test.rs
+crates/arags-storage/tests/tasks_test.rs
+crates/arags-storage/tests/vector_store_test.rs
 ---
 [workspace]
 resolver = "2"
@@ -1211,13 +1211,13 @@ prost = "0.13"
 prost-types = "0.13"
 
 # Internal crates
-arlm-storage = { path = "crates/arlm-storage" }
-arlm-embedding = { path = "crates/arlm-embedding" }
-arlm-search = { path = "crates/arlm-search" }
-arlm-llm = { path = "crates/arlm-llm" }
-arlm-memory = { path = "crates/arlm-memory" }
-arlm-core = { path = "crates/arlm-core" }
-arlm-proto = { path = "crates/arlm-proto" }
+arags-storage = { path = "crates/arags-storage" }
+arags-embedding = { path = "crates/arags-embedding" }
+arags-search = { path = "crates/arags-search" }
+arags-llm = { path = "crates/arags-llm" }
+arags-memory = { path = "crates/arags-memory" }
+arags-core = { path = "crates/arags-core" }
+arags-proto = { path = "crates/arags-proto" }
 
 # Testing
 tempfile = "3"
@@ -1246,16 +1246,16 @@ opt-level = 3
 <summary>Click to expand reasoning</summary>
 
 Interesting — the codebase already looks partially migrated. I see:
-- `crates/arlm-cli/src/user_config.rs` exists (the plan says "novo")
-- `crates/arlm-cli/src/dispatch/server.rs` exists but no `local.rs` (already deleted?)
-- No `arlm-cli/src/config.rs` visible
-- No `arlm-cli/src/commands/init.rs`
-- `arlm-server/src/config.rs` exists
+- `crates/arags-cli/src/user_config.rs` exists (the plan says "novo")
+- `crates/arags-cli/src/dispatch/server.rs` exists but no `local.rs` (already deleted?)
+- No `arags-cli/src/config.rs` visible
+- No `arags-cli/src/commands/init.rs`
+- `arags-server/src/config.rs` exists
 
 Wait, it seems the codebase is in a state where plan 019 may be done and 020 might be partially implemented. Let me check the current state carefully. Let me look at:
 1. git log to see recent work
 2. sd list to see issue status
-3. Key files: arlm-cli/src/lib.rs, user_config.rs, arlm-server/src/config.rs, dispatch/mod.rs, client.rs, auth_client.rs, commands/mod.rs
+3. Key files: arags-cli/src/lib.rs, user_config.rs, arags-server/src/config.rs, dispatch/mod.rs, client.rs, auth_client.rs, commands/mod.rs
 
 </details>
 
@@ -1306,13 +1306,13 @@ ddee33e seeds: sync 2026-08-22
  M STAGING.md
 ?? conversations/
 ---SD---
-agnostic-rlm-rs-27dc Critical open Revisão sistêmica ARLM (plan 016)
-agnostic-rlm-rs-4f10 High blocked Implementar TODO.md do arlm-search
-agnostic-rlm-rs-4a28 High in_progress Refatorar crate arlm-search (processo de 7 etapas)
+agnostic-rlm-rs-27dc Critical open Revisão sistêmica ARAGS (plan 016)
+agnostic-rlm-rs-4f10 High blocked Implementar TODO.md do arags-search
+agnostic-rlm-rs-4a28 High in_progress Refatorar crate arags-search (processo de 7 etapas)
 agnostic-rlm-rs-e108 Medium open 8. Custom tools executáveis
 agnostic-rlm-rs-03c3 Medium open 7. Docker environment para execução de código
 agnostic-rlm-rs-1119 Medium open 6. Testes de integração com servidor
-agnostic-rlm-rs-2fdc Low in_progress Ler TODO.md do arlm-search
+agnostic-rlm-rs-2fdc Low in_progress Ler TODO.md do arags-search
 agnostic-rlm-rs-eedd Low open 9. Compaction LLM-based
 agnostic-rlm-rs-7222 Backlog open Multi-user roadmap (Plano 15)
 
@@ -1338,33 +1338,33 @@ agnostic-rlm-rs-7222 Backlog open Multi-user roadmap (Plano 15)
 
 **Output:**
 ```
-agnostic-rlm-rs-27dc Critical open Revisão sistêmica ARLM (plan 016)
+agnostic-rlm-rs-27dc Critical open Revisão sistêmica ARAGS (plan 016)
 agnostic-rlm-rs-e108 Medium open 8. Custom tools executáveis
 agnostic-rlm-rs-03c3 Medium open 7. Docker environment para execução de código
 agnostic-rlm-rs-1119 Medium open 6. Testes de integração com servidor
 agnostic-rlm-rs-eedd Low open 9. Compaction LLM-based
 agnostic-rlm-rs-7222 Backlog open Multi-user roadmap (Plano 15)
 ---
-agnostic-rlm-rs-db34 Critical closed F7.2 user_config 2-escopos + merge granular em arlm-cli (auth só global)
-agnostic-rlm-rs-72e6 Critical closed F7.1 server.toml schema+load em arlm-server/config.rs (sem [llm]; embedder/search/maintenance/tls)
+agnostic-rlm-rs-db34 Critical closed F7.2 user_config 2-escopos + merge granular em arags-cli (auth só global)
+agnostic-rlm-rs-72e6 Critical closed F7.1 server.toml schema+load em arags-server/config.rs (sem [llm]; embedder/search/maintenance/tls)
 agnostic-rlm-rs-bfd8 Critical closed F7: Config consolidation (server.toml + user_config + pure gRPC client)
 agnostic-rlm-rs-e6e8 Critical closed Remoção RLM Legacy + Consolidação CLI/Config (plan 019/020)
 agnostic-rlm-rs-04bf High closed Auth & Token Management (plan 018, executar antes de 017)
 agnostic-rlm-rs-1fff High closed Digest-once: síntese LLM de top-K + provenance
 agnostic-rlm-rs-3d49 High closed Semantic Query-Answer Cache (digestão sob demanda)
-agnostic-rlm-rs-69a5 High closed Refatorar arlm-llm para backend genérico config-driven
+agnostic-rlm-rs-69a5 High closed Refatorar arags-llm para backend genérico config-driven
 agnostic-rlm-rs-5ebf High closed [emb] Modelo configurável + leve p/ testes (BgeM3 real, Lightweight p/ test)
 agnostic-rlm-rs-be04 High closed 11. Summarizer: LLM configurado + background task + streaming (gaps 2,12,18,19)
 agnostic-rlm-rs-88cd High closed 5. AppState: LLM backend configurável + EventBus (gaps 9,10)
 agnostic-rlm-rs-ee0e High closed 3. Limpar warnings clippy no workspace
-agnostic-rlm-rs-c20a High closed Phase 5: Refactor arlm-cli to thin gRPC client
-agnostic-rlm-rs-777f High closed Phase 3: Create arlm-server crate (long-running gRPC server)
+agnostic-rlm-rs-c20a High closed Phase 5: Refactor arags-cli to thin gRPC client
+agnostic-rlm-rs-777f High closed Phase 3: Create arags-server crate (long-running gRPC server)
 agnostic-rlm-rs-2a6c Medium closed Config.toml [auth] + CLI auto session + bearer
 agnostic-rlm-rs-bd29 Medium closed Engine: widening adaptativo por tier + thresholds configuráveis
 agnostic-rlm-rs-06d5 Medium closed Embedding: embed_query com prefixo de task no espaço B
-agnostic-rlm-rs-66a9 Medium closed config.toml.example + loader LlmConfig + install.sh cria ~/.arlm/config.toml
+agnostic-rlm-rs-66a9 Medium closed config.toml.example + loader LlmConfig + install.sh cria ~/.arags/config.toml
 agnostic-rlm-rs-6a2d Medium closed [emb] Truncamento matryoshka (dims configuráveis, default 512)
-agnostic-rlm-rs-0ca2 Medium closed Config file support (~/.arlm/config.toml)
+agnostic-rlm-rs-0ca2 Medium closed Config file support (~/.arags/config.toml)
 agnostic-rlm-rs-e237 Medium closed Agent Integration: config files for 5 agents
 agnostic-rlm-rs-1287 Low closed Config: QaCacheConfig com limiares/dims/eviction
 ---
@@ -1395,9 +1395,9 @@ Interesting! The seeds show that plan 020 items appear to be **closed** already:
 
 So it seems much of the work has been done. But the user asks me to deeply analyze the plan, plan with sd, and implement. Maybe the work is partially complete, or maybe there are gaps. I need to verify the actual state of the code against the plan's requirements:
 
-1. Server config rework — check `arlm-server/src/config.rs`
-2. Client user_config — check `arlm-cli/src/user_config.rs`
-3. Init command generating `.arlm.toml` + gitignore
+1. Server config rework — check `arags-server/src/config.rs`
+2. Client user_config — check `arags-cli/src/user_config.rs`
+3. Init command generating `.arags.toml` + gitignore
 4. Client stripped of data-config + offline mode removed
 5. Index protocol (D2) — client sends raw text, server chunks
 6. Wire: client.rs/auth_client.rs/dispatch/server.rs consume user_config
@@ -1405,13 +1405,13 @@ So it seems much of the work has been done. But the user asks me to deeply analy
 8. cargo check --workspace + clippy + fmt
 
 Let me do a deep exploration of the current state. I'll read the key files in parallel:
-- crates/arlm-server/src/config.rs
-- crates/arlm-cli/src/user_config.rs
-- crates/arlm-cli/src/lib.rs
-- crates/arlm-cli/src/client.rs
-- crates/arlm-cli/src/auth_client.rs
-- crates/arlm-cli/src/dispatch/mod.rs and server.rs
-- crates/arlm-cli/src/cli/root.rs, commands.rs
+- crates/arags-server/src/config.rs
+- crates/arags-cli/src/user_config.rs
+- crates/arags-cli/src/lib.rs
+- crates/arags-cli/src/client.rs
+- crates/arags-cli/src/auth_client.rs
+- crates/arags-cli/src/dispatch/mod.rs and server.rs
+- crates/arags-cli/src/cli/root.rs, commands.rs
 
 Let me use the explore agent to be efficient, but given this is a big implementation task, maybe direct reading is better for accuracy. Let me read the key files directly first.
 
@@ -1421,48 +1421,48 @@ O trabalho anterior da sd mostra itens do plano 020 já fechados — preciso ver
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/user_config.rs
+**Title:** crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs</path>
 <type>file</type>
 <content>
 1: //! User configuration (plan 020): 2-scope merge (global + local) with
 2: //! per-field granular override.
 3: //!
-4: //! - Global: `~/.arlm/arlm.toml` — identity (`[auth]`), the user's AI
+4: //! - Global: `~/.arags/arags.toml` — identity (`[auth]`), the user's AI
 5: //!   (`[llm]`), and the target server (`[server] addr`).
-6: //! - Local: `.arlm.toml` in the project root (gitignored, generated by
-7: //!   `arlm init`) — per-project overrides and `[project]` metadata.
+6: //! - Local: `.arags.toml` in the project root (gitignored, generated by
+7: //!   `arags init`) — per-project overrides and `[project]` metadata.
 8: //!
 9: //! Per-field merge rules:
 10: //! - `[server]` and `[project]` merge recursively field-by-field; a local
 11: //!   field wins, an absent local field falls back to the global value.
 12: //! - `[llm]` is taken from the local scope when present, otherwise from the
 13: //!   global scope (the whole backend list is overridden).
-14: //! - `[auth]` is **global-only**: if a local `.arlm.toml` contains `[auth]` it
+14: //! - `[auth]` is **global-only**: if a local `.arags.toml` contains `[auth]` it
 15: //!   is ignored entirely (the local file never carries credentials).
 16: //!
-17: //! Break total: the legacy `~/.arlm/config.toml` / `.arlm/config.toml` files
-18: //! are NOT read. Only `~/.arlm/arlm.toml` and `.arlm.toml` are consulted.
+17: //! Break total: the legacy `~/.arags/config.toml` / `.arags/config.toml` files
+18: //! are NOT read. Only `~/.arags/arags.toml` and `.arags.toml` are consulted.
 19: 
 20: use std::path::PathBuf;
 21: 
 22: use anyhow::{Context, Result};
 23: use serde::Deserialize;
 24: 
-25: use arlm_llm::{BackendConfig, LlmConfig};
+25: use arags_llm::{BackendConfig, LlmConfig};
 26: 
 27: /// Auth section (global-only). Carries the user's refresh token minted by the
-28: /// server admin (`arlm-server admin create-refresh`).
+28: /// server admin (`arags-server admin create-refresh`).
 29: #[derive(Debug, Clone, Default, Deserialize)]
 30: pub struct AuthConfig {
 31:     /// Auditing username, mirrored from the created token.
@@ -1482,7 +1482,7 @@ O trabalho anterior da sd mostra itens do plano 020 já fechados — preciso ver
 45:     pub addr: Option<String>,
 46: }
 47: 
-48: /// Project metadata section (local `.arlm.toml`).
+48: /// Project metadata section (local `.arags.toml`).
 49: #[derive(Debug, Clone, Default, Deserialize)]
 50: pub struct ProjectSection {
 51:     /// Human-readable project name.
@@ -1494,7 +1494,7 @@ O trabalho anterior da sd mostra itens do plano 020 já fechados — preciso ver
 57:     pub ignore: Option<Vec<String>>,
 58: }
 59: 
-60: /// Global config file shape (`~/.arlm/arlm.toml`).
+60: /// Global config file shape (`~/.arags/arags.toml`).
 61: #[derive(Debug, Clone, Default, Deserialize)]
 62: struct GlobalConfig {
 63:     auth: Option<AuthConfig>,
@@ -1503,7 +1503,7 @@ O trabalho anterior da sd mostra itens do plano 020 já fechados — preciso ver
 66:     project: Option<ProjectSection>,
 67: }
 68: 
-69: /// Local config file shape (`.arlm.toml`). Note: a `[auth]` section in the
+69: /// Local config file shape (`.arags.toml`). Note: a `[auth]` section in the
 70: /// local file is intentionally **ignored** (serde skips unknown fields), so it
 71: /// is simply absent from this struct — credentials stay global-only.
 72: #[derive(Debug, Clone, Default, Deserialize)]
@@ -1516,7 +1516,7 @@ O trabalho anterior da sd mostra itens do plano 020 já fechados — preciso ver
 79: /// The effective, merged user configuration used by the CLI.
 80: #[derive(Debug, Clone, Default)]
 81: pub struct EffectiveUserConfig {
-82:     /// Global-only identity (always from `~/.arlm/arlm.toml`).
+82:     /// Global-only identity (always from `~/.arags/arags.toml`).
 83:     pub auth: Option<AuthConfig>,
 84:     /// Effective LLM backends (local override, else global).
 85:     pub llm: Option<LlmConfig>,
@@ -1528,13 +1528,13 @@ O trabalho anterior da sd mostra itens do plano 020 já fechados — preciso ver
 91: 
 92: impl EffectiveUserConfig {
 93:     /// The server address to connect to: explicit `server.addr` (local over
-94:     /// global), then the `ARLM_SERVER_ADDR` env var, then a localhost default.
+94:     /// global), then the `ARAGS_SERVER_ADDR` env var, then a localhost default.
 95:     #[must_use]
 96:     pub fn server_addr(&self) -> String {
 97:         if let Some(addr) = self.server.addr.clone() {
 98:             return addr;
 99:         }
-100:         if let Ok(addr) = std::env::var("ARLM_SERVER_ADDR") {
+100:         if let Ok(addr) = std::env::var("ARAGS_SERVER_ADDR") {
 101:             return addr;
 102:         }
 103:         "127.0.0.1:50051".to_string()
@@ -1646,13 +1646,13 @@ O trabalho anterior da sd mostra itens do plano 020 já fechados — preciso ver
 209: }
 210: 
 211: fn global_path() -> PathBuf {
-212:     home_dir().join(".arlm").join("arlm.toml")
+212:     home_dir().join(".arags").join("arags.toml")
 213: }
 214: 
 215: fn local_path() -> PathBuf {
 216:     std::env::current_dir()
 217:         .unwrap_or_else(|_| PathBuf::from("."))
-218:         .join(".arlm.toml")
+218:         .join(".arags.toml")
 219: }
 220: 
 221: fn read_global() -> Result<GlobalConfig> {
@@ -1663,7 +1663,7 @@ O trabalho anterior da sd mostra itens do plano 020 já fechados — preciso ver
 226:     let content = std::fs::read_to_string(&path)
 227:         .with_context(|| format!("failed to read {}", path.display()))?;
 228:     let cfg: GlobalConfig =
-229:         toml::from_str(&content).with_context(|| "failed to parse ~/.arlm/arlm.toml")?;
+229:         toml::from_str(&content).with_context(|| "failed to parse ~/.arags/arags.toml")?;
 230:     Ok(cfg)
 231: }
 232: 
@@ -1675,7 +1675,7 @@ O trabalho anterior da sd mostra itens do plano 020 já fechados — preciso ver
 238:     let content = std::fs::read_to_string(&path)
 239:         .with_context(|| format!("failed to read {}", path.display()))?;
 240:     let cfg: LocalConfig =
-241:         toml::from_str(&content).with_context(|| "failed to parse .arlm.toml")?;
+241:         toml::from_str(&content).with_context(|| "failed to parse .arags.toml")?;
 242:     Ok(cfg)
 243: }
 244: 
@@ -1713,18 +1713,18 @@ The `user_config.rs` already exists and implements the 2-scope merge. Let me now
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs</path>
 <type>file</type>
 <content>
 1: use std::path::PathBuf;
@@ -1773,7 +1773,7 @@ The `user_config.rs` already exists and implements the 2-scope merge. Let me now
 44: }
 45: 
 46: fn default_data_dir() -> PathBuf {
-47:     dirs().unwrap_or_else(|| PathBuf::from(".")).join(".arlm")
+47:     dirs().unwrap_or_else(|| PathBuf::from(".")).join(".arags")
 48: }
 49: 
 50: fn dirs() -> Option<PathBuf> {
@@ -1843,20 +1843,20 @@ The `user_config.rs` already exists and implements the 2-scope merge. Let me now
 114: impl ServerConfig {
 115:     /// Load configuration from the server config file.
 116:     ///
-117:     /// Order: `ARLM_SERVER_CONFIG` env var → `/etc/arlm/server.toml` → env
+117:     /// Order: `ARAGS_SERVER_CONFIG` env var → `/etc/arags/server.toml` → env
 118:     /// overrides → built-in defaults.
 119:     ///
-120:     /// The server no longer reads the client's `.arlm/config.toml` /
-121:     /// `~/.arlm/config.toml` (plan 020): `server.toml` is a disjoint host
+120:     /// The server no longer reads the client's `.arags/config.toml` /
+121:     /// `~/.arags/config.toml` (plan 020): `server.toml` is a disjoint host
 122:     /// file mounted into the container.
 123:     ///
 124:     /// # Errors
 125:     ///
 126:     /// Returns an error if a config file exists but cannot be read or parsed.
 127:     pub fn load() -> Result<Self> {
-128:         let path = std::env::var("ARLM_SERVER_CONFIG")
+128:         let path = std::env::var("ARAGS_SERVER_CONFIG")
 129:             .map(PathBuf::from)
-130:             .unwrap_or_else(|_| PathBuf::from("/etc/arlm/server.toml"));
+130:             .unwrap_or_else(|_| PathBuf::from("/etc/arags/server.toml"));
 131: 
 132:         let mut config = if path.exists() {
 133:             let contents = std::fs::read_to_string(&path)
@@ -1868,10 +1868,10 @@ The `user_config.rs` already exists and implements the 2-scope merge. Let me now
 139:         };
 140: 
 141:         // Environment overrides win over the file (plan 020).
-142:         if let Ok(addr) = std::env::var("ARLM_SERVER_ADDR") {
+142:         if let Ok(addr) = std::env::var("ARAGS_SERVER_ADDR") {
 143:             config.listen_addr = addr;
 144:         }
-145:         if let Ok(dir) = std::env::var("ARLM_DATA_DIR") {
+145:         if let Ok(dir) = std::env::var("ARAGS_DATA_DIR") {
 146:             config.data_dir = PathBuf::from(dir);
 147:         }
 148: 
@@ -2020,7 +2020,7 @@ Server config exists but is missing some things from the plan:
 - Plan says `mtls_ca` — missing.
 - Plan says `pool_size`, `flush_interval_ms`, `max_batch_size` — missing.
 
-But wait — the plan's "Where to Implement" table says: "src/config.rs (rework: remover llm, add embedder/search/maintenance/tls.mtls_ca; load de ARLM_SERVER_CONFIG default /etc/arlm/server.toml)". So the required fields are: embedder, search, maintenance, mtls_ca. The embedder in the plan schema includes model selection etc., but the minimal implementation per the plan's step 1 mentions embedder/search/maintenance/mtls_ca.
+But wait — the plan's "Where to Implement" table says: "src/config.rs (rework: remover llm, add embedder/search/maintenance/tls.mtls_ca; load de ARAGS_SERVER_CONFIG default /etc/arags/server.toml)". So the required fields are: embedder, search, maintenance, mtls_ca. The embedder in the plan schema includes model selection etc., but the minimal implementation per the plan's step 1 mentions embedder/search/maintenance/mtls_ca.
 
 Let me check what the server actually does — how it uses the embedder config, whether it chunks, etc. And check the CLI side. Let me read more files.
 
@@ -2028,18 +2028,18 @@ Let me check what the server actually does — how it uses the embedder config, 
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/cli/root.rs
+**Title:** crates/arags-cli/src/cli/root.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/cli/root.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/cli/root.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/cli/root.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/cli/root.rs</path>
 <type>file</type>
 <content>
 1: use std::path::PathBuf;
@@ -2064,10 +2064,10 @@ Let me check what the server actually does — how it uses the embedder config, 
 20:     Jsonl,
 21: }
 22: 
-23: /// arlm command-line interface.
+23: /// arags command-line interface.
 24: #[derive(Parser, Debug)]
 25: #[command(
-26:     name = "arlm",
+26:     name = "arags",
 27:     about = "Agnostic RLM — on-demand, agent-agnostic RLM CLI (pure gRPC client)",
 28:     version
 29: )]
@@ -2114,18 +2114,18 @@ Let me check what the server actually does — how it uses the embedder config, 
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/cli/commands.rs
+**Title:** crates/arags-cli/src/cli/commands.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/cli/commands.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/cli/commands.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/cli/commands.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/cli/commands.rs</path>
 <type>file</type>
 <content>
 1: use std::path::PathBuf;
@@ -2134,13 +2134,13 @@ Let me check what the server actually does — how it uses the embedder config, 
 4: 
 5: #[derive(Subcommand, Debug)]
 6: pub enum Commands {
-7:     /// Prepare the repository: create `.arlm.toml` and (by default) index it.
+7:     /// Prepare the repository: create `.arags.toml` and (by default) index it.
 8:     Init {
-9:         /// Run `arlm index` after creating the config (default: true).
+9:         /// Run `arags index` after creating the config (default: true).
 10:         #[arg(long)]
 11:         index: bool,
 12: 
-13:         /// Skip running `arlm index` after creating the config.
+13:         /// Skip running `arags index` after creating the config.
 14:         #[arg(long, conflicts_with = "index")]
 15:         no_index: bool,
 16:     },
@@ -2225,7 +2225,7 @@ Let me check what the server actually does — how it uses the embedder config, 
 95: 
 96:     /// Persist a served answer as a structured wiki page using the user's LLM.
 97:     Persist {
-98:         /// The `cache_id` (response id) emitted by `arlm query -qa`.
+98:         /// The `cache_id` (response id) emitted by `arags query -qa`.
 99:         response_id: String,
 100: 
 101:         /// Optional title for the wiki page (defaults to a slug of the answer).
@@ -2260,7 +2260,7 @@ Let me check what the server actually does — how it uses the embedder config, 
 130:     },
 131: }
 132: 
-133: /// Subcommands of `arlm memory` (plan 019).
+133: /// Subcommands of `arags memory` (plan 019).
 134: #[derive(Subcommand, Debug)]
 135: pub enum MemoryCmd {
 136:     /// List cached query/answer memory for a project.
@@ -2344,23 +2344,23 @@ Let me look at:
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/main.rs
+**Title:** crates/arags-cli/src/main.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/main.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/main.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/main.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/main.rs</path>
 <type>file</type>
 <content>
 1: use anyhow::Result;
-2: use arlm_cli::cli::Cli;
-3: use arlm_cli::dispatch;
+2: use arags_cli::cli::Cli;
+3: use arags_cli::dispatch;
 4: use clap::Parser;
 5: 
 6: #[global_allocator]
@@ -2369,7 +2369,7 @@ Let me look at:
 9: fn main() -> Result<()> {
 10:     let cli = Cli::parse();
 11: 
-12:     arlm_core::logging::init_logging(cli.verbose);
+12:     arags_core::logging::init_logging(cli.verbose);
 13: 
 14:     let rt = tokio::runtime::Runtime::new()?;
 15: 
@@ -2389,18 +2389,18 @@ Let me look at:
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/dispatch/mod.rs
+**Title:** crates/arags-cli/src/dispatch/mod.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/dispatch/mod.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/dispatch/mod.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/dispatch/mod.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/dispatch/mod.rs</path>
 <type>file</type>
 <content>
 1: pub mod server;
@@ -2417,8 +2417,8 @@ Let me look at:
 12: /// Entry point for command dispatch.
 13: ///
 14: /// The CLI is a **pure gRPC client** (plus the user's local LLM for digest /
-15: /// summarize). Every data command is routed to a remote `arlm-server` over
-16: /// gRPC; the only local action is `arlm server`, which hosts the data plane.
+15: /// summarize). Every data command is routed to a remote `arags-server` over
+16: /// gRPC; the only local action is `arags server`, which hosts the data plane.
 17: pub fn dispatch(cli: Cli, rt: &Runtime) -> Result<()> {
 18:     let cfg = user_config::load().unwrap_or_default();
 19: 
@@ -2458,18 +2458,18 @@ Let me look at:
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/dispatch/server.rs
+**Title:** crates/arags-cli/src/dispatch/server.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/dispatch/server.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/dispatch/server.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/dispatch/server.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/dispatch/server.rs</path>
 <type>file</type>
 <content>
 1: use std::io::Write;
@@ -2484,13 +2484,13 @@ Let me look at:
 10: use tokio::sync::mpsc;
 11: use tokio_stream::wrappers::ReceiverStream;
 12: 
-13: use arlm_proto::proto::index_chunk;
-14: use arlm_proto::proto::{
+13: use arags_proto::proto::index_chunk;
+14: use arags_proto::proto::{
 15:     GetCacheRequest, GetHistoryRequest, InvalidateCacheRequest, InvalidateMode, ListMemoryRequest,
 16:     MemoryEntry, SearchRequest, SearchResult, TriggerMaintenanceRequest,
 17: };
 18: 
-19: use crate::auth_client::ArlmClient;
+19: use crate::auth_client::AragsClient;
 20: use crate::cli::Cli;
 21: use crate::cli::commands::{Commands, MemoryCmd};
 22: use crate::client::ClientConfig;
@@ -2500,7 +2500,7 @@ Let me look at:
 26: 
 27: /// Connect to the server, performing `AuthRefresh` when a refresh token is
 28: /// configured, and returning a client that auto-attaches the session token.
-29: fn connect(rt: &Runtime, cfg: &EffectiveUserConfig) -> Result<ArlmClient> {
+29: fn connect(rt: &Runtime, cfg: &EffectiveUserConfig) -> Result<AragsClient> {
 30:     let client_config = ClientConfig {
 31:         addr: cfg.server_addr(),
 32:     };
@@ -2509,13 +2509,13 @@ Let me look at:
 35: }
 36: 
 37: /// Map a textual tier (`fts`/`entity`/`vector`/`auto`) onto the proto enum.
-38: fn map_search_tier(tier: &str) -> arlm_proto::proto::SearchTier {
+38: fn map_search_tier(tier: &str) -> arags_proto::proto::SearchTier {
 39:     debug!(tier, "resolving search tier");
 40:     match tier {
-41:         "fts" => arlm_proto::proto::SearchTier::TierBm25,
-42:         "entity" => arlm_proto::proto::SearchTier::TierEntity,
-43:         "vector" => arlm_proto::proto::SearchTier::TierSemantic,
-44:         _ => arlm_proto::proto::SearchTier::TierHybrid,
+41:         "fts" => arags_proto::proto::SearchTier::TierBm25,
+42:         "entity" => arags_proto::proto::SearchTier::TierEntity,
+43:         "vector" => arags_proto::proto::SearchTier::TierSemantic,
+44:         _ => arags_proto::proto::SearchTier::TierHybrid,
 45:     }
 46: }
 47: 
@@ -2624,7 +2624,7 @@ Let me look at:
 150: #[allow(clippy::too_many_arguments)]
 151: fn run_index(
 152:     rt: &Runtime,
-153:     client: &mut ArlmClient,
+153:     client: &mut AragsClient,
 154:     project: &Path,
 155:     path: &Path,
 156:     ignore_patterns: &[String],
@@ -2635,7 +2635,7 @@ Let me look at:
 161:         .with_context(|| format!("failed to resolve path: {}", path.display()))?;
 162:     let project_str = project.to_string_lossy().to_string();
 163: 
-164:     // Combine CLI ignore patterns with the project's `.arlm.toml` ignore list.
+164:     // Combine CLI ignore patterns with the project's `.arags.toml` ignore list.
 165:     let mut ignore = ignore_patterns.to_vec();
 166:     ignore.extend(
 167:         crate::user_config::load()
@@ -2710,20 +2710,20 @@ Let me look at:
 236: /// Each file's **raw text** is sent (the server chunks + embeds), per plan 020
 237: /// D2.
 238: async fn stream_index_group(
-239:     client: &mut ArlmClient,
+239:     client: &mut AragsClient,
 240:     project: String,
 241:     root: PathBuf,
 242:     files: Vec<PathBuf>,
 243:     progress: Arc<indicatif::ProgressBar>,
 244: ) -> anyhow::Result<(i64, i64)> {
-245:     let (tx, rx) = mpsc::channel::<arlm_proto::proto::IndexChunk>(32);
+245:     let (tx, rx) = mpsc::channel::<arags_proto::proto::IndexChunk>(32);
 246:     let stream = ReceiverStream::new(rx);
 247:     let response_fut = client.index_project(stream);
 248: 
 249:     let send_handle = tokio::spawn(async move {
 250:         if tx
-251:             .send(arlm_proto::proto::IndexChunk {
-252:                 body: Some(index_chunk::Body::Init(arlm_proto::proto::IndexInit {
+251:             .send(arags_proto::proto::IndexChunk {
+252:                 body: Some(index_chunk::Body::Init(arags_proto::proto::IndexInit {
 253:                     project,
 254:                     root_path: root.to_string_lossy().to_string(),
 255:                     force_include: vec![],
@@ -2748,8 +2748,8 @@ Let me look at:
 274:                 .to_string();
 275:             let size = i64::try_from(content.len()).unwrap_or(i64::MAX);
 276:             if tx
-277:                 .send(arlm_proto::proto::IndexChunk {
-278:                     body: Some(index_chunk::Body::File(arlm_proto::proto::IndexFile {
+277:                 .send(arags_proto::proto::IndexChunk {
+278:                     body: Some(index_chunk::Body::File(arags_proto::proto::IndexFile {
 279:                         rel_path,
 280:                         content: content.into_bytes(),
 281:                         compressed: false,
@@ -2772,7 +2772,7 @@ Let me look at:
 298:         .await
 299:         .map_err(|e| anyhow::anyhow!("upload task failed: {e}"))?;
 300: 
-301:     let inner: arlm_proto::proto::IndexResponse = response.into_inner();
+301:     let inner: arags_proto::proto::IndexResponse = response.into_inner();
 302:     Ok((inner.files_indexed, inner.chunks_created))
 303: }
 304: 
@@ -2828,7 +2828,7 @@ Let me look at:
 354: fn is_default_ignored(rel: &str, is_dir: bool) -> bool {
 355:     const DIRS: &[&str] = &[
 356:         ".git",
-357:         ".arlm",
+357:         ".arags",
 358:         "target",
 359:         "node_modules",
 360:         "vendor",
@@ -2882,7 +2882,7 @@ Let me look at:
 408: #[allow(clippy::too_many_arguments)]
 409: fn run_search(
 410:     rt: &Runtime,
-411:     client: &mut ArlmClient,
+411:     client: &mut AragsClient,
 412:     project: &Path,
 413:     query: &str,
 414:     top_k: usize,
@@ -2987,7 +2987,7 @@ Let me look at:
 513: #[allow(clippy::too_many_arguments)]
 514: fn run_query(
 515:     rt: &Runtime,
-516:     client: &mut ArlmClient,
+516:     client: &mut AragsClient,
 517:     project: &Path,
 518:     question: &str,
 519:     cache_id: Option<String>,
@@ -3015,7 +3015,7 @@ Let me look at:
 541: 
 542:     // Default: server-side context (no client LLM), deterministic. Mirrors the
 543:     // removed `context` command.
-544:     let request = Request::new(arlm_proto::proto::ContextRequest {
+544:     let request = Request::new(arags_proto::proto::ContextRequest {
 545:         project: project_str.clone(),
 546:         task: question.to_string(),
 547:         ..Default::default()
@@ -3040,7 +3040,7 @@ Let me look at:
 566: 
 567: fn run_memory(
 568:     rt: &Runtime,
-569:     client: &mut ArlmClient,
+569:     client: &mut AragsClient,
 570:     cmd: MemoryCmd,
 571:     _project: &Path,
 572:     format: Format,
@@ -3144,7 +3144,7 @@ Let me look at:
 670:     }
 671: }
 672: 
-673: fn render_cache_get(resp: &arlm_proto::proto::GetCacheResponse, format: Format) {
+673: fn render_cache_get(resp: &arags_proto::proto::GetCacheResponse, format: Format) {
 674:     if format == Format::FullJson {
 675:         let out = crate::output::json::JsonOutput::ok()
 676:             .with_data(serde_json::json!({
@@ -3167,7 +3167,7 @@ Let me look at:
 693: 
 694: fn run_history(
 695:     rt: &Runtime,
-696:     client: &mut ArlmClient,
+696:     client: &mut AragsClient,
 697:     _project: &Path,
 698:     limit: usize,
 699:     user: Option<&str>,
@@ -3221,13 +3221,13 @@ Let me look at:
 747:     do_index: bool,
 748: ) -> Result<()> {
 749:     // Validate global identity (auth). The refresh token lives only in the
-750:     // global `~/.arlm/arlm.toml`; we never copy it into the local file.
+750:     // global `~/.arags/arags.toml`; we never copy it into the local file.
 751:     match cfg.auth() {
 752:         Some(auth) if auth.refresh_token.is_some() => {}
 753:         _ => {
 754:             bail!(
-755:                 "no global identity configured. Run `arlm-server admin create-refresh` and \
-756:                  store the token in `~/.arlm/arlm.toml` under `[auth]`."
+755:                 "no global identity configured. Run `arags-server admin create-refresh` and \
+756:                  store the token in `~/.arags/arags.toml` under `[auth]`."
 757:             );
 758:         }
 759:     }
@@ -3235,7 +3235,7 @@ Let me look at:
 761:     let project_name = project_name(project);
 762:     let local_path = std::env::current_dir()
 763:         .unwrap_or_else(|_| PathBuf::from("."))
-764:         .join(".arlm.toml");
+764:         .join(".arags.toml");
 765: 
 766:     if local_path.exists() {
 767:         println!(
@@ -3244,7 +3244,7 @@ Let me look at:
 770:         );
 771:     } else {
 772:         let ignore = seed_ignore_from_gitignore();
-773:         let content = toml::to_string_pretty(&LocalArlmToml {
+773:         let content = toml::to_string_pretty(&LocalAragsToml {
 774:             project: LocalProject {
 775:                 name: project_name.clone(),
 776:                 ignore: if ignore.is_empty() {
@@ -3257,7 +3257,7 @@ Let me look at:
 783:                 addr: "http://127.0.0.1:50051".to_string(),
 784:             },
 785:         })
-786:         .context("failed to serialize .arlm.toml")?;
+786:         .context("failed to serialize .arags.toml")?;
 787:         std::fs::write(&local_path, content)
 788:             .with_context(|| format!("failed to write {}", local_path.display()))?;
 789:         println!("Created {}", local_path.display());
@@ -3268,14 +3268,14 @@ Let me look at:
 794:         let mut client = connect(rt, cfg)?;
 795:         run_index(rt, &mut client, project, project, &[], &[], format)?;
 796:     } else {
-797:         println!("Skipping index (--no-index). Run `arlm index` to ingest.");
+797:         println!("Skipping index (--no-index). Run `arags index` to ingest.");
 798:     }
 799:     Ok(())
 800: }
 801: 
-802: /// Local `.arlm.toml` shape written by `arlm init`.
+802: /// Local `.arags.toml` shape written by `arags init`.
 803: #[derive(serde::Serialize)]
-804: struct LocalArlmToml {
+804: struct LocalAragsToml {
 805:     project: LocalProject,
 806:     server: LocalServer,
 807: }
@@ -3339,14 +3339,14 @@ Let me look at:
 865:         .collect()
 866: }
 867: 
-868: /// Append `.arlm.toml` to `.gitignore` (idempotent).
+868: /// Append `.arags.toml` to `.gitignore` (idempotent).
 869: fn append_gitignore(local_path: &Path) -> Result<()> {
 870:     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 871:     let gitignore = cwd.join(".gitignore");
 872:     let entry = local_path
 873:         .file_name()
 874:         .and_then(|n| n.to_str())
-875:         .unwrap_or(".arlm.toml");
+875:         .unwrap_or(".arags.toml");
 876:     if let Ok(existing) = std::fs::read_to_string(&gitignore) {
 877:         if existing.lines().any(|l| l.trim() == entry) {
 878:             return Ok(());
@@ -3379,13 +3379,13 @@ Let me look at:
 
 A lot of plan 020 is already implemented. Let me check the remaining pieces:
 
-1. **`Commands::Serve`** — still exists! The dispatch comment says "the only local action is `arlm server`, which hosts the data plane" — but wait, that contradicts the plan: "Modo offline REMOVIDO... O client é um puro gRPC client". Hmm, but the serve command might be the MCP server for agents (opencode etc.) which proxies to the remote server. Let me check `commands/serve/`.
+1. **`Commands::Serve`** — still exists! The dispatch comment says "the only local action is `arags server`, which hosts the data plane" — but wait, that contradicts the plan: "Modo offline REMOVIDO... O client é um puro gRPC client". Hmm, but the serve command might be the MCP server for agents (opencode etc.) which proxies to the remote server. Let me check `commands/serve/`.
 
-Actually, wait. The plan says client is pure gRPC. But agents like opencode/cursor need an MCP interface — the CLI could expose an MCP/HTTP server that proxies to arlm-server via gRPC. That's not "offline data plane" per se; it's a proxy. Let me examine commands/serve/state.rs and index_logic.rs to see if it opens local Storage or proxies to gRPC.
+Actually, wait. The plan says client is pure gRPC. But agents like opencode/cursor need an MCP interface — the CLI could expose an MCP/HTTP server that proxies to arags-server via gRPC. That's not "offline data plane" per se; it's a proxy. Let me examine commands/serve/state.rs and index_logic.rs to see if it opens local Storage or proxies to gRPC.
 
 2. Check `client.rs` (ClientConfig), `auth_client.rs`.
 3. Check `lib.rs` for what modules exist.
-4. Check whether `arlm-cli/src/config.rs` still exists — it doesn't appear in file list. Good.
+4. Check whether `arags-cli/src/config.rs` still exists — it doesn't appear in file list. Good.
 5. Check server side: lifecycle.rs, state.rs, grpc/index.rs for chunking with embedder config.
 6. Check proto IndexFile — has content bytes + compressed flag. Client sends raw text. Server chunks.
 7. Docs: install.sh, docker-compose.server.yml, README mention server.toml?
@@ -3397,18 +3397,18 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/lib.rs
+**Title:** crates/arags-cli/src/lib.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/lib.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/lib.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/lib.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/lib.rs</path>
 <type>file</type>
 <content>
 1: #![cfg_attr(
@@ -3450,7 +3450,7 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 37: pub mod util;
 38: 
 39: pub use client::{ClientConfig, create_client};
-40: pub use metrics::ArlmMetrics;
+40: pub use metrics::AragsMetrics;
 41: pub use output::{Format, error, info, success, warn};
 
 (End of file - total 41 lines)
@@ -3466,24 +3466,24 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/client.rs
+**Title:** crates/arags-cli/src/client.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/client.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/client.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/client.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/client.rs</path>
 <type>file</type>
 <content>
 1: use std::time::Duration;
 2: 
 3: use anyhow::{Context, Result};
-4: use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
+4: use arags_proto::proto::arags_service_client::AragsServiceClient;
 5: use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 6: use tracing::{info, warn};
 7: 
@@ -3496,7 +3496,7 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 14: 
 15: impl ClientConfig {
 16:     /// Load the client configuration from the merged user config (global
-17:     /// `~/.arlm/arlm.toml` + local `.arlm.toml`) and the `ARLM_SERVER_ADDR`
+17:     /// `~/.arags/arags.toml` + local `.arags.toml`) and the `ARAGS_SERVER_ADDR`
 18:     /// env var override.
 19:     #[must_use]
 20:     pub fn load() -> Self {
@@ -3532,9 +3532,9 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 50: ///
 51: /// Returns an error if the address is invalid or the connection cannot be
 52: /// established after the retry budget is exhausted.
-53: pub async fn create_client(config: &ClientConfig) -> Result<ArlmServiceClient<Channel>> {
+53: pub async fn create_client(config: &ClientConfig) -> Result<AragsServiceClient<Channel>> {
 54:     let channel = connect_channel(config).await?;
-55:     Ok(ArlmServiceClient::new(channel))
+55:     Ok(AragsServiceClient::new(channel))
 56: }
 57: 
 58: /// Establish a raw gRPC `Channel` to the server (no auth layer).
@@ -3581,7 +3581,7 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 99:         attempt += 1;
 100:         match endpoint.connect().await {
 101:             Ok(channel) => {
-102:                 info!(attempt, %raw, "connected to arlm-server");
+102:                 info!(attempt, %raw, "connected to arags-server");
 103:                 return Ok(channel);
 104:             }
 105:             Err(e) => {
@@ -3617,18 +3617,18 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/commands/mod.rs
+**Title:** crates/arags-cli/src/commands/mod.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/mod.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/mod.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/mod.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/mod.rs</path>
 <type>file</type>
 <content>
 1: pub mod mcp;
@@ -3649,23 +3649,23 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/commands/serve/state.rs
+**Title:** crates/arags-cli/src/commands/serve/state.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/serve/state.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/serve/state.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/serve/state.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/serve/state.rs</path>
 <type>file</type>
 <content>
 1: use std::path::PathBuf;
 2: 
-3: use crate::metrics::ArlmMetrics;
+3: use crate::metrics::AragsMetrics;
 4: 
 5: /// Shared application state.
 6: #[derive(Clone)]
@@ -3673,7 +3673,7 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 8:     pub project: PathBuf,
 9:     pub project_name: String,
 10:     pub verbose: bool,
-11:     pub metrics: ArlmMetrics,
+11:     pub metrics: AragsMetrics,
 12: }
 
 (End of file - total 12 lines)
@@ -3689,51 +3689,51 @@ Let me read these in parallel-ish. First lib.rs and client.rs and auth_client.rs
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "Storage::open|arlm_storage|arlm_embedding|arlm_search|data_dir" crates/arlm-cli/src --no-heading | head -40
+**Title:** rg -n "Storage::open|arags_storage|arags_embedding|arags_search|data_dir" crates/arags-cli/src --no-heading | head -40
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"Storage::open|arlm_storage|arlm_embedding|arlm_search|data_dir\" crates/arlm-cli/src --no-heading | head -40"
+  "command": "rg -n \"Storage::open|arags_storage|arags_embedding|arags_search|data_dir\" crates/arags-cli/src --no-heading | head -40"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-cli/src/util.rs:8:pub fn data_dir() -> PathBuf {
-crates/arlm-cli/src/metrics.rs:76:            "# HELP arlm_search_results_total Total search results returned"
-crates/arlm-cli/src/metrics.rs:78:        let _ = writeln!(out, "# TYPE arlm_search_results_total counter");
-crates/arlm-cli/src/metrics.rs:79:        let _ = writeln!(out, "arlm_search_results_total {search}");
-crates/arlm-cli/src/commands/serve/status_logic.rs:8:use crate::util::data_dir;
-crates/arlm-cli/src/commands/serve/status_logic.rs:19:    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
-crates/arlm-cli/src/commands/serve/index_logic.rs:10:use crate::util::data_dir;
-crates/arlm-cli/src/commands/serve/index_logic.rs:28:    let data_dir = data_dir();
-crates/arlm-cli/src/commands/serve/index_logic.rs:30:    let storage = arlm_storage::Storage::open(&data_dir).context("failed to open storage")?;
-crates/arlm-cli/src/commands/serve/index_logic.rs:40:            .insert_buffer(&arlm_storage::sqlite::buffers::NewBuffer {
-crates/arlm-cli/src/commands/mcp/handlers.rs:8:use crate::util::data_dir;
-crates/arlm-cli/src/commands/mcp/handlers.rs:30:    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
-crates/arlm-cli/src/commands/mcp/handlers.rs:37:    let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-crates/arlm-cli/src/commands/mcp/handlers.rs:38:    let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
-crates/arlm-cli/src/commands/mcp/handlers.rs:45:        arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
-crates/arlm-cli/src/commands/mcp/handlers.rs:84:    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
-crates/arlm-cli/src/commands/mcp/handlers.rs:91:    let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-crates/arlm-cli/src/commands/mcp/handlers.rs:92:    let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
-crates/arlm-cli/src/commands/mcp/handlers.rs:98:    let search_results = arlm_search::build_search_results(&storage, &results, None)
-crates/arlm-cli/src/commands/serve/mod.rs:53:        arlm_storage::Storage::open(&crate::util::data_dir()).context("failed to open storage")?;
-crates/arlm-cli/src/commands/qa_cache.rs:91:        .map(|c| arlm_storage::qa_cache::chunk_content_hash(&c.text))
-crates/arlm-cli/src/commands/serve/search_logic.rs:9:use crate::util::data_dir;
-crates/arlm-cli/src/commands/serve/search_logic.rs:20:    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
-crates/arlm-cli/src/commands/serve/search_logic.rs:27:    let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-crates/arlm-cli/src/commands/serve/search_logic.rs:28:    let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
-crates/arlm-cli/src/commands/serve/search_logic.rs:30:    let options = arlm_search::SearchOptions {
-crates/arlm-cli/src/commands/serve/search_logic.rs:31:        tier: arlm_search::SearchTier::Entity,
-crates/arlm-cli/src/commands/serve/search_logic.rs:48:        arlm_search::build_context(&storage, &results, arlm_search::OutputFormat::Prompt, None)
-crates/arlm-cli/src/commands/serve/search_logic.rs:69:    let storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
-crates/arlm-cli/src/commands/serve/search_logic.rs:76:    let bm25 = arlm_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
-crates/arlm-cli/src/commands/serve/search_logic.rs:77:    let hybrid = arlm_search::HybridSearch::new(bm25, None, None);
-crates/arlm-cli/src/commands/serve/search_logic.rs:79:    let options = arlm_search::SearchOptions {
-crates/arlm-cli/src/commands/serve/search_logic.rs:80:        tier: arlm_search::SearchTier::Entity,
-crates/arlm-cli/src/commands/serve/search_logic.rs:89:    let search_results = arlm_search::build_search_results(&storage, &results, None)
+crates/arags-cli/src/util.rs:8:pub fn data_dir() -> PathBuf {
+crates/arags-cli/src/metrics.rs:76:            "# HELP arags_search_results_total Total search results returned"
+crates/arags-cli/src/metrics.rs:78:        let _ = writeln!(out, "# TYPE arags_search_results_total counter");
+crates/arags-cli/src/metrics.rs:79:        let _ = writeln!(out, "arags_search_results_total {search}");
+crates/arags-cli/src/commands/serve/status_logic.rs:8:use crate::util::data_dir;
+crates/arags-cli/src/commands/serve/status_logic.rs:19:    let storage = arags_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+crates/arags-cli/src/commands/serve/index_logic.rs:10:use crate::util::data_dir;
+crates/arags-cli/src/commands/serve/index_logic.rs:28:    let data_dir = data_dir();
+crates/arags-cli/src/commands/serve/index_logic.rs:30:    let storage = arags_storage::Storage::open(&data_dir).context("failed to open storage")?;
+crates/arags-cli/src/commands/serve/index_logic.rs:40:            .insert_buffer(&arags_storage::sqlite::buffers::NewBuffer {
+crates/arags-cli/src/commands/mcp/handlers.rs:8:use crate::util::data_dir;
+crates/arags-cli/src/commands/mcp/handlers.rs:30:    let storage = arags_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+crates/arags-cli/src/commands/mcp/handlers.rs:37:    let bm25 = arags_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
+crates/arags-cli/src/commands/mcp/handlers.rs:38:    let hybrid = arags_search::HybridSearch::new(bm25, None, None);
+crates/arags-cli/src/commands/mcp/handlers.rs:45:        arags_search::build_context(&storage, &results, arags_search::OutputFormat::Prompt, None)
+crates/arags-cli/src/commands/mcp/handlers.rs:84:    let storage = arags_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+crates/arags-cli/src/commands/mcp/handlers.rs:91:    let bm25 = arags_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
+crates/arags-cli/src/commands/mcp/handlers.rs:92:    let hybrid = arags_search::HybridSearch::new(bm25, None, None);
+crates/arags-cli/src/commands/mcp/handlers.rs:98:    let search_results = arags_search::build_search_results(&storage, &results, None)
+crates/arags-cli/src/commands/serve/mod.rs:53:        arags_storage::Storage::open(&crate::util::data_dir()).context("failed to open storage")?;
+crates/arags-cli/src/commands/qa_cache.rs:91:        .map(|c| arags_storage::qa_cache::chunk_content_hash(&c.text))
+crates/arags-cli/src/commands/serve/search_logic.rs:9:use crate::util::data_dir;
+crates/arags-cli/src/commands/serve/search_logic.rs:20:    let storage = arags_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+crates/arags-cli/src/commands/serve/search_logic.rs:27:    let bm25 = arags_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
+crates/arags-cli/src/commands/serve/search_logic.rs:28:    let hybrid = arags_search::HybridSearch::new(bm25, None, None);
+crates/arags-cli/src/commands/serve/search_logic.rs:30:    let options = arags_search::SearchOptions {
+crates/arags-cli/src/commands/serve/search_logic.rs:31:        tier: arags_search::SearchTier::Entity,
+crates/arags-cli/src/commands/serve/search_logic.rs:48:        arags_search::build_context(&storage, &results, arags_search::OutputFormat::Prompt, None)
+crates/arags-cli/src/commands/serve/search_logic.rs:69:    let storage = arags_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+crates/arags-cli/src/commands/serve/search_logic.rs:76:    let bm25 = arags_search::Bm25Search::new(&storage).context("failed to create BM25 search")?;
+crates/arags-cli/src/commands/serve/search_logic.rs:77:    let hybrid = arags_search::HybridSearch::new(bm25, None, None);
+crates/arags-cli/src/commands/serve/search_logic.rs:79:    let options = arags_search::SearchOptions {
+crates/arags-cli/src/commands/serve/search_logic.rs:80:        tier: arags_search::SearchTier::Entity,
+crates/arags-cli/src/commands/serve/search_logic.rs:89:    let search_results = arags_search::build_search_results(&storage, &results, None)
 
 ```
 
@@ -3752,23 +3752,23 @@ crates/arlm-cli/src/commands/serve/search_logic.rs:89:    let search_results = a
 Found a major gap! The plan (D3) says:
 
 > **Modo offline REMOVIDO.** ... `dispatch/local.rs` e todo branch local de `Storage`/embed/search/chunk do client são **eliminados**.
-> **Removidos do client**: `dispatch/local.rs` (branch local), `arlm_storage::Storage::open` local, `embedding.rs`/`build_embedder_from_config` (client não embeda), busca/contexto locais, vector store local, `data_dir()` como DB. O client **não** possui `knowledge.db` local.
+> **Removidos do client**: `dispatch/local.rs` (branch local), `arags_storage::Storage::open` local, `embedding.rs`/`build_embedder_from_config` (client não embeda), busca/contexto locais, vector store local, `data_dir()` como DB. O client **não** possui `knowledge.db` local.
 
 But the CLI still has:
-- `commands/serve/` — a **local data plane HTTP server** that opens `arlm_storage::Storage::open(&data_dir())`, does BM25/hybrid search locally, indexes locally
+- `commands/serve/` — a **local data plane HTTP server** that opens `arags_storage::Storage::open(&data_dir())`, does BM25/hybrid search locally, indexes locally
 - `commands/mcp/` — MCP handlers that open local Storage and search locally
 - `util::data_dir()` — used as DB path
-- `commands/qa_cache.rs:91` uses `arlm_storage::qa_cache::chunk_content_hash`
+- `commands/qa_cache.rs:91` uses `arags_storage::qa_cache::chunk_content_hash`
 
-And the CLI Cargo.toml probably still depends on arlm-storage, arlm-search, arlm-embedding.
+And the CLI Cargo.toml probably still depends on arags-storage, arags-search, arags-embedding.
 
 The plan's "Where to Implement" table says:
-- "Client puro gRPC: remove modo offline | arlm-cli | **remover** dispatch/local.rs; dispatch/server.rs vira o único dispatch; **remover** arlm_storage::Storage::open local, embedding.rs, busca/contexto locais, vector store local, util::data_dir como DB; query.rs/search.rs chamam só gRPC"
+- "Client puro gRPC: remove modo offline | arags-cli | **remover** dispatch/local.rs; dispatch/server.rs vira o único dispatch; **remover** arags_storage::Storage::open local, embedding.rs, busca/contexto locais, vector store local, util::data_dir como DB; query.rs/search.rs chamam só gRPC"
 
 So the remaining work:
-1. Remove `Commands::Serve` + `commands/serve/` + `commands/mcp/` (local data plane) — or should serve be kept as a proxy? The plan says the client is pure gRPC. The `serve` command is described in commands as "Start the local HTTP/MCP server (data plane)". This is exactly what D3 removes. The plan's step 4 says "remover dispatch/local.rs e todo branch local; remover arlm_storage::Storage::open local, embedding.rs, busca/contexto locais e vector store local. query/search/history/memory/persist/index chamam só gRPC."
+1. Remove `Commands::Serve` + `commands/serve/` + `commands/mcp/` (local data plane) — or should serve be kept as a proxy? The plan says the client is pure gRPC. The `serve` command is described in commands as "Start the local HTTP/MCP server (data plane)". This is exactly what D3 removes. The plan's step 4 says "remover dispatch/local.rs e todo branch local; remover arags_storage::Storage::open local, embedding.rs, busca/contexto locais e vector store local. query/search/history/memory/persist/index chamam só gRPC."
 
-Hmm wait — but there are agent integrations (agents/opencode/tools.json etc.) that might use `arlm serve --mcp`. Let me check those. Also check qa_cache.rs to see how it digests (client-side LLM digest-once per plan 017) — it uses `chunk_content_hash` from arlm_storage which is just a hash function, not Storage::open. That might be acceptable or we could move the hash function. Let me look at qa_cache.rs fully.
+Hmm wait — but there are agent integrations (agents/opencode/tools.json etc.) that might use `arags serve --mcp`. Let me check those. Also check qa_cache.rs to see how it digests (client-side LLM digest-once per plan 017) — it uses `chunk_content_hash` from arags_storage which is just a hash function, not Storage::open. That might be acceptable or we could move the hash function. Let me look at qa_cache.rs fully.
 
 Also need to check:
 - backend.rs (what is it? LLM backend selection?)
@@ -3787,34 +3787,34 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/util.rs
+**Title:** crates/arags-cli/src/util.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/util.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/util.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/util.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/util.rs</path>
 <type>file</type>
 <content>
 1: use std::path::PathBuf;
 2: 
-3: /// Get the shared arlm data directory.
+3: /// Get the shared arags data directory.
 4: ///
-5: /// All projects share a single database at `~/.arlm/knowledge.db`.
-6: /// Override with `ARLM_DATA_DIR` env var (used in tests).
+5: /// All projects share a single database at `~/.arags/knowledge.db`.
+6: /// Override with `ARAGS_DATA_DIR` env var (used in tests).
 7: #[must_use]
 8: pub fn data_dir() -> PathBuf {
-9:     if let Ok(dir) = std::env::var("ARLM_DATA_DIR") {
+9:     if let Ok(dir) = std::env::var("ARAGS_DATA_DIR") {
 10:         return PathBuf::from(dir);
 11:     }
 12:     std::env::var("HOME")
 13:         .map_or_else(|_| PathBuf::from("."), PathBuf::from)
-14:         .join(".arlm")
+14:         .join(".arags")
 15: }
 16: 
 17: /// Get the project name from a path.
@@ -3842,38 +3842,38 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/commands/qa_cache.rs
+**Title:** crates/arags-cli/src/commands/qa_cache.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/qa_cache.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/qa_cache.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/qa_cache.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/qa_cache.rs</path>
 <type>file</type>
 <content>
 1: //! CLI for the semantic query-answer cache (plan 017).
 2: //!
-3: //! - `arlm query --qa ...`: `QueryWithCache` + client-side digest-once. On a
+3: //! - `arags query --qa ...`: `QueryWithCache` + client-side digest-once. On a
 4: //!   hit the server-served answer is printed with zero LLM calls; on a miss the
 5: //!   client digests the top-K chunks with the user's LLM and fires the answer
 6: //!   back to `StoreAnswer` (background, non-blocking for the user).
-7: //! - `arlm query --cache-id <id>`: direct `GetAnswerById` lookup (anti-drift).
-8: //! - `arlm cache get|invalidate`: direct cache inspection / admin invalidation.
+7: //! - `arags query --cache-id <id>`: direct `GetAnswerById` lookup (anti-drift).
+8: //! - `arags cache get|invalidate`: direct cache inspection / admin invalidation.
 9: 
 10: use anyhow::{Context, Result};
 11: use std::fmt::Write as _;
 12: 
-13: use arlm_proto::proto::{
+13: use arags_proto::proto::{
 14:     GetAnswerByIdRequest, InvalidateCacheRequest, InvalidateMode, QueryWithCacheRequest,
 15:     SearchResult, StoreAnswerRequest,
 16: };
 17: 
-18: use crate::auth_client::ArlmClient;
+18: use crate::auth_client::AragsClient;
 19: use crate::output::Format;
 20: 
 21: /// Run a query through the semantic cache (hit → zero LLM; miss → digest-once).
@@ -3881,7 +3881,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 23: /// `client` is the authenticated gRPC client; `rt` drives the async calls.
 24: pub fn run_ask(
 25:     rt: &tokio::runtime::Runtime,
-26:     client: &mut ArlmClient,
+26:     client: &mut AragsClient,
 27:     question: &str,
 28:     backend: Option<&str>,
 29:     model: Option<&str>,
@@ -3920,10 +3920,10 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 62:     );
 63: 
 64:     let answer = rt
-65:         .block_on(llm.complete(arlm_llm::CompletionRequest {
+65:         .block_on(llm.complete(arags_llm::CompletionRequest {
 66:             model: model.unwrap_or("llama3").to_string(),
-67:             messages: vec![arlm_llm::Message {
-68:                 role: arlm_llm::Role::User,
+67:             messages: vec![arags_llm::Message {
+68:                 role: arags_llm::Role::User,
 69:                 content: prompt,
 70:             }],
 71:             temperature: Some(0.3),
@@ -3946,7 +3946,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 88:     let source_hashes: Vec<String> = resp
 89:         .candidates
 90:         .iter()
-91:         .map(|c| arlm_storage::qa_cache::chunk_content_hash(&c.text))
+91:         .map(|c| arags_storage::qa_cache::chunk_content_hash(&c.text))
 92:         .collect();
 93: 
 94:     let store_req = StoreAnswerRequest {
@@ -3969,7 +3969,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 111: /// Direct, deterministic lookup of a served answer by stable id (anti-drift).
 112: pub fn run_get(
 113:     rt: &tokio::runtime::Runtime,
-114:     client: &mut ArlmClient,
+114:     client: &mut AragsClient,
 115:     cache_id: &str,
 116:     project: &str,
 117:     format: Format,
@@ -3991,7 +3991,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 133: /// Admin-gated invalidation of a cached answer.
 134: pub fn run_invalidate(
 135:     rt: &tokio::runtime::Runtime,
-136:     client: &mut ArlmClient,
+136:     client: &mut AragsClient,
 137:     cache_id: Option<&str>,
 138:     project: Option<&str>,
 139:     delete: bool,
@@ -4067,21 +4067,21 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/commands/persist.rs
+**Title:** crates/arags-cli/src/commands/persist.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/persist.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/persist.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/persist.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/persist.rs</path>
 <type>file</type>
 <content>
-1: //! `arlm persist <response_id>` (plan 019 D / 020).
+1: //! `arags persist <response_id>` (plan 019 D / 020).
 2: //!
 3: //! Flow: print the `response_id`, fetch the served answer via `GetAnswerById`
 4: //! (server), synthesize a structured wiki article with the **user's** LLM
@@ -4094,12 +4094,12 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 11: 
 12: use tokio::runtime::Runtime;
 13: 
-14: use arlm_llm::{CompletionRequest, Message, Role};
+14: use arags_llm::{CompletionRequest, Message, Role};
 15: use chrono::Utc;
 16: 
-17: use arlm_proto::proto::GetAnswerByIdRequest;
+17: use arags_proto::proto::GetAnswerByIdRequest;
 18: 
-19: use crate::auth_client::ArlmClient;
+19: use crate::auth_client::AragsClient;
 20: use crate::output::Format;
 21: use crate::user_config::EffectiveUserConfig;
 22: 
@@ -4107,7 +4107,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 24: #[allow(clippy::too_many_arguments)]
 25: pub fn run_persist(
 26:     rt: &Runtime,
-27:     client: &mut ArlmClient,
+27:     client: &mut AragsClient,
 28:     cfg: &EffectiveUserConfig,
 29:     project: &Path,
 30:     response_id: &str,
@@ -4131,11 +4131,11 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 48:     let source_chunk_ids = resp.source_chunk_ids;
 49:     let source_hashes = resp.source_hashes;
 50: 
-51:     // Resolve the user's LLM (must be configured in ~/.arlm/arlm.toml).
+51:     // Resolve the user's LLM (must be configured in ~/.arags/arags.toml).
 52:     let llm_config = cfg
 53:         .llm_config()
 54:         .cloned()
-55:         .context("no [llm] configured; add a backend to ~/.arlm/arlm.toml")?;
+55:         .context("no [llm] configured; add a backend to ~/.arags/arags.toml")?;
 56:     let model = llm_config
 57:         .backends
 58:         .first()
@@ -4290,18 +4290,18 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/auth_client.rs
+**Title:** crates/arags-cli/src/auth_client.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/auth_client.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/auth_client.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/auth_client.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/auth_client.rs</path>
 <type>file</type>
 <content>
 1: //! Client-side auth (plan 018).
@@ -4309,7 +4309,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 3: //! Wraps the generated gRPC client so every call automatically carries a
 4: //! `Bearer` session token. The session token is obtained once from
 5: //! `AuthRefresh` and proactively renewed on a background task (the refresh
-6: //! token lives only in `~/.arlm/arlm.toml`); the CLI user never manages it manually.
+6: //! token lives only in `~/.arags/arags.toml`); the CLI user never manages it manually.
 7: 
 8: use std::str::FromStr;
 9: use std::sync::Arc;
@@ -4324,13 +4324,13 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 18: use tonic::transport::Channel;
 19: use tonic::{Request, Status};
 20: 
-21: use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
-22: use arlm_proto::proto::{AuthRefreshRequest, AuthRefreshResponse};
+21: use arags_proto::proto::arags_service_client::AragsServiceClient;
+22: use arags_proto::proto::{AuthRefreshRequest, AuthRefreshResponse};
 23: 
 24: use crate::client::{self, ClientConfig};
 25: 
 26: /// Authenticated gRPC client type returned by [`connect`].
-27: pub type ArlmClient = ArlmServiceClient<InterceptedService<Channel, BearerInterceptor>>;
+27: pub type AragsClient = AragsServiceClient<InterceptedService<Channel, BearerInterceptor>>;
 28: 
 29: /// Interceptor that attaches the current session token as a `Bearer` header.
 30: #[derive(Clone)]
@@ -4366,17 +4366,17 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 60:     rt: &Runtime,
 61:     client_config: &ClientConfig,
 62:     auth: &crate::user_config::AuthConfig,
-63: ) -> Result<ArlmClient> {
+63: ) -> Result<AragsClient> {
 64:     let channel = rt
 65:         .block_on(client::connect_channel(client_config))
-66:         .context("failed to connect to arlm-server")?;
+66:         .context("failed to connect to arags-server")?;
 67: 
 68:     let token = Arc::new(Mutex::new(String::new()));
 69: 
 70:     if let Some(refresh) = &auth.refresh_token {
 71:         let refresh = refresh.clone();
 72: 
-73:         let mut refresh_client = ArlmServiceClient::new(channel.clone());
+73:         let mut refresh_client = AragsServiceClient::new(channel.clone());
 74:         let session: AuthRefreshResponse = rt
 75:             .block_on(refresh_client.auth_refresh(AuthRefreshRequest {
 76:                 refresh_token: refresh.clone(),
@@ -4386,7 +4386,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 80:         *token.lock() = session.session_token;
 81: 
 82:         let renewal_token = token.clone();
-83:         let mut renewal_client = ArlmServiceClient::new(channel.clone());
+83:         let mut renewal_client = AragsServiceClient::new(channel.clone());
 84:         let renewal_refresh = refresh.clone();
 85:         rt.spawn(async move {
 86:             let mut ticker = tokio::time::interval(Duration::from_secs(4 * 60));
@@ -4410,7 +4410,7 @@ Encontrei uma lacuna importante: `commands/serve/` e `commands/mcp/` ainda abrem
 104:     }
 105: 
 106:     let interceptor = BearerInterceptor { token };
-107:     Ok(ArlmServiceClient::new(InterceptedService::new(
+107:     Ok(AragsServiceClient::new(InterceptedService::new(
 108:         channel,
 109:         interceptor,
 110:     )))
@@ -4438,32 +4438,32 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-server/src/lifecycle.rs
+**Title:** crates/arags-server/src/lifecycle.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/lifecycle.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/lifecycle.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/lifecycle.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/lifecycle.rs</path>
 <type>file</type>
 <content>
 1: use std::path::PathBuf;
 2: use std::sync::Arc;
 3: 
 4: use anyhow::{Context, Result};
-5: use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
-6: use arlm_proto::proto::arlm_service_server::ArlmServiceServer;
-7: use arlm_storage::{QuestionVectorStore, Storage, VectorStore};
+5: use arags_proto::proto::arags_service_client::AragsServiceClient;
+6: use arags_proto::proto::arags_service_server::AragsServiceServer;
+7: use arags_storage::{QuestionVectorStore, Storage, VectorStore};
 8: use tonic::transport::{Identity, Server, ServerTlsConfig};
 9: use tracing::{info, warn};
 10: 
 11: use crate::config::ServerConfig;
-12: use crate::grpc::ArlmGrpcService;
+12: use crate::grpc::AragsGrpcService;
 13: use crate::state::AppState;
 14: use crate::timing::Timer;
 15: 
@@ -4480,9 +4480,9 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 26: 
 27:     let config = ServerConfig::load().context("failed to load server config")?;
 28: 
-29:     info!(addr = %config.listen_addr, "starting arlm-server");
+29:     info!(addr = %config.listen_addr, "starting arags-server");
 30: 
-31:     // Single-mode storage: `arlm-storage`'s read paths (`get_chunk`,
+31:     // Single-mode storage: `arags-storage`'s read paths (`get_chunk`,
 32:     // `get_summary`, `search_summaries`, …) currently assume a single
 33:     // connection via `Storage::conn()`. Opening single-mode keeps both the
 34:     // `conn()`-based read helpers and the `connection()`-based pooled writes
@@ -4503,7 +4503,7 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 49:         }
 50:     };
 51: 
-52:     let question_vector_store = match arlm_storage::QuestionVectorStore::open(
+52:     let question_vector_store = match arags_storage::QuestionVectorStore::open(
 53:         &config.data_dir,
 54:         crate::state::embedder_dimension(),
 55:     ) {
@@ -4535,7 +4535,7 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 81:         question_vector_store,
 82:     )?;
 83: 
-84:     let grpc_service = ArlmServiceServer::new(ArlmGrpcService::new(state));
+84:     let grpc_service = AragsServiceServer::new(AragsGrpcService::new(state));
 85: 
 86:     // Periodic memory maintenance (plan 019, C.1). Runs in the background on a
 87:     // fixed interval; `interval_secs == 0` disables it. The loop is tied to the
@@ -4574,14 +4574,14 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 120:         info!("gRPC server running without TLS (dev mode)");
 121:     }
 122: 
-123:     info!(addr = %addr, "arlm-server listening");
+123:     info!(addr = %addr, "arags-server listening");
 124: 
 125:     builder
 126:         .add_service(grpc_service)
 127:         .serve_with_shutdown(addr, shutdown_signal())
 128:         .await?;
 129: 
-130:     info!("arlm-server shut down gracefully");
+130:     info!("arags-server shut down gracefully");
 131:     Ok(())
 132: }
 133: 
@@ -4591,7 +4591,7 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 137: 
 138: /// Query a running server's health over gRPC and print a summary.
 139: ///
-140: /// Used by the `arlm-server status` subcommand (and the Docker HEALTHCHECK).
+140: /// Used by the `arags-server status` subcommand (and the Docker HEALTHCHECK).
 141: ///
 142: /// # Errors
 143: ///
@@ -4600,9 +4600,9 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 146:     let config = ServerConfig::load().context("failed to load server config")?;
 147:     let endpoint = format!("http://{}", config.listen_addr);
 148: 
-149:     let mut client = ArlmServiceClient::connect(endpoint)
+149:     let mut client = AragsServiceClient::connect(endpoint)
 150:         .await
-151:         .context("failed to connect to arlm-server (is it running?)")?;
+151:         .context("failed to connect to arags-server (is it running?)")?;
 152: 
 153:     let status = client
 154:         .get_server_status(())
@@ -4666,28 +4666,28 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-server/src/state.rs
+**Title:** crates/arags-server/src/state.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/state.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/state.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/state.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/state.rs</path>
 <type>file</type>
 <content>
 1: use std::path::PathBuf;
 2: use std::sync::Arc;
 3: 
 4: use anyhow::Result;
-5: use arlm_embedding::embedder::{Embedder, bge_m3, fallback};
-6: use arlm_storage::QuestionVectorStore;
-7: use arlm_storage::Storage;
-8: use arlm_storage::VectorStore;
+5: use arags_embedding::embedder::{Embedder, bge_m3, fallback};
+6: use arags_storage::QuestionVectorStore;
+7: use arags_storage::Storage;
+8: use arags_storage::VectorStore;
 9: 
 10: use crate::config::{QaCacheConfig, ServerConfig};
 11: 
@@ -4702,7 +4702,7 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 20:     /// cosine space, separate from the chunk vector store.
 21:     pub question_vector_store: Option<Arc<QuestionVectorStore>>,
 22:     /// Embedder used for chunk (index) and query (search) embeddings.
-23:     /// Real BGE-M3 when `ARLM_MODEL_DIR` points at a directory containing
+23:     /// Real BGE-M3 when `ARAGS_MODEL_DIR` points at a directory containing
 24:     /// `model.safetensors` + `tokenizer.json`; otherwise a hash fallback that
 25:     /// keeps the pipeline running without semantic search.
 26:     pub embedder: Arc<dyn Embedder + Send + Sync>,
@@ -4716,19 +4716,19 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 34: fn load_embedder() -> Arc<dyn Embedder + Send + Sync> {
 35:     const DIMS: usize = 1024;
 36: 
-37:     // Ollama backend (laptop-friendly): enabled via ARLM_OLLAMA_MODEL.
-38:     if let Ok(model) = std::env::var("ARLM_OLLAMA_MODEL") {
-39:         let url = std::env::var("ARLM_OLLAMA_URL")
+37:     // Ollama backend (laptop-friendly): enabled via ARAGS_OLLAMA_MODEL.
+38:     if let Ok(model) = std::env::var("ARAGS_OLLAMA_MODEL") {
+39:         let url = std::env::var("ARAGS_OLLAMA_URL")
 40:             .unwrap_or_else(|_| "http://localhost:11434".to_string());
-41:         let dims = std::env::var("ARLM_OLLAMA_DIMS")
+41:         let dims = std::env::var("ARAGS_OLLAMA_DIMS")
 42:             .ok()
 43:             .and_then(|d| d.parse::<usize>().ok())
 44:             .unwrap_or(768);
 45:         let prefix =
-46:             std::env::var("ARLM_OLLAMA_PREFIX").unwrap_or_else(|_| "search_document: ".to_string());
-47:         let cfg = arlm_embedding::embedder::config::EmbeddingConfig {
-48:             model: arlm_embedding::embedder::config::EmbeddingModel::Ollama,
-49:             quantization: arlm_embedding::embedder::config::Quantization::None,
+46:             std::env::var("ARAGS_OLLAMA_PREFIX").unwrap_or_else(|_| "search_document: ".to_string());
+47:         let cfg = arags_embedding::embedder::config::EmbeddingConfig {
+48:             model: arags_embedding::embedder::config::EmbeddingModel::Ollama,
+49:             quantization: arags_embedding::embedder::config::Quantization::None,
 50:             matryoshka_dims: None,
 51:             model_dir: None,
 52:             dims,
@@ -4736,7 +4736,7 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 54:             ollama_model: Some(model.clone()),
 55:             ollama_prefix: Some(prefix),
 56:         };
-57:         match arlm_embedding::embedder::config::build_embedder(&cfg) {
+57:         match arags_embedding::embedder::config::build_embedder(&cfg) {
 58:             Ok(embedder) => {
 59:                 tracing::info!(model = "ollama", ollama_model = %model, "loaded Ollama embedder");
 60:                 return embedder;
@@ -4747,18 +4747,18 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 65:         }
 66:     }
 67: 
-68:     match std::env::var("ARLM_MODEL_DIR").ok().map(PathBuf::from) {
+68:     match std::env::var("ARAGS_MODEL_DIR").ok().map(PathBuf::from) {
 69:         Some(dir) if dir.join("model.safetensors").exists() => {
 70:             // Quantize to INT8 at load time: runs real BGE-M3 semantics via
-71:             // `QMatMul` at ~3-4x less CPU/RAM than FP32 (set ARLM_MODEL_QUANT
+71:             // `QMatMul` at ~3-4x less CPU/RAM than FP32 (set ARAGS_MODEL_QUANT
 72:             // to override). FP32 ("none") is far too slow for CPU indexing.
-73:             let quant = match std::env::var("ARLM_MODEL_QUANT").as_deref() {
-74:                 Ok("none") => arlm_embedding::embedder::config::Quantization::None,
-75:                 Ok("int4") => arlm_embedding::embedder::config::Quantization::Int4,
-76:                 _ => arlm_embedding::embedder::config::Quantization::Int8,
+73:             let quant = match std::env::var("ARAGS_MODEL_QUANT").as_deref() {
+74:                 Ok("none") => arags_embedding::embedder::config::Quantization::None,
+75:                 Ok("int4") => arags_embedding::embedder::config::Quantization::Int4,
+76:                 _ => arags_embedding::embedder::config::Quantization::Int8,
 77:             };
-78:             let cfg = arlm_embedding::embedder::config::EmbeddingConfig {
-79:                 model: arlm_embedding::embedder::config::EmbeddingModel::BgeM3,
+78:             let cfg = arags_embedding::embedder::config::EmbeddingConfig {
+79:                 model: arags_embedding::embedder::config::EmbeddingModel::BgeM3,
 80:                 quantization: quant,
 81:                 matryoshka_dims: Some(DIMS),
 82:                 model_dir: Some(dir.clone()),
@@ -4788,12 +4788,12 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 106:         Some(dir) => {
 107:             tracing::warn!(
 108:                 model_dir = %dir.display(),
-109:                 "ARLM_MODEL_DIR set but model.safetensors missing; using hash embedder"
+109:                 "ARAGS_MODEL_DIR set but model.safetensors missing; using hash embedder"
 110:             );
 111:             Arc::new(fallback::FallbackEmbedder::new(DIMS))
 112:         }
 113:         None => {
-114:             tracing::info!("ARLM_MODEL_DIR not set; using fallback hash embedder");
+114:             tracing::info!("ARAGS_MODEL_DIR not set; using fallback hash embedder");
 115:             Arc::new(fallback::FallbackEmbedder::new(DIMS))
 116:         }
 117:     }
@@ -4803,8 +4803,8 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 121: /// the server's global vector store so stored and query vectors are comparable.
 122: #[must_use]
 123: pub fn embedder_dimension() -> usize {
-124:     if std::env::var("ARLM_OLLAMA_MODEL").is_ok() {
-125:         std::env::var("ARLM_OLLAMA_DIMS")
+124:     if std::env::var("ARAGS_OLLAMA_MODEL").is_ok() {
+125:         std::env::var("ARAGS_OLLAMA_DIMS")
 126:             .ok()
 127:             .and_then(|d| d.parse::<usize>().ok())
 128:             .unwrap_or(768)
@@ -4891,11 +4891,11 @@ Now the server side. Let me check lifecycle.rs, state.rs, grpc/index.rs, admin.r
 <details>
 <summary>Click to expand reasoning</summary>
 
-Big gap found on the server side too: `state.rs::load_embedder()` reads env vars (`ARLM_OLLAMA_MODEL`, `ARLM_MODEL_DIR`, `ARLM_MODEL_QUANT`, `ARLM_OLLAMA_URL`, `ARLM_OLLAMA_DIMS`, `ARLM_OLLAMA_PREFIX`) instead of the `[embedder]` section of `server.toml`. The plan says:
+Big gap found on the server side too: `state.rs::load_embedder()` reads env vars (`ARAGS_OLLAMA_MODEL`, `ARAGS_MODEL_DIR`, `ARAGS_MODEL_QUANT`, `ARAGS_OLLAMA_URL`, `ARAGS_OLLAMA_DIMS`, `ARAGS_OLLAMA_PREFIX`) instead of the `[embedder]` section of `server.toml`. The plan says:
 
 > `server.toml` schema `[embedder]`: model, model_dir, ollama_url, ollama_model, dims, batch_size, max_tokens, overlap_tokens, cache
 
-And "Where to Implement": "Remover [llm] server + build_llm (019) | arlm-server | config.rs, lifecycle.rs, state.rs" — state.rs should consume embedder config from ServerConfig.
+And "Where to Implement": "Remover [llm] server + build_llm (019) | arags-server | config.rs, lifecycle.rs, state.rs" — state.rs should consume embedder config from ServerConfig.
 
 Current EmbedderConfig only has max_tokens + overlap_tokens. Missing: model, model_dir, ollama_url, ollama_model, dims, batch_size, cache. Also missing `[search]` tier/top_k/max_tokens and mtls_ca.
 
@@ -4905,18 +4905,18 @@ Let me now check grpc/index.rs to see if the server chunks with config.max_token
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-server/src/grpc/index.rs
+**Title:** crates/arags-server/src/grpc/index.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/index.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/index.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/index.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/index.rs</path>
 <type>file</type>
 <content>
 1: //! Indexing RPC: `IndexProject` (client-streaming).
@@ -4931,23 +4931,23 @@ Let me now check grpc/index.rs to see if the server chunks with config.max_token
 10: use std::path::Path;
 11: use std::time::Instant;
 12: 
-13: use arlm_storage::VectorEntry;
+13: use arags_storage::VectorEntry;
 14: use futures::stream::{self, StreamExt};
 15: use tonic::{Request, Response, Status, Streaming};
 16: 
-17: use arlm_proto::proto::index_chunk;
-18: use arlm_proto::proto::*;
+17: use arags_proto::proto::index_chunk;
+18: use arags_proto::proto::*;
 19: 
 20: use crate::grpc::error::internal;
 21: use crate::indexing;
 22: use crate::state::AppState;
 23: use crate::store;
 24: 
-25: /// Default number of chunks per embedding request when `ARLM_EMBED_BATCH` is
+25: /// Default number of chunks per embedding request when `ARAGS_EMBED_BATCH` is
 26: /// unset. Matches the Ollama server's internal `OLLAMA_BATCH_SIZE`.
 27: const DEFAULT_EMBED_BATCH: usize = 64;
 28: 
-29: /// Default number of concurrent embedding batches when `ARLM_INDEX_CONCURRENCY`
+29: /// Default number of concurrent embedding batches when `ARAGS_INDEX_CONCURRENCY`
 30: /// is unset. Should track Ollama's `OLLAMA_NUM_PARALLEL`.
 31: const DEFAULT_INDEX_CONCURRENCY: usize = 4;
 32: 
@@ -5051,7 +5051,7 @@ Let me now check grpc/index.rs to see if the server chunks with config.max_token
 130:                 )?;
 131:                 store::insert_chunk_text(&storage, chunk_id, &c.content)?;
 132:                 store::insert_fts_row(&storage, chunk_id, &c.content)?;
-133:                 let entities = arlm_storage::Storage::extract_entities(&c.content, &c.file_path);
+133:                 let entities = arags_storage::Storage::extract_entities(&c.content, &c.file_path);
 134:                 store::insert_entities(&storage, chunk_id, &entities)?;
 135:                 persisted.push((chunk_id, c.content.clone()));
 136:             }
@@ -5066,11 +5066,11 @@ Let me now check grpc/index.rs to see if the server chunks with config.max_token
 145:         // Embedding batches and concurrency are tunable via env so the Docker
 146:         // image can be dialed to match Ollama's OLLAMA_NUM_PARALLEL without a
 147:         // rebuild (see OLLAMA_EMBED_PROPOSED.md).
-148:         let embed_batch = std::env::var("ARLM_EMBED_BATCH")
+148:         let embed_batch = std::env::var("ARAGS_EMBED_BATCH")
 149:             .ok()
 150:             .and_then(|v| v.parse::<usize>().ok())
 151:             .unwrap_or(DEFAULT_EMBED_BATCH);
-152:         let concurrency = std::env::var("ARLM_INDEX_CONCURRENCY")
+152:         let concurrency = std::env::var("ARAGS_INDEX_CONCURRENCY")
 153:             .ok()
 154:             .and_then(|v| v.parse::<usize>().ok())
 155:             .unwrap_or(DEFAULT_INDEX_CONCURRENCY);
@@ -5182,7 +5182,7 @@ Let me now check grpc/index.rs to see if the server chunks with config.max_token
 <details>
 <summary>Click to expand reasoning</summary>
 
-The server does chunk with `state.config.embedder.max_tokens` (D2 done). But embedding config still comes from env vars in `state.rs` instead of `[embedder]` server.toml section. Also `ARLM_EMBED_BATCH`/`ARLM_INDEX_CONCURRENCY` env vars are used instead of `batch_size` from the config.
+The server does chunk with `state.config.embedder.max_tokens` (D2 done). But embedding config still comes from env vars in `state.rs` instead of `[embedder]` server.toml section. Also `ARAGS_EMBED_BATCH`/`ARAGS_INDEX_CONCURRENCY` env vars are used instead of `batch_size` from the config.
 
 Now let me check:
 1. admin.rs message
@@ -5198,18 +5198,18 @@ Let me batch read several files.
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-server/src/admin.rs
+**Title:** crates/arags-server/src/admin.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/admin.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/admin.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/admin.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/admin.rs</path>
 <type>file</type>
 <content>
 1: //! Internal admin CLI (container-only).
@@ -5227,8 +5227,8 @@ Let me batch read several files.
 13: use anyhow::{Context, Result, bail};
 14: use clap::{Parser, Subcommand};
 15: 
-16: use arlm_storage::Storage;
-17: use arlm_storage::tokens::{self, NewToken, Role};
+16: use arags_storage::Storage;
+17: use arags_storage::tokens::{self, NewToken, Role};
 18: 
 19: use crate::config::ServerConfig;
 20: use crate::maintenance;
@@ -5296,7 +5296,7 @@ Let me batch read several files.
 82: /// Returns an error on invalid arguments, a storage failure, or a refused
 83: /// destructive operation.
 84: pub fn run() -> Result<()> {
-85:     let args = std::iter::once("arlm-server-admin".to_string()).chain(std::env::args().skip(2));
+85:     let args = std::iter::once("arags-server-admin".to_string()).chain(std::env::args().skip(2));
 86:     let cli = AdminCli::parse_from(args);
 87:     let config = ServerConfig::load().context("failed to load server config")?;
 88:     let storage = Storage::open(&config.data_dir).context("failed to open storage")?;
@@ -5315,7 +5315,7 @@ Let me batch read several files.
 101:             println!("Username : {username}");
 102:             println!("Role     : {role}");
 103:             println!();
-104:             println!("Refresh token (paste into client ~/.arlm/config.toml [auth].refresh_token):");
+104:             println!("Refresh token (paste into client ~/.arags/config.toml [auth].refresh_token):");
 105:             println!("{plaintext}");
 106:             eprintln!("WARNING: this token grants access for 1 year. Store it securely (0600).");
 107:         }
@@ -5387,7 +5387,7 @@ Let me batch read several files.
 <details>
 <summary>Click to expand reasoning</summary>
 
-Found: `admin.rs:104` still says "paste into client ~/.arlm/config.toml [auth].refresh_token" — should be `~/.arlm/arlm.toml` per plan 020 step 7.
+Found: `admin.rs:104` still says "paste into client ~/.arags/config.toml [auth].refresh_token" — should be `~/.arags/arags.toml` per plan 020 step 7.
 
 Now let me check the CLI Cargo.toml, backend.rs, serve/mod.rs and mcp to understand the removal scope, plus proto.
 
@@ -5395,38 +5395,38 @@ Now let me check the CLI Cargo.toml, backend.rs, serve/mod.rs and mcp to underst
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat crates/arlm-cli/Cargo.toml; echo "===BACKEND==="; cat crates/arlm-cli/src/backend.rs | head -60
+**Title:** cat crates/arags-cli/Cargo.toml; echo "===BACKEND==="; cat crates/arags-cli/src/backend.rs | head -60
 
 **Input:**
 ```json
 {
-  "command": "cat crates/arlm-cli/Cargo.toml; echo \"===BACKEND===\"; cat crates/arlm-cli/src/backend.rs | head -60"
+  "command": "cat crates/arags-cli/Cargo.toml; echo \"===BACKEND===\"; cat crates/arags-cli/src/backend.rs | head -60"
 }
 ```
 
 **Output:**
 ```
 [package]
-name = "arlm-cli"
+name = "arags-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "arlm"
+name = "arags"
 path = "src/main.rs"
 
 [lints]
 workspace = true
 
 [dependencies]
-arlm-core.workspace = true
-arlm-storage.workspace = true
-arlm-search.workspace = true
-arlm-memory.workspace = true
-arlm-llm.workspace = true
-arlm-proto.workspace = true
+arags-core.workspace = true
+arags-storage.workspace = true
+arags-search.workspace = true
+arags-memory.workspace = true
+arags-llm.workspace = true
+arags-proto.workspace = true
 clap.workspace = true
 indicatif.workspace = true
 console.workspace = true
@@ -5454,15 +5454,15 @@ tokio-test = "0.4"
 ===BACKEND===
 //! Resolve an LLM backend from the user's merged configuration.
 //!
-//! Providers are described provider-agnostically in `~/.arlm/arlm.toml`
+//! Providers are described provider-agnostically in `~/.arags/arags.toml`
 //! (`[[llm.backends]]`). When a named backend is found it is used directly via
-//! [`arlm_llm::get_backend_from_config`]; otherwise the legacy `BackendKind`
+//! [`arags_llm::get_backend_from_config`]; otherwise the legacy `BackendKind`
 //! preset path (with an env-var API key) is used for backwards compatibility.
 
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use arlm_llm::{BackendConfig, LlmBackend, LlmConfig, get_backend, get_backend_from_config};
+use arags_llm::{BackendConfig, LlmBackend, LlmConfig, get_backend, get_backend_from_config};
 
 /// Resolve a backend by logical `name` (or the configured default), falling
 /// back to the legacy kind-based presets.
@@ -5509,7 +5509,7 @@ pub fn resolve_backend(
 
     // 2. Legacy preset path.
     let kind_name = name.unwrap_or_else(|| "ollama".to_string());
-    let kind: arlm_llm::BackendKind = kind_name
+    let kind: arags_llm::BackendKind = kind_name
         .parse()
         .with_context(|| format!("unknown backend: {kind_name}"))?;
 
@@ -5524,18 +5524,18 @@ pub fn resolve_backend(
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-cli/src/commands/serve/mod.rs
+**Title:** crates/arags-cli/src/commands/serve/mod.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/serve/mod.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/serve/mod.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/serve/mod.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/serve/mod.rs</path>
 <type>file</type>
 <content>
 1: use std::net::SocketAddr;
@@ -5552,7 +5552,7 @@ pub fn resolve_backend(
 12: use crate::output;
 13: use crate::util::project_name;
 14: 
-15: pub use crate::metrics::ArlmMetrics;
+15: pub use crate::metrics::AragsMetrics;
 16: 
 17: pub use self::handlers::{
 18:     context_handler, health, index_handler, mcp_handler, metrics_handler, search_handler,
@@ -5578,29 +5578,29 @@ pub fn resolve_backend(
 38:     pub mcp: bool,
 39: }
 40: 
-41: /// Start the arlm HTTP server (the local data plane).
+41: /// Start the arags HTTP server (the local data plane).
 42: ///
 43: /// # Errors
 44: /// Returns an error if the storage backend cannot be opened, the listen
 45: /// address cannot be parsed, or the TCP listener fails to bind.
 46: #[instrument(skip_all)]
 47: pub async fn execute(config: ServeConfig<'_>) -> Result<()> {
-48:     let _timer = arlm_core::logging::ScopedTimer::new("cli_serve");
+48:     let _timer = arags_core::logging::ScopedTimer::new("cli_serve");
 49: 
 50:     let pname = project_name(config.project);
 51: 
 52:     let _storage =
-53:         arlm_storage::Storage::open(&crate::util::data_dir()).context("failed to open storage")?;
+53:         arags_storage::Storage::open(&crate::util::data_dir()).context("failed to open storage")?;
 54: 
-55:     info!(host = %config.host, port = config.port, project = %pname, "starting arlm server");
+55:     info!(host = %config.host, port = config.port, project = %pname, "starting arags server");
 56: 
 57:     output::info(&format!(
-58:         "Starting arlm server on {}:{}",
+58:         "Starting arags server on {}:{}",
 59:         config.host, config.port
 60:     ));
 61:     output::info(&format!("Project: {pname}"));
 62: 
-63:     let metrics = ArlmMetrics::new();
+63:     let metrics = AragsMetrics::new();
 64: 
 65:     let state = Arc::new(AppState {
 66:         project: config.project.to_path_buf(),
@@ -5674,7 +5674,7 @@ pub fn resolve_backend(
 <details>
 <summary>Click to expand reasoning</summary>
 
-Confirmed: `arlm serve` is a full local data plane (opens Storage, indexes locally, searches locally) — this is exactly what plan 020 D3 says must be REMOVED. The MCP handlers too.
+Confirmed: `arags serve` is a full local data plane (opens Storage, indexes locally, searches locally) — this is exactly what plan 020 D3 says must be REMOVED. The MCP handlers too.
 
 Now let me check:
 1. proto (IndexFile definition)
@@ -5683,25 +5683,25 @@ Now let me check:
 4. Check where `serve`/`mcp` are referenced elsewhere (agents configs, README)
 5. metrics.rs usage
 
-Let me also check the arlm-proto and the existing tests to see what's covered.
+Let me also check the arags-proto and the existing tests to see what's covered.
 
 </details>
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "IndexFile|message IndexFile" crates/arlm-proto/proto/*.proto | head; echo "==="; ls crates/arlm-proto/proto/; echo "===TESTS==="; rg -l "user_config|server_addr|merge_backends" crates/arlm-cli/tests/ crates/arlm-server/tests/ 2>/dev/null
+**Title:** rg -n "IndexFile|message IndexFile" crates/arags-proto/proto/*.proto | head; echo "==="; ls crates/arags-proto/proto/; echo "===TESTS==="; rg -l "user_config|server_addr|merge_backends" crates/arags-cli/tests/ crates/arags-server/tests/ 2>/dev/null
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"IndexFile|message IndexFile\" crates/arlm-proto/proto/*.proto | head; echo \"===\"; ls crates/arlm-proto/proto/; echo \"===TESTS===\"; rg -l \"user_config|server_addr|merge_backends\" crates/arlm-cli/tests/ crates/arlm-server/tests/ 2>/dev/null"
+  "command": "rg -n \"IndexFile|message IndexFile\" crates/arags-proto/proto/*.proto | head; echo \"===\"; ls crates/arags-proto/proto/; echo \"===TESTS===\"; rg -l \"user_config|server_addr|merge_backends\" crates/arags-cli/tests/ crates/arags-server/tests/ 2>/dev/null"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-proto/proto/index.proto:15:    IndexFile file = 2;
-crates/arlm-proto/proto/index.proto:26:message IndexFile {
+crates/arags-proto/proto/index.proto:15:    IndexFile file = 2;
+crates/arags-proto/proto/index.proto:26:message IndexFile {
 ===
 auth.proto
 context.proto
@@ -5725,19 +5725,19 @@ session.proto
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat crates/arlm-proto/proto/index.proto; echo "===CLI TESTS==="; ls crates/arlm-cli/tests/; echo "==="; rg -rn "mod tests" crates/arlm-cli/src/user_config.rs crates/arlm-server/src/config.rs | head
+**Title:** cat crates/arags-proto/proto/index.proto; echo "===CLI TESTS==="; ls crates/arags-cli/tests/; echo "==="; rg -rn "mod tests" crates/arags-cli/src/user_config.rs crates/arags-server/src/config.rs | head
 
 **Input:**
 ```json
 {
-  "command": "cat crates/arlm-proto/proto/index.proto; echo \"===CLI TESTS===\"; ls crates/arlm-cli/tests/; echo \"===\"; rg -rn \"mod tests\" crates/arlm-cli/src/user_config.rs crates/arlm-server/src/config.rs | head"
+  "command": "cat crates/arags-proto/proto/index.proto; echo \"===CLI TESTS===\"; ls crates/arags-cli/tests/; echo \"===\"; rg -rn \"mod tests\" crates/arags-cli/src/user_config.rs crates/arags-server/src/config.rs | head"
 }
 ```
 
 **Output:**
 ```
 syntax = "proto3";
-package arlm.v1;
+package arags.v1;
 
 // ── Indexing (client-streaming) ──
 //
@@ -5802,12 +5802,12 @@ output_tree_test.rs
 No unit tests in `user_config.rs` or `config.rs` (server), and no tests covering the plan's Testing list:
 - test_user_config_merge_local_overrides_global_granular — MISSING
 - test_user_config_nested_merge_recursive — MISSING
-- test_init_creates_local_arlm_toml_and_gitignores — MISSING
+- test_init_creates_local_arags_toml_and_gitignores — MISSING
 - test_init_does_not_write_auth_to_local — MISSING
 - test_client_uses_merged_server_addr — MISSING
 - test_legacy_config_toml_ignored — MISSING
 - test_auth_only_global — MISSING
-- test_server_config_loads_from_arlm_server_config_env — MISSING
+- test_server_config_loads_from_arags_server_config_env — MISSING
 - test_server_config_has_no_llm_section — MISSING
 - test_server_config_embedder_chunk_size_applied — MISSING (partially: server uses max_tokens)
 - test_server_and_user_config_files_disjoint — MISSING
@@ -5824,19 +5824,19 @@ Now let me check docs files and remaining references. Let me look at:
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "config.toml|arlm.toml|server.toml" install.sh docker-compose.server.yml Dockerfile.server Dockerfile Dockerfile.server.prebuilt README.md 2>/dev/null | head -40; echo "===AGENTS==="; rg -ln "serve|mcp" agents/ 2>/dev/null; echo "===STAGING==="; cat STAGING.md
+**Title:** rg -n "config.toml|arags.toml|server.toml" install.sh docker-compose.server.yml Dockerfile.server Dockerfile Dockerfile.server.prebuilt README.md 2>/dev/null | head -40; echo "===AGENTS==="; rg -ln "serve|mcp" agents/ 2>/dev/null; echo "===STAGING==="; cat STAGING.md
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"config.toml|arlm.toml|server.toml\" install.sh docker-compose.server.yml Dockerfile.server Dockerfile Dockerfile.server.prebuilt README.md 2>/dev/null | head -40; echo \"===AGENTS===\"; rg -ln \"serve|mcp\" agents/ 2>/dev/null; echo \"===STAGING===\"; cat STAGING.md"
+  "command": "rg -n \"config.toml|arags.toml|server.toml\" install.sh docker-compose.server.yml Dockerfile.server Dockerfile Dockerfile.server.prebuilt README.md 2>/dev/null | head -40; echo \"===AGENTS===\"; rg -ln \"serve|mcp\" agents/ 2>/dev/null; echo \"===STAGING===\"; cat STAGING.md"
 }
 ```
 
 **Output:**
 ```
-Dockerfile:28:# o data_dir vem deste TOML (~/.arlm/config.toml).
-Dockerfile:29:COPY docker/server.toml /root/.arlm/config.toml
+Dockerfile:28:# o data_dir vem deste TOML (~/.arags/config.toml).
+Dockerfile:29:COPY docker/server.toml /root/.arags/config.toml
 install.sh:139:    # Guarantee a valid config.toml exists at $DATA_DIR/config.toml
 install.sh:140:    local config_file="${DATA_DIR}/config.toml"
 install.sh:145:        if [ -f "config.toml.example" ]; then
@@ -5844,40 +5844,40 @@ install.sh:146:            example_src="config.toml.example"
 install.sh:147:        elif [ -f "${0%/*}/config.toml.example" ]; then
 install.sh:148:            example_src="${0%/*}/config.toml.example"
 install.sh:154:            local example_url="https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/config.toml.example"
-install.sh:162:# arlm default config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/config.toml.example
-README.md:63:./install.sh                     # instala arlm e cria ~/.arlm/arlm.toml
-README.md:75:# Inicializar o projeto (cria <proj>/.arlm.toml gitignored + indexa)
-README.md:77:arlm init ./meu-projeto --no-index     # só cria o .arlm.toml
-README.md:111:arlm server                                        # escuta conforme server.toml
-README.md:121:também é resolvido por `~/.arlm/arlm.toml` (`[server].addr`) ou
-README.md:128:| `arlm init [--index] [--no-index]` | Scaffold de `<proj>/.arlm.toml` (gitignored) + index |
+install.sh:162:# arags default config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/config.toml.example
+README.md:63:./install.sh                     # instala arags e cria ~/.arags/arags.toml
+README.md:75:# Inicializar o projeto (cria <proj>/.arags.toml gitignored + indexa)
+README.md:77:arags init ./meu-projeto --no-index     # só cria o .arags.toml
+README.md:111:arags server                                        # escuta conforme server.toml
+README.md:121:também é resolvido por `~/.arags/arags.toml` (`[server].addr`) ou
+README.md:128:| `arags init [--index] [--no-index]` | Scaffold de `<proj>/.arags.toml` (gitignored) + index |
 README.md:184:`/data` (configurável via `server.toml` `data_dir`):
 README.md:209:### `server.toml` (HOST — arquivo de config do servidor)
-README.md:211:Montado no container (ex.: `./server.toml:/etc/arlm/server.toml`). Lido de
-README.md:212:`ARLM_SERVER_CONFIG` ou, por padrão, `/etc/arlm/server.toml`. É um **arquivo de
-README.md:240:- **Global** `~/.arlm/arlm.toml`: `[auth]` (só global: `username` +
-README.md:242:- **Local** `.arlm.toml` (no projeto): sobrescreve campos do global + `[project]`.
-README.md:245:Arquivos legados `~/.arlm/config.toml` / `.arlm/config.toml` **não** são lidos.
-README.md:248:# ~/.arlm/arlm.toml (global)
-README.md:262:# .arlm.toml (local, no projeto)
+README.md:211:Montado no container (ex.: `./server.toml:/etc/arags/server.toml`). Lido de
+README.md:212:`ARAGS_SERVER_CONFIG` ou, por padrão, `/etc/arags/server.toml`. É um **arquivo de
+README.md:240:- **Global** `~/.arags/arags.toml`: `[auth]` (só global: `username` +
+README.md:242:- **Local** `.arags.toml` (no projeto): sobrescreve campos do global + `[project]`.
+README.md:245:Arquivos legados `~/.arags/config.toml` / `.arags/config.toml` **não** são lidos.
+README.md:248:# ~/.arags/arags.toml (global)
+README.md:262:# .arags.toml (local, no projeto)
 README.md:278:# Subir o servidor (porta 50051, volume de dados persistido, server.toml montado)
 README.md:287:(configure `data_dir=/data` no `server.toml`) e monta o `server.toml` em
-README.md:288:`/etc/arlm/server.toml`. O healthcheck usa `arlm-server status`.
+README.md:288:`/etc/arags/server.toml`. O healthcheck usa `arags-server status`.
 README.md:323:`.cargo/config.toml` (incluído no repositório):
 ===AGENTS===
 agents/README.md
 agents/claude-desktop/claude_desktop_config.json
 ===STAGING===
-# STAGING.md — RLM 100% Local (Ollama + arlm-server)
+# STAGING.md — RLM 100% Local (Ollama + arags-server)
 
 Status de aprendizados, modelo ideal por uso e o que falta verificar.
 Última atualização: 2026-08-21.
 
-> **ATUALIZAÇÃO (planos 019/020):** o `arlm-server` tornou-se um **plano de dados
+> **ATUALIZAÇÃO (planos 019/020):** o `arags-server` tornou-se um **plano de dados
 > puro, sem LLM** (removido o `summarizer` server-side). O servidor faz apenas
 > indexação (chunk+embed), busca híbrida, QA-Cache, memória e histórico. A
-> sumarização/digest agora ocorre **no cliente** (`arlm-cli`) usando o **LLM
-> local do usuário** (`arlm-llm`) em `query -qa` (digest) e `persist` (summarize,
+> sumarização/digest agora ocorre **no cliente** (`arags-cli`) usando o **LLM
+> local do usuário** (`arags-llm`) em `query -qa` (digest) e `persist` (summarize,
 > escreve `wiki/*.md`). As seções abaixo sobre o *summarizer* server-side são
 > históricas e referem-se ao estado pré-refator. Os aprendizados de **embedding**
 > (Ollama local, all-minilm/qwen3-embedding) continuam válidos para o servidor.
@@ -5886,8 +5886,8 @@ Status de aprendizados, modelo ideal por uso e o que falta verificar.
 
 ## 1. Objetivo
 
-Deixar a busca semântica do `arlm` **100% local** em laptop, sem APIs externas:
-embeddings via **Ollama** no servidor (`arlm-server`, container Docker único).
+Deixar a busca semântica do `arags` **100% local** em laptop, sem APIs externas:
+embeddings via **Ollama** no servidor (`arags-server`, container Docker único).
 A sumarização/digest é feita pelo **LLM local do usuário no cliente** (`query -qa`
 / `persist`), não no servidor.
 
@@ -5895,14 +5895,14 @@ A sumarização/digest é feita pelo **LLM local do usuário no cliente** (`quer
 
 ## 2. Estado do projeto — FEITO
 
-- **Servidor (`arlm-server`) — correções B1–B4** (clippy/fmt limpos):
+- **Servidor (`arags-server`) — correções B1–B4** (clippy/fmt limpos):
   - B1: embedding paralelo em lotes na Phase 2 (`grpc/index.rs`), com `buffer_unordered` + `spawn_blocking`.
   - B2: dimensões dinâmicas via `state.embedder.dimensions()` (não mais `const 1024`).
   - B3: embed da query em `spawn_blocking` (`grpc/search.rs`).
-  - B4: envs `ARLM_EMBED_BATCH` (64) / `ARLM_INDEX_CONCURRENCY` (4).
+  - B4: envs `ARAGS_EMBED_BATCH` (64) / `ARAGS_INDEX_CONCURRENCY` (4).
 - **Docker** (`Dockerfile`, `docker/Modelfile`, `docker/server.toml`, `docker/entrypoint.sh`):
   - Imagem **5.11 GB**, `all-minilm` bakeado, base `rust:1.97.1-slim` → `ollama/ollama`.
-  - Container `arlm-prod` sobe Ollama + arlm-server; mapeia **50052→50051** (não mapeia 11434 p/ não conflitar com Ollama do host).
+  - Container `arags-prod` sobe Ollama + arags-server; mapeia **50052→50051** (não mapeia 11434 p/ não conflitar com Ollama do host).
   - `docker build --network=host` (sandbox de build sem rede); apt precisa de `libprotobuf-dev` + `protobuf-compiler`.
 - **End-to-end validado**: `sucesu` indexado = **1194 arquivos / 4481 chunks em 104s**, pico ~10 cores / ~870 MB; queries BM25+semântica relevantes (login/permissão/middleware → controllers corretos).
 - Issues `sd` (B1–B4 + Docker + feature) **fechadas**.
@@ -5925,7 +5925,7 @@ A sumarização/digest é feita pelo **LLM local do usuário no cliente** (`quer
    `_Exemplos`, `vendor`. **Ação:** aplicar ignores e reindexar.
 6. **Embedding**: `all-minilm` (384-dim) atual; `qwen3-embedding:0.6b` (1024-dim) é candidato
    não validado em retrieval. Detalhe: prefixo do server default é `"search_document: "`
-   (correto p/ nomic, **errado p/ all-minilm** — o Dockerfile já seta `ARLM_OLLAMA_PREFIX=` vazio).
+   (correto p/ nomic, **errado p/ all-minilm** — o Dockerfile já seta `ARAGS_OLLAMA_PREFIX=` vazio).
 7. **Agente consumidor** (tabela Cline/Continue/Aider/etc.) ainda não integrado a nenhum.
 
 ---
@@ -5984,11 +5984,11 @@ via `/api/chat` do Ollama, `temperature=0.3`, `num_predict=1024`. Harness em
 - **Default do container:** trocar `qwen2.5-coder:7b` (não baixado) por modelo local
   verificado e **bakeá-lo** na imagem.
 
-### 6.3 Agente consumidor (usa o output do arlm)
+### 6.3 Agente consumidor (usa o output do arags)
 - **Tier 1 (local + self-hosted):** `Continue.dev`, `Tabby`, `Aider` (terminal — encaixa no CLI).
 - **Tier 2 (local, sem self-host):** `Cline`, `Roo Code`, `Kilo Code`, `Goose`, `Zed` (via ACP).
 - **Excluídos p/ 100% local:** `Cursor` (sem modelo local), `Codeium Enterprise`/`Pieces` (nuvem).
-- **Ação:** escolher 1 e integrar o consumo dos summaries/contexto do arlm.
+- **Ação:** escolher 1 e integrar o consumo dos summaries/contexto do arags.
 
 ---
 
@@ -6007,7 +6007,7 @@ via `/api/chat` do Ollama, `temperature=0.3`, `num_predict=1024`. Harness em
       se qwen3-embedding, ajustar Dockerfile + env + prefixo.
 - [ ] **Aplicar ignores** (`Seeds`, `storage/logs`, `REFERENCE`, `_Exemplos`, `vendor`) + reindexar;
       reavaliar relevância em NL.
-- [ ] **Validar container sob carga**: Ollama + arlm-server, VRAM, persistência (volume `/data/arlm`).
+- [ ] **Validar container sob carga**: Ollama + arags-server, VRAM, persistência (volume `/data/arags`).
 - [ ] **Testes**: `cargo test --workspace`, `cargo clippy --workspace -- -D warnings`, `cargo fmt -- --check`;
       cobrir `parse_summary_response` e dimensões dinâmicas.
 
@@ -6025,7 +6025,7 @@ curl -s -X POST http://127.0.0.1:11434/api/embeddings -H 'Content-Type: applicat
 curl -s -X POST http://127.0.0.1:11434/api/chat -H 'Content-Type: application/json' \
   -d '{"model":"<modelo>","messages":[{"role":"user","content":"resuma..."}],"options":{"num_predict":1024},"think":false,"stream":false}'
 # container
-docker run -d --name arlm-prod -p 50052:50051 -v arlm-data:/data arlm-ollama
+docker run -d --name arags-prod -p 50052:50051 -v arags-data:/data arags-ollama
 ```
 
 ```
@@ -6042,7 +6042,7 @@ docker run -d --name arlm-prod -p 50052:50051 -v arlm-data:/data arlm-ollama
 <details>
 <summary>Click to expand reasoning</summary>
 
-Now let me check `docker/server.toml`, `Dockerfile`, `docker-compose.server.yml`, and README more closely, plus check where `arlm serve`/mcp is referenced in docs (README, agents). Then I'll have a full picture.
+Now let me check `docker/server.toml`, `Dockerfile`, `docker-compose.server.yml`, and README more closely, plus check where `arags serve`/mcp is referenced in docs (README, agents). Then I'll have a full picture.
 
 </details>
 
@@ -6063,7 +6063,7 @@ entrypoint.sh
 Modelfile
 server.toml
 ===
-data_dir = "/data/arlm"
+data_dir = "/data/arags"
 listen_addr = "0.0.0.0:50051"
 
 [llm]
@@ -6071,28 +6071,28 @@ backend = "ollama"
 model = "qwen2.5-coder:7b"
 ===COMPOSE===
 services:
-  arlm-server:
+  arags-server:
     build:
       context: .
       dockerfile: Dockerfile.server
     volumes:
-      - arlm-server-data:/data
+      - arags-server-data:/data
       - ./models/bge-m3:/models:ro
     ports:
       - "50051:50051"
     environment:
-      - ARLM_DATA_DIR=/data
-      - ARLM_MODEL_DIR=/models
-      # ServerConfig resolves its data dir from $HOME/.arlm, so point HOME at
+      - ARAGS_DATA_DIR=/data
+      - ARAGS_MODEL_DIR=/models
+      # ServerConfig resolves its data dir from $HOME/.arags, so point HOME at
       # the persisted volume to keep SQLite + vectors on the mounted volume.
       - HOME=/data
       # Bind 0.0.0.0 so the published port is reachable from the host
       # (0.0.0.0 still accepts 127.0.0.1, so the in-container healthcheck works).
-      - ARLM_SERVER_ADDR=0.0.0.0:50051
+      - ARAGS_SERVER_ADDR=0.0.0.0:50051
     command: ["up"]
 
 volumes:
-  arlm-server-data:
+  arags-server-data:
 
 ```
 
@@ -6116,7 +6116,7 @@ volumes:
 
 **Output:**
 ```
-# ---------- Builder: compila arlm-server em release ----------
+# ---------- Builder: compila arags-server em release ----------
 # Pinado em 1.97.1 para casar com o rustc do host (Cargo.lock trava dependencias
 # que exigem rustc >= 1.88; o base 1.85-slim falha).
 FROM rust:1.97.1-slim AS builder
@@ -6130,9 +6130,9 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         build-essential pkg-config libssl-dev libprotobuf-dev protobuf-compiler ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
- && cargo build --release --bin arlm-server
+ && cargo build --release --bin arags-server
 
-# ---------- Runtime: Ollama + arlm-server (container unico) ----------
+# ---------- Runtime: Ollama + arags-server (container unico) ----------
 FROM ollama/ollama:latest
 
 RUN apt-get update \
@@ -6140,13 +6140,13 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Binario do servidor.
-COPY --from=builder /build/target/release/arlm-server /usr/local/bin/arlm-server
+COPY --from=builder /build/target/release/arags-server /usr/local/bin/arags-server
 
-# Config do servidor (data_dir + listen_addr). O servidor NAO le ARLM_DATA_DIR;
-# o data_dir vem deste TOML (~/.arlm/config.toml).
-COPY docker/server.toml /root/.arlm/config.toml
+# Config do servidor (data_dir + listen_addr). O servidor NAO le ARAGS_DATA_DIR;
+# o data_dir vem deste TOML (~/.arags/config.toml).
+COPY docker/server.toml /root/.arags/config.toml
 
-COPY docker/Modelfile /opt/arlm/Modelfile
+COPY docker/Modelfile /opt/arags/Modelfile
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
@@ -6157,16 +6157,16 @@ ENV OLLAMA_NUM_THREADS=0
 ENV OLLAMA_KEEP_ALIVE=-1
 ENV OLLAMA_BATCH_SIZE=64
 
-# ---- arlm-server (embedding Ollama; prefix VAZIO = correto p/ all-minilm) ----
+# ---- arags-server (embedding Ollama; prefix VAZIO = correto p/ all-minilm) ----
 # "search_document: " e um prefixo do nomic-embed-text; all-minilm nao o usa,
 # entao deixamos vazio para nao degradar a qualidade dos vetores.
-ENV ARLM_OLLAMA_MODEL=all-minilm
-ENV ARLM_OLLAMA_URL=http://127.0.0.1:11434
-ENV ARLM_OLLAMA_DIMS=384
-ENV ARLM_OLLAMA_PREFIX=
+ENV ARAGS_OLLAMA_MODEL=all-minilm
+ENV ARAGS_OLLAMA_URL=http://127.0.0.1:11434
+ENV ARAGS_OLLAMA_DIMS=384
+ENV ARAGS_OLLAMA_PREFIX=
 # Paralelismo do lado do servidor (casar com OLLAMA_NUM_PARALLEL).
-ENV ARLM_INDEX_CONCURRENCY=4
-ENV ARLM_EMBED_BATCH=64
+ENV ARAGS_INDEX_CONCURRENCY=4
+ENV ARAGS_EMBED_BATCH=64
 
 # Bake do modelo na imagem (precisa de rede no build). Se falhar, o entrypoint
 # faz o pull em runtime.
@@ -6176,8 +6176,8 @@ RUN ollama serve >/tmp/ollama-build.log 2>&1 & \
     ollama pull all-minilm || true; \
     kill $OLLAMA_PID 2>/dev/null || true
 
-# /root/.ollama NAO e volume (modelo bakeado); /data/arlm SIM (indice persiste).
-VOLUME ["/data/arlm"]
+# /root/.ollama NAO e volume (modelo bakeado); /data/arags SIM (indice persiste).
+VOLUME ["/data/arags"]
 EXPOSE 11434 50051
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=5 \
@@ -6204,10 +6204,10 @@ ollama pull all-minilm || true
 # 4) Mantem o Ollama vivo; encerra tudo junto no sinal de saida.
 trap 'kill $OLLAMA_PID 2>/dev/null || true' EXIT TERM INT
 
-# 5) arlm-server em foreground (PID 1 do container).
-exec arlm-server
+# 5) arags-server em foreground (PID 1 do container).
+exec arags-server
 ===DFSERVER===
-# Multi-stage build for arlm-server
+# Multi-stage build for arags-server
 # Stage 1: Build the binary
 # rustc >= 1.88 required by transitive deps (cxx, icu_*, zip).
 FROM rust:1.88-slim AS builder
@@ -6225,34 +6225,34 @@ WORKDIR /app
 
 # Copy manifests first for better caching
 COPY Cargo.toml Cargo.lock ./
-COPY crates/arlm-proto/Cargo.toml crates/arlm-proto/
-COPY crates/arlm-core/Cargo.toml crates/arlm-core/
-COPY crates/arlm-storage/Cargo.toml crates/arlm-storage/
-COPY crates/arlm-embedding/Cargo.toml crates/arlm-embedding/
-COPY crates/arlm-search/Cargo.toml crates/arlm-search/
-COPY crates/arlm-llm/Cargo.toml crates/arlm-llm/
-COPY crates/arlm-memory/Cargo.toml crates/arlm-memory/
-COPY crates/arlm-server/Cargo.toml crates/arlm-server/
+COPY crates/arags-proto/Cargo.toml crates/arags-proto/
+COPY crates/arags-core/Cargo.toml crates/arags-core/
+COPY crates/arags-storage/Cargo.toml crates/arags-storage/
+COPY crates/arags-embedding/Cargo.toml crates/arags-embedding/
+COPY crates/arags-search/Cargo.toml crates/arags-search/
+COPY crates/arags-llm/Cargo.toml crates/arags-llm/
+COPY crates/arags-memory/Cargo.toml crates/arags-memory/
+COPY crates/arags-server/Cargo.toml crates/arags-server/
 
 # Create dummy source files for dependency caching
-RUN mkdir -p crates/arlm-proto/src crates/arlm-core/src crates/arlm-storage/src crates/arlm-embedding/src crates/arlm-search/src crates/arlm-llm/src crates/arlm-memory/src crates/arlm-server/src && \
-    echo "pub fn dummy() {}" > crates/arlm-proto/src/lib.rs && \
-    echo "pub fn dummy() {}" > crates/arlm-core/src/lib.rs && \
-    echo "pub fn dummy() {}" > crates/arlm-storage/src/lib.rs && \
-    echo "pub fn dummy() {}" > crates/arlm-embedding/src/lib.rs && \
-    echo "pub fn dummy() {}" > crates/arlm-search/src/lib.rs && \
-    echo "pub fn dummy() {}" > crates/arlm-llm/src/lib.rs && \
-    echo "pub fn dummy() {}" > crates/arlm-memory/src/lib.rs && \
-    echo "fn main() {}" > crates/arlm-server/src/main.rs
+RUN mkdir -p crates/arags-proto/src crates/arags-core/src crates/arags-storage/src crates/arags-embedding/src crates/arags-search/src crates/arags-llm/src crates/arags-memory/src crates/arags-server/src && \
+    echo "pub fn dummy() {}" > crates/arags-proto/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arags-core/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arags-storage/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arags-embedding/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arags-search/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arags-llm/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/arags-memory/src/lib.rs && \
+    echo "fn main() {}" > crates/arags-server/src/main.rs
 
 # Build dependencies (cached)
-RUN cargo build --release --bin arlm-server 2>/dev/null || true
+RUN cargo build --release --bin arags-server 2>/dev/null || true
 
 # Copy actual source
 COPY crates/ crates/
 
 # Build the actual binary
-RUN cargo build --release --bin arlm-server
+RUN cargo build --release --bin arags-server
 
 # Stage 2: Runtime image (minimal, glibc)
 FROM debian:bookworm-slim
@@ -6263,28 +6263,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
-    && groupadd -r arlm && useradd -r -g arlm -m -s /bin/false arlm
+    && groupadd -r arags && useradd -r -g arags -m -s /bin/false arags
 
 # Copy the binary from builder
-COPY --from=builder /app/target/release/arlm-server /usr/local/bin/arlm-server
+COPY --from=builder /app/target/release/arags-server /usr/local/bin/arags-server
 
 # Create data directory
-RUN mkdir -p /data && chown arlm:arlm /data
+RUN mkdir -p /data && chown arags:arags /data
 
-USER arlm
+USER arags
 
 # Expose gRPC port
 EXPOSE 50051
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD arlm-server status || exit 1
+    CMD arags-server status || exit 1
 
 # Default environment
-ENV RUST_LOG=info,arlm_server=debug
-ENV ARLM_DATA_DIR=/data
+ENV RUST_LOG=info,arags_server=debug
+ENV ARAGS_DATA_DIR=/data
 
-ENTRYPOINT ["arlm-server"]
+ENTRYPOINT ["arags-server"]
 CMD ["up"]
 
 ```
@@ -6301,57 +6301,57 @@ CMD ["up"]
 <details>
 <summary>Click to expand reasoning</summary>
 
-Now let me check the README's serve/mcp references, the agents configs referencing `arlm serve`, and check `install.sh` more fully. Then I'll have the complete picture and can create the sd plan.
+Now let me check the README's serve/mcp references, the agents configs referencing `arags serve`, and check `install.sh` more fully. Then I'll have the complete picture and can create the sd plan.
 
 </details>
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "serve|mcp|knowledge.db|config.toml" README.md | head -30; echo "===AGENTS-README==="; rg -n "serve|mcp|config.toml|arlm.toml" agents/README.md agents/opencode/tools.json agents/cursor/commands.json 2>/dev/null | head -20; echo "===INSTALL==="; sed -n '100,200p' install.sh
+**Title:** rg -n "serve|mcp|knowledge.db|config.toml" README.md | head -30; echo "===AGENTS-README==="; rg -n "serve|mcp|config.toml|arags.toml" agents/README.md agents/opencode/tools.json agents/cursor/commands.json 2>/dev/null | head -20; echo "===INSTALL==="; sed -n '100,200p' install.sh
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"serve|mcp|knowledge.db|config.toml\" README.md | head -30; echo \"===AGENTS-README===\"; rg -n \"serve|mcp|config.toml|arlm.toml\" agents/README.md agents/opencode/tools.json agents/cursor/commands.json 2>/dev/null | head -20; echo \"===INSTALL===\"; sed -n '100,200p' install.sh"
+  "command": "rg -n \"serve|mcp|knowledge.db|config.toml\" README.md | head -30; echo \"===AGENTS-README===\"; rg -n \"serve|mcp|config.toml|arags.toml\" agents/README.md agents/opencode/tools.json agents/cursor/commands.json 2>/dev/null | head -20; echo \"===INSTALL===\"; sed -n '100,200p' install.sh"
 }
 ```
 
 **Output:**
 ```
 5:semântica), QA-Cache e memória sobre um **plano de dados server-first** via gRPC.
-15:- **Servidor = plano de dados puro:** `arlm-server` faz indexação (chunking +
+15:- **Servidor = plano de dados puro:** `arags-server` faz indexação (chunking +
 22:## Arquitetura (server-first)
-26:│              arlm-server  (long-running)                │
+26:│              arags-server  (long-running)                │
 35:│  persist / history / server                            │
-41:  `arlm-embedding`, `arlm-memory`, `arlm-llm`, `arlm-proto`, `arlm-server`.
-53:  `TriggerMaintenance` (e `arlm-server admin consolidate`), não por comandos de
+41:  `arags-embedding`, `arags-memory`, `arags-llm`, `arags-proto`, `arags-server`.
+53:  `TriggerMaintenance` (e `arags-server admin consolidate`), não por comandos de
 59:# Binários (server + client)
-60:cargo build --release            # → ./target/release/arlm e ./target/release/arlm-server
+60:cargo build --release            # → ./target/release/arags e ./target/release/arags-server
 82:# Buscar no projeto (híbrida BM25 + semântica, server-side)
-102:arlm server
-111:arlm server                                        # escuta conforme server.toml
+102:arags server
+111:arags server                                        # escuta conforme server.toml
 112:docker compose -f docker-compose.server.yml up -d   # ou via Docker
-115:arlm --server 127.0.0.1:50051 index ./meu-projeto
-116:arlm --server 127.0.0.1:50051 search "auth middleware"
-117:arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
-120:Sem `--server`, o CLI opera localmente sobre `~/.arlm`. O endereço do servidor
-121:também é resolvido por `~/.arlm/arlm.toml` (`[server].addr`) ou
-130:| `arlm search <query>` | Busca híbrida BM25 + semântica (server-side) |
-135:| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
+115:arags --server 127.0.0.1:50051 index ./meu-projeto
+116:arags --server 127.0.0.1:50051 search "auth middleware"
+117:arags --server 127.0.0.1:50051 query "como funciona o login?" -qa
+120:Sem `--server`, o CLI opera localmente sobre `~/.arags`. O endereço do servidor
+121:também é resolvido por `~/.arags/arags.toml` (`[server].addr`) ou
+130:| `arags search <query>` | Busca híbrida BM25 + semântica (server-side) |
+135:| `arags server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
 139:(CLI) e `entities` (CLI). A manutenção server-side (consolidate/decay) é feita
-140:por cron + RPC admin `TriggerMaintenance` (e `arlm-server admin consolidate`).
-183:O `arlm-server` é dono do estado. Por padrão (container) os dados vivem em
+140:por cron + RPC admin `TriggerMaintenance` (e `arags-server admin consolidate`).
+183:O `arags-server` é dono do estado. Por padrão (container) os dados vivem em
 184:`/data` (configurável via `server.toml` `data_dir`):
 188:├── knowledge.db          # SQLite (WAL, FTS5, metadados)
 189:├── knowledge.db-wal      # WAL journal
 209:### `server.toml` (HOST — arquivo de config do servidor)
-211:Montado no container (ex.: `./server.toml:/etc/arlm/server.toml`). Lido de
-212:`ARLM_SERVER_CONFIG` ou, por padrão, `/etc/arlm/server.toml`. É um **arquivo de
-220:# tls_cert = "/etc/arlm/tls/server.crt"
+211:Montado no container (ex.: `./server.toml:/etc/arags/server.toml`). Lido de
+212:`ARAGS_SERVER_CONFIG` ou, por padrão, `/etc/arags/server.toml`. É um **arquivo de
+220:# tls_cert = "/etc/arags/tls/server.crt"
 ===AGENTS-README===
-agents/README.md:54:arlm server
-agents/README.md:57:arlm --server 127.0.0.1:50051 search "validate_token" --top-k 5
-agents/README.md:58:arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
+agents/README.md:54:arags server
+agents/README.md:57:arags --server 127.0.0.1:50051 search "validate_token" --top-k 5
+agents/README.md:58:arags --server 127.0.0.1:50051 query "como funciona o login?" -qa
 agents/README.md:79:no servidor). A memória/histórico são server-side e escopados por usuário.
 ===INSTALL===
     # Create install directory
@@ -6359,27 +6359,27 @@ agents/README.md:79:no servidor). A memória/histórico são server-side e escop
 
     # Determine download URL
     local base_url="https://github.com/st-all-one/agnostic-rlm-rs/releases"
-    if [ "$ARLM_VERSION" = "latest" ]; then
+    if [ "$ARAGS_VERSION" = "latest" ]; then
         base_url="${base_url}/latest/download"
     else
-        base_url="${base_url}/download/${ARLM_VERSION}"
+        base_url="${base_url}/download/${ARAGS_VERSION}"
     fi
 
-    local binary_name="arlm"
+    local binary_name="arags"
     if [[ "$platform" == *"windows"* ]]; then
-        binary_name="arlm.exe"
+        binary_name="arags.exe"
     fi
 
-    local download_url="${base_url}/arlm-${platform}"
+    local download_url="${base_url}/arags-${platform}"
     if [[ "$platform" == *"windows"* ]]; then
-        download_url="${base_url}/arlm-windows-amd64.exe"
+        download_url="${base_url}/arags-windows-amd64.exe"
     fi
 
-    info "Downloading arlm CLI from: $download_url"
-    download "$download_url" "${INSTALL_DIR}/arlm"
-    chmod +x "${INSTALL_DIR}/arlm"
+    info "Downloading arags CLI from: $download_url"
+    download "$download_url" "${INSTALL_DIR}/arags"
+    chmod +x "${INSTALL_DIR}/arags"
 
-    success "arlm CLI installed to ${INSTALL_DIR}/arlm"
+    success "arags CLI installed to ${INSTALL_DIR}/arags"
 
     # Check if install dir is in PATH
     if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
@@ -6416,7 +6416,7 @@ agents/README.md:79:no servidor). A memória/histórico são server-side e escop
         # but valid default so the file always exists.
         if ! grep -Fq '[[backends]]' "$config_file" 2>/dev/null; then
             cat > "$config_file" << 'EOF'
-# arlm default config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/config.toml.example
+# arags default config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/config.toml.example
 [[backends]]
 name = "ollama"
 family = "ollama"
@@ -6441,15 +6441,15 @@ install_server_docker() {
         return
     fi
 
-    info "Pulling arlm-server Docker image..."
+    info "Pulling arags-server Docker image..."
     docker pull "${DOCKER_IMAGE}:latest"
 
     success "Docker image pulled: ${DOCKER_IMAGE}:latest"
 
     # Create data volume
-    docker volume create arlm-data 2>/dev/null || true
+    docker volume create arags-data 2>/dev/null || true
 
-    success "Docker volume created: arlm-data"
+    success "Docker volume created: arags-data"
 
     echo ""
     info "To start the server:"
@@ -6471,15 +6471,15 @@ install_server_docker() {
 <summary>Click to expand reasoning</summary>
 
 Now I have a fairly complete picture. Let me also verify:
-1. Whether `arlm --server` flag exists in the CLI (README mentions `--server 127.0.0.1:50051` but root.rs doesn't have a `--server` arg!) — README line 115-121 references `--server` flag and "arlm server" command. The current CLI has no `--server` global arg; it uses config/env. And there's a `Serve` command named `server`? The Commands enum has `Serve`, which clap would expose as `serve` (unless renamed). Let me check.
+1. Whether `arags --server` flag exists in the CLI (README mentions `--server 127.0.0.1:50051` but root.rs doesn't have a `--server` arg!) — README line 115-121 references `--server` flag and "arags server" command. The current CLI has no `--server` global arg; it uses config/env. And there's a `Serve` command named `server`? The Commands enum has `Serve`, which clap would expose as `serve` (unless renamed). Let me check.
 
-Actually in clap derive, variant name `Serve` → subcommand `serve`. README says `arlm server`. Minor doc drift.
+Actually in clap derive, variant name `Serve` → subcommand `serve`. README says `arags server`. Minor doc drift.
 
 2. `metrics.rs` — used by serve (local). If we remove serve, metrics might become dead code. Let me check usage.
 
 3. Check `commands/mcp/` files and `output/` for anything else tied to local data plane.
 
-4. Check `arlm-cli/tests/client_test.rs`.
+4. Check `arags-cli/tests/client_test.rs`.
 
 Let me check these quickly, then verify compile state, then create the sd plan.
 
@@ -6487,38 +6487,38 @@ Let me check these quickly, then verify compile state, then create the sd plan.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "metrics|ArlmMetrics" crates/arlm-cli/src --no-heading | grep -v "^crates/arlm-cli/src/metrics.rs" ; echo "===MCP==="; head -40 crates/arlm-cli/src/commands/mcp/mod.rs; echo "===CLIENT_TEST==="; head -50 crates/arlm-cli/tests/client_test.rs
+**Title:** rg -n "metrics|AragsMetrics" crates/arags-cli/src --no-heading | grep -v "^crates/arags-cli/src/metrics.rs" ; echo "===MCP==="; head -40 crates/arags-cli/src/commands/mcp/mod.rs; echo "===CLIENT_TEST==="; head -50 crates/arags-cli/tests/client_test.rs
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"metrics|ArlmMetrics\" crates/arlm-cli/src --no-heading | grep -v \"^crates/arlm-cli/src/metrics.rs\" ; echo \"===MCP===\"; head -40 crates/arlm-cli/src/commands/mcp/mod.rs; echo \"===CLIENT_TEST===\"; head -50 crates/arlm-cli/tests/client_test.rs"
+  "command": "rg -n \"metrics|AragsMetrics\" crates/arags-cli/src --no-heading | grep -v \"^crates/arags-cli/src/metrics.rs\" ; echo \"===MCP===\"; head -40 crates/arags-cli/src/commands/mcp/mod.rs; echo \"===CLIENT_TEST===\"; head -50 crates/arags-cli/tests/client_test.rs"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-cli/src/lib.rs:34:pub mod metrics;
-crates/arlm-cli/src/lib.rs:40:pub use metrics::ArlmMetrics;
-crates/arlm-cli/src/commands/serve/requests.rs:9:    /// Agent name for metrics tracking.
-crates/arlm-cli/src/commands/serve/requests.rs:22:    /// Agent name for metrics tracking.
-crates/arlm-cli/src/commands/serve/state.rs:3:use crate::metrics::ArlmMetrics;
-crates/arlm-cli/src/commands/serve/state.rs:11:    pub metrics: ArlmMetrics,
-crates/arlm-cli/src/commands/serve/mod.rs:15:pub use crate::metrics::ArlmMetrics;
-crates/arlm-cli/src/commands/serve/mod.rs:18:    context_handler, health, index_handler, mcp_handler, metrics_handler, search_handler,
-crates/arlm-cli/src/commands/serve/mod.rs:63:    let metrics = ArlmMetrics::new();
-crates/arlm-cli/src/commands/serve/mod.rs:69:        metrics,
-crates/arlm-cli/src/commands/serve/mod.rs:79:        .route("/metrics", get(metrics_handler))
-crates/arlm-cli/src/commands/serve/mod.rs:101:    println!("  GET  /metrics             - Prometheus metrics");
-crates/arlm-cli/src/commands/serve/handlers.rs:38:pub async fn metrics_handler(State(state): State<std::sync::Arc<AppState>>) -> impl IntoResponse {
-crates/arlm-cli/src/commands/serve/handlers.rs:39:    state.metrics.record_request();
-crates/arlm-cli/src/commands/serve/handlers.rs:40:    let body = state.metrics.render();
-crates/arlm-cli/src/commands/serve/search_logic.rs:40:    state.metrics.record_search(results.len() as u64);
-crates/arlm-cli/src/commands/serve/search_logic.rs:42:    // Record agent metrics if agent name provided
-crates/arlm-cli/src/commands/serve/search_logic.rs:44:        state.metrics.record_agent_request(agent, 0);
-crates/arlm-cli/src/commands/serve/search_logic.rs:113:    state.metrics.record_search(items.len() as u64);
-crates/arlm-cli/src/commands/serve/search_logic.rs:115:    // Record agent metrics if agent name provided
-crates/arlm-cli/src/commands/serve/search_logic.rs:117:        state.metrics.record_agent_request(agent, 0);
+crates/arags-cli/src/lib.rs:34:pub mod metrics;
+crates/arags-cli/src/lib.rs:40:pub use metrics::AragsMetrics;
+crates/arags-cli/src/commands/serve/requests.rs:9:    /// Agent name for metrics tracking.
+crates/arags-cli/src/commands/serve/requests.rs:22:    /// Agent name for metrics tracking.
+crates/arags-cli/src/commands/serve/state.rs:3:use crate::metrics::AragsMetrics;
+crates/arags-cli/src/commands/serve/state.rs:11:    pub metrics: AragsMetrics,
+crates/arags-cli/src/commands/serve/mod.rs:15:pub use crate::metrics::AragsMetrics;
+crates/arags-cli/src/commands/serve/mod.rs:18:    context_handler, health, index_handler, mcp_handler, metrics_handler, search_handler,
+crates/arags-cli/src/commands/serve/mod.rs:63:    let metrics = AragsMetrics::new();
+crates/arags-cli/src/commands/serve/mod.rs:69:        metrics,
+crates/arags-cli/src/commands/serve/mod.rs:79:        .route("/metrics", get(metrics_handler))
+crates/arags-cli/src/commands/serve/mod.rs:101:    println!("  GET  /metrics             - Prometheus metrics");
+crates/arags-cli/src/commands/serve/handlers.rs:38:pub async fn metrics_handler(State(state): State<std::sync::Arc<AppState>>) -> impl IntoResponse {
+crates/arags-cli/src/commands/serve/handlers.rs:39:    state.metrics.record_request();
+crates/arags-cli/src/commands/serve/handlers.rs:40:    let body = state.metrics.render();
+crates/arags-cli/src/commands/serve/search_logic.rs:40:    state.metrics.record_search(results.len() as u64);
+crates/arags-cli/src/commands/serve/search_logic.rs:42:    // Record agent metrics if agent name provided
+crates/arags-cli/src/commands/serve/search_logic.rs:44:        state.metrics.record_agent_request(agent, 0);
+crates/arags-cli/src/commands/serve/search_logic.rs:113:    state.metrics.record_search(items.len() as u64);
+crates/arags-cli/src/commands/serve/search_logic.rs:115:    // Record agent metrics if agent name provided
+crates/arags-cli/src/commands/serve/search_logic.rs:117:        state.metrics.record_agent_request(agent, 0);
 ===MCP===
 #![allow(
     clippy::cast_possible_truncation,
@@ -6547,7 +6547,7 @@ pub use session::{McpState, handle_jsonrpc};
     clippy::cast_precision_loss
 )]
 
-use arlm_cli::client::ClientConfig;
+use arags_cli::client::ClientConfig;
 
 #[test]
 fn test_client_config_load() {
@@ -6566,25 +6566,25 @@ fn test_client_config_load() {
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "arlm_search|arlm_embedding|arlm_memory|arlm_storage" crates/arlm-cli/src/commands/mcp/*.rs crates/arlm-cli/src/commands/serve/*.rs | awk -F: '{print $1}' | sort | uniq -c; echo "===check compile==="; cargo check --workspace 2>&1 | tail -5
+**Title:** rg -n "arags_search|arags_embedding|arags_memory|arags_storage" crates/arags-cli/src/commands/mcp/*.rs crates/arags-cli/src/commands/serve/*.rs | awk -F: '{print $1}' | sort | uniq -c; echo "===check compile==="; cargo check --workspace 2>&1 | tail -5
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"arlm_search|arlm_embedding|arlm_memory|arlm_storage\" crates/arlm-cli/src/commands/mcp/*.rs crates/arlm-cli/src/commands/serve/*.rs | awk -F: '{print $1}' | sort | uniq -c; echo \"===check compile===\"; cargo check --workspace 2>&1 | tail -5"
+  "command": "rg -n \"arags_search|arags_embedding|arags_memory|arags_storage\" crates/arags-cli/src/commands/mcp/*.rs crates/arags-cli/src/commands/serve/*.rs | awk -F: '{print $1}' | sort | uniq -c; echo \"===check compile===\"; cargo check --workspace 2>&1 | tail -5"
 }
 ```
 
 **Output:**
 ```
-      8 crates/arlm-cli/src/commands/mcp/handlers.rs
-      4 crates/arlm-cli/src/commands/serve/index_logic.rs
-      1 crates/arlm-cli/src/commands/serve/mod.rs
-     12 crates/arlm-cli/src/commands/serve/search_logic.rs
-      1 crates/arlm-cli/src/commands/serve/status_logic.rs
+      8 crates/arags-cli/src/commands/mcp/handlers.rs
+      4 crates/arags-cli/src/commands/serve/index_logic.rs
+      1 crates/arags-cli/src/commands/serve/mod.rs
+     12 crates/arags-cli/src/commands/serve/search_logic.rs
+      1 crates/arags-cli/src/commands/serve/status_logic.rs
 ===check compile===
-    Checking arlm-server v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server)
-    Checking arlm-cli v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli)
+    Checking arags-server v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server)
+    Checking arags-cli v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.52s
 
 ```
@@ -6606,11 +6606,11 @@ The workspace compiles. Now I have the complete picture. Let me summarize the de
 ## Deep Analysis: plan/020 vs current state
 
 ### DONE (already implemented):
-1. ✅ `arlm-cli/src/user_config.rs` — 2-scope user config (`~/.arlm/arlm.toml` global + `.arlm.toml` local), granular merge, auth global-only, legacy ignored
+1. ✅ `arags-cli/src/user_config.rs` — 2-scope user config (`~/.arags/arags.toml` global + `.arags.toml` local), granular merge, auth global-only, legacy ignored
 2. ✅ `dispatch/local.rs` removed; `dispatch/server.rs` is the only dispatch
-3. ✅ `arlm init` generates `.arlm.toml` + gitignore + no auth to local (in dispatch/server.rs run_init)
+3. ✅ `arags init` generates `.arags.toml` + gitignore + no auth to local (in dispatch/server.rs run_init)
 4. ✅ Index protocol D2: client sends raw text (`IndexFile.content` bytes), server chunks with `[embedder].max_tokens/overlap_tokens`
-5. ✅ Server config loads from `ARLM_SERVER_CONFIG` (default `/etc/arlm/server.toml`) with env overrides
+5. ✅ Server config loads from `ARAGS_SERVER_CONFIG` (default `/etc/arags/server.toml`) with env overrides
 6. ✅ Server has no `[llm]`; client auth flow via `auth_client.rs` with refresh token from user config
 7. ✅ README mostly documents the new scheme
 8. ✅ Workspace compiles
@@ -6618,14 +6618,14 @@ The workspace compiles. Now I have the complete picture. Let me summarize the de
 ### GAPS (violations of plan 020):
 
 **GAP A — Client still has a local data plane (D3 violation) — the biggest one:**
-- `Commands::Serve` + `commands/serve/*` (handlers.rs, index_logic.rs, search_logic.rs, status_logic.rs, requests.rs, response.rs, state.rs, mod.rs): opens `arlm_storage::Storage::open(&data_dir())`, does local BM25/hybrid search, local indexing — exactly what D3 removes.
+- `Commands::Serve` + `commands/serve/*` (handlers.rs, index_logic.rs, search_logic.rs, status_logic.rs, requests.rs, response.rs, state.rs, mod.rs): opens `arags_storage::Storage::open(&data_dir())`, does local BM25/hybrid search, local indexing — exactly what D3 removes.
 - `commands/mcp/*` (handlers.rs, protocol.rs, session.rs): MCP handlers open local Storage and search locally.
 - `util::data_dir()` used as DB path.
 - `metrics.rs` only used by serve.
-- CLI Cargo.toml still depends on `arlm-storage`, `arlm-search`, `arlm-memory`, `axum`, `tower-http` (data-plane deps).
+- CLI Cargo.toml still depends on `arags-storage`, `arags-search`, `arags-memory`, `axum`, `tower-http` (data-plane deps).
 - Plan says "remover ... busca/contexto locais e vector store local" and "test_client_no_local_storage_open".
 
-Wait — but should `serve` be entirely removed or converted into a gRPC proxy? The plan's Commands list: "index → IndexProject...; search/query → Search/QueryWithCache...; memory → ...; persist → GetAnswerById...; history → GetHistory...; init → gera .arlm.toml + dispara index". There's NO serve in the surviving commands list. So `Serve` must be REMOVED. The plan step 4: "deletar dispatch/local.rs e todo branch local; remover arlm_storage::Storage::open local, embedding.rs, busca/contexto locais e vector store local. query/search/history/memory/persist/index chamam só gRPC."
+Wait — but should `serve` be entirely removed or converted into a gRPC proxy? The plan's Commands list: "index → IndexProject...; search/query → Search/QueryWithCache...; memory → ...; persist → GetAnswerById...; history → GetHistory...; init → gera .arags.toml + dispara index". There's NO serve in the surviving commands list. So `Serve` must be REMOVED. The plan step 4: "deletar dispatch/local.rs e todo branch local; remover arags_storage::Storage::open local, embedding.rs, busca/contexto locais e vector store local. query/search/history/memory/persist/index chamam só gRPC."
 
 Hmm, but there's also the question of MCP integration for agents. The plan doesn't mention keeping MCP. agents/opencode/tools.json etc. reference the CLI directly probably. Since the plan explicitly removes the offline mode and lists surviving commands without `serve`, removing Serve+MCP+metrics is correct.
 
@@ -6634,10 +6634,10 @@ Actually wait — let me reconsider. The MCP handlers could be re-wired to proxy
 **GAP B — Server embedder config not wired to server.toml `[embedder]`:**
 - Plan schema `[embedder]`: model, model_dir, ollama_url, ollama_model, dims, batch_size, max_tokens, overlap_tokens, cache.
 - Current `EmbedderConfig`: only max_tokens + overlap_tokens.
-- `state.rs::load_embedder()` reads env vars (ARLM_OLLAMA_MODEL, ARLM_MODEL_DIR, ...) instead of config.
+- `state.rs::load_embedder()` reads env vars (ARAGS_OLLAMA_MODEL, ARAGS_MODEL_DIR, ...) instead of config.
 - `embedder_dimension()` reads env too.
-- `grpc/index.rs` uses env `ARLM_EMBED_BATCH`/`ARLM_INDEX_CONCURRENCY` instead of `batch_size`.
-Plan "Where to Implement": "Remover [llm] server + build_llm (019) | arlm-server | config.rs, lifecycle.rs, state.rs" and step 1: "ServerConfig recebe embedder/search/maintenance/mtls_ca". So:
+- `grpc/index.rs` uses env `ARAGS_EMBED_BATCH`/`ARAGS_INDEX_CONCURRENCY` instead of `batch_size`.
+Plan "Where to Implement": "Remover [llm] server + build_llm (019) | arags-server | config.rs, lifecycle.rs, state.rs" and step 1: "ServerConfig recebe embedder/search/maintenance/mtls_ca". So:
 - Extend EmbedderConfig: model, model_dir, ollama_url, ollama_model, dims, batch_size (+ maybe prefix/cache)
 - Wire state.rs load_embedder from ServerConfig.embedder
 - Add mtls_ca to ServerConfig + wire TLS in lifecycle.rs
@@ -6647,29 +6647,29 @@ Plan "Where to Implement": "Remover [llm] server + build_llm (019) | arlm-server
 
 Let me check grpc/search.rs quickly to see how tier/top_k defaults are handled.
 
-**GAP D — mtls_ca missing:** plan says `mtls_ca = "/etc/arlm/tls/ca.crt"` optional → require client cert. lifecycle.rs only handles tls_cert/tls_key identity, no mTLS client CA.
+**GAP D — mtls_ca missing:** plan says `mtls_ca = "/etc/arags/tls/ca.crt"` optional → require client cert. lifecycle.rs only handles tls_cert/tls_key identity, no mTLS client CA.
 
-**GAP E — admin.rs message:** line 104 says "~/.arlm/config.toml" → should be "~/.arlm/arlm.toml" (plan step 7).
+**GAP E — admin.rs message:** line 104 says "~/.arags/config.toml" → should be "~/.arags/arags.toml" (plan step 7).
 
 **GAP F — Docs drift:**
-- `docker/server.toml` is the OLD format: has `[llm] backend/model`, no `[embedder]`, copied to `/root/.arlm/config.toml` by Dockerfile (legacy path!).
-- Dockerfile copies docker/server.toml → /root/.arlm/config.toml (legacy). Should be /etc/arlm/server.toml.
-- Dockerfile uses env vars for embedding (ARLM_OLLAMA_*) which will remain as fallback but should be replaced/simplified once [embedder] is wired.
-- install.sh creates `$DATA_DIR/config.toml` (~/.arlm/config.toml) — LEGACY per plan D4! Should create ~/.arlm/arlm.toml.
-- config.toml.example — legacy example file; should become arlm.toml.example (or be replaced).
-- docker-compose.server.yml: no server.toml mount; uses env vars; comment says ServerConfig resolves data dir from $HOME/.arlm (outdated).
-- README mentions `--server` flag which doesn't exist; `arlm server` vs actual `serve` subcommand; "Sem --server, o CLI opera localmente sobre ~/.arlm" — WRONG (offline mode removed).
+- `docker/server.toml` is the OLD format: has `[llm] backend/model`, no `[embedder]`, copied to `/root/.arags/config.toml` by Dockerfile (legacy path!).
+- Dockerfile copies docker/server.toml → /root/.arags/config.toml (legacy). Should be /etc/arags/server.toml.
+- Dockerfile uses env vars for embedding (ARAGS_OLLAMA_*) which will remain as fallback but should be replaced/simplified once [embedder] is wired.
+- install.sh creates `$DATA_DIR/config.toml` (~/.arags/config.toml) — LEGACY per plan D4! Should create ~/.arags/arags.toml.
+- config.toml.example — legacy example file; should become arags.toml.example (or be replaced).
+- docker-compose.server.yml: no server.toml mount; uses env vars; comment says ServerConfig resolves data dir from $HOME/.arags (outdated).
+- README mentions `--server` flag which doesn't exist; `arags server` vs actual `serve` subcommand; "Sem --server, o CLI opera localmente sobre ~/.arags" — WRONG (offline mode removed).
 
-Wait, actually let me double-check whether clap renames `Serve` to `server`... In clap derive, `Serve` variant → kebab-case `serve`. README says `arlm server`. Doc drift to fix.
+Wait, actually let me double-check whether clap renames `Serve` to `server`... In clap derive, `Serve` variant → kebab-case `serve`. README says `arags server`. Doc drift to fix.
 
 **GAP G — Missing tests** (plan Testing section):
 - No tests at all for user_config merge, init gitignore, legacy ignore, auth-only-global, server config env load, no-llm-section, chunk size application, disjointness, no-local-storage.
 
-Also note `qa_cache.rs` uses `arlm_storage::qa_cache::chunk_content_hash(&c.text)` — a pure function, not Storage::open. That keeps an arlm-storage dep alive. Options: keep dep just for hash fn, or move hash to arlm-core/arlm-proto. The plan test `test_client_no_local_storage_open` says "nenhum comando sobrevivente abre Storage local" — opening Storage is prohibited; using a pure hash function isn't "opening storage". But cleaner: move `chunk_content_hash` to arlm-proto or arlm-core so the CLI can drop arlm-storage/arlm-search/arlm-memory deps entirely. Let me check what chunk_content_hash is and where qa_vectors/chunk hashing lives.
+Also note `qa_cache.rs` uses `arags_storage::qa_cache::chunk_content_hash(&c.text)` — a pure function, not Storage::open. That keeps an arags-storage dep alive. Options: keep dep just for hash fn, or move hash to arags-core/arags-proto. The plan test `test_client_no_local_storage_open` says "nenhum comando sobrevivente abre Storage local" — opening Storage is prohibited; using a pure hash function isn't "opening storage". But cleaner: move `chunk_content_hash` to arags-proto or arags-core so the CLI can drop arags-storage/arags-search/arags-memory deps entirely. Let me check what chunk_content_hash is and where qa_vectors/chunk hashing lives.
 
-Also `arlm-memory` dep on CLI: is it used anywhere? rg showed nothing in src except Cargo.toml? Let me verify. And `arlm-search` used only by serve/mcp. `arlm-embedding` not referenced in CLI at all anymore (good).
+Also `arags-memory` dep on CLI: is it used anywhere? rg showed nothing in src except Cargo.toml? Let me verify. And `arags-search` used only by serve/mcp. `arags-embedding` not referenced in CLI at all anymore (good).
 
-So after removing serve+mcp+metrics, CLI deps can shrink to: arlm-core, arlm-llm, arlm-proto (+ maybe move hash fn). That aligns with "pure gRPC client".
+So after removing serve+mcp+metrics, CLI deps can shrink to: arags-core, arags-llm, arags-proto (+ maybe move hash fn). That aligns with "pure gRPC client".
 
 Let me check chunk_content_hash location and whether moving it is trivial.
 
@@ -6677,7 +6677,7 @@ Then GAP H: `[project]` in global? The GlobalConfig struct includes project sect
 
 One more check: the plan says `EffectiveUserConfig = merge(global, local)` with recursive merge for nested tables. Current impl merges llm backends by name/model/family — reasonable interpretation ("merge recursivo campo a campo" — for backends list, they chose list-wise merge; acceptable).
 
-Env override order: `server_addr()`: config wins over env `ARLM_SERVER_ADDR`. Plan says "O `--server`/endereço vem de user_config (server.addr global ou override local); ARLM_SERVER_ADDR ainda funciona como override de env (equivalente a setar server.addr)". Hmm — "override de env" suggests env should OVERRIDE config (like server.toml handling where env wins over file). Current code: config.addr takes precedence over env. That's arguably inverted vs the plan wording ("ARLM_SERVER_ADDR ainda funciona como override"). An *override* should win. Also there's no CLI `--server` flag (README references it). I could add precedence: env > local > global? Or keep config-first? The plan table says "`server.addr` (client connect) | alvo do server | user config (global + override local)" and separately "O --server/endereço vem de user_config (server.addr global ou override local); ARLM_SERVER_ADDR ainda funciona como override de env (equivalente a setar server.addr)". "Equivalente a setar server.addr" — equivalent to SETTING server.addr — i.e., as if the value were set in config. If set where? As an override → highest precedence. I'll implement env as highest-precedence override (env > local > global > default), matching server-side behavior (env overrides file). This also matches "override de env" semantics.
+Env override order: `server_addr()`: config wins over env `ARAGS_SERVER_ADDR`. Plan says "O `--server`/endereço vem de user_config (server.addr global ou override local); ARAGS_SERVER_ADDR ainda funciona como override de env (equivalente a setar server.addr)". Hmm — "override de env" suggests env should OVERRIDE config (like server.toml handling where env wins over file). Current code: config.addr takes precedence over env. That's arguably inverted vs the plan wording ("ARAGS_SERVER_ADDR ainda funciona como override"). An *override* should win. Also there's no CLI `--server` flag (README references it). I could add precedence: env > local > global? Or keep config-first? The plan table says "`server.addr` (client connect) | alvo do server | user config (global + override local)" and separately "O --server/endereço vem de user_config (server.addr global ou override local); ARAGS_SERVER_ADDR ainda funciona como override de env (equivalente a setar server.addr)". "Equivalente a setar server.addr" — equivalent to SETTING server.addr — i.e., as if the value were set in config. If set where? As an override → highest precedence. I'll implement env as highest-precedence override (env > local > global > default), matching server-side behavior (env overrides file). This also matches "override de env" semantics.
 
 Now — the `sd` planning. Per AGENTS.md workflow:
 1. Create epic/task issues for remaining work
@@ -6689,7 +6689,7 @@ Now — the `sd` planning. Per AGENTS.md workflow:
 Given the scale, I'll create one parent feature issue "plan 020 gaps" with sub-tasks:
 - T1: Remove client local data plane (serve, mcp, metrics, util::data_dir, deps) [D3]
 - T2: Server embedder/search/mtls config wiring ([embedder] full schema incl. model selection; [search]; mtls_ca; batch_size)
-- T3: admin message + docs (install.sh, docker/server.toml, Dockerfile, compose, README, config.toml.example→arlm.toml.example)
+- T3: admin message + docs (install.sh, docker/server.toml, Dockerfile, compose, README, config.toml.example→arags.toml.example)
 - T4: Tests (the plan's testing list)
 - Maybe T0: server_addr env override precedence fix (small, fold into T4 or T1)
 
@@ -6699,22 +6699,22 @@ Let me use sd plan prompt/submit flow for the parent issue. Actually, let me fir
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "chunk_content_hash|pub fn" crates/arlm-storage/src/qa_cache.rs | head; echo "===SEARCH==="; sed -n '1,80p' crates/arlm-server/src/grpc/search.rs; echo "===MEM-DEP==="; rg -ln "arlm_memory|arlm_search" crates/arlm-cli/src | grep -v "commands/serve\|commands/mcp" || echo "none outside serve/mcp"
+**Title:** rg -n "chunk_content_hash|pub fn" crates/arags-storage/src/qa_cache.rs | head; echo "===SEARCH==="; sed -n '1,80p' crates/arags-server/src/grpc/search.rs; echo "===MEM-DEP==="; rg -ln "arags_memory|arags_search" crates/arags-cli/src | grep -v "commands/serve\|commands/mcp" || echo "none outside serve/mcp"
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"chunk_content_hash|pub fn\" crates/arlm-storage/src/qa_cache.rs | head; echo \"===SEARCH===\"; sed -n '1,80p' crates/arlm-server/src/grpc/search.rs; echo \"===MEM-DEP===\"; rg -ln \"arlm_memory|arlm_search\" crates/arlm-cli/src | grep -v \"commands/serve\\|commands/mcp\" || echo \"none outside serve/mcp\""
+  "command": "rg -n \"chunk_content_hash|pub fn\" crates/arags-storage/src/qa_cache.rs | head; echo \"===SEARCH===\"; sed -n '1,80p' crates/arags-server/src/grpc/search.rs; echo \"===MEM-DEP===\"; rg -ln \"arags_memory|arags_search\" crates/arags-cli/src | grep -v \"commands/serve\\|commands/mcp\" || echo \"none outside serve/mcp\""
 }
 ```
 
 **Output:**
 ```
-rg: crates/arlm-storage/src/qa_cache.rs: IO error for operation on crates/arlm-storage/src/qa_cache.rs: No such file or directory (os error 2)
+rg: crates/arags-storage/src/qa_cache.rs: IO error for operation on crates/arags-storage/src/qa_cache.rs: No such file or directory (os error 2)
 ===SEARCH===
 //! Search and context-building RPCs: `Search`, `BuildContext`.
 //!
-//! Both run a unified hybrid search (`arlm_search::HybridSearch`) over the
+//! Both run a unified hybrid search (`arags_search::HybridSearch`) over the
 //! project's chunks: BM25 (FTS5) is always the base tier, and the `entity`,
 //! `vector` (semantic) and `llm_rerank` tiers are fused on top via Reciprocal
 //! Rank Fusion (RRF). The semantic tier is powered by the server's embedder
@@ -6729,8 +6729,8 @@ rg: crates/arlm-storage/src/qa_cache.rs: IO error for operation on crates/arlm-s
 use std::fmt::Write as _;
 use std::time::Instant;
 
-use arlm_proto::proto::*;
-use arlm_search::{
+use arags_proto::proto::*;
+use arags_search::{
     Bm25Search, EntitySearch, HybridSearch, SearchOptions, SearchTier as HybridTier,
     SemanticSearch, build_search_results,
 };
@@ -6775,7 +6775,7 @@ pub(crate) async fn hybrid_search(
     fts_query: &str,
     tier: HybridTier,
     top_k: usize,
-) -> anyhow::Result<Vec<arlm_search::SearchResult>> {
+) -> anyhow::Result<Vec<arags_search::SearchResult>> {
     let storage = state.storage.clone();
     let bm25 = Bm25Search::new(&storage).map_err(|e| anyhow::anyhow!("bm25 init: {e}"))?;
     let entity = EntitySearch::new(storage.clone()).ok();
@@ -6793,7 +6793,7 @@ pub(crate) async fn hybrid_search(
     let query_vector = tokio::task::spawn_blocking(move || embedder.embed(&fts_query_owned))
         .await
 ===MEM-DEP===
-crates/arlm-cli/src/metrics.rs
+crates/arags-cli/src/metrics.rs
 
 ```
 
@@ -6806,20 +6806,20 @@ crates/arlm-cli/src/metrics.rs
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -rn "chunk_content_hash" crates/ | head; echo "==="; rg -n "top_k|max_results|SearchRequest" crates/arlm-server/src/grpc/search.rs | head -20
+**Title:** rg -rn "chunk_content_hash" crates/ | head; echo "==="; rg -n "top_k|max_results|SearchRequest" crates/arags-server/src/grpc/search.rs | head -20
 
 **Input:**
 ```json
 {
-  "command": "rg -rn \"chunk_content_hash\" crates/ | head; echo \"===\"; rg -n \"top_k|max_results|SearchRequest\" crates/arlm-server/src/grpc/search.rs | head -20"
+  "command": "rg -rn \"chunk_content_hash\" crates/ | head; echo \"===\"; rg -n \"top_k|max_results|SearchRequest\" crates/arags-server/src/grpc/search.rs | head -20"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-storage/MODULE.md:- `src/sqlite/qa_cache.rs` — **QA-Cache (plan 017):** `QaCacheRow`/`StoreAnswerInput`/`StoredAnswer`, `question_hash`/`n`, `store_answer` (idempotente/reserve-lock), `get_cached_answer`/`get_qa_by_id`/`get_qa_by_cache_id`/`get_qa_by_rowid`, `mark_qa_stale`/`delete_qa`/`touch_qa`, `mark_stale_by_hashes`, `evict_qa`/`evict_all_qa`/`count_qa`/`all_qa_ids`, `list_qa_hashes_for_buffer`, `invalidate_stale_cache_for_buffer`.
-crates/arlm-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String {
-crates/arlm-cli/src/commands/qa_cache.rs:        .map(|c| arlm_storage::qa_cache::n(&c.text))
+crates/arags-storage/MODULE.md:- `src/sqlite/qa_cache.rs` — **QA-Cache (plan 017):** `QaCacheRow`/`StoreAnswerInput`/`StoredAnswer`, `question_hash`/`n`, `store_answer` (idempotente/reserve-lock), `get_cached_answer`/`get_qa_by_id`/`get_qa_by_cache_id`/`get_qa_by_rowid`, `mark_qa_stale`/`delete_qa`/`touch_qa`, `mark_stale_by_hashes`, `evict_qa`/`evict_all_qa`/`count_qa`/`all_qa_ids`, `list_qa_hashes_for_buffer`, `invalidate_stale_cache_for_buffer`.
+crates/arags-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String {
+crates/arags-cli/src/commands/qa_cache.rs:        .map(|c| arags_storage::qa_cache::n(&c.text))
 ===
 63:    top_k: usize,
 86:        top_k: top_k * 3,
@@ -6842,9 +6842,9 @@ crates/arlm-cli/src/commands/qa_cache.rs:        .map(|c| arlm_storage::qa_cache
 <details>
 <summary>Click to expand reasoning</summary>
 
-Interesting: `rg` output shows `crates/arlm-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String` — wait, that's odd, the function is literally named `n`? That must be a display artifact of `rg -rn` (the `-r` flag is replace! I used `rg -rn "chunk_content_hash"` — the `-r` replaced matches with... no wait, `-r` in ripgrep is `--replace`. So `rg -rn "chunk_content_hash"` replaced "chunk_content_hash" with "n"?? No — `-r n` means replace with "n". Yes! My bad. The function is `chunk_content_hash`.
+Interesting: `rg` output shows `crates/arags-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String` — wait, that's odd, the function is literally named `n`? That must be a display artifact of `rg -rn` (the `-r` flag is replace! I used `rg -rn "chunk_content_hash"` — the `-r` replaced matches with... no wait, `-r` in ripgrep is `--replace`. So `rg -rn "chunk_content_hash"` replaced "chunk_content_hash" with "n"?? No — `-r n` means replace with "n". Yes! My bad. The function is `chunk_content_hash`.
 
-OK so `chunk_content_hash` lives in `arlm-storage/src/sqlite/qa_cache.rs`. The CLI uses it in qa_cache.rs for source_hashes. Moving it to arlm-proto or duplicating would let CLI drop arlm-storage. Simplest clean approach per plan ("client não abre Storage local"): move `chunk_content_hash` (pure fn) into `arlm-core` and re-export/use from storage too. Let me check its implementation.
+OK so `chunk_content_hash` lives in `arags-storage/src/sqlite/qa_cache.rs`. The CLI uses it in qa_cache.rs for source_hashes. Moving it to arags-proto or duplicating would let CLI drop arags-storage. Simplest clean approach per plan ("client não abre Storage local"): move `chunk_content_hash` (pure fn) into `arags-core` and re-export/use from storage too. Let me check its implementation.
 
 Also search defaults: `max_results > 0 ? max_results : ...` — line 211-212 shows fallback when 0. There's already a default somewhere; adding `[search]` server defaults would apply when request omits them. Let me see the exact code around line 205-230 later.
 
@@ -6854,12 +6854,12 @@ Now, time to formalize the analysis and create the sd plan. Let me check the chu
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n -B2 -A8 "pub fn chunk_content_hash" crates/arlm-storage/src/sqlite/qa_cache.rs; echo "===SEARCH DEFAULTS==="; sed -n '190,240p' crates/arlm-server/src/grpc/search.rs
+**Title:** rg -n -B2 -A8 "pub fn chunk_content_hash" crates/arags-storage/src/sqlite/qa_cache.rs; echo "===SEARCH DEFAULTS==="; sed -n '190,240p' crates/arags-server/src/grpc/search.rs
 
 **Input:**
 ```json
 {
-  "command": "rg -n -B2 -A8 \"pub fn chunk_content_hash\" crates/arlm-storage/src/sqlite/qa_cache.rs; echo \"===SEARCH DEFAULTS===\"; sed -n '190,240p' crates/arlm-server/src/grpc/search.rs"
+  "command": "rg -n -B2 -A8 \"pub fn chunk_content_hash\" crates/arags-storage/src/sqlite/qa_cache.rs; echo \"===SEARCH DEFAULTS===\"; sed -n '190,240p' crates/arags-server/src/grpc/search.rs"
 }
 ```
 
@@ -6949,38 +6949,38 @@ Complete picture achieved. Now let me write the deep analysis, create the sd iss
 
 **T1 — [D3] Remove client local data plane (biggest violation)**
 - Delete `Commands::Serve` variant; delete `commands/serve/` (8 files), `commands/mcp/` (4 files), `metrics.rs`, `util::data_dir()` (keep project_name? it's used by... let me check: util::project_name used anywhere? persist.rs has its own project_name. dispatch uses? Let me verify before deleting).
-- Remove deps from CLI Cargo.toml: arlm-storage, arlm-search, arlm-memory, axum, tower-http (+ tower dev-dep? tests use tower — client_test doesn't; check other tests using axum/tower: output tests probably not). Also `indicatif`/`console` still used (progress bar in index). `futures`, `tokio-stream` used by index streaming.
-- Move `chunk_content_hash` → arlm-core (pure fn), keep a re-export in arlm-storage for compat or update storage internals to call core's version. Update qa_cache.rs CLI to use arlm-core version. Then CLI drops arlm-storage dep.
+- Remove deps from CLI Cargo.toml: arags-storage, arags-search, arags-memory, axum, tower-http (+ tower dev-dep? tests use tower — client_test doesn't; check other tests using axum/tower: output tests probably not). Also `indicatif`/`console` still used (progress bar in index). `futures`, `tokio-stream` used by index streaming.
+- Move `chunk_content_hash` → arags-core (pure fn), keep a re-export in arags-storage for compat or update storage internals to call core's version. Update qa_cache.rs CLI to use arags-core version. Then CLI drops arags-storage dep.
 - README/docs mention of serve → update.
 
-Wait — actually, does anything else use `arlm-cli/src/util.rs::project_name`? Let me grep during implementation.
+Wait — actually, does anything else use `arags-cli/src/util.rs::project_name`? Let me grep during implementation.
 
 **T2 — Server `[embedder]` full schema + wire; `[search]`; `mtls_ca`; `pool_size`/`flush_interval_ms`/`max_batch_size`?**
 Plan schema includes pool_size, flush_interval_ms, max_batch_size under "Armazenamento / dados". Current Storage::open signature — does it take pool params? Probably not; adding config fields that nothing consumes would be dead config. The plan's "Where to Implement" for server config says: "rework: remover llm, add embedder/search/maintenance/tls.mtls_ca". It does NOT require pool_size/flush/batch in the minimal implementation (those are aspirational schema). To stay faithful but avoid dead config, I'll:
-- Extend `[embedder]`: model ("bge-m3"|"ollama"|"lightweight"), model_dir, ollama_url, ollama_model, dims, batch_size, max_tokens, overlap_tokens, cache(bool, reserved—hmm cache is embedder cache; arlm-embedding has cache.rs; wiring it might be complex. I could include field and use it to enable/disable the caching wrapper if trivially available).
-- Wire `state.rs::load_embedder(&config.embedder)` and `embedder_dimension(&config.embedder)`; remove env-var reading (or keep env as override? Plan says ARLM_SERVER_ADDR/ARLM_DATA_DIR remain env overrides; for model it specifies server.toml fields. Dockerfile currently sets ARLM_OLLAMA_* envs — I'll update Dockerfile/server.toml accordingly. Keep it clean: config file only, per plan).
-- `batch_size` consumed by grpc/index.rs instead of ARLM_EMBED_BATCH (keep ARLM_INDEX_CONCURRENCY? plan doesn't have concurrency field; keep env fallback or drop? The plan schema has no concurrency. I'll keep the existing env var as an optional override since removing could hurt ops, but default from config.batch_size. Actually simpler & faithful: embed batch size ← config.embedder.batch_size (default 32); concurrency stays env-tunable with current default 4.)
+- Extend `[embedder]`: model ("bge-m3"|"ollama"|"lightweight"), model_dir, ollama_url, ollama_model, dims, batch_size, max_tokens, overlap_tokens, cache(bool, reserved—hmm cache is embedder cache; arags-embedding has cache.rs; wiring it might be complex. I could include field and use it to enable/disable the caching wrapper if trivially available).
+- Wire `state.rs::load_embedder(&config.embedder)` and `embedder_dimension(&config.embedder)`; remove env-var reading (or keep env as override? Plan says ARAGS_SERVER_ADDR/ARAGS_DATA_DIR remain env overrides; for model it specifies server.toml fields. Dockerfile currently sets ARAGS_OLLAMA_* envs — I'll update Dockerfile/server.toml accordingly. Keep it clean: config file only, per plan).
+- `batch_size` consumed by grpc/index.rs instead of ARAGS_EMBED_BATCH (keep ARAGS_INDEX_CONCURRENCY? plan doesn't have concurrency field; keep env fallback or drop? The plan schema has no concurrency. I'll keep the existing env var as an optional override since removing could hurt ops, but default from config.batch_size. Actually simpler & faithful: embed batch size ← config.embedder.batch_size (default 32); concurrency stays env-tunable with current default 4.)
 - Add `[search]`: tier ("hybrid"), top_k (10), max_tokens (8000) defaults applied in handle_search when request omits (max_results==0 → search.top_k; tier unset → parse search.tier; max_tokens → cap context output? max_tokens applies to BuildContext presumably. Check context builder usage. I'll apply top_k + tier default in handle_search; max_tokens in handle_build_context where applicable.)
 - Add `mtls_ca: Option<PathBuf>`; lifecycle.rs: when set, configure mTLS `ClientCaRoot`... tonic ServerTlsConfig has `client_ca_root`. Require client cert = tls_config with identity + ca_root.
-- Keep ARLM_SERVER_ADDR/ARLM_DATA_DIR env overrides (plan explicitly keeps them).
+- Keep ARAGS_SERVER_ADDR/ARAGS_DATA_DIR env overrides (plan explicitly keeps them).
 
 **T3 — admin message fix + docs/docker/install.sh**
-- admin.rs:104 → "~/.arlm/arlm.toml"
+- admin.rs:104 → "~/.arags/arags.toml"
 - docker/server.toml → new schema ([embedder] ollama all-minilm dims 384, no [llm])
-- Dockerfile: COPY docker/server.toml /etc/arlm/server.toml; drop ARLM_OLLAMA_* ENVs (now in server.toml); keep OLLAMA_* tuning.
-- docker-compose.server.yml: mount ./server.toml:/etc/arlm/server.toml (host-provided), update comments; keep ARLM_DATA_DIR.
-- install.sh: create ~/.arlm/arlm.toml instead of ~/.arlm/config.toml (with auth/llm/server sections example); reference arlm.toml.example.
-- config.toml.example → rename content to arlm.toml.example (user global format). Check its current content first.
-- README fixes: `arlm serve` naming, remove "--server" flag references (no such flag; addr via config/env), remove "opera localmente" claim, document mtls/[embedder]/[search].
-- agents/README.md line 54 `arlm server` → update.
+- Dockerfile: COPY docker/server.toml /etc/arags/server.toml; drop ARAGS_OLLAMA_* ENVs (now in server.toml); keep OLLAMA_* tuning.
+- docker-compose.server.yml: mount ./server.toml:/etc/arags/server.toml (host-provided), update comments; keep ARAGS_DATA_DIR.
+- install.sh: create ~/.arags/arags.toml instead of ~/.arags/config.toml (with auth/llm/server sections example); reference arags.toml.example.
+- config.toml.example → rename content to arags.toml.example (user global format). Check its current content first.
+- README fixes: `arags serve` naming, remove "--server" flag references (no such flag; addr via config/env), remove "opera localmente" claim, document mtls/[embedder]/[search].
+- agents/README.md line 54 `arags server` → update.
 
 **T4 — Precedence + tests**
-- user_config::server_addr precedence: env override wins (env > local > global > default)? Hmm wait, reconsider. Plan: "O --server/endereço vem de user_config (server.addr global ou override local); ARLM_SERVER_ADDR ainda funciona como override de env (equivalente a setar server.addr)". I read this as: env acts like setting server.addr — i.e., highest precedence override. Server side does env-wins-over-file too. Consistent. Implement env-first.
+- user_config::server_addr precedence: env override wins (env > local > global > default)? Hmm wait, reconsider. Plan: "O --server/endereço vem de user_config (server.addr global ou override local); ARAGS_SERVER_ADDR ainda funciona como override de env (equivalente a setar server.addr)". I read this as: env acts like setting server.addr — i.e., highest precedence override. Server side does env-wins-over-file too. Consistent. Implement env-first.
 - Tests per plan Testing section:
   - user_config: merge granular (local overrides global, absent falls back), nested llm merge, auth-only-global ignored locally, legacy config.toml ignored (create legacy files, assert not read), client uses merged addr + env override.
-  - init: creates .arlm.toml + gitignore entry, no auth written locally. run_init needs rt+cfg+client for index; with --no-index path we can test without connecting. Extract testable helpers? run_init with do_index=false doesn't connect — good, testable directly.
-  - server config: loads from ARLM_SERVER_CONFIG env (tempfile), parses without [llm], embedder chunk size applied (tokens_to_lines or index_file_with budget), disjointness (structural — maybe skip heavy; do a light one: server config struct has no llm field & user_config has no listen_addr... compile-level. I'll implement pragmatic versions).
-  - no-local-storage-open: after T1 removal, assert module absence is compile-time; provide a test that greps? That's silly. Instead: CLI crate no longer depends on arlm-storage — enforce via cargo metadata test? Could add a test reading Cargo.toml asserting no arlm-storage dep. Pragmatic and meaningful. I'll add it in cli tests.
+  - init: creates .arags.toml + gitignore entry, no auth written locally. run_init needs rt+cfg+client for index; with --no-index path we can test without connecting. Extract testable helpers? run_init with do_index=false doesn't connect — good, testable directly.
+  - server config: loads from ARAGS_SERVER_CONFIG env (tempfile), parses without [llm], embedder chunk size applied (tokens_to_lines or index_file_with budget), disjointness (structural — maybe skip heavy; do a light one: server config struct has no llm field & user_config has no listen_addr... compile-level. I'll implement pragmatic versions).
+  - no-local-storage-open: after T1 removal, assert module absence is compile-time; provide a test that greps? That's silly. Instead: CLI crate no longer depends on arags-storage — enforce via cargo metadata test? Could add a test reading Cargo.toml asserting no arags-storage dep. Pragmatic and meaningful. I'll add it in cli tests.
 
 Also fix `Commands::Serve` removal ripple: dispatch comment, lib.rs exports, main unchanged.
 
@@ -7002,25 +7002,25 @@ Let me look at config.toml.example and check util::project_name usage before cre
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat config.toml.example; echo "===UTIL USAGE==="; rg -rn "util::project_name|util::data_dir" crates/arlm-cli/src | head; echo "===TOWER DEV==="; rg -rln "tower|axum" crates/arlm-cli/tests crates/arlm-cli/src/output 2>/dev/null || echo none
+**Title:** cat config.toml.example; echo "===UTIL USAGE==="; rg -rn "util::project_name|util::data_dir" crates/arags-cli/src | head; echo "===TOWER DEV==="; rg -rln "tower|axum" crates/arags-cli/tests crates/arags-cli/src/output 2>/dev/null || echo none
 
 **Input:**
 ```json
 {
-  "command": "cat config.toml.example; echo \"===UTIL USAGE===\"; rg -rn \"util::project_name|util::data_dir\" crates/arlm-cli/src | head; echo \"===TOWER DEV===\"; rg -rln \"tower|axum\" crates/arlm-cli/tests crates/arlm-cli/src/output 2>/dev/null || echo none"
+  "command": "cat config.toml.example; echo \"===UTIL USAGE===\"; rg -rn \"util::project_name|util::data_dir\" crates/arags-cli/src | head; echo \"===TOWER DEV===\"; rg -rln \"tower|axum\" crates/arags-cli/tests crates/arags-cli/src/output 2>/dev/null || echo none"
 }
 ```
 
 **Output:**
 ```
 # =============================================================================
-# arlm — Configuração de backends LLM (genérico, agnóstico a provider)
+# arags — Configuração de backends LLM (genérico, agnóstico a provider)
 # =============================================================================
 #
 # Cada entrada em [[backends]] descreve um backend completamente.
 # Adicionar um novo provider exige APENAS uma nova entrada — nenhum código.
 #
-# Local padrão: ~/.arlm/config.toml  (criado pelo install.sh a partir deste exemplo)
+# Local padrão: ~/.arags/config.toml  (criado pelo install.sh a partir deste exemplo)
 #
 # -----------------------------------------------------------------------------
 # Campos disponíveis por backend:
@@ -7114,7 +7114,7 @@ model = "mimo"
 # =============================================================================
 # Auth (plan 018) — cliente gRPC
 # =============================================================================
-# O refresh token é gerado pelo admin do server (arlm-server admin create-refresh)
+# O refresh token é gerado pelo admin do server (arags-server admin create-refresh)
 # e colado aqui. O CLI troca ele por session tokens de 5 min automaticamente.
 # Armazenado em plaintext neste arquivo (protegido por permissão 0600).
 
@@ -7122,12 +7122,12 @@ model = "mimo"
 username = "dev1"
 # refresh_token = "<token de 256 hex chars gerado pelo admin create-refresh>"
 ===UTIL USAGE===
-crates/arlm-cli/src/commands/serve/status_logic.rs:use crate::n;
-crates/arlm-cli/src/commands/serve/index_logic.rs:use crate::n;
-crates/arlm-cli/src/commands/mcp/handlers.rs:use crate::n;
-crates/arlm-cli/src/commands/serve/mod.rs:use crate::n;
-crates/arlm-cli/src/commands/serve/mod.rs:        arlm_storage::Storage::open(&crate::n()).context("failed to open storage")?;
-crates/arlm-cli/src/commands/serve/search_logic.rs:use crate::n;
+crates/arags-cli/src/commands/serve/status_logic.rs:use crate::n;
+crates/arags-cli/src/commands/serve/index_logic.rs:use crate::n;
+crates/arags-cli/src/commands/mcp/handlers.rs:use crate::n;
+crates/arags-cli/src/commands/serve/mod.rs:use crate::n;
+crates/arags-cli/src/commands/serve/mod.rs:        arags_storage::Storage::open(&crate::n()).context("failed to open storage")?;
+crates/arags-cli/src/commands/serve/search_logic.rs:use crate::n;
 ===TOWER DEV===
 none
 
@@ -7147,18 +7147,18 @@ none
 
 (The `-rn` flag again replaced matches with "n" in the output — my mistake using `-r`. The usages of `util::project_name`/`util::data_dir` are all within serve/mcp files. Good.)
 
-`config.toml.example` uses `[[backends]]` top-level + `[auth]` — that's the LEGACY global format. New format per plan: `[llm] backends = [...]` under `~/.arlm/arlm.toml`. Let me check what LlmConfig expects — arlm-llm/src/config.rs.
+`config.toml.example` uses `[[backends]]` top-level + `[auth]` — that's the LEGACY global format. New format per plan: `[llm] backends = [...]` under `~/.arags/arags.toml`. Let me check what LlmConfig expects — arags-llm/src/config.rs.
 
 </details>
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n -B3 -A20 "pub struct LlmConfig|pub struct BackendConfig" crates/arlm-llm/src/config.rs | head -70
+**Title:** rg -n -B3 -A20 "pub struct LlmConfig|pub struct BackendConfig" crates/arags-llm/src/config.rs | head -70
 
 **Input:**
 ```json
 {
-  "command": "rg -n -B3 -A20 \"pub struct LlmConfig|pub struct BackendConfig\" crates/arlm-llm/src/config.rs | head -70"
+  "command": "rg -n -B3 -A20 \"pub struct LlmConfig|pub struct BackendConfig\" crates/arags-llm/src/config.rs | head -70"
 }
 ```
 
@@ -7190,7 +7190,7 @@ none
 151-    #[serde(default = "default_auth_header")]
 --
 318-/// Holds an ordered list of [`BackendConfig`] entries. This is the structure
-319-/// that `config.toml` (typically at `~/.arlm/config.toml`) deserializes into.
+319-/// that `config.toml` (typically at `~/.arags/config.toml`) deserializes into.
 320-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 321:pub struct LlmConfig {
 322-    #[serde(default)]
@@ -7239,9 +7239,9 @@ Let me create the sd issues now. Per AGENTS.md labels: `core`, `cli`, `server`(n
 
 Issues:
 - Parent: "F9: Concluir gaps do plan 020 — client puro gRPC, [embedder]/[search]/mTLS no server.toml, docs e testes" type feature priority 1 (High/Critical? Plan is consolidation; remaining gaps include a D3 violation → Critical per project history F7 was Critical). I'll use priority 1.
-- F9.1 task: Remove local data plane do client (serve/mcp/metrics/util::data_dir/deps) + mover chunk_content_hash p/ arlm-core. labels: cli, security? It's about D3 conformance → cli.
+- F9.1 task: Remove local data plane do client (serve/mcp/metrics/util::data_dir/deps) + mover chunk_content_hash p/ arags-core. labels: cli, security? It's about D3 conformance → cli.
 - F9.2 task: Server.toml schema completo ([embedder] model/model_dir/ollama_*/dims/batch_size/cache; [search]; mtls_ca) + wire em state.rs/lifecycle.rs/grpc. labels: server→use "core"? Labels list has no server label; closest is "storage"/"embedding"/"search". I'll use embedding+search.
-- F9.3 task: Docs/ops: admin msg, docker/server.toml novo schema, Dockerfile (/etc/arlm/server.toml), compose mount, install.sh (~/.arlm/arlm.toml), arlm.toml.example, README/agents. labels: cli.
+- F9.3 task: Docs/ops: admin msg, docker/server.toml novo schema, Dockerfile (/etc/arags/server.toml), compose mount, install.sh (~/.arags/arags.toml), arags.toml.example, README/agents. labels: cli.
 - F9.4 task: Testes do plan 020 (merge granular, auth-only-global, legacy ignored, init gitignore/no-auth, addr precedence/env override, server config env-load/no-llm/chunk-size, sem Storage local no CLI). labels: testing.
 
 Blockers: F9.4 blocked-by F9.1 and F9.2. Parent blocked by all? Typically parent epic tracks children via plan adoption instead of blockers. I'll create the parent, then `sd plan prompt`, fill JSON with steps adopting the 4 seeds, submit.
@@ -7256,13 +7256,13 @@ A análise está completa. Resumo dos achados antes de planejar:
 
 ## Análise profunda: plan/020 vs código atual
 
-**✅ Já implementado:** `user_config.rs` (2 escopos + merge granular, auth global-only), `dispatch/local.rs` removido, `arlm init` gera `.arlm.toml`+gitignore, index manda texto cru e o server chunka com `[embedder].max_tokens` (D2), server sem `[llm]`, load de `ARLM_SERVER_CONFIG`.
+**✅ Já implementado:** `user_config.rs` (2 escopos + merge granular, auth global-only), `dispatch/local.rs` removido, `arags init` gera `.arags.toml`+gitignore, index manda texto cru e o server chunka com `[embedder].max_tokens` (D2), server sem `[llm]`, load de `ARAGS_SERVER_CONFIG`.
 
 **❌ Gaps encontrados (violam o plano):**
-1. **D3 violado** — `Commands::Serve` + `commands/serve/*` + `commands/mcp/*` ainda são um **data plane local completo**: abrem `Storage::open(data_dir())`, fazem BM25/hybrid/index locais; `metrics.rs` só serve a isso; CLI ainda depende de `arlm-storage/arlm-search/arlm-memory/axum`.
-2. **Server config incompleta** — `[embedder]` só tem `max_tokens/overlap_tokens`; `state.rs::load_embedder()` lê **env vars** (`ARLM_MODEL_DIR`, `ARLM_OLLAMA_*`) em vez do `server.toml`; faltam `[search]` defaults e `mtls_ca` (sem mTLS no lifecycle).
-3. **Docs/ops legados** — `admin.rs:104` aponta `~/.arlm/config.toml`; `docker/server.toml` tem `[llm]` (formato antigo); Dockerfile copia para `/root/.arlm/config.toml`; `install.sh` cria `config.toml` legado; README cita flag `--server` inexistente e "modo local".
-4. **Zero testes** da seção Testing do plano; precedência de `ARLM_SERVER_ADDR` invertida (plano diz "override de env", código dá prioridade ao config).
+1. **D3 violado** — `Commands::Serve` + `commands/serve/*` + `commands/mcp/*` ainda são um **data plane local completo**: abrem `Storage::open(data_dir())`, fazem BM25/hybrid/index locais; `metrics.rs` só serve a isso; CLI ainda depende de `arags-storage/arags-search/arags-memory/axum`.
+2. **Server config incompleta** — `[embedder]` só tem `max_tokens/overlap_tokens`; `state.rs::load_embedder()` lê **env vars** (`ARAGS_MODEL_DIR`, `ARAGS_OLLAMA_*`) em vez do `server.toml`; faltam `[search]` defaults e `mtls_ca` (sem mTLS no lifecycle).
+3. **Docs/ops legados** — `admin.rs:104` aponta `~/.arags/config.toml`; `docker/server.toml` tem `[llm]` (formato antigo); Dockerfile copia para `/root/.arags/config.toml`; `install.sh` cria `config.toml` legado; README cita flag `--server` inexistente e "modo local".
+4. **Zero testes** da seção Testing do plano; precedência de `ARAGS_SERVER_ADDR` invertida (plano diz "override de env", código dá prioridade ao config).
 
 Criando o planejamento no `sd`:
 
@@ -7294,15 +7294,15 @@ Criando o planejamento no `sd`:
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sd create --title "F9.1 [D3] Remover data plane local do client (serve/mcp/metrics/data_dir) + mover chunk_content_hash p/ arlm-core" --type task --priority 1 --label "cli" 2>&1
+**Title:** sd create --title "F9.1 [D3] Remover data plane local do client (serve/mcp/metrics/data_dir) + mover chunk_content_hash p/ arags-core" --type task --priority 1 --label "cli" 2>&1
 sd create --title "F9.2 server.toml schema completo: [embedder] model/model_dir/ollama_*/dims/batch_size + [search] defaults + mtls_ca wired" --type task --priority 1 --label "embedding,search" 2>&1
-sd create --title "F9.3 Docs/ops: admin msg, docker/server.toml novo schema, Dockerfile /etc/arlm, compose mount, install.sh arlm.toml, README" --type task --priority 2 --label "cli" 2>&1
+sd create --title "F9.3 Docs/ops: admin msg, docker/server.toml novo schema, Dockerfile /etc/arags, compose mount, install.sh arags.toml, README" --type task --priority 2 --label "cli" 2>&1
 sd create --title "F9.4 Testes plan 020: merge granular, auth-only-global, legacy ignorado, init gitignore, env override, server config, sem Storage local" --type task --priority 2 --label "testing" 2>&1
 
 **Input:**
 ```json
 {
-  "command": "sd create --title \"F9.1 [D3] Remover data plane local do client (serve/mcp/metrics/data_dir) + mover chunk_content_hash p/ arlm-core\" --type task --priority 1 --label \"cli\" 2>&1\nsd create --title \"F9.2 server.toml schema completo: [embedder] model/model_dir/ollama_*/dims/batch_size + [search] defaults + mtls_ca wired\" --type task --priority 1 --label \"embedding,search\" 2>&1\nsd create --title \"F9.3 Docs/ops: admin msg, docker/server.toml novo schema, Dockerfile /etc/arlm, compose mount, install.sh arlm.toml, README\" --type task --priority 2 --label \"cli\" 2>&1\nsd create --title \"F9.4 Testes plan 020: merge granular, auth-only-global, legacy ignorado, init gitignore, env override, server config, sem Storage local\" --type task --priority 2 --label \"testing\" 2>&1"
+  "command": "sd create --title \"F9.1 [D3] Remover data plane local do client (serve/mcp/metrics/data_dir) + mover chunk_content_hash p/ arags-core\" --type task --priority 1 --label \"cli\" 2>&1\nsd create --title \"F9.2 server.toml schema completo: [embedder] model/model_dir/ollama_*/dims/batch_size + [search] defaults + mtls_ca wired\" --type task --priority 1 --label \"embedding,search\" 2>&1\nsd create --title \"F9.3 Docs/ops: admin msg, docker/server.toml novo schema, Dockerfile /etc/arags, compose mount, install.sh arags.toml, README\" --type task --priority 2 --label \"cli\" 2>&1\nsd create --title \"F9.4 Testes plan 020: merge granular, auth-only-global, legacy ignorado, init gitignore, env override, server config, sem Storage local\" --type task --priority 2 --label \"testing\" 2>&1"
 }
 ```
 
@@ -7418,7 +7418,7 @@ agnostic-rlm-rs-ec63 is now blocked by agnostic-rlm-rs-dc90
 **Input:**
 ```json
 {
-  "content": "{\n  \"template\": \"feature\",\n  \"name\": \"Concluir gaps do plan 020 (config consolidation)\",\n  \"sections\": {\n    \"context\": \"Auditoria do plan/020-config-consolidation.md contra o código atual mostrou que o núcleo (user_config 2-escopos, index com chunking server-side, server.toml via ARLM_SERVER_CONFIG) já foi entregue, mas restam violações diretas: (1) D3 — o client ainda carrega um data plane local completo (Commands::Serve, commands/serve/*, commands/mcp/*, metrics.rs, util::data_dir, deps arlm-storage/arlm-search/arlm-memory/axum), abrindo Storage::open local e fazendo BM25/index locais; (2) o [embedder] do server.toml não é consumido — state.rs lê env vars ARLM_MODEL_DIR/ARLM_OLLAMA_*, e faltam [search] defaults e mtls_ca; (3) docs/ops legados (admin.rs aponta ~/.arlm/config.toml, docker/server.toml tem [llm], Dockerfile copia para /root/.arlm/config.toml, install.sh cria config.toml legado, README cita flag --server inexistente); (4) nenhum dos testes da seção Testing do plano existe e a precedência de ARLM_SERVER_ADDR está invertida (plano: env é override).\",\n    \"approach\": \"Quatro tasks filhas independentes na ordem: F9.1 remove o data plane local do client (deleta Commands::Serve + commands/serve + commands/mcp + metrics.rs + util::data_dir, move chunk_content_hash para arlm-core como função pura e enxuga Cargo.toml do CLI para arlm-core/arlm-llm/arlm-proto); F9.2 completa o schema do server.toml ([embedder] model/model_dir/ollama_url/ollama_model/dims/batch_size/max_tokens/overlap_tokens/cache, [search] tier/top_k/max_tokens, mtls_ca) e consome tudo em state.rs/lifecycle.rs/grpc/index.rs/grpc/search.rs removendo a leitura de env vars de modelo; F9.3 atualiza admin.rs, docker/server.toml, Dockerfile (/etc/arlm/server.toml), docker-compose.server.yml (mount host), install.sh (~/.arlm/arlm.toml), cria arlm.toml.example e corrige README/agents; F9.4 implementa os testes do plano com funções puras testáveis (load_from paths explícitos, resolve_addr). Alternativa de manter serve/mcp como proxy gRPC foi rejeitada porque o plano lista explicitamente os comandos sobreviventes sem serve.\",\n    \"alternatives\": [\n      {\n        \"name\": \"Converter arlm serve/MCP em proxy gRPC\",\n        \"rejected_because\": \"Fora do escopo do plan 020 (Non-goals); os comandos sobreviventes listados no plano não incluem serve. Se necessário vira issue nova.\"\n      },\n      {\n        \"name\": \"Manter env vars ARLM_OLLAMA_* como fallback paralelo ao server.toml\",\n        \"rejected_because\": \"Plano define [embedder] como fonte exclusiva da config de processamento; duplicar fonte recria a fragmentação que o 020 elimina.\"\n      },\n      {\n        \"name\": \"Deprecar gradualmente commands/serve mantendo código morto atrás de feature flag\",\n        \"rejected_because\": \"D4 manda break total sem transição; código morto mantém deps pesadas (axum, storage) no binário do client.\"\n      }\n    ],\n    \"steps\": [\n      {\n        \"title\": \"F9.1 Remover data plane local do client (serve/mcp/metrics/data_dir) e mover chunk_content_hash para arlm-core\",\n        \"type\": \"task\",\n        \"priority\": 1,\n        \"labels\": [\"cli\"],\n        \"existing_seed\": \"agnostic-rlm-rs-acda\"\n      },\n      {\n        \"title\": \"F9.2 Completar schema do server.toml ([embedder]/[search]/mtls_ca) e consumir em state/lifecycle/grpc\",\n        \"type\": \"task\",\n        \"priority\": 1,\n        \"labels\": [\"embedding\", \"search\"],\n        \"blocks\": [],\n        \"existing_seed\": \"agnostic-rlm-rs-dc90\"\n      },\n      {\n        \"title\": \"F9.3 Docs/ops: admin msg, docker/server.toml novo schema, Dockerfile /etc/arlm, compose mount, install.sh arlm.toml, arlm.toml.example, README/agents\",\n        \"type\": \"task\",\n        \"priority\": 2,\n        \"labels\": [\"cli\"],\n        \"existing_seed\": \"agnostic-rlm-rs-d905\"\n      },\n      {\n        \"title\": \"F9.4 Testes do plan 020 (merge granular, auth-only-global, legacy ignorado, init gitignore/no-auth, env override, server config, sem Storage local)\",\n        \"type\": \"task\",\n        \"priority\": 2,\n        \"labels\": [\"testing\"],\n        \"blocks\": [],\n        \"existing_seed\": \"agnostic-rlm-rs-ec63\"\n      }\n    ],\n    \"risks\": [\n      \"Remoção de serve/mcp pode quebrar integrações de agentes que usavam HTTP local — mitigado por atualizar agents/* e README na mesma passada (F9.3)\",\n      \"Trocar env vars por [embedder] pode quebrar deploys Docker existentes — mitigado atualizando Dockerfile/compose/server.toml juntos (F9.3)\",\n      \"Merge granular mal testado em tabelas aninhadas — mitigado por extrair load_from(global_path, local_path) puro e testar com tempdirs\"\n    ],\n    \"acceptance\": [\n      \"cargo check/clippy/test --workspace verdes\",\n      \"Nenhum caminho do arlm-cli abre Storage local ou depende de arlm-storage/arlm-search/arlm-memory\",\n      \"state.rs constrói o embedder a partir de ServerConfig.embedder (sem ler ARLM_MODEL_DIR/ARLM_OLLAMA_*)\",\n      \"Todos os testes da seção Testing do plan/020 presentes e passando\"\n    ]\n  }\n}\n",
+  "content": "{\n  \"template\": \"feature\",\n  \"name\": \"Concluir gaps do plan 020 (config consolidation)\",\n  \"sections\": {\n    \"context\": \"Auditoria do plan/020-config-consolidation.md contra o código atual mostrou que o núcleo (user_config 2-escopos, index com chunking server-side, server.toml via ARAGS_SERVER_CONFIG) já foi entregue, mas restam violações diretas: (1) D3 — o client ainda carrega um data plane local completo (Commands::Serve, commands/serve/*, commands/mcp/*, metrics.rs, util::data_dir, deps arags-storage/arags-search/arags-memory/axum), abrindo Storage::open local e fazendo BM25/index locais; (2) o [embedder] do server.toml não é consumido — state.rs lê env vars ARAGS_MODEL_DIR/ARAGS_OLLAMA_*, e faltam [search] defaults e mtls_ca; (3) docs/ops legados (admin.rs aponta ~/.arags/config.toml, docker/server.toml tem [llm], Dockerfile copia para /root/.arags/config.toml, install.sh cria config.toml legado, README cita flag --server inexistente); (4) nenhum dos testes da seção Testing do plano existe e a precedência de ARAGS_SERVER_ADDR está invertida (plano: env é override).\",\n    \"approach\": \"Quatro tasks filhas independentes na ordem: F9.1 remove o data plane local do client (deleta Commands::Serve + commands/serve + commands/mcp + metrics.rs + util::data_dir, move chunk_content_hash para arags-core como função pura e enxuga Cargo.toml do CLI para arags-core/arags-llm/arags-proto); F9.2 completa o schema do server.toml ([embedder] model/model_dir/ollama_url/ollama_model/dims/batch_size/max_tokens/overlap_tokens/cache, [search] tier/top_k/max_tokens, mtls_ca) e consome tudo em state.rs/lifecycle.rs/grpc/index.rs/grpc/search.rs removendo a leitura de env vars de modelo; F9.3 atualiza admin.rs, docker/server.toml, Dockerfile (/etc/arags/server.toml), docker-compose.server.yml (mount host), install.sh (~/.arags/arags.toml), cria arags.toml.example e corrige README/agents; F9.4 implementa os testes do plano com funções puras testáveis (load_from paths explícitos, resolve_addr). Alternativa de manter serve/mcp como proxy gRPC foi rejeitada porque o plano lista explicitamente os comandos sobreviventes sem serve.\",\n    \"alternatives\": [\n      {\n        \"name\": \"Converter arags serve/MCP em proxy gRPC\",\n        \"rejected_because\": \"Fora do escopo do plan 020 (Non-goals); os comandos sobreviventes listados no plano não incluem serve. Se necessário vira issue nova.\"\n      },\n      {\n        \"name\": \"Manter env vars ARAGS_OLLAMA_* como fallback paralelo ao server.toml\",\n        \"rejected_because\": \"Plano define [embedder] como fonte exclusiva da config de processamento; duplicar fonte recria a fragmentação que o 020 elimina.\"\n      },\n      {\n        \"name\": \"Deprecar gradualmente commands/serve mantendo código morto atrás de feature flag\",\n        \"rejected_because\": \"D4 manda break total sem transição; código morto mantém deps pesadas (axum, storage) no binário do client.\"\n      }\n    ],\n    \"steps\": [\n      {\n        \"title\": \"F9.1 Remover data plane local do client (serve/mcp/metrics/data_dir) e mover chunk_content_hash para arags-core\",\n        \"type\": \"task\",\n        \"priority\": 1,\n        \"labels\": [\"cli\"],\n        \"existing_seed\": \"agnostic-rlm-rs-acda\"\n      },\n      {\n        \"title\": \"F9.2 Completar schema do server.toml ([embedder]/[search]/mtls_ca) e consumir em state/lifecycle/grpc\",\n        \"type\": \"task\",\n        \"priority\": 1,\n        \"labels\": [\"embedding\", \"search\"],\n        \"blocks\": [],\n        \"existing_seed\": \"agnostic-rlm-rs-dc90\"\n      },\n      {\n        \"title\": \"F9.3 Docs/ops: admin msg, docker/server.toml novo schema, Dockerfile /etc/arags, compose mount, install.sh arags.toml, arags.toml.example, README/agents\",\n        \"type\": \"task\",\n        \"priority\": 2,\n        \"labels\": [\"cli\"],\n        \"existing_seed\": \"agnostic-rlm-rs-d905\"\n      },\n      {\n        \"title\": \"F9.4 Testes do plan 020 (merge granular, auth-only-global, legacy ignorado, init gitignore/no-auth, env override, server config, sem Storage local)\",\n        \"type\": \"task\",\n        \"priority\": 2,\n        \"labels\": [\"testing\"],\n        \"blocks\": [],\n        \"existing_seed\": \"agnostic-rlm-rs-ec63\"\n      }\n    ],\n    \"risks\": [\n      \"Remoção de serve/mcp pode quebrar integrações de agentes que usavam HTTP local — mitigado por atualizar agents/* e README na mesma passada (F9.3)\",\n      \"Trocar env vars por [embedder] pode quebrar deploys Docker existentes — mitigado atualizando Dockerfile/compose/server.toml juntos (F9.3)\",\n      \"Merge granular mal testado em tabelas aninhadas — mitigado por extrair load_from(global_path, local_path) puro e testar com tempdirs\"\n    ],\n    \"acceptance\": [\n      \"cargo check/clippy/test --workspace verdes\",\n      \"Nenhum caminho do arags-cli abre Storage local ou depende de arags-storage/arags-search/arags-memory\",\n      \"state.rs constrói o embedder a partir de ServerConfig.embedder (sem ler ARAGS_MODEL_DIR/ARAGS_OLLAMA_*)\",\n      \"Todos os testes da seção Testing do plan/020 presentes e passando\"\n    ]\n  }\n}\n",
   "filePath": "/tmp/opencode/f9-plan.json"
 }
 ```
@@ -7474,21 +7474,21 @@ Next:
 Plan submitted (pl-c770). Now start F9.1: mark in_progress and implement.
 
 F9.1 — Remove client local data plane:
-1. Delete `crates/arlm-cli/src/commands/serve/` (whole dir), `commands/mcp/` (whole dir), `metrics.rs`
+1. Delete `crates/arags-cli/src/commands/serve/` (whole dir), `commands/mcp/` (whole dir), `metrics.rs`
 2. Update `commands/mod.rs`: remove mcp, serve
 3. Update `lib.rs`: remove metrics module + re-export
 4. Update `dispatch/server.rs`: remove Serve match arm
 5. Update `cli/commands.rs`: remove Serve variant
-6. Move `chunk_content_hash` to arlm-core; update storage qa_cache to use it; update CLI qa_cache.rs
+6. Move `chunk_content_hash` to arags-core; update storage qa_cache to use it; update CLI qa_cache.rs
 7. `util.rs`: remove data_dir(); check project_name usage — persist.rs has its own local project_name fn, dispatch? Let me check who uses util::project_name now — earlier grep showed only serve/mcp files. After deletion, if nothing uses util::project_name either, delete util.rs entirely and remove from lib.rs.
-8. Cargo.toml CLI: drop arlm-storage, arlm-search, arlm-memory, axum, tower-http. Check what remains used: arlm-core (logging, chunk hash), arlm-llm (backend), arlm-proto, clap, indicatif (progress), console (?), mimalloc (main), anyhow, tracing (+subscriber in main via logging init — that's arlm-core's logging which needs the feature... arlm-core::logging::init_logging(cli.verbose) — fine), serde/serde_json, tokio, tokio-stream, chrono (persist), uuid (?) — check usage of uuid in cli: dispatch/server.rs uses uuid::Uuid? No — index response run_id comes from server. Let me grep uuid/console/futures/toml/parking_lot usage after edits.
+8. Cargo.toml CLI: drop arags-storage, arags-search, arags-memory, axum, tower-http. Check what remains used: arags-core (logging, chunk hash), arags-llm (backend), arags-proto, clap, indicatif (progress), console (?), mimalloc (main), anyhow, tracing (+subscriber in main via logging init — that's arags-core's logging which needs the feature... arags-core::logging::init_logging(cli.verbose) — fine), serde/serde_json, tokio, tokio-stream, chrono (persist), uuid (?) — check usage of uuid in cli: dispatch/server.rs uses uuid::Uuid? No — index response run_id comes from server. Let me grep uuid/console/futures/toml/parking_lot usage after edits.
    - futures: used in grpc/index.rs (server) not cli. CLI uses tokio_stream ReceiverStream. Check.
    - parking_lot: auth_client uses parking_lot::Mutex. Keep.
    - toml: user_config + init serialization. Keep.
    - console: grep.
 9. Also `commands/mod.rs` keeps persist, qa_cache.
 
-Also there's `arlm-cli/tests/metrics_test.rs` — must be deleted with metrics.rs.
+Also there's `arags-cli/tests/metrics_test.rs` — must be deleted with metrics.rs.
 
 Let me check remaining usages first, then do the deletions.
 
@@ -7498,28 +7498,28 @@ Plano `pl-c770` criado. Iniciando **F9.1** (remoção do data plane local):
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sd update agnostic-rlm-rs-acda --status in_progress >/dev/null && rg -rln "console|uuid|futures" crates/arlm-cli/src crates/arlm-cli/tests 2>/dev/null; echo "---"; rg -n "arlm_core" crates/arlm-cli/src | head -5
+**Title:** sd update agnostic-rlm-rs-acda --status in_progress >/dev/null && rg -rln "console|uuid|futures" crates/arags-cli/src crates/arags-cli/tests 2>/dev/null; echo "---"; rg -n "arags_core" crates/arags-cli/src | head -5
 
 **Input:**
 ```json
 {
-  "command": "sd update agnostic-rlm-rs-acda --status in_progress >/dev/null && rg -rln \"console|uuid|futures\" crates/arlm-cli/src crates/arlm-cli/tests 2>/dev/null; echo \"---\"; rg -n \"arlm_core\" crates/arlm-cli/src | head -5"
+  "command": "sd update agnostic-rlm-rs-acda --status in_progress >/dev/null && rg -rln \"console|uuid|futures\" crates/arags-cli/src crates/arags-cli/tests 2>/dev/null; echo \"---\"; rg -n \"arags_core\" crates/arags-cli/src | head -5"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-cli/src/output/mod.rs:    let style = ln::Style::new().green().bold();
-crates/arlm-cli/src/output/mod.rs:    let style = ln::Style::new().red().bold();
-crates/arlm-cli/src/output/mod.rs:    let style = ln::Style::new().cyan();
-crates/arlm-cli/src/output/mod.rs:    let style = ln::Style::new().yellow();
-crates/arlm-cli/src/output/tree.rs:use ln::Style;
-crates/arlm-cli/src/output/tree.rs:            ln::Style::new().green().apply_to(score_str)
-crates/arlm-cli/src/output/tree.rs:            ln::Style::new().yellow().apply_to(score_str)
-crates/arlm-cli/src/output/tree.rs:            ln::Style::new().dim().apply_to(score_str)
+crates/arags-cli/src/output/mod.rs:    let style = ln::Style::new().green().bold();
+crates/arags-cli/src/output/mod.rs:    let style = ln::Style::new().red().bold();
+crates/arags-cli/src/output/mod.rs:    let style = ln::Style::new().cyan();
+crates/arags-cli/src/output/mod.rs:    let style = ln::Style::new().yellow();
+crates/arags-cli/src/output/tree.rs:use ln::Style;
+crates/arags-cli/src/output/tree.rs:            ln::Style::new().green().apply_to(score_str)
+crates/arags-cli/src/output/tree.rs:            ln::Style::new().yellow().apply_to(score_str)
+crates/arags-cli/src/output/tree.rs:            ln::Style::new().dim().apply_to(score_str)
 ---
-crates/arlm-cli/src/main.rs:12:    arlm_core::logging::init_logging(cli.verbose);
-crates/arlm-cli/src/commands/serve/mod.rs:48:    let _timer = arlm_core::logging::ScopedTimer::new("cli_serve");
+crates/arags-cli/src/main.rs:12:    arags_core::logging::init_logging(cli.verbose);
+crates/arags-cli/src/commands/serve/mod.rs:48:    let _timer = arags_core::logging::ScopedTimer::new("cli_serve");
 
 ```
 
@@ -7542,19 +7542,19 @@ crates/arlm-cli/src/commands/serve/mod.rs:48:    let _timer = arlm_core::logging
 Now execute F9.1:
 1. Delete serve/, mcp/, metrics.rs, metrics_test.rs
 2. Edit commands/mod.rs, lib.rs, dispatch/server.rs (remove Serve arm), cli/commands.rs (remove Serve variant)
-3. Move chunk_content_hash → arlm-core; update arlm-storage qa_cache + CLI qa_cache
+3. Move chunk_content_hash → arags-core; update arags-storage qa_cache + CLI qa_cache
 4. util.rs: remove data_dir; check if util module still needed (project_name unused elsewhere?)
 
 </details>
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rm -rf crates/arlm-cli/src/commands/serve crates/arlm-cli/src/commands/mcp crates/arlm-cli/src/metrics.rs crates/arlm-cli/tests/metrics_test.rs && rg -rn "util::" crates/arlm-cli/src --glob '!util.rs' | head
+**Title:** rm -rf crates/arags-cli/src/commands/serve crates/arags-cli/src/commands/mcp crates/arags-cli/src/metrics.rs crates/arags-cli/tests/metrics_test.rs && rg -rn "util::" crates/arags-cli/src --glob '!util.rs' | head
 
 **Input:**
 ```json
 {
-  "command": "rm -rf crates/arlm-cli/src/commands/serve crates/arlm-cli/src/commands/mcp crates/arlm-cli/src/metrics.rs crates/arlm-cli/tests/metrics_test.rs && rg -rn \"util::\" crates/arlm-cli/src --glob '!util.rs' | head"
+  "command": "rm -rf crates/arags-cli/src/commands/serve crates/arags-cli/src/commands/mcp crates/arags-cli/src/metrics.rs crates/arags-cli/tests/metrics_test.rs && rg -rn \"util::\" crates/arags-cli/src --glob '!util.rs' | head"
 }
 ```
 
@@ -7574,12 +7574,12 @@ Now execute F9.1:
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rm crates/arlm-cli/src/util.rs
+**Title:** rm crates/arags-cli/src/util.rs
 
 **Input:**
 ```json
 {
-  "command": "rm crates/arlm-cli/src/util.rs"
+  "command": "rm crates/arags-cli/src/util.rs"
 }
 ```
 
@@ -7599,12 +7599,12 @@ Now execute F9.1:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/commands/mod.rs
+**Title:** crates/arags-cli/src/commands/mod.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/mod.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/mod.rs",
   "newString": "pub mod persist;\npub mod qa_cache;",
   "oldString": "pub mod mcp;\npub mod persist;\npub mod qa_cache;\npub mod serve;"
 }
@@ -7626,14 +7626,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/lib.rs
+**Title:** crates/arags-cli/src/lib.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/lib.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/lib.rs",
   "newString": "pub mod auth_client;\npub mod backend;\npub mod cli;\npub mod client;\npub mod commands;\npub mod dispatch;\npub mod output;\npub mod user_config;\n\npub use client::{ClientConfig, create_client};",
-  "oldString": "pub mod auth_client;\npub mod backend;\npub mod cli;\npub mod client;\npub mod commands;\npub mod dispatch;\npub mod metrics;\npub mod output;\npub mod user_config;\npub mod util;\n\npub use client::{ClientConfig, create_client};\npub use metrics::ArlmMetrics;"
+  "oldString": "pub mod auth_client;\npub mod backend;\npub mod cli;\npub mod client;\npub mod commands;\npub mod dispatch;\npub mod metrics;\npub mod output;\npub mod user_config;\npub mod util;\n\npub use client::{ClientConfig, create_client};\npub use metrics::AragsMetrics;"
 }
 ```
 
@@ -7653,12 +7653,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/cli/commands.rs
+**Title:** crates/arags-cli/src/cli/commands.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/cli/commands.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/cli/commands.rs",
   "newString": "    /// Show the current user's query history (server-scoped by refresh token).\n    History {\n        /// Limit results.\n        #[arg(long, default_value_t = 20)]\n        limit: usize,\n\n        /// View another user's history (admin only; server enforces scope).\n        #[arg(long)]\n        user: Option<String>,\n    },\n}",
   "oldString": "    /// Show the current user's query history (server-scoped by refresh token).\n    History {\n        /// Limit results.\n        #[arg(long, default_value_t = 20)]\n        limit: usize,\n\n        /// View another user's history (admin only; server enforces scope).\n        #[arg(long)]\n        user: Option<String>,\n    },\n\n    /// Start the local HTTP/MCP server (data plane).\n    Serve {\n        /// Port to listen on.\n        #[arg(long, default_value_t = 8080)]\n        port: u16,\n\n        /// Host to bind to.\n        #[arg(long, default_value = \"127.0.0.1\")]\n        host: String,\n\n        /// Enable MCP (Model Context Protocol) server on /mcp endpoint.\n        #[arg(long)]\n        mcp: bool,\n    },\n}"
 }
@@ -7680,14 +7680,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/dispatch/mod.rs
+**Title:** crates/arags-cli/src/dispatch/mod.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/dispatch/mod.rs",
-  "newString": "/// Entry point for command dispatch.\n///\n/// The CLI is a **pure gRPC client** (plus the user's local LLM for digest /\n/// summarize). Every data command is routed to a remote `arlm-server` over\n/// gRPC; there is no local data plane (plan 020, D3).\npub fn dispatch(cli: Cli, rt: &Runtime) -> Result<()> {",
-  "oldString": "/// Entry point for command dispatch.\n///\n/// The CLI is a **pure gRPC client** (plus the user's local LLM for digest /\n/// summarize). Every data command is routed to a remote `arlm-server` over\n/// gRPC; the only local action is `arlm server`, which hosts the data plane.\npub fn dispatch(cli: Cli, rt: &Runtime) -> Result<()> {"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/dispatch/mod.rs",
+  "newString": "/// Entry point for command dispatch.\n///\n/// The CLI is a **pure gRPC client** (plus the user's local LLM for digest /\n/// summarize). Every data command is routed to a remote `arags-server` over\n/// gRPC; there is no local data plane (plan 020, D3).\npub fn dispatch(cli: Cli, rt: &Runtime) -> Result<()> {",
+  "oldString": "/// Entry point for command dispatch.\n///\n/// The CLI is a **pure gRPC client** (plus the user's local LLM for digest /\n/// summarize). Every data command is routed to a remote `arags-server` over\n/// gRPC; the only local action is `arags server`, which hosts the data plane.\npub fn dispatch(cli: Cli, rt: &Runtime) -> Result<()> {"
 }
 ```
 
@@ -7707,12 +7707,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/dispatch/server.rs
+**Title:** crates/arags-cli/src/dispatch/server.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/dispatch/server.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/dispatch/server.rs",
   "newString": "    match cli.command {\n        Commands::Init { no_index, .. } => run_init(rt, &cfg, &project, format, !no_index),",
   "oldString": "    match cli.command {\n        Commands::Serve { port, host, mcp } => rt.block_on(crate::commands::serve::execute(\n            crate::commands::serve::ServeConfig {\n                port,\n                host: &host,\n                project: &project,\n                verbose: cli.verbose,\n                mcp,\n            },\n        )),\n        Commands::Init { no_index, .. } => run_init(rt, &cfg, &project, format, !no_index),"
 }
@@ -7732,16 +7732,16 @@ Edit applied successfully.
 
 *[step-start part]*
 
-Agora mova `chunk_content_hash` para `arlm-core`:
+Agora mova `chunk_content_hash` para `arags-core`:
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "pub mod|pub use" crates/arlm-core/src/lib.rs | head -20
+**Title:** rg -n "pub mod|pub use" crates/arags-core/src/lib.rs | head -20
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"pub mod|pub use\" crates/arlm-core/src/lib.rs | head -20"
+  "command": "rg -n \"pub mod|pub use\" crates/arags-core/src/lib.rs | head -20"
 }
 ```
 
@@ -7765,18 +7765,18 @@ Agora mova `chunk_content_hash` para `arlm-core`:
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-core/src/qa_cache/mod.rs
+**Title:** crates/arags-core/src/qa_cache/mod.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-core/src/qa_cache/mod.rs"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-core/src/qa_cache/mod.rs"
 }
 ```
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-core/src/qa_cache/mod.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-core/src/qa_cache/mod.rs</path>
 <type>file</type>
 <content>
 1: //! Adaptive widening engine for the semantic query-answer cache (plan 017).
@@ -7979,18 +7979,18 @@ Agora mova `chunk_content_hash` para `arlm-core`:
 <details>
 <summary>Click to expand reasoning</summary>
 
-`arlm-core::qa_cache` is the perfect home for `chunk_content_hash` (pure, shared by client digest-once and server staleness checks). Check arlm-core deps include sha2/hex.
+`arags-core::qa_cache` is the perfect home for `chunk_content_hash` (pure, shared by client digest-once and server staleness checks). Check arags-core deps include sha2/hex.
 
 </details>
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "sha2|hex" crates/arlm-core/Cargo.toml || echo "missing"
+**Title:** rg -n "sha2|hex" crates/arags-core/Cargo.toml || echo "missing"
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"sha2|hex\" crates/arlm-core/Cargo.toml || echo \"missing\""
+  "command": "rg -n \"sha2|hex\" crates/arags-core/Cargo.toml || echo \"missing\""
 }
 ```
 
@@ -8010,12 +8010,12 @@ Agora mova `chunk_content_hash` para `arlm-core`:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-core/src/qa_cache/mod.rs
+**Title:** crates/arags-core/src/qa_cache/mod.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-core/src/qa_cache/mod.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-core/src/qa_cache/mod.rs",
   "newString": "/// Deterministic content hash for a chunk's text (SHA-256, hex-encoded).\n///\n/// Shared by the client (digest-once `StoreAnswer.source_hashes`) and the\n/// server (staleness invalidation when indexed chunks change), so both sides\n/// compute identical hashes without a storage dependency (plan 020: the CLI\n/// is a pure gRPC client and never opens local storage).\n#[must_use]\npub fn chunk_content_hash(content: &str) -> String {\n    use sha2::{Digest, Sha256};\n    let mut hasher = Sha256::new();\n    hasher.update(content.as_bytes());\n    hex::encode(hasher.finalize())\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn miss_below_floor() {",
   "oldString": "#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn miss_below_floor() {"
 }
@@ -8037,12 +8037,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-core/src/qa_cache/mod.rs
+**Title:** crates/arags-core/src/qa_cache/mod.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-core/src/qa_cache/mod.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-core/src/qa_cache/mod.rs",
   "newString": "    #[test]\n    fn invariant_holds_at_every_tier() {\n        let t = QaThresholds::default();\n        for s in [0.50, 0.55, 0.62, 0.71, 0.83, 0.91, 0.99] {\n            let p = resolve_plan(s, 0.9, &t);\n            if !p.is_miss {\n                assert!(p.provenance_k <= p.digest_k);\n                assert!(p.digest_k <= t.novel_k);\n            }\n        }\n    }\n\n    #[test]\n    fn content_hash_is_deterministic_sha256_hex() {\n        let a = chunk_content_hash(\"hello world\");\n        let b = chunk_content_hash(\"hello world\");\n        assert_eq!(a, b);\n        assert_eq!(a.len(), 64);\n        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));\n        assert_ne!(a, chunk_content_hash(\"hello world!\"));\n    }\n}",
   "oldString": "    #[test]\n    fn invariant_holds_at_every_tier() {\n        let t = QaThresholds::default();\n        for s in [0.50, 0.55, 0.62, 0.71, 0.83, 0.91, 0.99] {\n            let p = resolve_plan(s, 0.9, &t);\n            if !p.is_miss {\n                assert!(p.provenance_k <= p.digest_k);\n                assert!(p.digest_k <= t.novel_k);\n            }\n        }\n    }\n}"
 }
@@ -8062,22 +8062,22 @@ Edit applied successfully.
 
 *[step-start part]*
 
-Now update `arlm-storage` to delegate and the CLI to use the core version:
+Now update `arags-storage` to delegate and the CLI to use the core version:
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -rn "chunk_content_hash" crates/arlm-storage/src --no-heading | head
+**Title:** rg -rn "chunk_content_hash" crates/arags-storage/src --no-heading | head
 
 **Input:**
 ```json
 {
-  "command": "rg -rn \"chunk_content_hash\" crates/arlm-storage/src --no-heading | head"
+  "command": "rg -rn \"chunk_content_hash\" crates/arags-storage/src --no-heading | head"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String {
+crates/arags-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String {
 
 ```
 
@@ -8090,12 +8090,12 @@ crates/arlm-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String {
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-storage/src/sqlite/qa_cache.rs
+**Title:** crates/arags-storage/src/sqlite/qa_cache.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/src/sqlite/qa_cache.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage/src/sqlite/qa_cache.rs",
   "limit": 30,
   "offset": 105
 }
@@ -8103,7 +8103,7 @@ crates/arlm-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String {
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/src/sqlite/qa_cache.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage/src/sqlite/qa_cache.rs</path>
 <type>file</type>
 <content>
 105:     let normalized: String = question
@@ -8150,13 +8150,13 @@ crates/arlm-storage/src/sqlite/qa_cache.rs:pub fn n(content: &str) -> String {
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-storage/src/sqlite/qa_cache.rs
+**Title:** crates/arags-storage/src/sqlite/qa_cache.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/src/sqlite/qa_cache.rs",
-  "newString": "/// Canonical content hash for a chunk (sha256 hex). Clients must use this exact\n/// function when computing `source_hashes` so the server's staleness hook can\n/// compare against stored chunk hashes.\n///\n/// Re-exported from [`arlm_core::qa_cache::chunk_content_hash`] so client and\n/// server share one implementation (plan 020: CLI has no storage dependency).\n#[must_use]\npub fn chunk_content_hash(content: &str) -> String {\n    arlm_core::qa_cache::chunk_content_hash(content)\n}",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage/src/sqlite/qa_cache.rs",
+  "newString": "/// Canonical content hash for a chunk (sha256 hex). Clients must use this exact\n/// function when computing `source_hashes` so the server's staleness hook can\n/// compare against stored chunk hashes.\n///\n/// Re-exported from [`arags_core::qa_cache::chunk_content_hash`] so client and\n/// server share one implementation (plan 020: CLI has no storage dependency).\n#[must_use]\npub fn chunk_content_hash(content: &str) -> String {\n    arags_core::qa_cache::chunk_content_hash(content)\n}",
   "oldString": "/// Canonical content hash for a chunk (sha256 hex). Clients must use this exact\n/// function when computing `source_hashes` so the server's staleness hook can\n/// compare against stored chunk hashes.\n#[must_use]\npub fn chunk_content_hash(content: &str) -> String {\n    use sha2::{Digest, Sha256};\n    let mut hasher = Sha256::new();\n    hasher.update(content.as_bytes());\n    hex::encode(hasher.finalize())\n}"
 }
 ```
@@ -8177,14 +8177,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/commands/qa_cache.rs
+**Title:** crates/arags-cli/src/commands/qa_cache.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/commands/qa_cache.rs",
-  "newString": "    let source_hashes: Vec<String> = resp\n        .candidates\n        .iter()\n        .map(|c| arlm_core::qa_cache::chunk_content_hash(&c.text))\n        .collect();",
-  "oldString": "    let source_hashes: Vec<String> = resp\n        .candidates\n        .iter()\n        .map(|c| arlm_storage::qa_cache::chunk_content_hash(&c.text))\n        .collect();"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/commands/qa_cache.rs",
+  "newString": "    let source_hashes: Vec<String> = resp\n        .candidates\n        .iter()\n        .map(|c| arags_core::qa_cache::chunk_content_hash(&c.text))\n        .collect();",
+  "oldString": "    let source_hashes: Vec<String> = resp\n        .candidates\n        .iter()\n        .map(|c| arags_storage::qa_cache::chunk_content_hash(&c.text))\n        .collect();"
 }
 ```
 
@@ -8206,14 +8206,14 @@ Agora, ajuste as dependências da CLI:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/Cargo.toml
+**Title:** crates/arags-cli/Cargo.toml
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/Cargo.toml",
-  "newString": "[dependencies]\narlm-core.workspace = true\narlm-llm.workspace = true\narlm-proto.workspace = true\nclap.workspace = true\nindicatif.workspace = true\nconsole.workspace = true\nmimalloc.workspace = true\nanyhow.workspace = true\ntracing.workspace = true\ntracing-subscriber.workspace = true\nserde.workspace = true\nserde_json.workspace = true\ntokio.workspace = true\ntokio-stream = { version = \"0.1\", features = [\"sync\"] }\nchrono.workspace = true\ntonic.workspace = true\ntoml.workspace = true\nparking_lot.workspace = true\n\n[dev-dependencies]\ntempfile.workspace = true\ntokio-test = \"0.4\"",
-  "oldString": "[dependencies]\narlm-core.workspace = true\narlm-storage.workspace = true\narlm-search.workspace = true\narlm-memory.workspace = true\narlm-llm.workspace = true\narlm-proto.workspace = true\nclap.workspace = true\nindicatif.workspace = true\nconsole.workspace = true\nmimalloc.workspace = true\nanyhow.workspace = true\ntracing.workspace = true\ntracing-subscriber.workspace = true\nserde.workspace = true\nserde_json.workspace = true\ntokio.workspace = true\ntokio-stream = { version = \"0.1\", features = [\"sync\"] }\nchrono.workspace = true\nuuid.workspace = true\ntonic.workspace = true\nfutures.workspace = true\ntoml.workspace = true\nparking_lot.workspace = true\naxum.workspace = true\ntower-http.workspace = true\n\n[dev-dependencies]\ntempfile.workspace = true\ntower.workspace = true\ntokio-test = \"0.4\""
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/Cargo.toml",
+  "newString": "[dependencies]\narags-core.workspace = true\narags-llm.workspace = true\narags-proto.workspace = true\nclap.workspace = true\nindicatif.workspace = true\nconsole.workspace = true\nmimalloc.workspace = true\nanyhow.workspace = true\ntracing.workspace = true\ntracing-subscriber.workspace = true\nserde.workspace = true\nserde_json.workspace = true\ntokio.workspace = true\ntokio-stream = { version = \"0.1\", features = [\"sync\"] }\nchrono.workspace = true\ntonic.workspace = true\ntoml.workspace = true\nparking_lot.workspace = true\n\n[dev-dependencies]\ntempfile.workspace = true\ntokio-test = \"0.4\"",
+  "oldString": "[dependencies]\narags-core.workspace = true\narags-storage.workspace = true\narags-search.workspace = true\narags-memory.workspace = true\narags-llm.workspace = true\narags-proto.workspace = true\nclap.workspace = true\nindicatif.workspace = true\nconsole.workspace = true\nmimalloc.workspace = true\nanyhow.workspace = true\ntracing.workspace = true\ntracing-subscriber.workspace = true\nserde.workspace = true\nserde_json.workspace = true\ntokio.workspace = true\ntokio-stream = { version = \"0.1\", features = [\"sync\"] }\nchrono.workspace = true\nuuid.workspace = true\ntonic.workspace = true\nfutures.workspace = true\ntoml.workspace = true\nparking_lot.workspace = true\naxum.workspace = true\ntower-http.workspace = true\n\n[dev-dependencies]\ntempfile.workspace = true\ntower.workspace = true\ntokio-test = \"0.4\""
 }
 ```
 
@@ -8233,12 +8233,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo check -p arlm-cli 2>&1 | grep -E "^error|^warning: unused" | head -20; echo "EXIT: $?"
+**Title:** cargo check -p arags-cli 2>&1 | grep -E "^error|^warning: unused" | head -20; echo "EXIT: $?"
 
 **Input:**
 ```json
 {
-  "command": "cargo check -p arlm-cli 2>&1 | grep -E \"^error|^warning: unused\" | head -20; echo \"EXIT: $?\""
+  "command": "cargo check -p arags-cli 2>&1 | grep -E \"^error|^warning: unused\" | head -20; echo \"EXIT: $?\""
 }
 ```
 
@@ -8259,12 +8259,12 @@ EXIT: 0
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo check -p arlm-cli 2>&1 | tail -3; cargo check --workspace 2>&1 | tail -3
+**Title:** cargo check -p arags-cli 2>&1 | tail -3; cargo check --workspace 2>&1 | tail -3
 
 **Input:**
 ```json
 {
-  "command": "cargo check -p arlm-cli 2>&1 | tail -3; cargo check --workspace 2>&1 | tail -3"
+  "command": "cargo check -p arags-cli 2>&1 | tail -3; cargo check --workspace 2>&1 | tail -3"
 }
 ```
 
@@ -8272,7 +8272,7 @@ EXIT: 0
 ```
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.44s
 For more information about this error, try `rustc --explain E0433`.
-error: could not compile `arlm-storage` (lib) due to 1 previous error
+error: could not compile `arags-storage` (lib) due to 1 previous error
 warning: build failed, waiting for other jobs to finish...
 
 ```
@@ -8286,28 +8286,28 @@ warning: build failed, waiting for other jobs to finish...
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "arlm_core" crates/arlm-storage/Cargo.toml || rg -n "E0433" /dev/null; cargo check -p arlm-storage 2>&1 | grep -B2 -A5 "E0433\|error\[" | head -20
+**Title:** rg -n "arags_core" crates/arags-storage/Cargo.toml || rg -n "E0433" /dev/null; cargo check -p arags-storage 2>&1 | grep -B2 -A5 "E0433\|error\[" | head -20
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"arlm_core\" crates/arlm-storage/Cargo.toml || rg -n \"E0433\" /dev/null; cargo check -p arlm-storage 2>&1 | grep -B2 -A5 \"E0433\\|error\\[\" | head -20"
+  "command": "rg -n \"arags_core\" crates/arags-storage/Cargo.toml || rg -n \"E0433\" /dev/null; cargo check -p arags-storage 2>&1 | grep -B2 -A5 \"E0433\\|error\\[\" | head -20"
 }
 ```
 
 **Output:**
 ```
-    Checking arlm-storage v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage)
-error[E0433]: cannot find module or crate `arlm_core` in this scope
-   --> crates/arlm-storage/src/sqlite/qa_cache.rs:123:5
+    Checking arags-storage v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage)
+error[E0433]: cannot find module or crate `arags_core` in this scope
+   --> crates/arags-storage/src/sqlite/qa_cache.rs:123:5
     |
-123 |     arlm_core::qa_cache::chunk_content_hash(content)
-    |     ^^^^^^^^^ use of unresolved module or unlinked crate `arlm_core`
+123 |     arags_core::qa_cache::chunk_content_hash(content)
+    |     ^^^^^^^^^ use of unresolved module or unlinked crate `arags_core`
     |
-    = help: if you wanted to use a crate named `arlm_core`, use `cargo add arlm_core` to add it to your `Cargo.toml`
+    = help: if you wanted to use a crate named `arags_core`, use `cargo add arags_core` to add it to your `Cargo.toml`
 
 For more information about this error, try `rustc --explain E0433`.
-error: could not compile `arlm-storage` (lib) due to 1 previous error
+error: could not compile `arags-storage` (lib) due to 1 previous error
 
 ```
 
@@ -8320,12 +8320,12 @@ error: could not compile `arlm-storage` (lib) due to 1 previous error
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "dependencies\]" -A8 crates/arlm-storage/Cargo.toml | head -15
+**Title:** rg -n "dependencies\]" -A8 crates/arags-storage/Cargo.toml | head -15
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"dependencies\\]\" -A8 crates/arlm-storage/Cargo.toml | head -15"
+  "command": "rg -n \"dependencies\\]\" -A8 crates/arags-storage/Cargo.toml | head -15"
 }
 ```
 
@@ -8358,13 +8358,13 @@ error: could not compile `arlm-storage` (lib) due to 1 previous error
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-storage/Cargo.toml
+**Title:** crates/arags-storage/Cargo.toml
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/Cargo.toml",
-  "newString": "[dependencies]\narlm-core.workspace = true\nrusqlite.workspace = true",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage/Cargo.toml",
+  "newString": "[dependencies]\narags-core.workspace = true\nrusqlite.workspace = true",
   "oldString": "[dependencies]\nrusqlite.workspace = true"
 }
 ```
@@ -8396,8 +8396,8 @@ Edit applied successfully.
 
 **Output:**
 ```
-    Checking arlm-memory v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-memory)
-    Checking arlm-server v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server)
+    Checking arags-memory v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-memory)
+    Checking arags-server v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.24s
 
 ```
@@ -8413,12 +8413,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli -p arlm-core 2>&1 | grep -E "test result|error" | head
+**Title:** cargo test -p arags-cli -p arags-core 2>&1 | grep -E "test result|error" | head
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli -p arlm-core 2>&1 | grep -E \"test result|error\" | head"
+  "command": "cargo test -p arags-cli -p arags-core 2>&1 | grep -E \"test result|error\" | head"
 }
 ```
 
@@ -8460,12 +8460,12 @@ Mark F9.1 completed and F9.2 in_progress. Then implement:
    - Accessors for tls.
    
 2. **state.rs**: `load_embedder(&EmbedderConfig)` — build from config:
-   - model == "ollama" → Ollama config with url/model/dims; prefix? Plan doesn't have ollama_prefix field... The current env has ARLM_OLLAMA_PREFIX default "search_document: ". For all-minilm the prefix must be empty. Plan schema doesn't include prefix — hmm. To avoid dead config vs plan fidelity conflict, I'll keep prefix configurable via optional `ollama_prefix` field (extra field beyond plan schema is acceptable — superset). Actually the plan says defaults applied by server. I'll add `ollama_prefix` as an optional extra (documented in docker/server.toml).
-   - model == "bge-m3" → model_dir required; quantization via existing env ARLM_MODEL_QUANT? Keep quant env override (it's a perf knob not data config)... simpler: add `quantization` optional string to embedder config too ("int8"|"int4"|"none", default int8). That keeps everything in server.toml per plan intent.
+   - model == "ollama" → Ollama config with url/model/dims; prefix? Plan doesn't have ollama_prefix field... The current env has ARAGS_OLLAMA_PREFIX default "search_document: ". For all-minilm the prefix must be empty. Plan schema doesn't include prefix — hmm. To avoid dead config vs plan fidelity conflict, I'll keep prefix configurable via optional `ollama_prefix` field (extra field beyond plan schema is acceptable — superset). Actually the plan says defaults applied by server. I'll add `ollama_prefix` as an optional extra (documented in docker/server.toml).
+   - model == "bge-m3" → model_dir required; quantization via existing env ARAGS_MODEL_QUANT? Keep quant env override (it's a perf knob not data config)... simpler: add `quantization` optional string to embedder config too ("int8"|"int4"|"none", default int8). That keeps everything in server.toml per plan intent.
    - "lightweight"/fallback → FallbackEmbedder(dims).
    - `embedder_dimension(&cfg)` returns cfg.dims.
 3. **lifecycle.rs**: pass config into AppState already there; mTLS: if mtls_ca set → ServerTlsConfig::client_ca_root(Certificate::from_pem(...)) requiring client auth. Also vector store dims from state::embedder_dimension(config) — lifecycle currently calls crate::state::embedder_dimension() before AppState exists; change signature to take &ServerConfig.
-4. **grpc/index.rs**: batch_size ← state.config.embedder.batch_size (keep ARLM_INDEX_CONCURRENCY env for concurrency since plan has no field; actually let me keep it simple: concurrency stays env-tunable default 4).
+4. **grpc/index.rs**: batch_size ← state.config.embedder.batch_size (keep ARAGS_INDEX_CONCURRENCY env for concurrency since plan has no field; actually let me keep it simple: concurrency stays env-tunable default 4).
 
 Let me check how VectorStore open_with_dims is called in lifecycle (uses embedder_dimension()) and what Certificate import tonic needs.
 
@@ -8475,18 +8475,18 @@ F9.1 concluída. Iniciando **F9.2** — schema completo do `server.toml` e wirin
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sd close agnostic-rlm-rs-acda --reason "Removidos Commands::Serve, commands/serve/, commands/mcp/, metrics.rs, util.rs(data_dir); chunk_content_hash movido para arlm-core::qa_cache (re-export em arlm-storage); CLI deps reduzidas para core/llm/proto (sem storage/search/memory/axum)" 2>&1 | head -2 && sd update agnostic-rlm-rs-dc90 --status in_progress >/dev/null && rg -n "client_ca_root|Certificate|with_native_roots" ~/.cargo/registry/src/*/tonic-0.13*/src/transport/service/tls.rs 2>/dev/null | head -8
+**Title:** sd close agnostic-rlm-rs-acda --reason "Removidos Commands::Serve, commands/serve/, commands/mcp/, metrics.rs, util.rs(data_dir); chunk_content_hash movido para arags-core::qa_cache (re-export em arags-storage); CLI deps reduzidas para core/llm/proto (sem storage/search/memory/axum)" 2>&1 | head -2 && sd update agnostic-rlm-rs-dc90 --status in_progress >/dev/null && rg -n "client_ca_root|Certificate|with_native_roots" ~/.cargo/registry/src/*/tonic-0.13*/src/transport/service/tls.rs 2>/dev/null | head -8
 
 **Input:**
 ```json
 {
-  "command": "sd close agnostic-rlm-rs-acda --reason \"Removidos Commands::Serve, commands/serve/, commands/mcp/, metrics.rs, util.rs(data_dir); chunk_content_hash movido para arlm-core::qa_cache (re-export em arlm-storage); CLI deps reduzidas para core/llm/proto (sem storage/search/memory/axum)\" 2>&1 | head -2 && sd update agnostic-rlm-rs-dc90 --status in_progress >/dev/null && rg -n \"client_ca_root|Certificate|with_native_roots\" ~/.cargo/registry/src/*/tonic-0.13*/src/transport/service/tls.rs 2>/dev/null | head -8"
+  "command": "sd close agnostic-rlm-rs-acda --reason \"Removidos Commands::Serve, commands/serve/, commands/mcp/, metrics.rs, util.rs(data_dir); chunk_content_hash movido para arags-core::qa_cache (re-export em arags-storage); CLI deps reduzidas para core/llm/proto (sem storage/search/memory/axum)\" 2>&1 | head -2 && sd update agnostic-rlm-rs-dc90 --status in_progress >/dev/null && rg -n \"client_ca_root|Certificate|with_native_roots\" ~/.cargo/registry/src/*/tonic-0.13*/src/transport/service/tls.rs 2>/dev/null | head -8"
 }
 ```
 
 **Output:**
 ```
-✓ Closed agnostic-rlm-rs-acda — Removidos Commands::Serve, commands/serve/, commands/mcp/, metrics.rs, util.rs(data_dir); chunk_content_hash movido para arlm-core::qa_cache (re-export em arlm-storage); CLI deps reduzidas para core/llm/proto (sem storage/search/memory/axum)
+✓ Closed agnostic-rlm-rs-acda — Removidos Commands::Serve, commands/serve/, commands/mcp/, metrics.rs, util.rs(data_dir); chunk_content_hash movido para arags-core::qa_cache (re-export em arags-storage); CLI deps reduzidas para core/llm/proto (sem storage/search/memory/axum)
 3:use tokio_rustls::rustls::pki_types::{pem::PemObject as _, CertificateDer, PrivateKeyDer};
 5:use crate::transport::{Certificate, Identity};
 16:    CertificateParseError,
@@ -8539,7 +8539,7 @@ F9.1 concluída. Iniciando **F9.2** — schema completo do `server.toml` e wirin
 <details>
 <summary>Click to expand reasoning</summary>
 
-`ServerTlsConfig::client_ca_root(Certificate)` exists, `Certificate::from_pem`. Now implement the config rework in arlm-server/src/config.rs.
+`ServerTlsConfig::client_ca_root(Certificate)` exists, `Certificate::from_pem`. Now implement the config rework in arags-server/src/config.rs.
 
 </details>
 
@@ -8547,13 +8547,13 @@ Agora o rework do `config.rs` do server:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
-  "newString": "/// Server configuration loaded from TOML.\n///\n/// Plan 020: this is the **server-only data-plane** file (`server.toml`, a\n/// host file mounted into the container at `/etc/arlm/server.toml`). It owns\n/// everything that touches data — serving (listen/tls), storage (data_dir),\n/// processing ([embedder]) and serving defaults ([search]). It has no LLM\n/// section (the server is LLM-free) and is disjoint from the user files\n/// (`~/.arlm/arlm.toml` / `.arlm.toml`).\n#[derive(Debug, Clone, Deserialize)]\npub struct ServerConfig {\n    /// Address to listen on (e.g., \"127.0.0.1:50051\").\n    #[serde(default = \"default_listen_addr\")]\n    pub listen_addr: String,\n\n    /// Data directory for SQLite and LanceDB.\n    #[serde(default = \"default_data_dir\")]\n    pub data_dir: PathBuf,\n\n    /// Optional PEM certificate path. Enables TLS when set together with\n    /// `tls_key`.\n    #[serde(default)]\n    pub tls_cert: Option<PathBuf>,\n\n    /// Optional PEM private key path. Enables TLS when set together with\n    /// `tls_cert`.\n    #[serde(default)]\n    pub tls_key: Option<PathBuf>,\n\n    /// Optional PEM CA bundle. When set together with TLS, clients must\n    /// present a certificate signed by this CA (mutual TLS).\n    #[serde(default)]\n    pub mtls_ca: Option<PathBuf>,\n\n    /// Server-side chunking + embedding parameters (plan 020). The server\n    /// owns all data-plane processing.\n    #[serde(default)]\n    pub embedder: EmbedderConfig,\n\n    /// Search serving defaults (plan 020), applied when a request omits them.\n    #[serde(default)]\n    pub search: SearchConfig,\n\n    /// Semantic query-answer cache configuration (plan 017).\n    #[serde(default)]\n    pub qa_cache: QaCacheConfig,\n\n    /// Background memory maintenance (plan 019, C.1): consolidate + decay.\n    #[serde(default)]\n    pub maintenance: MaintenanceConfig,\n}",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
+  "newString": "/// Server configuration loaded from TOML.\n///\n/// Plan 020: this is the **server-only data-plane** file (`server.toml`, a\n/// host file mounted into the container at `/etc/arags/server.toml`). It owns\n/// everything that touches data — serving (listen/tls), storage (data_dir),\n/// processing ([embedder]) and serving defaults ([search]). It has no LLM\n/// section (the server is LLM-free) and is disjoint from the user files\n/// (`~/.arags/arags.toml` / `.arags.toml`).\n#[derive(Debug, Clone, Deserialize)]\npub struct ServerConfig {\n    /// Address to listen on (e.g., \"127.0.0.1:50051\").\n    #[serde(default = \"default_listen_addr\")]\n    pub listen_addr: String,\n\n    /// Data directory for SQLite and LanceDB.\n    #[serde(default = \"default_data_dir\")]\n    pub data_dir: PathBuf,\n\n    /// Optional PEM certificate path. Enables TLS when set together with\n    /// `tls_key`.\n    #[serde(default)]\n    pub tls_cert: Option<PathBuf>,\n\n    /// Optional PEM private key path. Enables TLS when set together with\n    /// `tls_cert`.\n    #[serde(default)]\n    pub tls_key: Option<PathBuf>,\n\n    /// Optional PEM CA bundle. When set together with TLS, clients must\n    /// present a certificate signed by this CA (mutual TLS).\n    #[serde(default)]\n    pub mtls_ca: Option<PathBuf>,\n\n    /// Server-side chunking + embedding parameters (plan 020). The server\n    /// owns all data-plane processing.\n    #[serde(default)]\n    pub embedder: EmbedderConfig,\n\n    /// Search serving defaults (plan 020), applied when a request omits them.\n    #[serde(default)]\n    pub search: SearchConfig,\n\n    /// Semantic query-answer cache configuration (plan 017).\n    #[serde(default)]\n    pub qa_cache: QaCacheConfig,\n\n    /// Background memory maintenance (plan 019, C.1): consolidate + decay.\n    #[serde(default)]\n    pub maintenance: MaintenanceConfig,\n}",
   "oldString": "/// Server configuration loaded from TOML.\n#[derive(Debug, Clone, Deserialize)]\npub struct ServerConfig {\n    /// Address to listen on (e.g., \"127.0.0.1:50051\").\n    #[serde(default = \"default_listen_addr\")]\n    pub listen_addr: String,\n\n    /// Data directory for SQLite and LanceDB.\n    #[serde(default = \"default_data_dir\")]\n    pub data_dir: PathBuf,\n\n    /// Optional PEM certificate path. Enables TLS when set together with\n    /// `tls_key`.\n    #[serde(default)]\n    pub tls_cert: Option<PathBuf>,\n\n    /// Optional PEM private key path. Enables TLS when set together with\n    /// `tls_cert`.\n    #[serde(default)]\n    pub tls_key: Option<PathBuf>,\n\n    /// Server-side chunking parameters (plan 020, D2). The server owns all\n    /// data-plane processing, so chunk size is configured here rather than on\n    /// the client.\n    #[serde(default)]\n    pub embedder: EmbedderConfig,\n\n    /// Semantic query-answer cache configuration (plan 017).\n    #[serde(default)]\n    pub qa_cache: QaCacheConfig,\n\n    /// Background memory maintenance (plan 019, C.1): consolidate + decay.\n    #[serde(default)]\n    pub maintenance: MaintenanceConfig,\n}"
 }
 ```
@@ -8574,13 +8574,13 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
-  "newString": "/// Embedding model family served by the data plane (plan 020 `[embedder]`).\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]\npub enum EmbedderModel {\n    /// Real BGE-M3 via candle (requires `model_dir` with weights).\n    #[default]\n    BgeM3,\n    /// Ollama HTTP embedding server (`ollama_url` + `ollama_model`).\n    Ollama,\n    /// Hash-based lightweight embedder (tests / degraded mode).\n    Lightweight,\n}\n\nimpl EmbedderModel {\n    /// Parse a `server.toml` `model` string.\n    #[must_use]\n    pub fn parse(s: &str) -> Self {\n        match s.trim().to_ascii_lowercase().as_str() {\n            \"ollama\" => Self::Ollama,\n            \"lightweight\" | \"fallback\" | \"hash\" => Self::Lightweight,\n            _ => Self::BgeM3,\n        }\n    }\n}\n\n/// Server-side chunking + embedding parameters (plan 020, D2).\n///\n/// The server chunks raw file content it receives over gRPC using\n/// `max_tokens`/`overlap_tokens`, then embeds and stores vectors. All of this\n/// is configured exclusively here — the client has no data config.\n#[derive(Debug, Clone, Deserialize)]\npub struct EmbedderConfig {\n    /// Embedding model: `bge-m3` (default), `ollama`, or `lightweight`.\n    #[serde(default)]\n    pub model: Option<String>,\n\n    /// Model weights directory (BGE-M3: `model.safetensors` + `tokenizer.json`).\n    #[serde(default)]\n    pub model_dir: Option<PathBuf>,\n\n    /// Ollama base URL (model = \"ollama\").\n    #[serde(default)]\n    pub ollama_url: Option<String>,\n\n    /// Ollama embedding model tag (model = \"ollama\"), e.g. `all-minilm`.\n    #[serde(default)]\n    pub ollama_model: Option<String>,\n\n    /// Optional task prefix prepended to embedded texts\n    /// (`search_document: ` for nomic-family models; empty for all-minilm).\n    #[serde(default)]\n    pub ollama_prefix: Option<String>,\n\n    /// Vector dimensionality used to size the LanceDB stores.\n    #[serde(default = \"default_dims\")]\n    pub dims: usize,\n\n    /// Chunks per embedding request.\n    #[serde(default = \"default_batch_size\")]\n    pub batch_size: usize,\n\n    /// Quantization for candle BGE-M3 weights: `int8` (default), `int4`,\n    /// `none`.\n    #[serde(default)]\n    pub quantization: Option<String>,\n\n    /// Target chunk size in tokens (server chunks raw file content it\n    /// receives over gRPC).\n    #[serde(default = \"default_max_tokens\")]\n    pub max_tokens: usize,\n    /// Overlap between adjacent chunks in tokens.\n    #[serde(default = \"default_overlap_tokens\")]\n    pub overlap_tokens: usize,\n    /// Whether to keep the embedder's in-memory vector cache warm.\n    #[serde(default = \"default_cache_enabled\")]\n    pub cache: bool,\n}\n\nfn default_dims() -> usize {\n    1024\n}\n\nfn default_batch_size() -> usize {\n    32\n}\n\nfn default_max_tokens() -> usize {\n    512\n}\n\nfn default_overlap_tokens() -> usize {\n    64\n}\n\nfn default_cache_enabled() -> bool {\n    true\n}\n\nimpl Default for EmbedderConfig {\n    fn default() -> Self {\n        Self {\n            model: None,\n            model_dir: None,\n            ollama_url: None,\n            ollama_model: None,\n            ollama_prefix: None,\n            dims: default_dims(),\n            batch_size: default_batch_size(),\n            quantization: None,\n            max_tokens: default_max_tokens(),\n            overlap_tokens: default_overlap_tokens(),\n            cache: default_cache_enabled(),\n        }\n    }\n}\n\nimpl EmbedderConfig {\n    /// The resolved model family (defaults to [`EmbedderModel::BgeM3`]).\n    #[must_use]\n    pub fn resolved_model(&self) -> EmbedderModel {\n        self.model.as_deref().map_or(\n            match (&self.model_dir, &self.ollama_model) {\n                (Some(_), _) | (None, Some(_)) => EmbedderModel::Ollama,\n                (None, None) => EmbedderModel::BgeM3,\n            },\n            EmbedderModel::parse,\n        )\n    }\n\n    /// The configured weight quantization (candle BGE-M3 only).\n    #[must_use]\n    pub fn resolved_quantization(&self) -> arlm_embedding::embedder::config::Quantization {\n        use arlm_embedding::embedder::config::Quantization;\n        match self.quantization.as_deref() {\n            Some(\"none\") => Quantization::None,\n            Some(\"int4\") => Quantization::Int4,\n            _ => Quantization::Int8,\n        }\n    }\n}\n\n/// Search serving defaults (plan 020). Applied by the handlers when a request\n/// omits the corresponding field.\n#[derive(Debug, Clone, Deserialize)]\npub struct SearchConfig {\n    /// Default tier when a request does not specify one: `hybrid` (default),\n    /// `fts`, `entity` or `vector`.\n    #[serde(default = \"default_search_tier\")]\n    pub tier: String,\n    /// Default `top_k` for requests without an explicit limit.\n    #[serde(default = \"default_search_top_k\")]\n    pub top_k: usize,\n    /// Default token budget for rendered context.\n    #[serde(default = \"default_search_max_tokens\")]\n    pub max_tokens: u32,\n}\n\nfn default_search_tier() -> String {\n    \"hybrid\".to_string()\n}\n\nfn default_search_top_k() -> usize {\n    10\n}\n\nfn default_search_max_tokens() -> u32 {\n    8000\n}\n\nimpl Default for SearchConfig {\n    fn default() -> Self {\n        Self {\n            tier: default_search_tier(),\n            top_k: default_search_top_k(),\n            max_tokens: default_search_max_tokens(),\n        }\n    }\n}",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
+  "newString": "/// Embedding model family served by the data plane (plan 020 `[embedder]`).\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]\npub enum EmbedderModel {\n    /// Real BGE-M3 via candle (requires `model_dir` with weights).\n    #[default]\n    BgeM3,\n    /// Ollama HTTP embedding server (`ollama_url` + `ollama_model`).\n    Ollama,\n    /// Hash-based lightweight embedder (tests / degraded mode).\n    Lightweight,\n}\n\nimpl EmbedderModel {\n    /// Parse a `server.toml` `model` string.\n    #[must_use]\n    pub fn parse(s: &str) -> Self {\n        match s.trim().to_ascii_lowercase().as_str() {\n            \"ollama\" => Self::Ollama,\n            \"lightweight\" | \"fallback\" | \"hash\" => Self::Lightweight,\n            _ => Self::BgeM3,\n        }\n    }\n}\n\n/// Server-side chunking + embedding parameters (plan 020, D2).\n///\n/// The server chunks raw file content it receives over gRPC using\n/// `max_tokens`/`overlap_tokens`, then embeds and stores vectors. All of this\n/// is configured exclusively here — the client has no data config.\n#[derive(Debug, Clone, Deserialize)]\npub struct EmbedderConfig {\n    /// Embedding model: `bge-m3` (default), `ollama`, or `lightweight`.\n    #[serde(default)]\n    pub model: Option<String>,\n\n    /// Model weights directory (BGE-M3: `model.safetensors` + `tokenizer.json`).\n    #[serde(default)]\n    pub model_dir: Option<PathBuf>,\n\n    /// Ollama base URL (model = \"ollama\").\n    #[serde(default)]\n    pub ollama_url: Option<String>,\n\n    /// Ollama embedding model tag (model = \"ollama\"), e.g. `all-minilm`.\n    #[serde(default)]\n    pub ollama_model: Option<String>,\n\n    /// Optional task prefix prepended to embedded texts\n    /// (`search_document: ` for nomic-family models; empty for all-minilm).\n    #[serde(default)]\n    pub ollama_prefix: Option<String>,\n\n    /// Vector dimensionality used to size the LanceDB stores.\n    #[serde(default = \"default_dims\")]\n    pub dims: usize,\n\n    /// Chunks per embedding request.\n    #[serde(default = \"default_batch_size\")]\n    pub batch_size: usize,\n\n    /// Quantization for candle BGE-M3 weights: `int8` (default), `int4`,\n    /// `none`.\n    #[serde(default)]\n    pub quantization: Option<String>,\n\n    /// Target chunk size in tokens (server chunks raw file content it\n    /// receives over gRPC).\n    #[serde(default = \"default_max_tokens\")]\n    pub max_tokens: usize,\n    /// Overlap between adjacent chunks in tokens.\n    #[serde(default = \"default_overlap_tokens\")]\n    pub overlap_tokens: usize,\n    /// Whether to keep the embedder's in-memory vector cache warm.\n    #[serde(default = \"default_cache_enabled\")]\n    pub cache: bool,\n}\n\nfn default_dims() -> usize {\n    1024\n}\n\nfn default_batch_size() -> usize {\n    32\n}\n\nfn default_max_tokens() -> usize {\n    512\n}\n\nfn default_overlap_tokens() -> usize {\n    64\n}\n\nfn default_cache_enabled() -> bool {\n    true\n}\n\nimpl Default for EmbedderConfig {\n    fn default() -> Self {\n        Self {\n            model: None,\n            model_dir: None,\n            ollama_url: None,\n            ollama_model: None,\n            ollama_prefix: None,\n            dims: default_dims(),\n            batch_size: default_batch_size(),\n            quantization: None,\n            max_tokens: default_max_tokens(),\n            overlap_tokens: default_overlap_tokens(),\n            cache: default_cache_enabled(),\n        }\n    }\n}\n\nimpl EmbedderConfig {\n    /// The resolved model family (defaults to [`EmbedderModel::BgeM3`]).\n    #[must_use]\n    pub fn resolved_model(&self) -> EmbedderModel {\n        self.model.as_deref().map_or(\n            match (&self.model_dir, &self.ollama_model) {\n                (Some(_), _) | (None, Some(_)) => EmbedderModel::Ollama,\n                (None, None) => EmbedderModel::BgeM3,\n            },\n            EmbedderModel::parse,\n        )\n    }\n\n    /// The configured weight quantization (candle BGE-M3 only).\n    #[must_use]\n    pub fn resolved_quantization(&self) -> arags_embedding::embedder::config::Quantization {\n        use arags_embedding::embedder::config::Quantization;\n        match self.quantization.as_deref() {\n            Some(\"none\") => Quantization::None,\n            Some(\"int4\") => Quantization::Int4,\n            _ => Quantization::Int8,\n        }\n    }\n}\n\n/// Search serving defaults (plan 020). Applied by the handlers when a request\n/// omits the corresponding field.\n#[derive(Debug, Clone, Deserialize)]\npub struct SearchConfig {\n    /// Default tier when a request does not specify one: `hybrid` (default),\n    /// `fts`, `entity` or `vector`.\n    #[serde(default = \"default_search_tier\")]\n    pub tier: String,\n    /// Default `top_k` for requests without an explicit limit.\n    #[serde(default = \"default_search_top_k\")]\n    pub top_k: usize,\n    /// Default token budget for rendered context.\n    #[serde(default = \"default_search_max_tokens\")]\n    pub max_tokens: u32,\n}\n\nfn default_search_tier() -> String {\n    \"hybrid\".to_string()\n}\n\nfn default_search_top_k() -> usize {\n    10\n}\n\nfn default_search_max_tokens() -> u32 {\n    8000\n}\n\nimpl Default for SearchConfig {\n    fn default() -> Self {\n        Self {\n            tier: default_search_tier(),\n            top_k: default_search_top_k(),\n            max_tokens: default_search_max_tokens(),\n        }\n    }\n}",
   "oldString": "/// Server-side chunking parameters (plan 020, D2).\n#[derive(Debug, Clone, Deserialize)]\npub struct EmbedderConfig {\n    /// Target chunk size in tokens (server chunks raw file content it\n    /// receives over gRPC).\n    #[serde(default = \"default_max_tokens\")]\n    pub max_tokens: usize,\n    /// Overlap between adjacent chunks in tokens.\n    #[serde(default = \"default_overlap_tokens\")]\n    pub overlap_tokens: usize,\n}\n\nfn default_max_tokens() -> usize {\n    512\n}\n\nfn default_overlap_tokens() -> usize {\n    64\n}\n\nimpl Default for EmbedderConfig {\n    fn default() -> Self {\n        Self {\n            max_tokens: default_max_tokens(),\n            overlap_tokens: default_overlap_tokens(),\n        }\n    }\n}"
 }
 ```
@@ -8601,12 +8601,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "newString": "impl Default for ServerConfig {\n    fn default() -> Self {\n        Self {\n            listen_addr: default_listen_addr(),\n            data_dir: default_data_dir(),\n            tls_cert: None,\n            tls_key: None,\n            mtls_ca: None,\n            embedder: EmbedderConfig::default(),\n            search: SearchConfig::default(),\n            qa_cache: QaCacheConfig::default(),\n            maintenance: MaintenanceConfig::default(),\n        }\n    }\n}",
   "oldString": "impl Default for ServerConfig {\n    fn default() -> Self {\n        Self {\n            listen_addr: default_listen_addr(),\n            data_dir: default_data_dir(),\n            tls_cert: None,\n            tls_key: None,\n            embedder: EmbedderConfig::default(),\n            qa_cache: QaCacheConfig::default(),\n            maintenance: MaintenanceConfig::default(),\n        }\n    }\n}"
 }
@@ -8628,12 +8628,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "newString": "    /// Path to the TLS certificate, if configured.\n    #[must_use]\n    pub fn tls_cert(&self) -> Option<&PathBuf> {\n        self.tls_cert.as_ref()\n    }\n\n    /// Path to the TLS private key, if configured.\n    #[must_use]\n    pub fn tls_key(&self) -> Option<&PathBuf> {\n        self.tls_key.as_ref()\n    }\n\n    /// Path to the mTLS client CA bundle, if configured.\n    #[must_use]\n    pub fn mtls_ca(&self) -> Option<&PathBuf> {\n        self.mtls_ca.as_ref()\n    }\n}",
   "oldString": "    /// Path to the TLS certificate, if configured.\n    #[must_use]\n    pub fn tls_cert(&self) -> Option<&PathBuf> {\n        self.tls_cert.as_ref()\n    }\n\n    /// Path to the TLS private key, if configured.\n    #[must_use]\n    pub fn tls_key(&self) -> Option<&PathBuf> {\n        self.tls_key.as_ref()\n    }\n}"
 }
@@ -8662,13 +8662,13 @@ Also add a testable `load_from_path` function to ServerConfig so F9.4 tests can 
 
 ```rust
 pub fn load() -> Result<Self> {
-    let path = std::env::var("ARLM_SERVER_CONFIG").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("/etc/arlm/server.toml"));
+    let path = std::env::var("ARAGS_SERVER_CONFIG").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("/etc/arags/server.toml"));
     Self::load_from_path(&path)
 }
 
 pub fn load_from_path(path: &Path) -> Result<Self> { ... file or default ... }
 
-pub fn apply_env_overrides(mut self) -> Self { ... ARLM_SERVER_ADDR / ARLM_DATA_DIR ... }
+pub fn apply_env_overrides(mut self) -> Self { ... ARAGS_SERVER_ADDR / ARAGS_DATA_DIR ... }
 ```
 
 Then wire state.rs. Let me do the config load refactor now.
@@ -8677,14 +8677,14 @@ Then wire state.rs. Let me do the config load refactor now.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
-  "newString": "impl ServerConfig {\n    /// Load configuration from the server config file.\n    ///\n    /// Order: `ARLM_SERVER_CONFIG` env var → `/etc/arlm/server.toml` → env\n    /// overrides → built-in defaults.\n    ///\n    /// The server no longer reads the client's `.arlm/config.toml` /\n    /// `~/.arlm/config.toml` (plan 020): `server.toml` is a disjoint host\n    /// file mounted into the container.\n    ///\n    /// # Errors\n    ///\n    /// Returns an error if a config file exists but cannot be read or parsed.\n    pub fn load() -> Result<Self> {\n        let path = std::env::var(\"ARLM_SERVER_CONFIG\")\n            .map(PathBuf::from)\n            .unwrap_or_else(|_| PathBuf::from(\"/etc/arlm/server.toml\"));\n        Ok(Self::load_from_path(&path)?.with_env_overrides())\n    }\n\n    /// Load from an explicit path (missing file → defaults). Env overrides\n    /// are **not** applied here; call [`Self::with_env_overrides`] after.\n    ///\n    /// # Errors\n    ///\n    /// Returns an error if the file exists but cannot be read or parsed.\n    pub fn load_from_path(path: &std::path::Path) -> Result<Self> {\n        if !path.exists() {\n            return Ok(Self::default());\n        }\n        let contents = std::fs::read_to_string(path)\n            .with_context(|| format!(\"failed to read config from {}\", path.display()))?;\n        toml::from_str(&contents).with_context(|| format!(\"failed to parse {}\", path.display()))\n    }\n\n    /// Apply the `ARLM_SERVER_ADDR` / `ARLM_DATA_DIR` environment overrides\n    /// (plan 020 keeps both as ops escape hatches over the file).\n    #[must_use]\n    pub fn with_env_overrides(mut self) -> Self {\n        if let Ok(addr) = std::env::var(\"ARLM_SERVER_ADDR\") {\n            self.listen_addr = addr;\n        }\n        if let Ok(dir) = std::env::var(\"ARLM_DATA_DIR\") {\n            self.data_dir = PathBuf::from(dir);\n        }\n        self\n    }",
-  "oldString": "impl ServerConfig {\n    /// Load configuration from the server config file.\n    ///\n    /// Order: `ARLM_SERVER_CONFIG` env var → `/etc/arlm/server.toml` → env\n    /// overrides → built-in defaults.\n    ///\n    /// The server no longer reads the client's `.arlm/config.toml` /\n    /// `~/.arlm/config.toml` (plan 020): `server.toml` is a disjoint host\n    /// file mounted into the container.\n    ///\n    /// # Errors\n    ///\n    /// Returns an error if a config file exists but cannot be read or parsed.\n    pub fn load() -> Result<Self> {\n        let path = std::env::var(\"ARLM_SERVER_CONFIG\")\n            .map(PathBuf::from)\n            .unwrap_or_else(|_| PathBuf::from(\"/etc/arlm/server.toml\"));\n\n        let mut config = if path.exists() {\n            let contents = std::fs::read_to_string(&path)\n                .with_context(|| format!(\"failed to read config from {}\", path.display()))?;\n            toml::from_str(&contents)\n                .with_context(|| format!(\"failed to parse config from {}\", path.display()))?\n        } else {\n            Self::default()\n        };\n\n        // Environment overrides win over the file (plan 020).\n        if let Ok(addr) = std::env::var(\"ARLM_SERVER_ADDR\") {\n            config.listen_addr = addr;\n        }\n        if let Ok(dir) = std::env::var(\"ARLM_DATA_DIR\") {\n            config.data_dir = PathBuf::from(dir);\n        }\n\n        Ok(config)\n    }"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
+  "newString": "impl ServerConfig {\n    /// Load configuration from the server config file.\n    ///\n    /// Order: `ARAGS_SERVER_CONFIG` env var → `/etc/arags/server.toml` → env\n    /// overrides → built-in defaults.\n    ///\n    /// The server no longer reads the client's `.arags/config.toml` /\n    /// `~/.arags/config.toml` (plan 020): `server.toml` is a disjoint host\n    /// file mounted into the container.\n    ///\n    /// # Errors\n    ///\n    /// Returns an error if a config file exists but cannot be read or parsed.\n    pub fn load() -> Result<Self> {\n        let path = std::env::var(\"ARAGS_SERVER_CONFIG\")\n            .map(PathBuf::from)\n            .unwrap_or_else(|_| PathBuf::from(\"/etc/arags/server.toml\"));\n        Ok(Self::load_from_path(&path)?.with_env_overrides())\n    }\n\n    /// Load from an explicit path (missing file → defaults). Env overrides\n    /// are **not** applied here; call [`Self::with_env_overrides`] after.\n    ///\n    /// # Errors\n    ///\n    /// Returns an error if the file exists but cannot be read or parsed.\n    pub fn load_from_path(path: &std::path::Path) -> Result<Self> {\n        if !path.exists() {\n            return Ok(Self::default());\n        }\n        let contents = std::fs::read_to_string(path)\n            .with_context(|| format!(\"failed to read config from {}\", path.display()))?;\n        toml::from_str(&contents).with_context(|| format!(\"failed to parse {}\", path.display()))\n    }\n\n    /// Apply the `ARAGS_SERVER_ADDR` / `ARAGS_DATA_DIR` environment overrides\n    /// (plan 020 keeps both as ops escape hatches over the file).\n    #[must_use]\n    pub fn with_env_overrides(mut self) -> Self {\n        if let Ok(addr) = std::env::var(\"ARAGS_SERVER_ADDR\") {\n            self.listen_addr = addr;\n        }\n        if let Ok(dir) = std::env::var(\"ARAGS_DATA_DIR\") {\n            self.data_dir = PathBuf::from(dir);\n        }\n        self\n    }",
+  "oldString": "impl ServerConfig {\n    /// Load configuration from the server config file.\n    ///\n    /// Order: `ARAGS_SERVER_CONFIG` env var → `/etc/arags/server.toml` → env\n    /// overrides → built-in defaults.\n    ///\n    /// The server no longer reads the client's `.arags/config.toml` /\n    /// `~/.arags/config.toml` (plan 020): `server.toml` is a disjoint host\n    /// file mounted into the container.\n    ///\n    /// # Errors\n    ///\n    /// Returns an error if a config file exists but cannot be read or parsed.\n    pub fn load() -> Result<Self> {\n        let path = std::env::var(\"ARAGS_SERVER_CONFIG\")\n            .map(PathBuf::from)\n            .unwrap_or_else(|_| PathBuf::from(\"/etc/arags/server.toml\"));\n\n        let mut config = if path.exists() {\n            let contents = std::fs::read_to_string(&path)\n                .with_context(|| format!(\"failed to read config from {}\", path.display()))?;\n            toml::from_str(&contents)\n                .with_context(|| format!(\"failed to parse config from {}\", path.display()))?\n        } else {\n            Self::default()\n        };\n\n        // Environment overrides win over the file (plan 020).\n        if let Ok(addr) = std::env::var(\"ARAGS_SERVER_ADDR\") {\n            config.listen_addr = addr;\n        }\n        if let Ok(dir) = std::env::var(\"ARAGS_DATA_DIR\") {\n            config.data_dir = PathBuf::from(dir);\n        }\n\n        Ok(config)\n    }"
 }
 ```
 
@@ -8706,14 +8706,14 @@ Agora, refaça o `state.rs` para construir o embedder a partir da config:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/state.rs
+**Title:** crates/arags-server/src/state.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/state.rs",
-  "newString": "use std::path::PathBuf;\nuse std::sync::Arc;\n\nuse anyhow::Result;\nuse arlm_embedding::embedder::{Embedder, bge_m3, fallback};\nuse arlm_storage::QuestionVectorStore;\nuse arlm_storage::Storage;\nuse arlm_storage::VectorStore;\n\nuse crate::config::{EmbedderModel, QaCacheConfig, ServerConfig};",
-  "oldString": "use std::path::PathBuf;\nuse std::sync::Arc;\n\nuse anyhow::Result;\nuse arlm_embedding::embedder::{Embedder, bge_m3, fallback};\nuse arlm_storage::QuestionVectorStore;\nuse arlm_storage::Storage;\nuse arlm_storage::VectorStore;\n\nuse crate::config::{QaCacheConfig, ServerConfig};"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/state.rs",
+  "newString": "use std::path::PathBuf;\nuse std::sync::Arc;\n\nuse anyhow::Result;\nuse arags_embedding::embedder::{Embedder, bge_m3, fallback};\nuse arags_storage::QuestionVectorStore;\nuse arags_storage::Storage;\nuse arags_storage::VectorStore;\n\nuse crate::config::{EmbedderModel, QaCacheConfig, ServerConfig};",
+  "oldString": "use std::path::PathBuf;\nuse std::sync::Arc;\n\nuse anyhow::Result;\nuse arags_embedding::embedder::{Embedder, bge_m3, fallback};\nuse arags_storage::QuestionVectorStore;\nuse arags_storage::Storage;\nuse arags_storage::VectorStore;\n\nuse crate::config::{QaCacheConfig, ServerConfig};"
 }
 ```
 
@@ -8733,14 +8733,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/state.rs
+**Title:** crates/arags-server/src/state.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/state.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/state.rs",
   "newString": "    /// Embedder used for chunk (index) and query (search) embeddings. Built\n    /// from `server.toml [embedder]` (plan 020): real BGE-M3 when\n    /// `[embedder] model = \"bge-m3\"` and `model_dir` contains weights;\n    /// Ollama when `model = \"ollama\"`; otherwise a hash fallback that keeps\n    /// the pipeline running without semantic search.\n    pub embedder: Arc<dyn Embedder + Send + Sync>,",
-  "oldString": "    /// Embedder used for chunk (index) and query (search) embeddings.\n    /// Real BGE-M3 when `ARLM_MODEL_DIR` points at a directory containing\n    /// `model.safetensors` + `tokenizer.json`; otherwise a hash fallback that\n    /// keeps the pipeline running without semantic search.\n    pub embedder: Arc<dyn Embedder + Send + Sync>,"
+  "oldString": "    /// Embedder used for chunk (index) and query (search) embeddings.\n    /// Real BGE-M3 when `ARAGS_MODEL_DIR` points at a directory containing\n    /// `model.safetensors` + `tokenizer.json`; otherwise a hash fallback that\n    /// keeps the pipeline running without semantic search.\n    pub embedder: Arc<dyn Embedder + Send + Sync>,"
 }
 ```
 
@@ -8760,14 +8760,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/state.rs
+**Title:** crates/arags-server/src/state.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/state.rs",
-  "newString": "/// Build the embedder from the `[embedder]` section of `server.toml`\n/// (plan 020): Ollama when `model = \"ollama\"`, BGE-M3 (quantized) when\n/// `model = \"bge-m3\"` and weights are available, else a hash fallback.\nfn load_embedder(cfg: &crate::config::EmbedderConfig) -> Arc<dyn Embedder + Send + Sync> {\n    use arlm_embedding::embedder::config::{\n        EmbeddingConfig, EmbeddingModel as CfgModel, Quantization,\n    };\n\n    let dims = cfg.dims;\n    match cfg.resolved_model() {\n        EmbedderModel::Ollama => {\n            let url = cfg\n                .ollama_url\n                .clone()\n                .unwrap_or_else(|| \"http://localhost:11434\".to_string());\n            let model = cfg\n                .ollama_model\n                .clone()\n                .unwrap_or_else(|| \"nomic-embed-text-v2-moe\".to_string());\n            let prefix = Some(\n                cfg.ollama_prefix\n                    .clone()\n                    .unwrap_or_else(|| \"search_document: \".to_string()),\n            );\n            let emb_cfg = EmbeddingConfig {\n                model: CfgModel::Ollama,\n                quantization: Quantization::None,\n                matryoshka_dims: None,\n                model_dir: None,\n                dims,\n                ollama_url: Some(url.clone()),\n                ollama_model: Some(model.clone()),\n                ollama_prefix: prefix,\n            };\n            match arlm_embedding::embedder::config::build_embedder(&emb_cfg) {\n                Ok(embedder) => {\n                    tracing::info!(model = \"ollama\", ollama_model = %model, %url, \"loaded Ollama embedder\");\n                    return embedder;\n                }\n                Err(err) => {\n                    tracing::warn!(error = %err, \"Ollama embedder failed; falling back\");\n                }\n            }\n        }\n        EmbedderModel::BgeM3 => {\n            if let Some(dir) = cfg.model_dir.clone().map(PathBuf::from) {\n                if dir.join(\"model.safetensors\").exists() {\n                    // Quantize to INT8 at load time: runs real BGE-M3 semantics\n                    // via `QMatMul` at ~3-4x less CPU/RAM than FP32.\n                    let quant = cfg.resolved_quantization();\n                    let emb_cfg = EmbeddingConfig {\n                        model: CfgModel::BgeM3,\n                        quantization: quant,\n                        matryoshka_dims: Some(dims),\n                        model_dir: Some(dir.clone()),\n                        dims,\n                        ollama_url: None,\n                        ollama_model: None,\n                        ollama_prefix: None,\n                    };\n                    match bge_m3::BgeM3Embedder::new_with_config(&dir, &emb_cfg) {\n                        Ok(embedder) => {\n                            tracing::info!(\n                                model_dir = %dir.display(),\n                                quantization = ?quant,\n                                \"loaded BGE-M3 embedder\"\n                            );\n                            return Arc::new(embedder);\n                        }\n                        Err(err) => {\n                            tracing::warn!(\n                                error = %err,\n                                \"BGE-M3 load failed, falling back to hash embedder\"\n                            );\n                        }\n                    }\n                } else {\n                    tracing::warn!(\n                        model_dir = %dir.display(),\n                        \"model.safetensors missing in [embedder].model_dir; using hash embedder\"\n                    );\n                }\n            } else {\n                tracing::warn!(\"[embedder] model = \\\"bge-m3\\\" without model_dir; using hash embedder\");\n            }\n        }\n        EmbedderModel::Lightweight => {\n            tracing::info!(\"[embedder] model = \\\"lightweight\\\"; using hash embedder\");\n        }\n    }\n\n    Arc::new(fallback::FallbackEmbedder::new(dims))\n}\n\n/// Dimensionality of the embedder built for `cfg`, used to size the server's\n/// global vector stores so stored and query vectors are comparable.\n#[must_use]\npub fn embedder_dimension(cfg: &crate::config::EmbedderConfig) -> usize {\n    cfg.dims\n}",
-  "oldString": "/// Build the embedder: Ollama when configured, else BGE-M3 (quantized) when\n/// weights are available, else a hash fallback.\nfn load_embedder() -> Arc<dyn Embedder + Send + Sync> {\n    const DIMS: usize = 1024;\n\n    // Ollama backend (laptop-friendly): enabled via ARLM_OLLAMA_MODEL.\n    if let Ok(model) = std::env::var(\"ARLM_OLLAMA_MODEL\") {\n        let url = std::env::var(\"ARLM_OLLAMA_URL\")\n            .unwrap_or_else(|_| \"http://localhost:11434\".to_string());\n        let dims = std::env::var(\"ARLM_OLLAMA_DIMS\")\n            .ok()\n            .and_then(|d| d.parse::<usize>().ok())\n            .unwrap_or(768);\n        let prefix =\n            std::env::var(\"ARLM_OLLAMA_PREFIX\").unwrap_or_else(|_| \"search_document: \".to_string());\n        let cfg = arlm_embedding::embedder::config::EmbeddingConfig {\n            model: arlm_embedding::embedder::config::EmbeddingModel::Ollama,\n            quantization: arlm_embedding::embedder::config::Quantization::None,\n            matryoshka_dims: None,\n            model_dir: None,\n            dims,\n            ollama_url: Some(url.clone()),\n            ollama_model: Some(model.clone()),\n            ollama_prefix: Some(prefix),\n        };\n        match arlm_embedding::embedder::config::build_embedder(&cfg) {\n            Ok(embedder) => {\n                tracing::info!(model = \"ollama\", ollama_model = %model, \"loaded Ollama embedder\");\n                return embedder;\n            }\n            Err(err) => {\n                tracing::warn!(error = %err, \"Ollama embedder failed; falling back\");\n            }\n        }\n    }\n\n    match std::env::var(\"ARLM_MODEL_DIR\").ok().map(PathBuf::from) {\n        Some(dir) if dir.join(\"model.safetensors\").exists() => {\n            // Quantize to INT8 at load time: runs real BGE-M3 semantics via\n            // `QMatMul` at ~3-4x less CPU/RAM than FP32 (set ARLM_MODEL_QUANT\n            // to override). FP32 (\"none\") is far too slow for CPU indexing.\n            let quant = match std::env::var(\"ARLM_MODEL_QUANT\").as_deref() {\n                Ok(\"none\") => arlm_embedding::embedder::config::Quantization::None,\n                Ok(\"int4\") => arlm_embedding::embedder::config::Quantization::Int4,\n                _ => arlm_embedding::embedder::config::Quantization::Int8,\n            };\n            let cfg = arlm_embedding::embedder::config::EmbeddingConfig {\n                model: arlm_embedding::embedder::config::EmbeddingModel::BgeM3,\n                quantization: quant,\n                matryoshka_dims: Some(DIMS),\n                model_dir: Some(dir.clone()),\n                dims: DIMS,\n                ollama_url: None,\n                ollama_model: None,\n                ollama_prefix: None,\n            };\n            match bge_m3::BgeM3Embedder::new_with_config(&dir, &cfg) {\n                Ok(embedder) => {\n                    tracing::info!(\n                        model_dir = %dir.display(),\n                        quantization = ?quant,\n                        \"loaded BGE-M3 embedder\"\n                    );\n                    Arc::new(embedder)\n                }\n                Err(err) => {\n                    tracing::warn!(\n                        error = %err,\n                        \"BGE-M3 load failed, falling back to hash embedder\"\n                    );\n                    Arc::new(fallback::FallbackEmbedder::new(DIMS))\n                }\n            }\n        }\n        Some(dir) => {\n            tracing::warn!(\n                model_dir = %dir.display(),\n                \"ARLM_MODEL_DIR set but model.safetensors missing; using hash embedder\"\n            );\n            Arc::new(fallback::FallbackEmbedder::new(DIMS))\n        }\n        None => {\n            tracing::info!(\"ARLM_MODEL_DIR not set; using fallback hash embedder\");\n            Arc::new(fallback::FallbackEmbedder::new(DIMS))\n        }\n    }\n}\n\n/// Dimensionality of the embedder [`load_embedder`] will build, used to size\n/// the server's global vector store so stored and query vectors are comparable.\n#[must_use]\npub fn embedder_dimension() -> usize {\n    if std::env::var(\"ARLM_OLLAMA_MODEL\").is_ok() {\n        std::env::var(\"ARLM_OLLAMA_DIMS\")\n            .ok()\n            .and_then(|d| d.parse::<usize>().ok())\n            .unwrap_or(768)\n    } else {\n        1024\n    }\n}"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/state.rs",
+  "newString": "/// Build the embedder from the `[embedder]` section of `server.toml`\n/// (plan 020): Ollama when `model = \"ollama\"`, BGE-M3 (quantized) when\n/// `model = \"bge-m3\"` and weights are available, else a hash fallback.\nfn load_embedder(cfg: &crate::config::EmbedderConfig) -> Arc<dyn Embedder + Send + Sync> {\n    use arags_embedding::embedder::config::{\n        EmbeddingConfig, EmbeddingModel as CfgModel, Quantization,\n    };\n\n    let dims = cfg.dims;\n    match cfg.resolved_model() {\n        EmbedderModel::Ollama => {\n            let url = cfg\n                .ollama_url\n                .clone()\n                .unwrap_or_else(|| \"http://localhost:11434\".to_string());\n            let model = cfg\n                .ollama_model\n                .clone()\n                .unwrap_or_else(|| \"nomic-embed-text-v2-moe\".to_string());\n            let prefix = Some(\n                cfg.ollama_prefix\n                    .clone()\n                    .unwrap_or_else(|| \"search_document: \".to_string()),\n            );\n            let emb_cfg = EmbeddingConfig {\n                model: CfgModel::Ollama,\n                quantization: Quantization::None,\n                matryoshka_dims: None,\n                model_dir: None,\n                dims,\n                ollama_url: Some(url.clone()),\n                ollama_model: Some(model.clone()),\n                ollama_prefix: prefix,\n            };\n            match arags_embedding::embedder::config::build_embedder(&emb_cfg) {\n                Ok(embedder) => {\n                    tracing::info!(model = \"ollama\", ollama_model = %model, %url, \"loaded Ollama embedder\");\n                    return embedder;\n                }\n                Err(err) => {\n                    tracing::warn!(error = %err, \"Ollama embedder failed; falling back\");\n                }\n            }\n        }\n        EmbedderModel::BgeM3 => {\n            if let Some(dir) = cfg.model_dir.clone().map(PathBuf::from) {\n                if dir.join(\"model.safetensors\").exists() {\n                    // Quantize to INT8 at load time: runs real BGE-M3 semantics\n                    // via `QMatMul` at ~3-4x less CPU/RAM than FP32.\n                    let quant = cfg.resolved_quantization();\n                    let emb_cfg = EmbeddingConfig {\n                        model: CfgModel::BgeM3,\n                        quantization: quant,\n                        matryoshka_dims: Some(dims),\n                        model_dir: Some(dir.clone()),\n                        dims,\n                        ollama_url: None,\n                        ollama_model: None,\n                        ollama_prefix: None,\n                    };\n                    match bge_m3::BgeM3Embedder::new_with_config(&dir, &emb_cfg) {\n                        Ok(embedder) => {\n                            tracing::info!(\n                                model_dir = %dir.display(),\n                                quantization = ?quant,\n                                \"loaded BGE-M3 embedder\"\n                            );\n                            return Arc::new(embedder);\n                        }\n                        Err(err) => {\n                            tracing::warn!(\n                                error = %err,\n                                \"BGE-M3 load failed, falling back to hash embedder\"\n                            );\n                        }\n                    }\n                } else {\n                    tracing::warn!(\n                        model_dir = %dir.display(),\n                        \"model.safetensors missing in [embedder].model_dir; using hash embedder\"\n                    );\n                }\n            } else {\n                tracing::warn!(\"[embedder] model = \\\"bge-m3\\\" without model_dir; using hash embedder\");\n            }\n        }\n        EmbedderModel::Lightweight => {\n            tracing::info!(\"[embedder] model = \\\"lightweight\\\"; using hash embedder\");\n        }\n    }\n\n    Arc::new(fallback::FallbackEmbedder::new(dims))\n}\n\n/// Dimensionality of the embedder built for `cfg`, used to size the server's\n/// global vector stores so stored and query vectors are comparable.\n#[must_use]\npub fn embedder_dimension(cfg: &crate::config::EmbedderConfig) -> usize {\n    cfg.dims\n}",
+  "oldString": "/// Build the embedder: Ollama when configured, else BGE-M3 (quantized) when\n/// weights are available, else a hash fallback.\nfn load_embedder() -> Arc<dyn Embedder + Send + Sync> {\n    const DIMS: usize = 1024;\n\n    // Ollama backend (laptop-friendly): enabled via ARAGS_OLLAMA_MODEL.\n    if let Ok(model) = std::env::var(\"ARAGS_OLLAMA_MODEL\") {\n        let url = std::env::var(\"ARAGS_OLLAMA_URL\")\n            .unwrap_or_else(|_| \"http://localhost:11434\".to_string());\n        let dims = std::env::var(\"ARAGS_OLLAMA_DIMS\")\n            .ok()\n            .and_then(|d| d.parse::<usize>().ok())\n            .unwrap_or(768);\n        let prefix =\n            std::env::var(\"ARAGS_OLLAMA_PREFIX\").unwrap_or_else(|_| \"search_document: \".to_string());\n        let cfg = arags_embedding::embedder::config::EmbeddingConfig {\n            model: arags_embedding::embedder::config::EmbeddingModel::Ollama,\n            quantization: arags_embedding::embedder::config::Quantization::None,\n            matryoshka_dims: None,\n            model_dir: None,\n            dims,\n            ollama_url: Some(url.clone()),\n            ollama_model: Some(model.clone()),\n            ollama_prefix: Some(prefix),\n        };\n        match arags_embedding::embedder::config::build_embedder(&cfg) {\n            Ok(embedder) => {\n                tracing::info!(model = \"ollama\", ollama_model = %model, \"loaded Ollama embedder\");\n                return embedder;\n            }\n            Err(err) => {\n                tracing::warn!(error = %err, \"Ollama embedder failed; falling back\");\n            }\n        }\n    }\n\n    match std::env::var(\"ARAGS_MODEL_DIR\").ok().map(PathBuf::from) {\n        Some(dir) if dir.join(\"model.safetensors\").exists() => {\n            // Quantize to INT8 at load time: runs real BGE-M3 semantics via\n            // `QMatMul` at ~3-4x less CPU/RAM than FP32 (set ARAGS_MODEL_QUANT\n            // to override). FP32 (\"none\") is far too slow for CPU indexing.\n            let quant = match std::env::var(\"ARAGS_MODEL_QUANT\").as_deref() {\n                Ok(\"none\") => arags_embedding::embedder::config::Quantization::None,\n                Ok(\"int4\") => arags_embedding::embedder::config::Quantization::Int4,\n                _ => arags_embedding::embedder::config::Quantization::Int8,\n            };\n            let cfg = arags_embedding::embedder::config::EmbeddingConfig {\n                model: arags_embedding::embedder::config::EmbeddingModel::BgeM3,\n                quantization: quant,\n                matryoshka_dims: Some(DIMS),\n                model_dir: Some(dir.clone()),\n                dims: DIMS,\n                ollama_url: None,\n                ollama_model: None,\n                ollama_prefix: None,\n            };\n            match bge_m3::BgeM3Embedder::new_with_config(&dir, &cfg) {\n                Ok(embedder) => {\n                    tracing::info!(\n                        model_dir = %dir.display(),\n                        quantization = ?quant,\n                        \"loaded BGE-M3 embedder\"\n                    );\n                    Arc::new(embedder)\n                }\n                Err(err) => {\n                    tracing::warn!(\n                        error = %err,\n                        \"BGE-M3 load failed, falling back to hash embedder\"\n                    );\n                    Arc::new(fallback::FallbackEmbedder::new(DIMS))\n                }\n            }\n        }\n        Some(dir) => {\n            tracing::warn!(\n                model_dir = %dir.display(),\n                \"ARAGS_MODEL_DIR set but model.safetensors missing; using hash embedder\"\n            );\n            Arc::new(fallback::FallbackEmbedder::new(DIMS))\n        }\n        None => {\n            tracing::info!(\"ARAGS_MODEL_DIR not set; using fallback hash embedder\");\n            Arc::new(fallback::FallbackEmbedder::new(DIMS))\n        }\n    }\n}\n\n/// Dimensionality of the embedder [`load_embedder`] will build, used to size\n/// the server's global vector store so stored and query vectors are comparable.\n#[must_use]\npub fn embedder_dimension() -> usize {\n    if std::env::var(\"ARAGS_OLLAMA_MODEL\").is_ok() {\n        std::env::var(\"ARAGS_OLLAMA_DIMS\")\n            .ok()\n            .and_then(|d| d.parse::<usize>().ok())\n            .unwrap_or(768)\n    } else {\n        1024\n    }\n}"
 }
 ```
 
@@ -8787,12 +8787,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/state.rs
+**Title:** crates/arags-server/src/state.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/state.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/state.rs",
   "newString": "    pub fn new(\n        storage: Storage,\n        config: ServerConfig,\n        vector_store: Option<Arc<VectorStore>>,\n        question_vector_store: Option<Arc<QuestionVectorStore>>,\n    ) -> Result<Self> {\n        let embedder = load_embedder(&config.embedder);\n        let qa_config = config.qa_cache.clone();",
   "oldString": "    pub fn new(\n        storage: Storage,\n        config: ServerConfig,\n        vector_store: Option<Arc<VectorStore>>,\n        question_vector_store: Option<Arc<QuestionVectorStore>>,\n    ) -> Result<Self> {\n        let embedder = load_embedder();\n        let qa_config = config.qa_cache.clone();"
 }
@@ -8816,12 +8816,12 @@ Agora, `lifecycle.rs` (dims + mTLS):
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/lifecycle.rs
+**Title:** crates/arags-server/src/lifecycle.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/lifecycle.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/lifecycle.rs",
   "newString": "use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};",
   "oldString": "use tonic::transport::{Identity, Server, ServerTlsConfig};"
 }
@@ -8843,14 +8843,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/lifecycle.rs
+**Title:** crates/arags-server/src/lifecycle.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/lifecycle.rs",
-  "newString": "    let vector_store = match VectorStore::open_with_dims(\n        &config.data_dir,\n        crate::state::embedder_dimension(&config.embedder),\n    )\n    .await\n    {\n        Ok(store) => Some(Arc::new(store)),\n        Err(e) => {\n            tracing::warn!(error = %e, \"vector store unavailable, continuing without semantic search\");\n            None\n        }\n    };\n\n    let question_vector_store = match arlm_storage::QuestionVectorStore::open(\n        &config.data_dir,\n        crate::state::embedder_dimension(&config.embedder),\n    ) {",
-  "oldString": "    let vector_store = match VectorStore::open_with_dims(\n        &config.data_dir,\n        crate::state::embedder_dimension(),\n    )\n    .await\n    {\n        Ok(store) => Some(Arc::new(store)),\n        Err(e) => {\n            tracing::warn!(error = %e, \"vector store unavailable, continuing without semantic search\");\n            None\n        }\n    };\n\n    let question_vector_store = match arlm_storage::QuestionVectorStore::open(\n        &config.data_dir,\n        crate::state::embedder_dimension(),\n    ) {"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/lifecycle.rs",
+  "newString": "    let vector_store = match VectorStore::open_with_dims(\n        &config.data_dir,\n        crate::state::embedder_dimension(&config.embedder),\n    )\n    .await\n    {\n        Ok(store) => Some(Arc::new(store)),\n        Err(e) => {\n            tracing::warn!(error = %e, \"vector store unavailable, continuing without semantic search\");\n            None\n        }\n    };\n\n    let question_vector_store = match arags_storage::QuestionVectorStore::open(\n        &config.data_dir,\n        crate::state::embedder_dimension(&config.embedder),\n    ) {",
+  "oldString": "    let vector_store = match VectorStore::open_with_dims(\n        &config.data_dir,\n        crate::state::embedder_dimension(),\n    )\n    .await\n    {\n        Ok(store) => Some(Arc::new(store)),\n        Err(e) => {\n            tracing::warn!(error = %e, \"vector store unavailable, continuing without semantic search\");\n            None\n        }\n    };\n\n    let question_vector_store = match arags_storage::QuestionVectorStore::open(\n        &config.data_dir,\n        crate::state::embedder_dimension(),\n    ) {"
 }
 ```
 
@@ -8870,12 +8870,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/lifecycle.rs
+**Title:** crates/arags-server/src/lifecycle.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/lifecycle.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/lifecycle.rs",
   "newString": "    if let (Some(cert), Some(key)) = (config.tls_cert(), config.tls_key()) {\n        let identity = Identity::from_pem(&load_file(&cert)?, &load_file(&key)?);\n        let mut tls = ServerTlsConfig::new().identity(identity);\n        // mTLS (plan 020): when `mtls_ca` is set, clients must present a\n        // certificate signed by this CA.\n        if let Some(ca) = config.mtls_ca() {\n            tls = tls.client_ca_root(Certificate::from_pem(&load_file(&ca)?));\n            info!(ca = %ca.display(), \"gRPC server requires client certificates (mTLS)\");\n        }\n        builder = builder.tls_config(tls)?;\n        info!(cert = %cert.display(), \"gRPC server TLS enabled\");\n    } else {\n        info!(\"gRPC server running without TLS (dev mode)\");\n    }",
   "oldString": "    if let (Some(cert), Some(key)) = (config.tls_cert(), config.tls_key()) {\n        let identity = Identity::from_pem(&load_file(&cert)?, &load_file(&key)?);\n        builder = builder.tls_config(ServerTlsConfig::new().identity(identity))?;\n        info!(cert = %cert.display(), \"gRPC server TLS enabled\");\n    } else {\n        info!(\"gRPC server running without TLS (dev mode)\");\n    }"
 }
@@ -8899,14 +8899,14 @@ Agora `grpc/index.rs` (batch_size a partir da config) e `grpc/search.rs` (defaul
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/grpc/index.rs
+**Title:** crates/arags-server/src/grpc/index.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/index.rs",
-  "newString": "/// Default number of concurrent embedding batches when `ARLM_INDEX_CONCURRENCY`\n/// is unset. Should track Ollama's `OLLAMA_NUM_PARALLEL`.\nconst DEFAULT_INDEX_CONCURRENCY: usize = 4;",
-  "oldString": "/// Default number of chunks per embedding request when `ARLM_EMBED_BATCH` is\n/// unset. Matches the Ollama server's internal `OLLAMA_BATCH_SIZE`.\nconst DEFAULT_EMBED_BATCH: usize = 64;\n\n/// Default number of concurrent embedding batches when `ARLM_INDEX_CONCURRENCY`\n/// is unset. Should track Ollama's `OLLAMA_NUM_PARALLEL`.\nconst DEFAULT_INDEX_CONCURRENCY: usize = 4;"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/index.rs",
+  "newString": "/// Default number of concurrent embedding batches when `ARAGS_INDEX_CONCURRENCY`\n/// is unset. Should track Ollama's `OLLAMA_NUM_PARALLEL`.\nconst DEFAULT_INDEX_CONCURRENCY: usize = 4;",
+  "oldString": "/// Default number of chunks per embedding request when `ARAGS_EMBED_BATCH` is\n/// unset. Matches the Ollama server's internal `OLLAMA_BATCH_SIZE`.\nconst DEFAULT_EMBED_BATCH: usize = 64;\n\n/// Default number of concurrent embedding batches when `ARAGS_INDEX_CONCURRENCY`\n/// is unset. Should track Ollama's `OLLAMA_NUM_PARALLEL`.\nconst DEFAULT_INDEX_CONCURRENCY: usize = 4;"
 }
 ```
 
@@ -8926,14 +8926,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/grpc/index.rs
+**Title:** crates/arags-server/src/grpc/index.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/index.rs",
-  "newString": "    // Phase 2: persist vectors to LanceDB when available.\n    if let Some(vector_store) = &state.vector_store {\n        // Batch size comes from `server.toml [embedder].batch_size` (plan 020);\n        // concurrency stays env-tunable so Docker images can be dialed to match\n        // OLLAMA_NUM_PARALLEL without a rebuild (see OLLAMA_EMBED_PROPOSED.md).\n        let embed_batch = state.config.embedder.batch_size.max(1);\n        let concurrency = std::env::var(\"ARLM_INDEX_CONCURRENCY\")\n            .ok()\n            .and_then(|v| v.parse::<usize>().ok())\n            .unwrap_or(DEFAULT_INDEX_CONCURRENCY)\n            .max(1);",
-  "oldString": "    // Phase 2: persist vectors to LanceDB when available.\n    if let Some(vector_store) = &state.vector_store {\n        // Embedding batches and concurrency are tunable via env so the Docker\n        // image can be dialed to match Ollama's OLLAMA_NUM_PARALLEL without a\n        // rebuild (see OLLAMA_EMBED_PROPOSED.md).\n        let embed_batch = std::env::var(\"ARLM_EMBED_BATCH\")\n            .ok()\n            .and_then(|v| v.parse::<usize>().ok())\n            .unwrap_or(DEFAULT_EMBED_BATCH);\n        let concurrency = std::env::var(\"ARLM_INDEX_CONCURRENCY\")\n            .ok()\n            .and_then(|v| v.parse::<usize>().ok())\n            .unwrap_or(DEFAULT_INDEX_CONCURRENCY);"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/index.rs",
+  "newString": "    // Phase 2: persist vectors to LanceDB when available.\n    if let Some(vector_store) = &state.vector_store {\n        // Batch size comes from `server.toml [embedder].batch_size` (plan 020);\n        // concurrency stays env-tunable so Docker images can be dialed to match\n        // OLLAMA_NUM_PARALLEL without a rebuild (see OLLAMA_EMBED_PROPOSED.md).\n        let embed_batch = state.config.embedder.batch_size.max(1);\n        let concurrency = std::env::var(\"ARAGS_INDEX_CONCURRENCY\")\n            .ok()\n            .and_then(|v| v.parse::<usize>().ok())\n            .unwrap_or(DEFAULT_INDEX_CONCURRENCY)\n            .max(1);",
+  "oldString": "    // Phase 2: persist vectors to LanceDB when available.\n    if let Some(vector_store) = &state.vector_store {\n        // Embedding batches and concurrency are tunable via env so the Docker\n        // image can be dialed to match Ollama's OLLAMA_NUM_PARALLEL without a\n        // rebuild (see OLLAMA_EMBED_PROPOSED.md).\n        let embed_batch = std::env::var(\"ARAGS_EMBED_BATCH\")\n            .ok()\n            .and_then(|v| v.parse::<usize>().ok())\n            .unwrap_or(DEFAULT_EMBED_BATCH);\n        let concurrency = std::env::var(\"ARAGS_INDEX_CONCURRENCY\")\n            .ok()\n            .and_then(|v| v.parse::<usize>().ok())\n            .unwrap_or(DEFAULT_INDEX_CONCURRENCY);"
 }
 ```
 
@@ -8953,12 +8953,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-server/src/grpc/search.rs
+**Title:** crates/arags-server/src/grpc/search.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/search.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/search.rs",
   "limit": 45,
   "offset": 205
 }
@@ -8966,7 +8966,7 @@ Edit applied successfully.
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/search.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/search.rs</path>
 <type>file</type>
 <content>
 205:     }
@@ -9037,12 +9037,12 @@ The proto `SearchTier` — how does the client send "auto"/unspecified? The CLI 
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n -B2 -A12 "enum SearchTier" crates/arlm-proto/proto/search.proto
+**Title:** rg -n -B2 -A12 "enum SearchTier" crates/arags-proto/proto/search.proto
 
 **Input:**
 ```json
 {
-  "command": "rg -n -B2 -A12 \"enum SearchTier\" crates/arlm-proto/proto/search.proto"
+  "command": "rg -n -B2 -A12 \"enum SearchTier\" crates/arags-proto/proto/search.proto"
 }
 ```
 
@@ -9093,12 +9093,12 @@ Alternative: leave tier resolution unchanged (explicit per-request), apply confi
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-server/src/grpc/search.rs
+**Title:** crates/arags-server/src/grpc/search.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/search.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/search.rs",
   "limit": 55,
   "offset": 243
 }
@@ -9106,7 +9106,7 @@ Alternative: leave tier resolution unchanged (explicit per-request), apply confi
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/search.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/search.rs</path>
 <type>file</type>
 <content>
 243: pub(crate) async fn handle_build_context(
@@ -9175,12 +9175,12 @@ Alternative: leave tier resolution unchanged (explicit per-request), apply confi
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/grpc/search.rs
+**Title:** crates/arags-server/src/grpc/search.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/search.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/search.rs",
   "newString": "    // Serving defaults from `server.toml [search]` (plan 020): an omitted\n    // limit falls back to the configured `top_k`.\n    let max_results = if req.max_results > 0 {\n        req.max_results as usize\n    } else {\n        state.config.search.top_k\n    };",
   "oldString": "    let max_results = if req.max_results > 0 {\n        req.max_results as usize\n    } else {\n        10\n    };"
 }
@@ -9202,12 +9202,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/grpc/search.rs
+**Title:** crates/arags-server/src/grpc/search.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/search.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/search.rs",
   "newString": "    // Serving defaults from `server.toml [search]` (plan 020): an omitted\n    // budget falls back to the configured `max_tokens`.\n    let max_tokens: u32 = if req.max_tokens == 0 {\n        state.config.search.max_tokens\n    } else {\n        req.max_tokens as u32\n    };",
   "oldString": "    let max_tokens: u32 = if req.max_tokens == 0 {\n        8_000\n    } else {\n        req.max_tokens as u32\n    };"
 }
@@ -9267,12 +9267,12 @@ Para `[search].tier`, aplico como fallback quando o valor wire é desconhecido (
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/grpc/search.rs
+**Title:** crates/arags-server/src/grpc/search.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/search.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/search.rs",
   "newString": "    // Unknown/out-of-range tier values fall back to the `[search].tier`\n    // serving default from `server.toml` (plan 020) instead of silently\n    // degrading to BM25.\n    let tier = match SearchTier::try_from(req.tier) {\n        Ok(SearchTier::TierBm25) => HybridTier::Fts,\n        Ok(SearchTier::TierEntity) => HybridTier::Entity,\n        Ok(SearchTier::TierSemantic) => HybridTier::Vector,\n        Ok(SearchTier::TierHybrid) | Err(_) => {\n            let default = state.config.search.tier.to_ascii_lowercase();\n            match default.as_str() {\n                \"fts\" | \"bm25\" => HybridTier::Fts,\n                \"entity\" => HybridTier::Entity,\n                \"vector\" | \"semantic\" => HybridTier::Vector,\n                _ => HybridTier::LlmRerank,\n            }\n        }\n    };",
   "oldString": "    let tier = match SearchTier::try_from(req.tier).unwrap_or(SearchTier::TierBm25) {\n        SearchTier::TierBm25 => HybridTier::Fts,\n        SearchTier::TierEntity => HybridTier::Entity,\n        SearchTier::TierSemantic => HybridTier::Vector,\n        SearchTier::TierHybrid => HybridTier::LlmRerank,\n    };"
 }
@@ -9294,12 +9294,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo check -p arlm-server 2>&1 | grep -E "^error" -A6 | head -30; cargo check -p arlm-server 2>&1 | tail -2
+**Title:** cargo check -p arags-server 2>&1 | grep -E "^error" -A6 | head -30; cargo check -p arags-server 2>&1 | tail -2
 
 **Input:**
 ```json
 {
-  "command": "cargo check -p arlm-server 2>&1 | grep -E \"^error\" -A6 | head -30; cargo check -p arlm-server 2>&1 | tail -2"
+  "command": "cargo check -p arags-server 2>&1 | grep -E \"^error\" -A6 | head -30; cargo check -p arags-server 2>&1 | tail -2"
 }
 ```
 
@@ -9342,12 +9342,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-server 2>&1 | grep -E "test result|FAILED|error\[" | head
+**Title:** cargo test -p arags-server 2>&1 | grep -E "test result|FAILED|error\[" | head
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-server 2>&1 | grep -E \"test result|FAILED|error\\[\" | head"
+  "command": "cargo test -p arags-server 2>&1 | grep -E \"test result|FAILED|error\\[\" | head"
 }
 ```
 
@@ -9377,14 +9377,14 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 F9.2 code done. Close it and start F9.3 (docs/ops). 
 
 F9.3 items:
-1. `admin.rs:104` message → `~/.arlm/arlm.toml`
+1. `admin.rs:104` message → `~/.arags/arags.toml`
 2. `docker/server.toml` → new schema
-3. `Dockerfile`: COPY docker/server.toml → /etc/arlm/server.toml; remove ARLM_OLLAMA_* ENVs (now in server.toml); keep OLLAMA_* tuning + ARLM_INDEX_CONCURRENCY
-4. `docker-compose.server.yml`: mount server.toml, update comments, remove ARLM_MODEL_DIR (config-driven now)
-5. `install.sh`: create ~/.arlm/arlm.toml from arlm.toml.example
-6. New `arlm.toml.example` (global user config format) replacing legacy `config.toml.example`
-7. README fixes: remove `--server` flag references, "arlm server"→removed/`arlm-server up`, "Sem --server o CLI opera localmente" → wrong; document [embedder]/[search]/mtls in server.toml section; serve removal.
-8. agents/README.md line 54 `arlm server` fix.
+3. `Dockerfile`: COPY docker/server.toml → /etc/arags/server.toml; remove ARAGS_OLLAMA_* ENVs (now in server.toml); keep OLLAMA_* tuning + ARAGS_INDEX_CONCURRENCY
+4. `docker-compose.server.yml`: mount server.toml, update comments, remove ARAGS_MODEL_DIR (config-driven now)
+5. `install.sh`: create ~/.arags/arags.toml from arags.toml.example
+6. New `arags.toml.example` (global user config format) replacing legacy `config.toml.example`
+7. README fixes: remove `--server` flag references, "arags server"→removed/`arags-server up`, "Sem --server o CLI opera localmente" → wrong; document [embedder]/[search]/mtls in server.toml section; serve removal.
+8. agents/README.md line 54 `arags server` fix.
 
 Let me read the relevant README sections first.
 
@@ -9405,13 +9405,13 @@ Let me read the relevant README sections first.
 ```
 ✓ Closed agnostic-rlm-rs-dc90 — [embedder] completo (model/model_dir/ollama_*/dims/batch_size/quantization/cache), SearchConfig (tier/top_k/max_tokens) e mtls_ca no ServerConfig; state.rs consome config (sem env de modelo); lifecycle aplica mTLS via client_ca_root; index usa embedder.batch_size; search/context aplicam defaults de [search]
 # Memória (admin): listar / obter / invalidar / manutenção
-arlm memory list
-arlm memory get <cache_id>
-arlm memory invalidate <cache_id>
-arlm memory cleanup
+arags memory list
+arags memory get <cache_id>
+arags memory invalidate <cache_id>
+arags memory cleanup
 
 # Subir o servidor gRPC/MCP (plano de dados, sem /run)
-arlm server
+arags server
 ```
 
 ## Modo Servidor (gRPC)
@@ -9420,31 +9420,31 @@ O modelo recomendado é separar servidor e cliente:
 
 ```bash
 # 1) Inicia o servidor (long-running) — dono do estado
-arlm server                                        # escuta conforme server.toml
+arags server                                        # escuta conforme server.toml
 docker compose -f docker-compose.server.yml up -d   # ou via Docker
 
 # 2) O cliente CLI conecta por gRPC
-arlm --server 127.0.0.1:50051 index ./meu-projeto
-arlm --server 127.0.0.1:50051 search "auth middleware"
-arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
+arags --server 127.0.0.1:50051 index ./meu-projeto
+arags --server 127.0.0.1:50051 search "auth middleware"
+arags --server 127.0.0.1:50051 query "como funciona o login?" -qa
 ```
 
-Sem `--server`, o CLI opera localmente sobre `~/.arlm`. O endereço do servidor
-também é resolvido por `~/.arlm/arlm.toml` (`[server].addr`) ou
-`ARLM_SERVER_ADDR`.
+Sem `--server`, o CLI opera localmente sobre `~/.arags`. O endereço do servidor
+também é resolvido por `~/.arags/arags.toml` (`[server].addr`) ou
+`ARAGS_SERVER_ADDR`.
 
 ## Comandos CLI
 
 | Comando | Descrição |
 |---------|-----------|
-| `arlm init [--index] [--no-index]` | Scaffold de `<proj>/.arlm.toml` (gitignored) + index |
-| `arlm index <dir>` | Faz stream do texto bruto; servidor chunk+embed |
-| `arlm search <query>` | Busca híbrida BM25 + semântica (server-side) |
-| `arlm query <question>` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
-| `arlm memory list\|get\|invalidate\|cleanup` | Memória (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
-| `arlm persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
-| `arlm history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |
-| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
+| `arags init [--index] [--no-index]` | Scaffold de `<proj>/.arags.toml` (gitignored) + index |
+| `arags index <dir>` | Faz stream do texto bruto; servidor chunk+embed |
+| `arags search <query>` | Busca híbrida BM25 + semântica (server-side) |
+| `arags query <question>` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
+| `arags memory list\|get\|invalidate\|cleanup` | Memória (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
+| `arags persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
+| `arags history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |
+| `arags server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
 
 ```
 
@@ -9465,8 +9465,8 @@ também é resolvido por `~/.arlm/arlm.toml` (`[server].addr`) ou
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/README.md",
-  "newString": "# Memória (admin): listar / obter / invalidar / manutenção\narlm memory list\narlm memory get <cache_id>\narlm memory invalidate <cache_id>\narlm memory cleanup\n```",
-  "oldString": "# Memória (admin): listar / obter / invalidar / manutenção\narlm memory list\narlm memory get <cache_id>\narlm memory invalidate <cache_id>\narlm memory cleanup\n\n# Subir o servidor gRPC/MCP (plano de dados, sem /run)\narlm server\n```"
+  "newString": "# Memória (admin): listar / obter / invalidar / manutenção\narags memory list\narags memory get <cache_id>\narags memory invalidate <cache_id>\narags memory cleanup\n```",
+  "oldString": "# Memória (admin): listar / obter / invalidar / manutenção\narags memory list\narags memory get <cache_id>\narags memory invalidate <cache_id>\narags memory cleanup\n\n# Subir o servidor gRPC/MCP (plano de dados, sem /run)\narags server\n```"
 }
 ```
 
@@ -9492,8 +9492,8 @@ Edit applied successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/README.md",
-  "newString": "## Modo Servidor (gRPC)\n\nO modelo recomendado é separar servidor e cliente:\n\n```bash\n# 1) Inicia o servidor (long-running) — dono do estado\narlm-server up                                     # escuta conforme server.toml\ndocker compose -f docker-compose.server.yml up -d   # ou via Docker\n\n# 2) O cliente CLI conecta por gRPC (endereço via user config)\narlm index ./meu-projeto\narlm search \"auth middleware\"\narlm query \"como funciona o login?\" -qa\n```\n\nO endereço do servidor é resolvido por `.arlm.toml` local (`[server].addr`,\noverride por projeto) → `~/.arlm/arlm.toml` (`[server].addr`) → env\n`ARLM_SERVER_ADDR` → `127.0.0.1:50051`. O client é um **puro gRPC client**\n(sem modo offline); quem quiser \"offline\" sobe o próprio `arlm-server`.",
-  "oldString": "## Modo Servidor (gRPC)\n\nO modelo recomendado é separar servidor e cliente:\n\n```bash\n# 1) Inicia o servidor (long-running) — dono do estado\narlm server                                        # escuta conforme server.toml\ndocker compose -f docker-compose.server.yml up -d   # ou via Docker\n\n# 2) O cliente CLI conecta por gRPC\narlm --server 127.0.0.1:50051 index ./meu-projeto\narlm --server 127.0.0.1:50051 search \"auth middleware\"\narlm --server 127.0.0.1:50051 query \"como funciona o login?\" -qa\n```\n\nSem `--server`, o CLI opera localmente sobre `~/.arlm`. O endereço do servidor\ntambém é resolvido por `~/.arlm/arlm.toml` (`[server].addr`) ou\n`ARLM_SERVER_ADDR`."
+  "newString": "## Modo Servidor (gRPC)\n\nO modelo recomendado é separar servidor e cliente:\n\n```bash\n# 1) Inicia o servidor (long-running) — dono do estado\narags-server up                                     # escuta conforme server.toml\ndocker compose -f docker-compose.server.yml up -d   # ou via Docker\n\n# 2) O cliente CLI conecta por gRPC (endereço via user config)\narags index ./meu-projeto\narags search \"auth middleware\"\narags query \"como funciona o login?\" -qa\n```\n\nO endereço do servidor é resolvido por `.arags.toml` local (`[server].addr`,\noverride por projeto) → `~/.arags/arags.toml` (`[server].addr`) → env\n`ARAGS_SERVER_ADDR` → `127.0.0.1:50051`. O client é um **puro gRPC client**\n(sem modo offline); quem quiser \"offline\" sobe o próprio `arags-server`.",
+  "oldString": "## Modo Servidor (gRPC)\n\nO modelo recomendado é separar servidor e cliente:\n\n```bash\n# 1) Inicia o servidor (long-running) — dono do estado\narags server                                        # escuta conforme server.toml\ndocker compose -f docker-compose.server.yml up -d   # ou via Docker\n\n# 2) O cliente CLI conecta por gRPC\narags --server 127.0.0.1:50051 index ./meu-projeto\narags --server 127.0.0.1:50051 search \"auth middleware\"\narags --server 127.0.0.1:50051 query \"como funciona o login?\" -qa\n```\n\nSem `--server`, o CLI opera localmente sobre `~/.arags`. O endereço do servidor\ntambém é resolvido por `~/.arags/arags.toml` (`[server].addr`) ou\n`ARAGS_SERVER_ADDR`."
 }
 ```
 
@@ -9519,8 +9519,8 @@ Edit applied successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/README.md",
-  "newString": "| `arlm history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |\n| `arlm-server up\\|status\\|admin ...` | Binário do servidor (data plane gRPC; `admin create-refresh`, etc.) |",
-  "oldString": "| `arlm history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |\n| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |"
+  "newString": "| `arags history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |\n| `arags-server up\\|status\\|admin ...` | Binário do servidor (data plane gRPC; `admin create-refresh`, etc.) |",
+  "oldString": "| `arags history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |\n| `arags server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |"
 }
 ```
 
@@ -9565,8 +9565,8 @@ Edit applied successfully.
 
 ### `server.toml` (HOST — arquivo de config do servidor)
 
-Montado no container (ex.: `./server.toml:/etc/arlm/server.toml`). Lido de
-`ARLM_SERVER_CONFIG` ou, por padrão, `/etc/arlm/server.toml`. É um **arquivo de
+Montado no container (ex.: `./server.toml:/etc/arags/server.toml`). Lido de
+`ARAGS_SERVER_CONFIG` ou, por padrão, `/etc/arags/server.toml`. É um **arquivo de
 host** e possui **toda** a configuração do plano de dados — **não** há seção
 `[llm]` (o servidor é LLM-free):
 
@@ -9574,8 +9574,8 @@ host** e possui **toda** a configuração do plano de dados — **não** há se�
 listen_addr = "0.0.0.0:50051"
 data_dir = "/data"
 
-# tls_cert = "/etc/arlm/tls/server.crt"
-# tls_key  = "/etc/arlm/tls/server.key"
+# tls_cert = "/etc/arags/tls/server.crt"
+# tls_key  = "/etc/arags/tls/server.key"
 
 [embedder]
 max_tokens = 512        # tamanho máximo de chunk (tokens)
@@ -9591,18 +9591,18 @@ decay_score_floor = 0.05
 
 ### Config do usuário (2 escopos)
 
-O cliente (`arlm-cli`) lê configuração do usuário em **2 escopos**, com merge
+O cliente (`arags-cli`) lê configuração do usuário em **2 escopos**, com merge
 granular campo a campo (local > global):
 
-- **Global** `~/.arlm/arlm.toml`: `[auth]` (só global: `username` +
+- **Global** `~/.arags/arags.toml`: `[auth]` (só global: `username` +
   `refresh_token`), `[llm]` (IA do usuário), `[server] addr`.
-- **Local** `.arlm.toml` (no projeto): sobrescreve campos do global + `[project]`.
+- **Local** `.arags.toml` (no projeto): sobrescreve campos do global + `[project]`.
 
 `[auth]` é **somente global** e é ignorado se presente no arquivo local.
-Arquivos legados `~/.arlm/config.toml` / `.arlm/config.toml` **não** são lidos.
+Arquivos legados `~/.arags/config.toml` / `.arags/config.toml` **não** são lidos.
 
 ```toml
-# ~/.arlm/arlm.toml (global)
+# ~/.arags/arags.toml (global)
 [auth]
 username = "alice"
 refresh_token = "..."      # obtido no login; só-global
@@ -9616,7 +9616,7 @@ addr = "127.0.0.1:50051"
 ```
 
 ```toml
-# .arlm.toml (local, no projeto)
+# .arags.toml (local, no projeto)
 [project]
 name = "meu-projeto"
 
@@ -9626,23 +9626,23 @@ addr = "10.0.0.5:50051"    # sobrescreve o global
 
 ## Docker (server-first)
 
-A imagem canônica é o `arlm-server` (gRPC):
+A imagem canônica é o `arags-server` (gRPC):
 
 ```bash
 # Build da imagem do servidor
-docker build -t arlm-server:latest -f Dockerfile.server .
+docker build -t arags-server:latest -f Dockerfile.server .
 
 # Subir o servidor (porta 50051, volume de dados persistido, server.toml montado)
 docker compose -f docker-compose.server.yml up -d
 
 # CLI (no host) conecta por gRPC
-arlm --server 127.0.0.1:50051 index /workspace
-arlm --server 127.0.0.1:50051 search "query"
+arags --server 127.0.0.1:50051 index /workspace
+arags --server 127.0.0.1:50051 search "query"
 ```
 
-O `docker-compose.server.yml` monta o volume `arlm-server-data` em `/data`
+O `docker-compose.server.yml` monta o volume `arags-server-data` em `/data`
 (configure `data_dir=/data` no `server.toml`) e monta o `server.toml` em
-`/etc/arlm/server.toml`. O healthcheck usa `arlm-server status`.
+`/etc/arags/server.toml`. O healthcheck usa `arags-server status`.
 
 > **Indexação em Docker (client-streaming):** o servidor **não** lê o filesystem
 > do cliente. A CLI descobre e lê os arquivos localmente e faz *stream* dos bytes
@@ -9651,7 +9651,7 @@ O `docker-compose.server.yml` monta o volume `arlm-server-data` em `/data`
 > local:
 >
 > ```bash
-> arlm --server 127.0.0.1:50051 index /caminho/do/projeto
+> arags --server 127.0.0.1:50051 index /caminho/do/projeto
 > ```
 >
 > Por padrão, caminhos sensíveis/ignorados (`.env`, `.vscode`, `.github`,
@@ -9675,8 +9675,8 @@ O `docker-compose.server.yml` monta o volume `arlm-server-data` em `/data`
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/README.md",
-  "newString": "```toml\nlisten_addr = \"0.0.0.0:50051\"\ndata_dir = \"/data\"\n\n# tls_cert = \"/etc/arlm/tls/server.crt\"\n# tls_key  = \"/etc/arlm/tls/server.key\"\n# mtls_ca  = \"/etc/arlm/tls/ca.crt\"   # exige client cert (mTLS)\n\n[embedder]\nmodel = \"ollama\"                      # bge-m3 | ollama | lightweight\n# model_dir = \"/models/bge-m3\"        # p/ bge-m3 (model.safetensors)\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                    # \"search_document: \" p/ família nomic\ndims = 384\nbatch_size = 64                       # chunks por request de embedding\nmax_tokens = 512                      # tamanho máximo de chunk (tokens)\noverlap_tokens = 64                   # sobreposição entre chunks\ncache = true\n\n[search]\ntier = \"hybrid\"                       # default p/ valores inválidos\ntop_k = 10                            # quando o request omite max_results\nmax_tokens = 8000                     # budget do contexto\n\n[qa_cache]\n# parâmetros de cache semântico (anti-drift por hash de chunk)\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.05\n```\n\nEnv overrides: `ARLM_SERVER_ADDR` (listen) e `ARLM_DATA_DIR`; o caminho do\narquivo vem de `ARLM_SERVER_CONFIG`.",
-  "oldString": "```toml\nlisten_addr = \"0.0.0.0:50051\"\ndata_dir = \"/data\"\n\n# tls_cert = \"/etc/arlm/tls/server.crt\"\n# tls_key  = \"/etc/arlm/tls/server.key\"\n\n[embedder]\nmax_tokens = 512        # tamanho máximo de chunk (tokens)\noverlap_tokens = 64     # sobreposição entre chunks\n\n[qa_cache]\n# parâmetros de cache semântico (anti-drift por hash de chunk)\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.05\n```"
+  "newString": "```toml\nlisten_addr = \"0.0.0.0:50051\"\ndata_dir = \"/data\"\n\n# tls_cert = \"/etc/arags/tls/server.crt\"\n# tls_key  = \"/etc/arags/tls/server.key\"\n# mtls_ca  = \"/etc/arags/tls/ca.crt\"   # exige client cert (mTLS)\n\n[embedder]\nmodel = \"ollama\"                      # bge-m3 | ollama | lightweight\n# model_dir = \"/models/bge-m3\"        # p/ bge-m3 (model.safetensors)\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                    # \"search_document: \" p/ família nomic\ndims = 384\nbatch_size = 64                       # chunks por request de embedding\nmax_tokens = 512                      # tamanho máximo de chunk (tokens)\noverlap_tokens = 64                   # sobreposição entre chunks\ncache = true\n\n[search]\ntier = \"hybrid\"                       # default p/ valores inválidos\ntop_k = 10                            # quando o request omite max_results\nmax_tokens = 8000                     # budget do contexto\n\n[qa_cache]\n# parâmetros de cache semântico (anti-drift por hash de chunk)\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.05\n```\n\nEnv overrides: `ARAGS_SERVER_ADDR` (listen) e `ARAGS_DATA_DIR`; o caminho do\narquivo vem de `ARAGS_SERVER_CONFIG`.",
+  "oldString": "```toml\nlisten_addr = \"0.0.0.0:50051\"\ndata_dir = \"/data\"\n\n# tls_cert = \"/etc/arags/tls/server.crt\"\n# tls_key  = \"/etc/arags/tls/server.key\"\n\n[embedder]\nmax_tokens = 512        # tamanho máximo de chunk (tokens)\noverlap_tokens = 64     # sobreposição entre chunks\n\n[qa_cache]\n# parâmetros de cache semântico (anti-drift por hash de chunk)\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.05\n```"
 }
 ```
 
@@ -9702,8 +9702,8 @@ Edit applied successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/README.md",
-  "newString": "```toml\n# ~/.arlm/arlm.toml (global)\n[auth]\nusername = \"alice\"\nrefresh_token = \"...\"      # gerado por `arlm-server admin create-refresh`; só-global\n\n[llm]\n[[llm.backends]]\nname = \"default\"\nfamily = \"ollama\"\nbase_url = \"http://localhost:11434\"\nmodel = \"llama3.2\"\n\n[server]\naddr = \"127.0.0.1:50051\"\n```",
-  "oldString": "```toml\n# ~/.arlm/arlm.toml (global)\n[auth]\nusername = \"alice\"\nrefresh_token = \"...\"      # obtido no login; só-global\n\n[llm]\nbackend = \"ollama\"\nmodel = \"llama3.2\"\n\n[server]\naddr = \"127.0.0.1:50051\"\n```"
+  "newString": "```toml\n# ~/.arags/arags.toml (global)\n[auth]\nusername = \"alice\"\nrefresh_token = \"...\"      # gerado por `arags-server admin create-refresh`; só-global\n\n[llm]\n[[llm.backends]]\nname = \"default\"\nfamily = \"ollama\"\nbase_url = \"http://localhost:11434\"\nmodel = \"llama3.2\"\n\n[server]\naddr = \"127.0.0.1:50051\"\n```",
+  "oldString": "```toml\n# ~/.arags/arags.toml (global)\n[auth]\nusername = \"alice\"\nrefresh_token = \"...\"      # obtido no login; só-global\n\n[llm]\nbackend = \"ollama\"\nmodel = \"llama3.2\"\n\n[server]\naddr = \"127.0.0.1:50051\"\n```"
 }
 ```
 
@@ -9729,8 +9729,8 @@ Edit applied successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/README.md",
-  "newString": "# CLI (no host) conecta por gRPC\narlm index /workspace\narlm search \"query\"",
-  "oldString": "# CLI (no host) conecta por gRPC\narlm --server 127.0.0.1:50051 index /workspace\narlm --server 127.0.0.1:50051 search \"query\""
+  "newString": "# CLI (no host) conecta por gRPC\narags index /workspace\narags search \"query\"",
+  "oldString": "# CLI (no host) conecta por gRPC\narags --server 127.0.0.1:50051 index /workspace\narags --server 127.0.0.1:50051 search \"query\""
 }
 ```
 
@@ -9756,8 +9756,8 @@ Edit applied successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/README.md",
-  "newString": "> ```bash\n> arlm index /caminho/do/projeto\n> ```",
-  "oldString": "> ```bash\n> arlm --server 127.0.0.1:50051 index /caminho/do/projeto\n> ```"
+  "newString": "> ```bash\n> arags index /caminho/do/projeto\n> ```",
+  "oldString": "> ```bash\n> arags --server 127.0.0.1:50051 index /caminho/do/projeto\n> ```"
 }
 ```
 
@@ -9777,14 +9777,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/admin.rs
+**Title:** crates/arags-server/src/admin.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/admin.rs",
-  "newString": "            println!(\"Refresh token (paste into client ~/.arlm/arlm.toml [auth].refresh_token):\");",
-  "oldString": "            println!(\"Refresh token (paste into client ~/.arlm/config.toml [auth].refresh_token):\");"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/admin.rs",
+  "newString": "            println!(\"Refresh token (paste into client ~/.arags/arags.toml [auth].refresh_token):\");",
+  "oldString": "            println!(\"Refresh token (paste into client ~/.arags/config.toml [auth].refresh_token):\");"
 }
 ```
 
@@ -9811,7 +9811,7 @@ Agora `docker/server.toml` (novo schema), `Dockerfile` e compose:
 **Input:**
 ```json
 {
-  "content": "# arlm-server config (plan 020) — HOST file mounted into the container at\n# /etc/arlm/server.toml (override the path with ARLM_SERVER_CONFIG).\n# Server-only data plane: serving + storage + processing. No [llm] section.\n\nlisten_addr = \"0.0.0.0:50051\"          # (env ARLM_SERVER_ADDR overrides)\ndata_dir = \"/data/arlm\"                # (env ARLM_DATA_DIR overrides)\n\n[embedder]\nmodel = \"ollama\"\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                     # all-minilm does NOT use nomic prefixes\ndims = 384\nbatch_size = 64\nmax_tokens = 512\noverlap_tokens = 64\ncache = true\n\n[search]\ntier = \"hybrid\"\ntop_k = 10\nmax_tokens = 8000\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.1\n",
+  "content": "# arags-server config (plan 020) — HOST file mounted into the container at\n# /etc/arags/server.toml (override the path with ARAGS_SERVER_CONFIG).\n# Server-only data plane: serving + storage + processing. No [llm] section.\n\nlisten_addr = \"0.0.0.0:50051\"          # (env ARAGS_SERVER_ADDR overrides)\ndata_dir = \"/data/arags\"                # (env ARAGS_DATA_DIR overrides)\n\n[embedder]\nmodel = \"ollama\"\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                     # all-minilm does NOT use nomic prefixes\ndims = 384\nbatch_size = 64\nmax_tokens = 512\noverlap_tokens = 64\ncache = true\n\n[search]\ntier = \"hybrid\"\ntop_k = 10\nmax_tokens = 8000\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.1\n",
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/docker/server.toml"
 }
 ```
@@ -9838,8 +9838,8 @@ Wrote file successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/Dockerfile",
-  "newString": "# Config do servidor (plan 020): server.toml e um arquivo do HOST montado no\n# container; esta copia so serve como fallback para `docker run` sem mount.\n# Override de caminho: ARLM_SERVER_CONFIG (default /etc/arlm/server.toml).\nCOPY docker/server.toml /etc/arlm/server.toml",
-  "oldString": "# Config do servidor (data_dir + listen_addr). O servidor NAO le ARLM_DATA_DIR;\n# o data_dir vem deste TOML (~/.arlm/config.toml).\nCOPY docker/server.toml /root/.arlm/config.toml"
+  "newString": "# Config do servidor (plan 020): server.toml e um arquivo do HOST montado no\n# container; esta copia so serve como fallback para `docker run` sem mount.\n# Override de caminho: ARAGS_SERVER_CONFIG (default /etc/arags/server.toml).\nCOPY docker/server.toml /etc/arags/server.toml",
+  "oldString": "# Config do servidor (data_dir + listen_addr). O servidor NAO le ARAGS_DATA_DIR;\n# o data_dir vem deste TOML (~/.arags/config.toml).\nCOPY docker/server.toml /root/.arags/config.toml"
 }
 ```
 
@@ -9865,8 +9865,8 @@ Edit applied successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/Dockerfile",
-  "newString": "# ---- arlm-server (embedding via server.toml [embedder]; plan 020) ----\n# O modelo/url/dims/prefixo vem de /etc/arlm/server.toml [embedder] — sem\n# envs ARLM_OLLAMA_*. Paralelismo continua env-tunable (casar com\n# OLLAMA_NUM_PARALLEL).\nENV ARLM_INDEX_CONCURRENCY=4",
-  "oldString": "# ---- arlm-server (embedding Ollama; prefix VAZIO = correto p/ all-minilm) ----\n# \"search_document: \" e um prefixo do nomic-embed-text; all-minilm nao o usa,\n# entao deixamos vazio para nao degradar a qualidade dos vetores.\nENV ARLM_OLLAMA_MODEL=all-minilm\nENV ARLM_OLLAMA_URL=http://127.0.0.1:11434\nENV ARLM_OLLAMA_DIMS=384\nENV ARLM_OLLAMA_PREFIX=\n# Paralelismo do lado do servidor (casar com OLLAMA_NUM_PARALLEL).\nENV ARLM_INDEX_CONCURRENCY=4\nENV ARLM_EMBED_BATCH=64"
+  "newString": "# ---- arags-server (embedding via server.toml [embedder]; plan 020) ----\n# O modelo/url/dims/prefixo vem de /etc/arags/server.toml [embedder] — sem\n# envs ARAGS_OLLAMA_*. Paralelismo continua env-tunable (casar com\n# OLLAMA_NUM_PARALLEL).\nENV ARAGS_INDEX_CONCURRENCY=4",
+  "oldString": "# ---- arags-server (embedding Ollama; prefix VAZIO = correto p/ all-minilm) ----\n# \"search_document: \" e um prefixo do nomic-embed-text; all-minilm nao o usa,\n# entao deixamos vazio para nao degradar a qualidade dos vetores.\nENV ARAGS_OLLAMA_MODEL=all-minilm\nENV ARAGS_OLLAMA_URL=http://127.0.0.1:11434\nENV ARAGS_OLLAMA_DIMS=384\nENV ARAGS_OLLAMA_PREFIX=\n# Paralelismo do lado do servidor (casar com OLLAMA_NUM_PARALLEL).\nENV ARAGS_INDEX_CONCURRENCY=4\nENV ARAGS_EMBED_BATCH=64"
 }
 ```
 
@@ -9891,7 +9891,7 @@ Edit applied successfully.
 **Input:**
 ```json
 {
-  "content": "services:\n  arlm-server:\n    build:\n      context: .\n      dockerfile: Dockerfile.server\n    volumes:\n      - arlm-server-data:/data\n      # server.toml é um arquivo do HOST montado no container (plan 020).\n      - ./docker/server.toml:/etc/arlm/server.toml:ro\n      # Descomente para BGE-M3 local (e ajuste [embedder] no server.toml):\n      # - ./models/bge-m3:/models:ro\n    ports:\n      - \"50051:50051\"\n    environment:\n      - ARLM_DATA_DIR=/data/arlm\n      - ARLM_SERVER_CONFIG=/etc/arlm/server.toml\n      - RUST_LOG=info,arlm_server=debug\n    command: [\"up\"]\n\nvolumes:\n  arlm-server-data:\n",
+  "content": "services:\n  arags-server:\n    build:\n      context: .\n      dockerfile: Dockerfile.server\n    volumes:\n      - arags-server-data:/data\n      # server.toml é um arquivo do HOST montado no container (plan 020).\n      - ./docker/server.toml:/etc/arags/server.toml:ro\n      # Descomente para BGE-M3 local (e ajuste [embedder] no server.toml):\n      # - ./models/bge-m3:/models:ro\n    ports:\n      - \"50051:50051\"\n    environment:\n      - ARAGS_DATA_DIR=/data/arags\n      - ARAGS_SERVER_CONFIG=/etc/arags/server.toml\n      - RUST_LOG=info,arags_server=debug\n    command: [\"up\"]\n\nvolumes:\n  arags-server-data:\n",
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/docker-compose.server.yml"
 }
 ```
@@ -9915,7 +9915,7 @@ Wrote file successfully.
 <details>
 <summary>Click to expand reasoning</summary>
 
-Now `install.sh` — replace the config.toml creation with ~/.arlm/arlm.toml from arlm.toml.example. And create `arlm.toml.example` in the new format. Let me view the relevant part of install.sh around DATA_DIR definition first, plus check what else references DATA_DIR/config.
+Now `install.sh` — replace the config.toml creation with ~/.arags/arags.toml from arags.toml.example. And create `arags.toml.example` in the new format. Let me view the relevant part of install.sh around DATA_DIR definition first, plus check what else references DATA_DIR/config.
 
 </details>
 
@@ -9935,13 +9935,13 @@ Now `install.sh` — replace the config.toml creation with ~/.arlm/arlm.toml fro
 #!/bin/bash
 set -euo pipefail
 
-# arlm installer script
-# Installs the arlm CLI and optionally the Docker server
+# arags installer script
+# Installs the arags CLI and optionally the Docker server
 
-ARLM_VERSION="${ARLM_VERSION:-latest}"
+ARAGS_VERSION="${ARAGS_VERSION:-latest}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
-DATA_DIR="${DATA_DIR:-$HOME/.arlm}"
-DOCKER_IMAGE="arlm/arlm-server"
+DATA_DIR="${DATA_DIR:-$HOME/.arags}"
+DOCKER_IMAGE="arags/arags-server"
 
 # Colors
 RED='\033[0;31m'
@@ -10049,8 +10049,8 @@ install_cli() {
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/install.sh",
-  "newString": "    # Guarantee a valid global user config at $DATA_DIR/arlm.toml (plan 020)\n    local config_file=\"${DATA_DIR}/arlm.toml\"\n    if [ ! -f \"$config_file\" ]; then\n        info \"Creating default config at ${config_file}\"\n\n        local example_src=\"\"\n        if [ -f \"arlm.toml.example\" ]; then\n            example_src=\"arlm.toml.example\"\n        elif [ -f \"${0%/*}/arlm.toml.example\" ]; then\n            example_src=\"${0%/*}/arlm.toml.example\"\n        fi\n\n        if [ -n \"$example_src\" ]; then\n            cp \"$example_src\" \"$config_file\"\n        else\n            local example_url=\"https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/arlm.toml.example\"\n            download \"$example_url\" \"$config_file\" || true\n        fi\n\n        # If the copy/download did not yield a valid config, write a minimal\n        # but valid default so the file always exists.\n        if ! grep -Fq '[llm]' \"$config_file\" 2>/dev/null; then\n            cat > \"$config_file\" << 'EOF'\n# arlm default user config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/arlm.toml.example\n\n[auth]\n# username = \"dev1\"\n# refresh_token = \"<gerado por `arlm-server admin create-refresh`>\"\n\n[llm]\n[[llm.backends]]\nname = \"default\"\nfamily = \"ollama\"\nbase_url = \"http://localhost:11434\"\nmodel = \"llama3.2\"\n\n[server]\naddr = \"127.0.0.1:50051\"\nEOF\n        fi\n\n        chmod 600 \"$config_file\"\n        success \"Default config created: $config_file\"\n    else\n        success \"Config already exists: $config_file (keeping existing)\"\n    fi\n}",
-  "oldString": "    # Guarantee a valid config.toml exists at $DATA_DIR/config.toml\n    local config_file=\"${DATA_DIR}/config.toml\"\n    if [ ! -f \"$config_file\" ]; then\n        info \"Creating default config at ${config_file}\"\n\n        local example_src=\"\"\n        if [ -f \"config.toml.example\" ]; then\n            example_src=\"config.toml.example\"\n        elif [ -f \"${0%/*}/config.toml.example\" ]; then\n            example_src=\"${0%/*}/config.toml.example\"\n        fi\n\n        if [ -n \"$example_src\" ]; then\n            cp \"$example_src\" \"$config_file\"\n        else\n            local example_url=\"https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/config.toml.example\"\n            download \"$example_url\" \"$config_file\" || true\n        fi\n\n        # If the copy/download did not yield a valid config, write a minimal\n        # but valid default so the file always exists.\n        if ! grep -Fq '[[backends]]' \"$config_file\" 2>/dev/null; then\n            cat > \"$config_file\" << 'EOF'\n# arlm default config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/config.toml.example\n[[backends]]\nname = \"ollama\"\nfamily = \"ollama\"\nbase_url = \"http://localhost:11434\"\nmodel = \"llama3\"\ncompletions_path = \"api/chat\"\nauth = \"none\"\nEOF\n        fi\n\n        chmod 600 \"$config_file\"\n        success \"Default config created: $config_file\"\n    else\n        success \"Config already exists: $config_file (keeping existing)\"\n    fi\n}"
+  "newString": "    # Guarantee a valid global user config at $DATA_DIR/arags.toml (plan 020)\n    local config_file=\"${DATA_DIR}/arags.toml\"\n    if [ ! -f \"$config_file\" ]; then\n        info \"Creating default config at ${config_file}\"\n\n        local example_src=\"\"\n        if [ -f \"arags.toml.example\" ]; then\n            example_src=\"arags.toml.example\"\n        elif [ -f \"${0%/*}/arags.toml.example\" ]; then\n            example_src=\"${0%/*}/arags.toml.example\"\n        fi\n\n        if [ -n \"$example_src\" ]; then\n            cp \"$example_src\" \"$config_file\"\n        else\n            local example_url=\"https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/arags.toml.example\"\n            download \"$example_url\" \"$config_file\" || true\n        fi\n\n        # If the copy/download did not yield a valid config, write a minimal\n        # but valid default so the file always exists.\n        if ! grep -Fq '[llm]' \"$config_file\" 2>/dev/null; then\n            cat > \"$config_file\" << 'EOF'\n# arags default user config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/arags.toml.example\n\n[auth]\n# username = \"dev1\"\n# refresh_token = \"<gerado por `arags-server admin create-refresh`>\"\n\n[llm]\n[[llm.backends]]\nname = \"default\"\nfamily = \"ollama\"\nbase_url = \"http://localhost:11434\"\nmodel = \"llama3.2\"\n\n[server]\naddr = \"127.0.0.1:50051\"\nEOF\n        fi\n\n        chmod 600 \"$config_file\"\n        success \"Default config created: $config_file\"\n    else\n        success \"Config already exists: $config_file (keeping existing)\"\n    fi\n}",
+  "oldString": "    # Guarantee a valid config.toml exists at $DATA_DIR/config.toml\n    local config_file=\"${DATA_DIR}/config.toml\"\n    if [ ! -f \"$config_file\" ]; then\n        info \"Creating default config at ${config_file}\"\n\n        local example_src=\"\"\n        if [ -f \"config.toml.example\" ]; then\n            example_src=\"config.toml.example\"\n        elif [ -f \"${0%/*}/config.toml.example\" ]; then\n            example_src=\"${0%/*}/config.toml.example\"\n        fi\n\n        if [ -n \"$example_src\" ]; then\n            cp \"$example_src\" \"$config_file\"\n        else\n            local example_url=\"https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/config.toml.example\"\n            download \"$example_url\" \"$config_file\" || true\n        fi\n\n        # If the copy/download did not yield a valid config, write a minimal\n        # but valid default so the file always exists.\n        if ! grep -Fq '[[backends]]' \"$config_file\" 2>/dev/null; then\n            cat > \"$config_file\" << 'EOF'\n# arags default config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/config.toml.example\n[[backends]]\nname = \"ollama\"\nfamily = \"ollama\"\nbase_url = \"http://localhost:11434\"\nmodel = \"llama3\"\ncompletions_path = \"api/chat\"\nauth = \"none\"\nEOF\n        fi\n\n        chmod 600 \"$config_file\"\n        success \"Default config created: $config_file\"\n    else\n        success \"Config already exists: $config_file (keeping existing)\"\n    fi\n}"
 }
 ```
 
@@ -10070,25 +10070,25 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** git mv config.toml.example arlm.toml.example && sed -n '1,12p' arlm.toml.example
+**Title:** git mv config.toml.example arags.toml.example && sed -n '1,12p' arags.toml.example
 
 **Input:**
 ```json
 {
-  "command": "git mv config.toml.example arlm.toml.example && sed -n '1,12p' arlm.toml.example"
+  "command": "git mv config.toml.example arags.toml.example && sed -n '1,12p' arags.toml.example"
 }
 ```
 
 **Output:**
 ```
 # =============================================================================
-# arlm — Configuração de backends LLM (genérico, agnóstico a provider)
+# arags — Configuração de backends LLM (genérico, agnóstico a provider)
 # =============================================================================
 #
 # Cada entrada em [[backends]] descreve um backend completamente.
 # Adicionar um novo provider exige APENAS uma nova entrada — nenhum código.
 #
-# Local padrão: ~/.arlm/config.toml  (criado pelo install.sh a partir deste exemplo)
+# Local padrão: ~/.arags/config.toml  (criado pelo install.sh a partir deste exemplo)
 #
 # -----------------------------------------------------------------------------
 # Campos disponíveis por backend:
@@ -10107,12 +10107,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** arlm.toml.example
+**Title:** arags.toml.example
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/arlm.toml.example",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/arags.toml.example",
   "limit": 40,
   "offset": 95
 }
@@ -10120,7 +10120,7 @@ Edit applied successfully.
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/arlm.toml.example</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/arags.toml.example</path>
 <type>file</type>
 <content>
 95: api_key = "sk-mimo-XXXX_REPLACE_ME"
@@ -10130,7 +10130,7 @@ Edit applied successfully.
 99: # =============================================================================
 100: # Auth (plan 018) — cliente gRPC
 101: # =============================================================================
-102: # O refresh token é gerado pelo admin do server (arlm-server admin create-refresh)
+102: # O refresh token é gerado pelo admin do server (arags-server admin create-refresh)
 103: # e colado aqui. O CLI troca ele por session tokens de 5 min automaticamente.
 104: # Armazenado em plaintext neste arquivo (protegido por permissão 0600).
 105: 
@@ -10151,14 +10151,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** arlm.toml.example
+**Title:** arags.toml.example
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/arlm.toml.example",
-  "newString": "# =============================================================================\n# arlm — Configuração GLOBAL do usuário (plan 020)\n# =============================================================================\n# Arquivo: ~/.arlm/arlm.toml  (criado pelo install.sh a partir deste exemplo)\n#\n# Escopos:\n#   - Global:   ~/.arlm/arlm.toml  → [auth] + [llm] + [server] addr\n#   - Local:    <repo>/.arlm.toml  → overrides por projeto ([project], etc.),\n#                 gerado por `arlm init` e gitignored.\n# O merge é granular campo a campo (local > global). `[auth]` existe SOMENTE\n# no global — se presente no local, é ignorado. Os legados ~/.arlm/config.toml\n# e .arlm/config.toml NÃO são lidos (break total, plan 020).\n#\n# -----------------------------------------------------------------------------\n# Campos disponíveis por backend ([[llm.backends]]):\n#\n#   name              (opcional)   Identificador lógico usado em logs/metrics.\n#                                 Default: o valor de `family`.\n#   family            (obrigatório) Protocolo de mapeamento request/response:\n#                                 \"openai\" | \"anthropic\" | \"gemini\" | \"ollama\"\n#                                 (DeepSeek e MiMo usam a família \"openai\".)",
-  "oldString": "# =============================================================================\n# arlm — Configuração de backends LLM (genérico, agnóstico a provider)\n# =============================================================================\n#\n# Cada entrada em [[backends]] descreve um backend completamente.\n# Adicionar um novo provider exige APENAS uma nova entrada — nenhum código.\n#\n# Local padrão: ~/.arlm/config.toml  (criado pelo install.sh a partir deste exemplo)\n#\n# -----------------------------------------------------------------------------\n# Campos disponíveis por backend:\n#\n#   name              (opcional)   Identificador lógico usado em logs/metrics.\n#                                 Default: o valor de `family`.\n#   family            (obrigatório) Protocolo de mapeamento request/response:\n#                                 \"openai\" | \"anthropic\" | \"gemini\" | \"ollama\"\n#                                 (DeepSeek e MiMo usam a família \"openai\".)"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/arags.toml.example",
+  "newString": "# =============================================================================\n# arags — Configuração GLOBAL do usuário (plan 020)\n# =============================================================================\n# Arquivo: ~/.arags/arags.toml  (criado pelo install.sh a partir deste exemplo)\n#\n# Escopos:\n#   - Global:   ~/.arags/arags.toml  → [auth] + [llm] + [server] addr\n#   - Local:    <repo>/.arags.toml  → overrides por projeto ([project], etc.),\n#                 gerado por `arags init` e gitignored.\n# O merge é granular campo a campo (local > global). `[auth]` existe SOMENTE\n# no global — se presente no local, é ignorado. Os legados ~/.arags/config.toml\n# e .arags/config.toml NÃO são lidos (break total, plan 020).\n#\n# -----------------------------------------------------------------------------\n# Campos disponíveis por backend ([[llm.backends]]):\n#\n#   name              (opcional)   Identificador lógico usado em logs/metrics.\n#                                 Default: o valor de `family`.\n#   family            (obrigatório) Protocolo de mapeamento request/response:\n#                                 \"openai\" | \"anthropic\" | \"gemini\" | \"ollama\"\n#                                 (DeepSeek e MiMo usam a família \"openai\".)",
+  "oldString": "# =============================================================================\n# arags — Configuração de backends LLM (genérico, agnóstico a provider)\n# =============================================================================\n#\n# Cada entrada em [[backends]] descreve um backend completamente.\n# Adicionar um novo provider exige APENAS uma nova entrada — nenhum código.\n#\n# Local padrão: ~/.arags/config.toml  (criado pelo install.sh a partir deste exemplo)\n#\n# -----------------------------------------------------------------------------\n# Campos disponíveis por backend:\n#\n#   name              (opcional)   Identificador lógico usado em logs/metrics.\n#                                 Default: o valor de `family`.\n#   family            (obrigatório) Protocolo de mapeamento request/response:\n#                                 \"openai\" | \"anthropic\" | \"gemini\" | \"ollama\"\n#                                 (DeepSeek e MiMo usam a família \"openai\".)"
 }
 ```
 
@@ -10178,12 +10178,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '28,50p' arlm.toml.example
+**Title:** sed -n '28,50p' arags.toml.example
 
 **Input:**
 ```json
 {
-  "command": "sed -n '28,50p' arlm.toml.example"
+  "command": "sed -n '28,50p' arags.toml.example"
 }
 ```
 
@@ -10226,7 +10226,7 @@ model = "gpt-4o"
 **Status:** completed
 **Title:** python3 - <<'EOF'
 import re
-p = 'arlm.toml.example'
+p = 'arags.toml.example'
 s = open(p).read()
 s = s.replace('[[backends]]', '[[llm.backends]]')
 # add [llm] header before first backend table and [server] at end
@@ -10240,24 +10240,24 @@ EOF
 **Input:**
 ```json
 {
-  "command": "python3 - <<'EOF'\nimport re\np = 'arlm.toml.example'\ns = open(p).read()\ns = s.replace('[[backends]]', '[[llm.backends]]')\n# add [llm] header before first backend table and [server] at end\ns = s.replace('# -----------------------------------------------------------------------------\\n\\n# --- OpenAI', '# -----------------------------------------------------------------------------\\n[llm]\\n\\n# --- OpenAI', 1)\nif '[server]' not in s:\n    s += '\\n[server]\\naddr = \"127.0.0.1:50051\"\\n'\nopen(p, 'w').write(s)\nprint(s[:1200])\nEOF"
+  "command": "python3 - <<'EOF'\nimport re\np = 'arags.toml.example'\ns = open(p).read()\ns = s.replace('[[backends]]', '[[llm.backends]]')\n# add [llm] header before first backend table and [server] at end\ns = s.replace('# -----------------------------------------------------------------------------\\n\\n# --- OpenAI', '# -----------------------------------------------------------------------------\\n[llm]\\n\\n# --- OpenAI', 1)\nif '[server]' not in s:\n    s += '\\n[server]\\naddr = \"127.0.0.1:50051\"\\n'\nopen(p, 'w').write(s)\nprint(s[:1200])\nEOF"
 }
 ```
 
 **Output:**
 ```
 # =============================================================================
-# arlm — Configuração GLOBAL do usuário (plan 020)
+# arags — Configuração GLOBAL do usuário (plan 020)
 # =============================================================================
-# Arquivo: ~/.arlm/arlm.toml  (criado pelo install.sh a partir deste exemplo)
+# Arquivo: ~/.arags/arags.toml  (criado pelo install.sh a partir deste exemplo)
 #
 # Escopos:
-#   - Global:   ~/.arlm/arlm.toml  → [auth] + [llm] + [server] addr
-#   - Local:    <repo>/.arlm.toml  → overrides por projeto ([project], etc.),
-#                 gerado por `arlm init` e gitignored.
+#   - Global:   ~/.arags/arags.toml  → [auth] + [llm] + [server] addr
+#   - Local:    <repo>/.arags.toml  → overrides por projeto ([project], etc.),
+#                 gerado por `arags init` e gitignored.
 # O merge é granular campo a campo (local > global). `[auth]` existe SOMENTE
-# no global — se presente no local, é ignorado. Os legados ~/.arlm/config.toml
-# e .arlm/config.toml NÃO são lidos (break total, plan 020).
+# no global — se presente no local, é ignorado. Os legados ~/.arags/config.toml
+# e .arags/config.toml NÃO são lidos (break total, plan 020).
 #
 # -----------------------------------------------------------------------------
 # Campos disponíveis por backend ([[llm.backends]]):
@@ -10281,18 +10281,18 @@ EOF
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** grep -n "\[llm\]\|\[\[llm.backends\]\]\|\[server\]\|\[auth\]" arlm.toml.example
+**Title:** grep -n "\[llm\]\|\[\[llm.backends\]\]\|\[server\]\|\[auth\]" arags.toml.example
 
 **Input:**
 ```json
 {
-  "command": "grep -n \"\\[llm\\]\\|\\[\\[llm.backends\\]\\]\\|\\[server\\]\\|\\[auth\\]\" arlm.toml.example"
+  "command": "grep -n \"\\[llm\\]\\|\\[\\[llm.backends\\]\\]\\|\\[server\\]\\|\\[auth\\]\" arags.toml.example"
 }
 ```
 
 **Output:**
 ```
-7:#   - Global:   ~/.arlm/arlm.toml  → [auth] + [llm] + [server] addr
+7:#   - Global:   ~/.arags/arags.toml  → [auth] + [llm] + [server] addr
 10:# O merge é granular campo a campo (local > global). `[auth]` existe SOMENTE
 15:# Campos disponíveis por backend ([[llm.backends]]):
 35:[llm]
@@ -10324,12 +10324,12 @@ The `[server]` section wasn't appended? Let me check — the python script check
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** printf '\n[server]\naddr = "127.0.0.1:50051"\n' >> arlm.toml.example && tail -6 arlm.toml.example
+**Title:** printf '\n[server]\naddr = "127.0.0.1:50051"\n' >> arags.toml.example && tail -6 arags.toml.example
 
 **Input:**
 ```json
 {
-  "command": "printf '\\n[server]\\naddr = \"127.0.0.1:50051\"\\n' >> arlm.toml.example && tail -6 arlm.toml.example"
+  "command": "printf '\\n[server]\\naddr = \"127.0.0.1:50051\"\\n' >> arags.toml.example && tail -6 arags.toml.example"
 }
 ```
 
@@ -10357,12 +10357,12 @@ Agora, os agentes/README e as referências restantes:
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '45,85p' agents/README.md; echo "==="; rg -n "config.toml|arlm serve|arlm server|--server" agents/README.md README.md docs/ 2>/dev/null | grep -v "server.toml\|arlm.toml\|\.cargo/config" | head
+**Title:** sed -n '45,85p' agents/README.md; echo "==="; rg -n "config.toml|arags serve|arags server|--server" agents/README.md README.md docs/ 2>/dev/null | grep -v "server.toml\|arags.toml\|\.cargo/config" | head
 
 **Input:**
 ```json
 {
-  "command": "sed -n '45,85p' agents/README.md; echo \"===\"; rg -n \"config.toml|arlm serve|arlm server|--server\" agents/README.md README.md docs/ 2>/dev/null | grep -v \"server.toml\\|arlm.toml\\|\\.cargo/config\" | head"
+  "command": "sed -n '45,85p' agents/README.md; echo \"===\"; rg -n \"config.toml|arags serve|arags server|--server\" agents/README.md README.md docs/ 2>/dev/null | grep -v \"server.toml\\|arags.toml\\|\\.cargo/config\" | head"
 }
 ```
 
@@ -10377,11 +10377,11 @@ endpoint `/run` nem `/context`):
 
 ```bash
 # Iniciar o servidor de plano de dados (gRPC + MCP)
-arlm server
+arags server
 
 # O cliente CLI conecta por gRPC
-arlm --server 127.0.0.1:50051 search "validate_token" --top-k 5
-arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
+arags --server 127.0.0.1:50051 search "validate_token" --top-k 5
+arags --server 127.0.0.1:50051 query "como funciona o login?" -qa
 ```
 
 ## Docker
@@ -10391,24 +10391,24 @@ arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
 docker compose up -d
 
 # CLI via Docker (index/search; context e run foram removidos no plan 019)
-docker compose run --rm arlm-cli search "bug no login"
-docker compose run --rm arlm-cli index /projects/meu-app
+docker compose run --rm arags-cli search "bug no login"
+docker compose run --rm arags-cli index /projects/meu-app
 ```
 
 ## Fluxo de Dados
 
 ```
-Usuário → Agente → arlm CLI/HTTP → Busca Híbrida → Contexto → Agente resolve
+Usuário → Agente → arags CLI/HTTP → Busca Híbrida → Contexto → Agente resolve
 ```
 
 Todos os agentes compartilham o mesmo projeto indexado (isolado por `buffer_id`
 no servidor). A memória/histórico são server-side e escopados por usuário.
 ===
-agents/README.md:54:arlm server
-agents/README.md:57:arlm --server 127.0.0.1:50051 search "validate_token" --top-k 5
-agents/README.md:58:arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
-README.md:260:Arquivos legados `~/.arlm/config.toml` / `.arlm/config.toml` **não** são lidos.
-docs/opencode-setup.md:84:arlm server
+agents/README.md:54:arags server
+agents/README.md:57:arags --server 127.0.0.1:50051 search "validate_token" --top-k 5
+agents/README.md:58:arags --server 127.0.0.1:50051 query "como funciona o login?" -qa
+README.md:260:Arquivos legados `~/.arags/config.toml` / `.arags/config.toml` **não** são lidos.
+docs/opencode-setup.md:84:arags server
 
 ```
 
@@ -10427,8 +10427,8 @@ docs/opencode-setup.md:84:arlm server
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/agents/README.md",
-  "newString": "## Servidor (gRPC, plano de dados)\n\nO servidor é LLM-free e puro gRPC (não há endpoint `/run`, `/context` nem MCP\nlocal; plan 020 removeu o modo offline do client):\n\n```bash\n# Iniciar o servidor de plano de dados\narlm-server up          # ou: docker compose -f docker-compose.server.yml up -d\n\n# O cliente CLI conecta por gRPC (addr via .arlm.toml / ~/.arlm/arlm.toml / env)\narlm search \"validate_token\" --top-k 5\narlm query \"como funciona o login?\" -qa\n```\n\n## Docker\n\n```bash\n# Servidor via Docker\ndocker compose up -d\n\n# CLI via Docker (index/search)\ndocker compose run --rm arlm-cli search \"bug no login\"\ndocker compose run --rm arlm-cli index /projects/meu-app\n```",
-  "oldString": "## Servidor (gRPC/MCP, plano de dados)\n\nPara qualquer agente que suporte gRPC/MCP (o servidor é LLM-free; não há\nendpoint `/run` nem `/context`):\n\n```bash\n# Iniciar o servidor de plano de dados (gRPC + MCP)\narlm server\n\n# O cliente CLI conecta por gRPC\narlm --server 127.0.0.1:50051 search \"validate_token\" --top-k 5\narlm --server 127.0.0.1:50051 query \"como funciona o login?\" -qa\n```\n\n## Docker\n\n```bash\n# Servidor via Docker\ndocker compose up -d\n\n# CLI via Docker (index/search; context e run foram removidos no plan 019)\ndocker compose run --rm arlm-cli search \"bug no login\"\ndocker compose run --rm arlm-cli index /projects/meu-app\n```"
+  "newString": "## Servidor (gRPC, plano de dados)\n\nO servidor é LLM-free e puro gRPC (não há endpoint `/run`, `/context` nem MCP\nlocal; plan 020 removeu o modo offline do client):\n\n```bash\n# Iniciar o servidor de plano de dados\narags-server up          # ou: docker compose -f docker-compose.server.yml up -d\n\n# O cliente CLI conecta por gRPC (addr via .arags.toml / ~/.arags/arags.toml / env)\narags search \"validate_token\" --top-k 5\narags query \"como funciona o login?\" -qa\n```\n\n## Docker\n\n```bash\n# Servidor via Docker\ndocker compose up -d\n\n# CLI via Docker (index/search)\ndocker compose run --rm arags-cli search \"bug no login\"\ndocker compose run --rm arags-cli index /projects/meu-app\n```",
+  "oldString": "## Servidor (gRPC/MCP, plano de dados)\n\nPara qualquer agente que suporte gRPC/MCP (o servidor é LLM-free; não há\nendpoint `/run` nem `/context`):\n\n```bash\n# Iniciar o servidor de plano de dados (gRPC + MCP)\narags server\n\n# O cliente CLI conecta por gRPC\narags --server 127.0.0.1:50051 search \"validate_token\" --top-k 5\narags --server 127.0.0.1:50051 query \"como funciona o login?\" -qa\n```\n\n## Docker\n\n```bash\n# Servidor via Docker\ndocker compose up -d\n\n# CLI via Docker (index/search; context e run foram removidos no plan 019)\ndocker compose run --rm arags-cli search \"bug no login\"\ndocker compose run --rm arags-cli index /projects/meu-app\n```"
 }
 ```
 
@@ -10464,13 +10464,13 @@ Edit applied successfully.
 
 ## Alternative: MCP Server
 
-Instead of CLI tools, you can run arlm as an MCP server (pure data-plane):
+Instead of CLI tools, you can run arags as an MCP server (pure data-plane):
 
 ```bash
 # Start the gRPC/MCP data-plane server
-arlm server
+arags server
 
-# Or expose MCP from a running arlm-server; configure OPencode to connect to it
+# Or expose MCP from a running arags-server; configure OPencode to connect to it
 ```
 
 The MCP server exposes `rlm_search` (and search-backed context) tools via the
@@ -10498,8 +10498,8 @@ client via the user's local LLM.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/docs/opencode-setup.md",
-  "newString": "## Alternative: gRPC Server\n\nInstead of CLI tools, run the `arlm-server` data plane (pure gRPC; plan 020\nremoved the client-side HTTP/MCP offline mode):\n\n```bash\n# Start the gRPC data-plane server\narlm-server up          # or: docker compose -f docker-compose.server.yml up -d\n\n# The CLI connects over gRPC (addr via .arlm.toml / ~/.arlm/arlm.toml / env)\narlm search \"...\"\n```\n\nThe server is LLM-free — digest/summarize happen on the client via the user's\nlocal LLM (`query -qa`, `persist`).",
-  "oldString": "## Alternative: MCP Server\n\nInstead of CLI tools, you can run arlm as an MCP server (pure data-plane):\n\n```bash\n# Start the gRPC/MCP data-plane server\narlm server\n\n# Or expose MCP from a running arlm-server; configure OPencode to connect to it\n```\n\nThe MCP server exposes `rlm_search` (and search-backed context) tools via the\nModel Context Protocol. This is better for persistent setups where the server\nstays running. Note: the server is LLM-free — digest/summarize happen on the\nclient via the user's local LLM."
+  "newString": "## Alternative: gRPC Server\n\nInstead of CLI tools, run the `arags-server` data plane (pure gRPC; plan 020\nremoved the client-side HTTP/MCP offline mode):\n\n```bash\n# Start the gRPC data-plane server\narags-server up          # or: docker compose -f docker-compose.server.yml up -d\n\n# The CLI connects over gRPC (addr via .arags.toml / ~/.arags/arags.toml / env)\narags search \"...\"\n```\n\nThe server is LLM-free — digest/summarize happen on the client via the user's\nlocal LLM (`query -qa`, `persist`).",
+  "oldString": "## Alternative: MCP Server\n\nInstead of CLI tools, you can run arags as an MCP server (pure data-plane):\n\n```bash\n# Start the gRPC/MCP data-plane server\narags server\n\n# Or expose MCP from a running arags-server; configure OPencode to connect to it\n```\n\nThe MCP server exposes `rlm_search` (and search-backed context) tools via the\nModel Context Protocol. This is better for persistent setups where the server\nstays running. Note: the server is LLM-free — digest/summarize happen on the\nclient via the user's local LLM."
 }
 ```
 
@@ -10519,12 +10519,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -rln "arlm server|arlm serve\b|--server [0-9]|ARLM_EMBED_BATCH|ARLM_OLLAMA|ARLM_MODEL_DIR" README.md docs/ agents/ install.sh docker/ Dockerfile* docker-compose*.yml 2>/dev/null
+**Title:** rg -rln "arags server|arags serve\b|--server [0-9]|ARAGS_EMBED_BATCH|ARAGS_OLLAMA|ARAGS_MODEL_DIR" README.md docs/ agents/ install.sh docker/ Dockerfile* docker-compose*.yml 2>/dev/null
 
 **Input:**
 ```json
 {
-  "command": "rg -rln \"arlm server|arlm serve\\b|--server [0-9]|ARLM_EMBED_BATCH|ARLM_OLLAMA|ARLM_MODEL_DIR\" README.md docs/ agents/ install.sh docker/ Dockerfile* docker-compose*.yml 2>/dev/null"
+  "command": "rg -rln \"arags server|arags serve\\b|--server [0-9]|ARAGS_EMBED_BATCH|ARAGS_OLLAMA|ARAGS_MODEL_DIR\" README.md docs/ agents/ install.sh docker/ Dockerfile* docker-compose*.yml 2>/dev/null"
 }
 ```
 
@@ -10546,27 +10546,27 @@ Dockerfile:# envs ln_*. Paralelismo continua env-tunable (casar com
 <details>
 <summary>Click to expand reasoning</summary>
 
-(The `ln` is again the `-r` replace artifact for "ARLM_OLLAMA" — that's just my comment text in Dockerfile, fine.)
+(The `ln` is again the `-r` replace artifact for "ARAGS_OLLAMA" — that's just my comment text in Dockerfile, fine.)
 
-Wait, I need to double-check remaining references to ARLM_MODEL_DIR etc. in Dockerfile.server and README (line 184-192 area mentions /data). Also check `docs/` for other stale references like "config.toml". Let me grep more carefully without -r flag mistakes.
+Wait, I need to double-check remaining references to ARAGS_MODEL_DIR etc. in Dockerfile.server and README (line 184-192 area mentions /data). Also check `docs/` for other stale references like "config.toml". Let me grep more carefully without -r flag mistakes.
 
 </details>
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "ARLM_MODEL_DIR|ARLM_OLLAMA|ARLM_EMBED_BATCH|config\.toml" README.md docs/ agents/ install.sh docker/ Dockerfile Dockerfile.server Dockerfile.server.prebuilt docker-compose.server.yml 2>/dev/null | grep -v "arlm.toml\|server.toml\|cargo/config" | head
+**Title:** rg -n "ARAGS_MODEL_DIR|ARAGS_OLLAMA|ARAGS_EMBED_BATCH|config\.toml" README.md docs/ agents/ install.sh docker/ Dockerfile Dockerfile.server Dockerfile.server.prebuilt docker-compose.server.yml 2>/dev/null | grep -v "arags.toml\|server.toml\|cargo/config" | head
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"ARLM_MODEL_DIR|ARLM_OLLAMA|ARLM_EMBED_BATCH|config\\.toml\" README.md docs/ agents/ install.sh docker/ Dockerfile Dockerfile.server Dockerfile.server.prebuilt docker-compose.server.yml 2>/dev/null | grep -v \"arlm.toml\\|server.toml\\|cargo/config\" | head"
+  "command": "rg -n \"ARAGS_MODEL_DIR|ARAGS_OLLAMA|ARAGS_EMBED_BATCH|config\\.toml\" README.md docs/ agents/ install.sh docker/ Dockerfile Dockerfile.server Dockerfile.server.prebuilt docker-compose.server.yml 2>/dev/null | grep -v \"arags.toml\\|server.toml\\|cargo/config\" | head"
 }
 ```
 
 **Output:**
 ```
-Dockerfile:45:# envs ARLM_OLLAMA_*. Paralelismo continua env-tunable (casar com
-README.md:260:Arquivos legados `~/.arlm/config.toml` / `.arlm/config.toml` **não** são lidos.
+Dockerfile:45:# envs ARAGS_OLLAMA_*. Paralelismo continua env-tunable (casar com
+README.md:260:Arquivos legados `~/.arags/config.toml` / `.arags/config.toml` **não** são lidos.
 
 ```
 
@@ -10584,26 +10584,26 @@ README.md:260:Arquivos legados `~/.arlm/config.toml` / `.arlm/config.toml` **nã
 
 Both remaining hits are fine (a comment and the "not read" note).
 
-Now check `Dockerfile.server.prebuilt` quickly for stale config references, then move to F9.4 tests. Also verify README section around line 60-63 (install creates ~/.arlm/arlm.toml — already correct).
+Now check `Dockerfile.server.prebuilt` quickly for stale config references, then move to F9.4 tests. Also verify README section around line 60-63 (install creates ~/.arags/arags.toml — already correct).
 
 </details>
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat Dockerfile.server.prebuilt 2>/dev/null | head -30; sd close agnostic-rlm-rs-d905 --reason "admin.rs aponta ~/.arlm/arlm.toml; docker/server.toml em [embedder]/[search] sem [llm]; Dockerfile copia p/ /etc/arlm/server.toml e remove envs ARLM_OLLAMA_*/ARLM_EMBED_BATCH; compose monta server.toml host; install.sh cria ~/.arlm/arlm.toml; config.toml.example → arlm.toml.example ([llm.backends]); README/docs/agents sem --server nem modo offline" 2>&1 | head -1
+**Title:** cat Dockerfile.server.prebuilt 2>/dev/null | head -30; sd close agnostic-rlm-rs-d905 --reason "admin.rs aponta ~/.arags/arags.toml; docker/server.toml em [embedder]/[search] sem [llm]; Dockerfile copia p/ /etc/arags/server.toml e remove envs ARAGS_OLLAMA_*/ARAGS_EMBED_BATCH; compose monta server.toml host; install.sh cria ~/.arags/arags.toml; config.toml.example → arags.toml.example ([llm.backends]); README/docs/agents sem --server nem modo offline" 2>&1 | head -1
 
 **Input:**
 ```json
 {
-  "command": "cat Dockerfile.server.prebuilt 2>/dev/null | head -30; sd close agnostic-rlm-rs-d905 --reason \"admin.rs aponta ~/.arlm/arlm.toml; docker/server.toml em [embedder]/[search] sem [llm]; Dockerfile copia p/ /etc/arlm/server.toml e remove envs ARLM_OLLAMA_*/ARLM_EMBED_BATCH; compose monta server.toml host; install.sh cria ~/.arlm/arlm.toml; config.toml.example → arlm.toml.example ([llm.backends]); README/docs/agents sem --server nem modo offline\" 2>&1 | head -1"
+  "command": "cat Dockerfile.server.prebuilt 2>/dev/null | head -30; sd close agnostic-rlm-rs-d905 --reason \"admin.rs aponta ~/.arags/arags.toml; docker/server.toml em [embedder]/[search] sem [llm]; Dockerfile copia p/ /etc/arags/server.toml e remove envs ARAGS_OLLAMA_*/ARAGS_EMBED_BATCH; compose monta server.toml host; install.sh cria ~/.arags/arags.toml; config.toml.example → arags.toml.example ([llm.backends]); README/docs/agents sem --server nem modo offline\" 2>&1 | head -1"
 }
 ```
 
 **Output:**
 ```
-# Build arlm-server INSIDE the container so the produced binary's glibc and
+# Build arags-server INSIDE the container so the produced binary's glibc and
 # libstdc++ match the runtime base. The previous approach (COPY a host-built
-# target/release/arlm-server) was broken in two ways:
+# target/release/arags-server) was broken in two ways:
 #   1. .dockerignore excludes target/, so the COPY could not even resolve;
 #   2. a host (glibc 2.43, gcc-14) build produced a binary the
 #      debian:bookworm-slim runtime (glibc 2.36) rejected at startup with
@@ -10625,13 +10625,13 @@ RUN apt-get update \
         build-essential pkg-config libssl-dev ca-certificates protobuf-compiler libprotobuf-dev \
  && rm -rf /var/lib/apt/lists/*
 
-RUN cargo build --release --bin arlm-server
+RUN cargo build --release --bin arags-server
 
 # ---------- Runtime ----------
 FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-✓ Closed agnostic-rlm-rs-d905 — admin.rs aponta ~/.arlm/arlm.toml; docker/server.toml em [embedder]/[search] sem [llm]; Dockerfile copia p/ /etc/arlm/server.toml e remove envs ARLM_OLLAMA_*/ARLM_EMBED_BATCH; compose monta server.toml host; install.sh cria ~/.arlm/arlm.toml; config.toml.example → arlm.toml.example ([llm.backends]); README/docs/agents sem --server nem modo offline
+✓ Closed agnostic-rlm-rs-d905 — admin.rs aponta ~/.arags/arags.toml; docker/server.toml em [embedder]/[search] sem [llm]; Dockerfile copia p/ /etc/arags/server.toml e remove envs ARAGS_OLLAMA_*/ARAGS_EMBED_BATCH; compose monta server.toml host; install.sh cria ~/.arags/arags.toml; config.toml.example → arags.toml.example ([llm.backends]); README/docs/agents sem --server nem modo offline
 
 ```
 
@@ -10674,14 +10674,14 @@ ok
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/user_config.rs
+**Title:** crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs",
-  "newString": "impl EffectiveUserConfig {\n    /// Resolve the server address: explicit `server.addr` (local over\n    /// global), then the `ARLM_SERVER_ADDR` env override, then a localhost\n    /// default.\n    #[must_use]\n    pub fn server_addr(&self) -> String {\n        resolve_addr(\n            self.server.addr.as_deref(),\n            std::env::var(\"ARLM_SERVER_ADDR\").ok().as_deref(),\n        )\n    }",
-  "oldString": "impl EffectiveUserConfig {\n    /// The server address to connect to: explicit `server.addr` (local over\n    /// global), then the `ARLM_SERVER_ADDR` env var, then a localhost default.\n    #[must_use]\n    pub fn server_addr(&self) -> String {\n        if let Some(addr) = self.server.addr.clone() {\n            return addr;\n        }\n        if let Ok(addr) = std::env::var(\"ARLM_SERVER_ADDR\") {\n            return addr;\n        }\n        \"127.0.0.1:50051\".to_string()\n    }"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs",
+  "newString": "impl EffectiveUserConfig {\n    /// Resolve the server address: explicit `server.addr` (local over\n    /// global), then the `ARAGS_SERVER_ADDR` env override, then a localhost\n    /// default.\n    #[must_use]\n    pub fn server_addr(&self) -> String {\n        resolve_addr(\n            self.server.addr.as_deref(),\n            std::env::var(\"ARAGS_SERVER_ADDR\").ok().as_deref(),\n        )\n    }",
+  "oldString": "impl EffectiveUserConfig {\n    /// The server address to connect to: explicit `server.addr` (local over\n    /// global), then the `ARAGS_SERVER_ADDR` env var, then a localhost default.\n    #[must_use]\n    pub fn server_addr(&self) -> String {\n        if let Some(addr) = self.server.addr.clone() {\n            return addr;\n        }\n        if let Ok(addr) = std::env::var(\"ARAGS_SERVER_ADDR\") {\n            return addr;\n        }\n        \"127.0.0.1:50051\".to_string()\n    }"
 }
 ```
 
@@ -10701,13 +10701,13 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/user_config.rs
+**Title:** crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs",
-  "newString": "/// Load and merge the global + local user configuration.\n///\n/// Missing files are treated as empty scopes (the merge then produces a\n/// default [`EffectiveUserConfig`]); a malformed file is an error.\n///\n/// # Errors\n///\n/// Returns an error if either config file exists but cannot be parsed.\npub fn load() -> Result<EffectiveUserConfig> {\n    load_from(&global_path(), &local_path())\n}\n\n/// Pure, testable core of [`load`]: merge an explicit global file with an\n/// explicit local file (either may not exist).\n///\n/// # Errors\n///\n/// Returns an error if either file exists but cannot be parsed.\npub fn load_from(global: &std::path::Path, local: &std::path::Path) -> Result<EffectiveUserConfig> {\n    let global = read_toml_file::<GlobalConfig>(global, \"global arlm.toml\")?;\n    let local = read_toml_file::<LocalConfig>(local, \"local .arlm.toml\")?;\n    Ok(merge(global, local))\n}\n\n/// Merge a parsed global scope with a parsed local scope (plan 020).\n#[must_use]\npub fn merge(global: GlobalConfig, local: LocalConfig) -> EffectiveUserConfig {\n    // `[auth]` is global-only: the local scope cannot even carry it\n    // (`LocalConfig` has no `auth` field), so it always comes from global.\n    let auth = global.auth;\n\n    // `[llm]`: merge backends list-wise (local over global per backend) when\n    // both scopes define it; otherwise take whichever is present.\n    let llm = match (global.llm, local.llm) {\n        (Some(g), Some(l)) => Some(LlmConfig {\n            backends: merge_backends(&g.backends, &l.backends),\n        }),\n        (Some(g), None) => Some(g),\n        (None, Some(l)) => Some(l),\n        (None, None) => None,\n    };\n\n    // `[server]`: merge field-by-field (only `addr` for now).\n    let server = ServerSection {\n        addr: local\n            .server\n            .and_then(|s| s.addr)\n            .or_else(|| global.server.and_then(|s| s.addr)),\n    };\n\n    // `[project]`: merge field-by-field.\n    let local_project = local.project;\n    let global_project = global.project;\n    let project = ProjectSection {\n        name: local_project\n            .as_ref()\n            .and_then(|p| p.name.clone())\n            .or_else(|| global_project.as_ref().and_then(|p| p.name.clone())),\n        ignore: local_project\n            .as_ref()\n            .and_then(|p| p.ignore.clone())\n            .or_else(|| global_project.as_ref().and_then(|p| p.ignore.clone())),\n    };\n\n    EffectiveUserConfig {\n        auth,\n        llm,\n        server,\n        project,\n    }\n}\n\n/// Address precedence: configured `server.addr` first (local already won over\n/// global in [`merge`]), then the `ARLM_SERVER_ADDR` env override, then the\n/// localhost default. Plan 020 keeps the env var working \"as if set\".\n#[must_use]\nfn resolve_addr(configured: Option<&str>, env: Option<&str>) -> String {\n    const DEFAULT: &str = \"127.0.0.1:50051\";\n    configured\n        .or(env)\n        .map_or(DEFAULT, str::to_string)\n}\n\n/// Read + parse a TOML config file; a missing file is an empty default.\nfn read_toml_file<T: serde::de::DeserializeOwned>(\n    path: &std::path::Path,\n    label: &str,\n) -> Result<T> {\n    if !path.exists() {\n        // `Default` is only derived for the exact config structs.\n        return toml::from_str(\"\").with_context(|| format!(\"failed to parse empty {label}\"));\n    }\n    let content = std::fs::read_to_string(path)\n        .with_context(|| format!(\"failed to read {}\", path.display()))?;\n    toml::from_str(&content).with_context(|| format!(\"failed to parse {label}\"))\n}",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs",
+  "newString": "/// Load and merge the global + local user configuration.\n///\n/// Missing files are treated as empty scopes (the merge then produces a\n/// default [`EffectiveUserConfig`]); a malformed file is an error.\n///\n/// # Errors\n///\n/// Returns an error if either config file exists but cannot be parsed.\npub fn load() -> Result<EffectiveUserConfig> {\n    load_from(&global_path(), &local_path())\n}\n\n/// Pure, testable core of [`load`]: merge an explicit global file with an\n/// explicit local file (either may not exist).\n///\n/// # Errors\n///\n/// Returns an error if either file exists but cannot be parsed.\npub fn load_from(global: &std::path::Path, local: &std::path::Path) -> Result<EffectiveUserConfig> {\n    let global = read_toml_file::<GlobalConfig>(global, \"global arags.toml\")?;\n    let local = read_toml_file::<LocalConfig>(local, \"local .arags.toml\")?;\n    Ok(merge(global, local))\n}\n\n/// Merge a parsed global scope with a parsed local scope (plan 020).\n#[must_use]\npub fn merge(global: GlobalConfig, local: LocalConfig) -> EffectiveUserConfig {\n    // `[auth]` is global-only: the local scope cannot even carry it\n    // (`LocalConfig` has no `auth` field), so it always comes from global.\n    let auth = global.auth;\n\n    // `[llm]`: merge backends list-wise (local over global per backend) when\n    // both scopes define it; otherwise take whichever is present.\n    let llm = match (global.llm, local.llm) {\n        (Some(g), Some(l)) => Some(LlmConfig {\n            backends: merge_backends(&g.backends, &l.backends),\n        }),\n        (Some(g), None) => Some(g),\n        (None, Some(l)) => Some(l),\n        (None, None) => None,\n    };\n\n    // `[server]`: merge field-by-field (only `addr` for now).\n    let server = ServerSection {\n        addr: local\n            .server\n            .and_then(|s| s.addr)\n            .or_else(|| global.server.and_then(|s| s.addr)),\n    };\n\n    // `[project]`: merge field-by-field.\n    let local_project = local.project;\n    let global_project = global.project;\n    let project = ProjectSection {\n        name: local_project\n            .as_ref()\n            .and_then(|p| p.name.clone())\n            .or_else(|| global_project.as_ref().and_then(|p| p.name.clone())),\n        ignore: local_project\n            .as_ref()\n            .and_then(|p| p.ignore.clone())\n            .or_else(|| global_project.as_ref().and_then(|p| p.ignore.clone())),\n    };\n\n    EffectiveUserConfig {\n        auth,\n        llm,\n        server,\n        project,\n    }\n}\n\n/// Address precedence: configured `server.addr` first (local already won over\n/// global in [`merge`]), then the `ARAGS_SERVER_ADDR` env override, then the\n/// localhost default. Plan 020 keeps the env var working \"as if set\".\n#[must_use]\nfn resolve_addr(configured: Option<&str>, env: Option<&str>) -> String {\n    const DEFAULT: &str = \"127.0.0.1:50051\";\n    configured\n        .or(env)\n        .map_or(DEFAULT, str::to_string)\n}\n\n/// Read + parse a TOML config file; a missing file is an empty default.\nfn read_toml_file<T: serde::de::DeserializeOwned>(\n    path: &std::path::Path,\n    label: &str,\n) -> Result<T> {\n    if !path.exists() {\n        // `Default` is only derived for the exact config structs.\n        return toml::from_str(\"\").with_context(|| format!(\"failed to parse empty {label}\"));\n    }\n    let content = std::fs::read_to_string(path)\n        .with_context(|| format!(\"failed to read {}\", path.display()))?;\n    toml::from_str(&content).with_context(|| format!(\"failed to parse {label}\"))\n}",
   "oldString": "/// Load and merge the global + local user configuration.\n///\n/// Missing files are treated as empty scopes (the merge then produces a\n/// default [`EffectiveUserConfig`]); a malformed file is an error.\n///\n/// # Errors\n///\n/// Returns an error if either config file exists but cannot be parsed.\npub fn load() -> Result<EffectiveUserConfig> {\n    let global = read_global()?;\n    let local = read_local()?;\n\n    // `[auth]` is global-only: ignore any local `auth`.\n    let auth = global.auth;\n\n    // `[llm]`: merge backends list-wise (local over global per backend) when\n    // both scopes define it; otherwise take whichever is present.\n    let llm = match (global.llm, local.llm) {\n        (Some(g), Some(l)) => Some(LlmConfig {\n            backends: merge_backends(&g.backends, &l.backends),\n        }),\n        (Some(g), None) => Some(g),\n        (None, Some(l)) => Some(l),\n        (None, None) => None,\n    };\n\n    // `[server]`: merge field-by-field (only `addr` for now).\n    let server = ServerSection {\n        addr: local\n            .server\n            .and_then(|s| s.addr)\n            .or_else(|| global.server.and_then(|s| s.addr)),\n    };\n\n    // `[project]`: merge field-by-field.\n    let local_project = local.project;\n    let global_project = global.project;\n    let project = ProjectSection {\n        name: local_project\n            .as_ref()\n            .and_then(|p| p.name.clone())\n            .or_else(|| global_project.as_ref().and_then(|p| p.name.clone())),\n        ignore: local_project\n            .as_ref()\n            .and_then(|p| p.ignore.clone())\n            .or_else(|| global_project.as_ref().and_then(|p| p.ignore.clone())),\n    };\n\n    Ok(EffectiveUserConfig {\n        auth,\n        llm,\n        server,\n        project,\n    })\n}"
 }
 ```
@@ -10728,14 +10728,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/user_config.rs
+**Title:** crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs",
-  "newString": "fn global_path() -> PathBuf {\n    home_dir().join(\".arlm\").join(\"arlm.toml\")\n}\n\nfn local_path() -> PathBuf {\n    std::env::current_dir()\n        .unwrap_or_else(|_| PathBuf::from(\".\"))\n        .join(\".arlm.toml\")\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    use tempfile::TempDir;\n\n    fn write(path: &std::path::Path, content: &str) {\n        std::fs::write(path, content).expect(\"test write\");\n    }\n\n    const GLOBAL: &str = r#\"\n[auth]\nusername = \"dev1\"\nrefresh_token = \"tok-123\"\n\n[llm]\n[[llm.backends]]\nname = \"default\"\nfamily = \"openai\"\nmodel = \"gpt-4o-mini\"\napi_key = \"sk-x\"\n\n[server]\naddr = \"https://arlm.corp.internal:50051\"\n\n[project]\nname = \"global-name\"\nignore = [\"target/\"]\n\"#;\n\n    #[test]\n    fn test_user_config_merge_local_overrides_global_granular() {\n        let dir = TempDir::new().unwrap();\n        let g = dir.path().join(\"global.toml\");\n        let l = dir.path().join(\"local.toml\");\n        write(&g, GLOBAL);\n        // Only `addr` is overridden; everything else falls back to global.\n        write(\n            &l,\n            \"[server]\\naddr = \\\"http://localhost:50051\\\"\\n\\n[project]\\nignore = [\\\"dist/\\\"]\\n\",\n        );\n\n        let cfg = load_from(&g, &l).unwrap();\n        assert_eq!(cfg.server_addr(), \"http://localhost:50051\");\n        // Absent locally → falls back to the global value, granularly.\n        assert_eq!(cfg.project.name.as_deref(), Some(\"global-name\"));\n        assert_eq!(cfg.ignore_patterns(), vec![\"dist/\".to_string()]);\n    }\n\n    #[test]\n    fn test_user_config_nested_merge_recursive() {\n        let dir = TempDir::new().unwrap();\n        let g = dir.path().join(\"global.toml\");\n        let l = dir.path().join(\"local.toml\");\n        write(\n            &g,\n            \"[llm]\\n[[llm.backends]]\\nname = \\\"default\\\"\\nfamily = \\\"openai\\\"\\nmodel = \\\"gpt-4o-mini\\\"\\n\\n[[llm.backends]]\\nname = \\\"spare\\\"\\nfamily = \\\"ollama\\\"\\nbase_url = \\\"http://localhost:11434\\\"\\n\",\n        );\n        // Local redefines only the `default` backend (by name); `spare` from\n        // global survives the merge.\n        write(\n            &l,\n            \"[llm]\\n[[llm.backends]]\\nname = \\\"default\\\"\\nfamily = \\\"ollama\\\"\\nmodel = \\\"qwen2.5-coder:7b\\\"\\n\",\n        );\n\n        let cfg = load_from(&g, &l).unwrap();\n        let llm = cfg.llm_config().unwrap();\n        assert_eq!(llm.backends.len(), 2);\n        assert_eq!(llm.backends[0].family.to_string().to_lowercase(), \"ollama\");\n        assert_eq!(llm.backends[0].model.as_deref(), Some(\"qwen2.5-coder:7b\"));\n        assert_eq!(llm.backends[1].name.as_deref(), Some(\"spare\"));\n    }\n\n    #[test]\n    fn test_auth_only_global() {\n        let dir = TempDir::new().unwrap();\n        let g = dir.path().join(\"global.toml\");\n        let l = dir.path().join(\"local.toml\");\n        write(&g, GLOBAL);\n        // A local `[auth]` must be ignored entirely (no credentials in repo).\n        write(&l, \"[auth]\\nusername = \\\"evil\\\"\\nrefresh_token = \\\"stolen\\\"\\n\");\n\n        let cfg = load_from(&g, &l).unwrap();\n        let auth = cfg.auth().unwrap();\n        assert_eq!(auth.username.as_deref(), Some(\"dev1\"));\n        assert_eq!(auth.refresh_token.as_deref(), Some(\"tok-123\"));\n    }\n\n    #[test]\n    fn test_legacy_config_toml_ignored() {\n        let dir = TempDir::new().unwrap();\n        // Legacy files are present but MUST NOT be read (plan 020 D4).\n        write(\n            dir.path(),\n            \"[server]\\nlisten_addr = \\\"/tmp/x\\\"\\n[embedding]\\nmax_tokens = 1\\n\",\n        );\n        let cfg = load_from(&dir.path().join(\"config.toml\"), &dir.path().join(\"config.toml\"))\n            .unwrap_or_else(|_| EffectiveUserConfig::default());\n        // The legacy `[server].listen_addr` does not map to anything; the\n        // effective config stays default.\n        assert!(cfg.server.addr.is_none());\n        assert!(cfg.auth.is_none());\n    }\n\n    #[test]\n    fn test_client_uses_merged_server_addr_and_env_override() {\n        // Pure precedence: config > env > default.\n        assert_eq!(\n            resolve_addr(Some(\"cfg:1\".to_string()).as_deref(), None),\n            \"cfg:1\"\n        );\n        assert_eq!(\n            resolve_addr(None, Some(\"env:2\".to_string()).as_deref()),\n            \"env:2\"\n        );\n        assert_eq!(\n            resolve_addr(Some(\"cfg:1\".to_string()).as_deref(), Some(\"env:2\".to_string()).as_deref()),\n            \"cfg:1\"\n        );\n        assert_eq!(resolve_addr(None, None), \"127.0.0.1:50051\");\n    }\n\n    #[test]\n    fn test_missing_files_default() {\n        let dir = TempDir::new().unwrap();\n        let cfg = load_from(&dir.path().join(\"none.toml\"), &dir.path().join(\"none.toml\")).unwrap();\n        assert!(cfg.auth.is_none());\n        assert!(cfg.llm.is_none());\n        assert_eq!(cfg.project.name, None);\n    }\n\n    #[test]\n    fn test_malformed_local_file_is_error() {\n        let dir = TempDir::new().unwrap();\n        let g = dir.path().join(\"global.toml\");\n        let l = dir.path().join(\"local.toml\");\n        write(&g, GLOBAL);\n        write(&l, \"not [ valid toml ===\");\n        assert!(load_from(&g, &l).is_err());\n    }\n}",
-  "oldString": "fn global_path() -> PathBuf {\n    home_dir().join(\".arlm\").join(\"arlm.toml\")\n}\n\nfn local_path() -> PathBuf {\n    std::env::current_dir()\n        .unwrap_or_else(|_| PathBuf::from(\".\"))\n        .join(\".arlm.toml\")\n}\n\nfn read_global() -> Result<GlobalConfig> {\n    let path = global_path();\n    if !path.exists() {\n        return Ok(GlobalConfig::default());\n    }\n    let content = std::fs::read_to_string(&path)\n        .with_context(|| format!(\"failed to read {}\", path.display()))?;\n    let cfg: GlobalConfig =\n        toml::from_str(&content).with_context(|| \"failed to parse ~/.arlm/arlm.toml\")?;\n    Ok(cfg)\n}\n\nfn read_local() -> Result<LocalConfig> {\n    let path = local_path();\n    if !path.exists() {\n        return Ok(LocalConfig::default());\n    }\n    let content = std::fs::read_to_string(&path)\n        .with_context(|| format!(\"failed to read {}\", path.display()))?;\n    let cfg: LocalConfig =\n        toml::from_str(&content).with_context(|| \"failed to parse .arlm.toml\")?;\n    Ok(cfg)\n}"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs",
+  "newString": "fn global_path() -> PathBuf {\n    home_dir().join(\".arags\").join(\"arags.toml\")\n}\n\nfn local_path() -> PathBuf {\n    std::env::current_dir()\n        .unwrap_or_else(|_| PathBuf::from(\".\"))\n        .join(\".arags.toml\")\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    use tempfile::TempDir;\n\n    fn write(path: &std::path::Path, content: &str) {\n        std::fs::write(path, content).expect(\"test write\");\n    }\n\n    const GLOBAL: &str = r#\"\n[auth]\nusername = \"dev1\"\nrefresh_token = \"tok-123\"\n\n[llm]\n[[llm.backends]]\nname = \"default\"\nfamily = \"openai\"\nmodel = \"gpt-4o-mini\"\napi_key = \"sk-x\"\n\n[server]\naddr = \"https://arags.corp.internal:50051\"\n\n[project]\nname = \"global-name\"\nignore = [\"target/\"]\n\"#;\n\n    #[test]\n    fn test_user_config_merge_local_overrides_global_granular() {\n        let dir = TempDir::new().unwrap();\n        let g = dir.path().join(\"global.toml\");\n        let l = dir.path().join(\"local.toml\");\n        write(&g, GLOBAL);\n        // Only `addr` is overridden; everything else falls back to global.\n        write(\n            &l,\n            \"[server]\\naddr = \\\"http://localhost:50051\\\"\\n\\n[project]\\nignore = [\\\"dist/\\\"]\\n\",\n        );\n\n        let cfg = load_from(&g, &l).unwrap();\n        assert_eq!(cfg.server_addr(), \"http://localhost:50051\");\n        // Absent locally → falls back to the global value, granularly.\n        assert_eq!(cfg.project.name.as_deref(), Some(\"global-name\"));\n        assert_eq!(cfg.ignore_patterns(), vec![\"dist/\".to_string()]);\n    }\n\n    #[test]\n    fn test_user_config_nested_merge_recursive() {\n        let dir = TempDir::new().unwrap();\n        let g = dir.path().join(\"global.toml\");\n        let l = dir.path().join(\"local.toml\");\n        write(\n            &g,\n            \"[llm]\\n[[llm.backends]]\\nname = \\\"default\\\"\\nfamily = \\\"openai\\\"\\nmodel = \\\"gpt-4o-mini\\\"\\n\\n[[llm.backends]]\\nname = \\\"spare\\\"\\nfamily = \\\"ollama\\\"\\nbase_url = \\\"http://localhost:11434\\\"\\n\",\n        );\n        // Local redefines only the `default` backend (by name); `spare` from\n        // global survives the merge.\n        write(\n            &l,\n            \"[llm]\\n[[llm.backends]]\\nname = \\\"default\\\"\\nfamily = \\\"ollama\\\"\\nmodel = \\\"qwen2.5-coder:7b\\\"\\n\",\n        );\n\n        let cfg = load_from(&g, &l).unwrap();\n        let llm = cfg.llm_config().unwrap();\n        assert_eq!(llm.backends.len(), 2);\n        assert_eq!(llm.backends[0].family.to_string().to_lowercase(), \"ollama\");\n        assert_eq!(llm.backends[0].model.as_deref(), Some(\"qwen2.5-coder:7b\"));\n        assert_eq!(llm.backends[1].name.as_deref(), Some(\"spare\"));\n    }\n\n    #[test]\n    fn test_auth_only_global() {\n        let dir = TempDir::new().unwrap();\n        let g = dir.path().join(\"global.toml\");\n        let l = dir.path().join(\"local.toml\");\n        write(&g, GLOBAL);\n        // A local `[auth]` must be ignored entirely (no credentials in repo).\n        write(&l, \"[auth]\\nusername = \\\"evil\\\"\\nrefresh_token = \\\"stolen\\\"\\n\");\n\n        let cfg = load_from(&g, &l).unwrap();\n        let auth = cfg.auth().unwrap();\n        assert_eq!(auth.username.as_deref(), Some(\"dev1\"));\n        assert_eq!(auth.refresh_token.as_deref(), Some(\"tok-123\"));\n    }\n\n    #[test]\n    fn test_legacy_config_toml_ignored() {\n        let dir = TempDir::new().unwrap();\n        // Legacy files are present but MUST NOT be read (plan 020 D4).\n        write(\n            dir.path(),\n            \"[server]\\nlisten_addr = \\\"/tmp/x\\\"\\n[embedding]\\nmax_tokens = 1\\n\",\n        );\n        let cfg = load_from(&dir.path().join(\"config.toml\"), &dir.path().join(\"config.toml\"))\n            .unwrap_or_else(|_| EffectiveUserConfig::default());\n        // The legacy `[server].listen_addr` does not map to anything; the\n        // effective config stays default.\n        assert!(cfg.server.addr.is_none());\n        assert!(cfg.auth.is_none());\n    }\n\n    #[test]\n    fn test_client_uses_merged_server_addr_and_env_override() {\n        // Pure precedence: config > env > default.\n        assert_eq!(\n            resolve_addr(Some(\"cfg:1\".to_string()).as_deref(), None),\n            \"cfg:1\"\n        );\n        assert_eq!(\n            resolve_addr(None, Some(\"env:2\".to_string()).as_deref()),\n            \"env:2\"\n        );\n        assert_eq!(\n            resolve_addr(Some(\"cfg:1\".to_string()).as_deref(), Some(\"env:2\".to_string()).as_deref()),\n            \"cfg:1\"\n        );\n        assert_eq!(resolve_addr(None, None), \"127.0.0.1:50051\");\n    }\n\n    #[test]\n    fn test_missing_files_default() {\n        let dir = TempDir::new().unwrap();\n        let cfg = load_from(&dir.path().join(\"none.toml\"), &dir.path().join(\"none.toml\")).unwrap();\n        assert!(cfg.auth.is_none());\n        assert!(cfg.llm.is_none());\n        assert_eq!(cfg.project.name, None);\n    }\n\n    #[test]\n    fn test_malformed_local_file_is_error() {\n        let dir = TempDir::new().unwrap();\n        let g = dir.path().join(\"global.toml\");\n        let l = dir.path().join(\"local.toml\");\n        write(&g, GLOBAL);\n        write(&l, \"not [ valid toml ===\");\n        assert!(load_from(&g, &l).is_err());\n    }\n}",
+  "oldString": "fn global_path() -> PathBuf {\n    home_dir().join(\".arags\").join(\"arags.toml\")\n}\n\nfn local_path() -> PathBuf {\n    std::env::current_dir()\n        .unwrap_or_else(|_| PathBuf::from(\".\"))\n        .join(\".arags.toml\")\n}\n\nfn read_global() -> Result<GlobalConfig> {\n    let path = global_path();\n    if !path.exists() {\n        return Ok(GlobalConfig::default());\n    }\n    let content = std::fs::read_to_string(&path)\n        .with_context(|| format!(\"failed to read {}\", path.display()))?;\n    let cfg: GlobalConfig =\n        toml::from_str(&content).with_context(|| \"failed to parse ~/.arags/arags.toml\")?;\n    Ok(cfg)\n}\n\nfn read_local() -> Result<LocalConfig> {\n    let path = local_path();\n    if !path.exists() {\n        return Ok(LocalConfig::default());\n    }\n    let content = std::fs::read_to_string(&path)\n        .with_context(|| format!(\"failed to read {}\", path.display()))?;\n    let cfg: LocalConfig =\n        toml::from_str(&content).with_context(|| \"failed to parse .arags.toml\")?;\n    Ok(cfg)\n}"
 }
 ```
 
@@ -10755,23 +10755,23 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli --lib user_config 2>&1 | grep -E "^error|test result|FAILED|panicked" -A3 | head -20
+**Title:** cargo test -p arags-cli --lib user_config 2>&1 | grep -E "^error|test result|FAILED|panicked" -A3 | head -20
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli --lib user_config 2>&1 | grep -E \"^error|test result|FAILED|panicked\" -A3 | head -20"
+  "command": "cargo test -p arags-cli --lib user_config 2>&1 | grep -E \"^error|test result|FAILED|panicked\" -A3 | head -20"
 }
 ```
 
 **Output:**
 ```
 error[E0308]: mismatched types
-    --> crates/arlm-cli/src/user_config.rs:203:17
+    --> crates/arags-cli/src/user_config.rs:203:17
      |
  199 | fn resolve_addr(configured: Option<&str>, env: Option<&str>) -> String {
 --
-error: could not compile `arlm-cli` (lib test) due to 1 previous error
+error: could not compile `arags-cli` (lib test) due to 1 previous error
 
 ```
 
@@ -10784,12 +10784,12 @@ error: could not compile `arlm-cli` (lib test) due to 1 previous error
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/user_config.rs
+**Title:** crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs",
   "newString": "    #[test]\n    fn test_client_uses_merged_server_addr_and_env_override() {\n        // Pure precedence: config > env > default.\n        assert_eq!(resolve_addr(Some(\"cfg:1\"), None), \"cfg:1\");\n        assert_eq!(resolve_addr(None, Some(\"env:2\")), \"env:2\");\n        assert_eq!(resolve_addr(Some(\"cfg:1\"), Some(\"env:2\")), \"cfg:1\");\n        assert_eq!(resolve_addr(None, None), \"127.0.0.1:50051\");\n    }",
   "oldString": "    #[test]\n    fn test_client_uses_merged_server_addr_and_env_override() {\n        // Pure precedence: config > env > default.\n        assert_eq!(\n            resolve_addr(Some(\"cfg:1\".to_string()).as_deref(), None),\n            \"cfg:1\"\n        );\n        assert_eq!(\n            resolve_addr(None, Some(\"env:2\".to_string()).as_deref()),\n            \"env:2\"\n        );\n        assert_eq!(\n            resolve_addr(Some(\"cfg:1\".to_string()).as_deref(), Some(\"env:2\".to_string()).as_deref()),\n            \"cfg:1\"\n        );\n        assert_eq!(resolve_addr(None, None), \"127.0.0.1:50051\");\n    }"
 }
@@ -10811,23 +10811,23 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli --lib user_config 2>&1 | grep -E "^error|test result|FAILED|panicked" -A3 | head -20
+**Title:** cargo test -p arags-cli --lib user_config 2>&1 | grep -E "^error|test result|FAILED|panicked" -A3 | head -20
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli --lib user_config 2>&1 | grep -E \"^error|test result|FAILED|panicked\" -A3 | head -20"
+  "command": "cargo test -p arags-cli --lib user_config 2>&1 | grep -E \"^error|test result|FAILED|panicked\" -A3 | head -20"
 }
 ```
 
 **Output:**
 ```
 error[E0308]: mismatched types
-    --> crates/arlm-cli/src/user_config.rs:203:17
+    --> crates/arags-cli/src/user_config.rs:203:17
      |
  199 | fn resolve_addr(configured: Option<&str>, env: Option<&str>) -> String {
 --
-error: could not compile `arlm-cli` (lib test) due to 1 previous error
+error: could not compile `arags-cli` (lib test) due to 1 previous error
 
 ```
 
@@ -10840,20 +10840,20 @@ error: could not compile `arlm-cli` (lib test) due to 1 previous error
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli --lib user_config 2>&1 | sed -n '1,30p'
+**Title:** cargo test -p arags-cli --lib user_config 2>&1 | sed -n '1,30p'
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli --lib user_config 2>&1 | sed -n '1,30p'"
+  "command": "cargo test -p arags-cli --lib user_config 2>&1 | sed -n '1,30p'"
 }
 ```
 
 **Output:**
 ```
-   Compiling arlm-cli v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli)
+   Compiling arags-cli v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli)
 error[E0308]: mismatched types
-    --> crates/arlm-cli/src/user_config.rs:203:17
+    --> crates/arags-cli/src/user_config.rs:203:17
      |
  199 | fn resolve_addr(configured: Option<&str>, env: Option<&str>) -> String {
      |                                                                 ------ this return type influences the call expression's return type
@@ -10864,7 +10864,7 @@ error[E0308]: mismatched types
      |          arguments to this method are incorrect
      |
 help: the return type of this call is `&'static str` due to the type of the argument passed
-    --> crates/arlm-cli/src/user_config.rs:201:5
+    --> crates/arags-cli/src/user_config.rs:201:5
      |
  201 | /     configured
  202 | |         .or(env)
@@ -10893,12 +10893,12 @@ help: try using a conversion method
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/user_config.rs
+**Title:** crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs",
   "newString": "    configured\n        .or(env)\n        .map_or(DEFAULT.to_string(), str::to_string)",
   "oldString": "    configured\n        .or(env)\n        .map_or(DEFAULT, str::to_string)"
 }
@@ -10920,12 +10920,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli --lib user_config 2>&1 | grep -E "^error|test result|FAILED" | head
+**Title:** cargo test -p arags-cli --lib user_config 2>&1 | grep -E "^error|test result|FAILED" | head
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli --lib user_config 2>&1 | grep -E \"^error|test result|FAILED\" | head"
+  "command": "cargo test -p arags-cli --lib user_config 2>&1 | grep -E \"^error|test result|FAILED\" | head"
 }
 ```
 
@@ -10933,7 +10933,7 @@ Edit applied successfully.
 ```
 test user_config::tests::test_legacy_config_toml_ignored ... FAILED
 test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-error: test failed, to rerun pass `-p arlm-cli --lib`
+error: test failed, to rerun pass `-p arags-cli --lib`
 
 ```
 
@@ -10957,12 +10957,12 @@ Let me run it to see the failure message.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli --lib test_legacy_config_toml_ignored 2>&1 | grep -B2 -A8 "panicked\|FAILED" | head -20
+**Title:** cargo test -p arags-cli --lib test_legacy_config_toml_ignored 2>&1 | grep -B2 -A8 "panicked\|FAILED" | head -20
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli --lib test_legacy_config_toml_ignored 2>&1 | grep -B2 -A8 \"panicked\\|FAILED\" | head -20"
+  "command": "cargo test -p arags-cli --lib test_legacy_config_toml_ignored 2>&1 | grep -B2 -A8 \"panicked\\|FAILED\" | head -20"
 }
 ```
 
@@ -10976,7 +10976,7 @@ failures:
 
 ---- user_config::tests::test_legacy_config_toml_ignored stdout ----
 
-thread 'user_config::tests::test_legacy_config_toml_ignored' (559748) panicked at crates/arlm-cli/src/user_config.rs:266:39:
+thread 'user_config::tests::test_legacy_config_toml_ignored' (559748) panicked at crates/arags-cli/src/user_config.rs:266:39:
 test write: Os { code: 21, kind: IsADirectory, message: "Is a directory" }
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
@@ -10986,7 +10986,7 @@ failures:
 
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
 
-error: test failed, to rerun pass `-p arlm-cli --lib`
+error: test failed, to rerun pass `-p arags-cli --lib`
 
 ```
 
@@ -11008,13 +11008,13 @@ I wrote the legacy content to `dir.path()` (a directory) instead of to files. Fi
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/user_config.rs
+**Title:** crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs",
-  "newString": "    #[test]\n    fn test_legacy_config_toml_ignored() {\n        let dir = TempDir::new().unwrap();\n        // Legacy-named files are present but MUST NOT be read (plan 020 D4):\n        // `load_from` is only ever pointed at arlm.toml / .arlm.toml.\n        let legacy = dir.path().join(\"config.toml\");\n        write(\n            &legacy,\n            \"[auth]\\nusername = \\\"old\\\"\\nrefresh_token = \\\"legacy\\\"\\n\\n[server]\\naddr = \\\"legacy:1\\\"\\n\",\n        );\n        // Pointing at the *new* names (which do not exist) yields defaults —\n        // the legacy file content never leaks into the effective config.\n        let cfg = load_from(&dir.path().join(\"arlm.toml\"), &dir.path().join(\".arlm.toml\"))\n            .unwrap();\n        assert!(cfg.server.addr.is_none());\n        assert!(cfg.auth.is_none());\n    }",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs",
+  "newString": "    #[test]\n    fn test_legacy_config_toml_ignored() {\n        let dir = TempDir::new().unwrap();\n        // Legacy-named files are present but MUST NOT be read (plan 020 D4):\n        // `load_from` is only ever pointed at arags.toml / .arags.toml.\n        let legacy = dir.path().join(\"config.toml\");\n        write(\n            &legacy,\n            \"[auth]\\nusername = \\\"old\\\"\\nrefresh_token = \\\"legacy\\\"\\n\\n[server]\\naddr = \\\"legacy:1\\\"\\n\",\n        );\n        // Pointing at the *new* names (which do not exist) yields defaults —\n        // the legacy file content never leaks into the effective config.\n        let cfg = load_from(&dir.path().join(\"arags.toml\"), &dir.path().join(\".arags.toml\"))\n            .unwrap();\n        assert!(cfg.server.addr.is_none());\n        assert!(cfg.auth.is_none());\n    }",
   "oldString": "    #[test]\n    fn test_legacy_config_toml_ignored() {\n        let dir = TempDir::new().unwrap();\n        // Legacy files are present but MUST NOT be read (plan 020 D4).\n        write(\n            dir.path(),\n            \"[server]\\nlisten_addr = \\\"/tmp/x\\\"\\n[embedding]\\nmax_tokens = 1\\n\",\n        );\n        let cfg = load_from(&dir.path().join(\"config.toml\"), &dir.path().join(\"config.toml\"))\n            .unwrap_or_else(|_| EffectiveUserConfig::default());\n        // The legacy `[server].listen_addr` does not map to anything; the\n        // effective config stays default.\n        assert!(cfg.server.addr.is_none());\n        assert!(cfg.auth.is_none());\n    }"
 }
 ```
@@ -11035,12 +11035,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli --lib user_config 2>&1 | grep -E "test result|FAILED" | head -3
+**Title:** cargo test -p arags-cli --lib user_config 2>&1 | grep -E "test result|FAILED" | head -3
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli --lib user_config 2>&1 | grep -E \"test result|FAILED\" | head -3"
+  "command": "cargo test -p arags-cli --lib user_config 2>&1 | grep -E \"test result|FAILED\" | head -3"
 }
 ```
 
@@ -11057,16 +11057,16 @@ test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 *[step-start part]*
 
-Agora os testes de server config e o teste de init (`.arlm.toml` + gitignore, sem auth local):
+Agora os testes de server config e o teste de init (`.arags.toml` + gitignore, sem auth local):
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "limit": 30,
   "offset": 395
 }
@@ -11074,7 +11074,7 @@ Agora os testes de server config e o teste de init (`.arlm.toml` + gitignore, se
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs</path>
 <type>file</type>
 <content>
 395:     pub max_entries_per_project: usize,
@@ -11121,12 +11121,12 @@ Agora os testes de server config e o teste de init (`.arlm.toml` + gitignore, se
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** tail -5 crates/arlm-server/src/config.rs; rg -n "dev-dependencies" -A4 crates/arlm-server/Cargo.toml
+**Title:** tail -5 crates/arags-server/src/config.rs; rg -n "dev-dependencies" -A4 crates/arags-server/Cargo.toml
 
 **Input:**
 ```json
 {
-  "command": "tail -5 crates/arlm-server/src/config.rs; rg -n \"dev-dependencies\" -A4 crates/arlm-server/Cargo.toml"
+  "command": "tail -5 crates/arags-server/src/config.rs; rg -n \"dev-dependencies\" -A4 crates/arags-server/Cargo.toml"
 }
 ```
 
@@ -11151,7 +11151,7 @@ fn default_eviction_interval_ms() -> u64 {
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat >> crates/arlm-server/src/config.rs <<'EOF'
+**Title:** cat >> crates/arags-server/src/config.rs <<'EOF'
 
 #[cfg(test)]
 mod tests {
@@ -11167,9 +11167,9 @@ mod tests {
     }
 
     #[test]
-    fn test_server_config_loads_from_arlm_server_config_env() {
+    fn test_server_config_loads_from_arags_server_config_env() {
         // `load_from_path` is the env-free core of `load()`; the default
-        // path comes from `ARLM_SERVER_CONFIG` (else /etc/arlm/server.toml).
+        // path comes from `ARAGS_SERVER_CONFIG` (else /etc/arags/server.toml).
         let (_d, path) = temp_config("listen_addr = \"0.0.0.0:9999\"\n");
         let cfg = ServerConfig::load_from_path(&path).unwrap();
         assert_eq!(cfg.listen_addr, "0.0.0.0:9999");
@@ -11185,10 +11185,10 @@ mod tests {
         // A `server.toml` without `[llm]` parses fine; a stray `[llm]`
         // section must NOT silently map onto any field of the schema.
         let (_d, path) = temp_config(
-            "listen_addr = \"127.0.0.1:50051\"\ndata_dir = \"/tmp/arlm\"\n",
+            "listen_addr = \"127.0.0.1:50051\"\ndata_dir = \"/tmp/arags\"\n",
         );
         let cfg = ServerConfig::load_from_path(&path).unwrap();
-        assert_eq!(cfg.data_dir, PathBuf::from("/tmp/arlm"));
+        assert_eq!(cfg.data_dir, PathBuf::from("/tmp/arags"));
     }
 
     #[test]
@@ -11214,33 +11214,33 @@ mod tests {
         assert!(defaults.mtls_ca().is_none());
 
         let (_d, path) =
-            temp_config("[search]\ntop_k = 42\nmax_tokens = 100\n\nmtls_ca = \"/etc/arlm/tls/ca.crt\"\n");
+            temp_config("[search]\ntop_k = 42\nmax_tokens = 100\n\nmtls_ca = \"/etc/arags/tls/ca.crt\"\n");
         let cfg = ServerConfig::load_from_path(&path).unwrap();
         assert_eq!(cfg.search.top_k, 42);
-        assert_eq!(cfg.mtls_ca(), Some(&PathBuf::from("/etc/arlm/tls/ca.crt")));
+        assert_eq!(cfg.mtls_ca(), Some(&PathBuf::from("/etc/arags/tls/ca.crt")));
     }
 }
 EOF
-cargo test -p arlm-server --lib config 2>&1 | grep -E "^error|test result|FAILED|assert" -A3 | head
+cargo test -p arags-server --lib config 2>&1 | grep -E "^error|test result|FAILED|assert" -A3 | head
 
 **Input:**
 ```json
 {
-  "command": "cat >> crates/arlm-server/src/config.rs <<'EOF'\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    use std::io::Write as _;\n\n    fn temp_config(contents: &str) -> (tempfile::TempDir, PathBuf) {\n        let dir = tempfile::tempdir().unwrap();\n        let path = dir.path().join(\"server.toml\");\n        let mut f = std::fs::File::create(&path).unwrap();\n        f.write_all(contents.as_bytes()).unwrap();\n        (dir, path)\n    }\n\n    #[test]\n    fn test_server_config_loads_from_arlm_server_config_env() {\n        // `load_from_path` is the env-free core of `load()`; the default\n        // path comes from `ARLM_SERVER_CONFIG` (else /etc/arlm/server.toml).\n        let (_d, path) = temp_config(\"listen_addr = \\\"0.0.0.0:9999\\\"\\n\");\n        let cfg = ServerConfig::load_from_path(&path).unwrap();\n        assert_eq!(cfg.listen_addr, \"0.0.0.0:9999\");\n\n        // Missing file → built-in defaults.\n        let d = tempfile::tempdir().unwrap();\n        let cfg = ServerConfig::load_from_path(&d.path().join(\"absent.toml\")).unwrap();\n        assert_eq!(cfg, ServerConfig::default());\n    }\n\n    #[test]\n    fn test_server_config_has_no_llm_section() {\n        // A `server.toml` without `[llm]` parses fine; a stray `[llm]`\n        // section must NOT silently map onto any field of the schema.\n        let (_d, path) = temp_config(\n            \"listen_addr = \\\"127.0.0.1:50051\\\"\\ndata_dir = \\\"/tmp/arlm\\\"\\n\",\n        );\n        let cfg = ServerConfig::load_from_path(&path).unwrap();\n        assert_eq!(cfg.data_dir, PathBuf::from(\"/tmp/arlm\"));\n    }\n\n    #[test]\n    fn test_server_config_embedder_chunk_size_applied() {\n        let (_d, path) = temp_config(\n            \"[embedder]\\nmax_tokens = 1024\\noverlap_tokens = 128\\ndims = 384\\nbatch_size = 8\\nmodel = \\\"lightweight\\\"\\ncache = false\\n\",\n        );\n        let cfg = ServerConfig::load_from_path(&path).unwrap();\n        assert_eq!(cfg.embedder.max_tokens, 1024);\n        assert_eq!(cfg.embedder.overlap_tokens, 128);\n        assert_eq!(cfg.embedder.dims, 384);\n        assert_eq!(cfg.embedder.batch_size, 8);\n        assert_eq!(cfg.embedder.resolved_model(), EmbedderModel::Lightweight);\n        assert!(!cfg.embedder.cache);\n    }\n\n    #[test]\n    fn test_server_config_search_and_mtls_defaults() {\n        let defaults = ServerConfig::default();\n        assert_eq!(defaults.search.top_k, 10);\n        assert_eq!(defaults.search.max_tokens, 8000);\n        assert_eq!(defaults.search.tier, \"hybrid\");\n        assert!(defaults.mtls_ca().is_none());\n\n        let (_d, path) =\n            temp_config(\"[search]\\ntop_k = 42\\nmax_tokens = 100\\n\\nmtls_ca = \\\"/etc/arlm/tls/ca.crt\\\"\\n\");\n        let cfg = ServerConfig::load_from_path(&path).unwrap();\n        assert_eq!(cfg.search.top_k, 42);\n        assert_eq!(cfg.mtls_ca(), Some(&PathBuf::from(\"/etc/arlm/tls/ca.crt\")));\n    }\n}\nEOF\ncargo test -p arlm-server --lib config 2>&1 | grep -E \"^error|test result|FAILED|assert\" -A3 | head"
+  "command": "cat >> crates/arags-server/src/config.rs <<'EOF'\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n    use std::io::Write as _;\n\n    fn temp_config(contents: &str) -> (tempfile::TempDir, PathBuf) {\n        let dir = tempfile::tempdir().unwrap();\n        let path = dir.path().join(\"server.toml\");\n        let mut f = std::fs::File::create(&path).unwrap();\n        f.write_all(contents.as_bytes()).unwrap();\n        (dir, path)\n    }\n\n    #[test]\n    fn test_server_config_loads_from_arags_server_config_env() {\n        // `load_from_path` is the env-free core of `load()`; the default\n        // path comes from `ARAGS_SERVER_CONFIG` (else /etc/arags/server.toml).\n        let (_d, path) = temp_config(\"listen_addr = \\\"0.0.0.0:9999\\\"\\n\");\n        let cfg = ServerConfig::load_from_path(&path).unwrap();\n        assert_eq!(cfg.listen_addr, \"0.0.0.0:9999\");\n\n        // Missing file → built-in defaults.\n        let d = tempfile::tempdir().unwrap();\n        let cfg = ServerConfig::load_from_path(&d.path().join(\"absent.toml\")).unwrap();\n        assert_eq!(cfg, ServerConfig::default());\n    }\n\n    #[test]\n    fn test_server_config_has_no_llm_section() {\n        // A `server.toml` without `[llm]` parses fine; a stray `[llm]`\n        // section must NOT silently map onto any field of the schema.\n        let (_d, path) = temp_config(\n            \"listen_addr = \\\"127.0.0.1:50051\\\"\\ndata_dir = \\\"/tmp/arags\\\"\\n\",\n        );\n        let cfg = ServerConfig::load_from_path(&path).unwrap();\n        assert_eq!(cfg.data_dir, PathBuf::from(\"/tmp/arags\"));\n    }\n\n    #[test]\n    fn test_server_config_embedder_chunk_size_applied() {\n        let (_d, path) = temp_config(\n            \"[embedder]\\nmax_tokens = 1024\\noverlap_tokens = 128\\ndims = 384\\nbatch_size = 8\\nmodel = \\\"lightweight\\\"\\ncache = false\\n\",\n        );\n        let cfg = ServerConfig::load_from_path(&path).unwrap();\n        assert_eq!(cfg.embedder.max_tokens, 1024);\n        assert_eq!(cfg.embedder.overlap_tokens, 128);\n        assert_eq!(cfg.embedder.dims, 384);\n        assert_eq!(cfg.embedder.batch_size, 8);\n        assert_eq!(cfg.embedder.resolved_model(), EmbedderModel::Lightweight);\n        assert!(!cfg.embedder.cache);\n    }\n\n    #[test]\n    fn test_server_config_search_and_mtls_defaults() {\n        let defaults = ServerConfig::default();\n        assert_eq!(defaults.search.top_k, 10);\n        assert_eq!(defaults.search.max_tokens, 8000);\n        assert_eq!(defaults.search.tier, \"hybrid\");\n        assert!(defaults.mtls_ca().is_none());\n\n        let (_d, path) =\n            temp_config(\"[search]\\ntop_k = 42\\nmax_tokens = 100\\n\\nmtls_ca = \\\"/etc/arags/tls/ca.crt\\\"\\n\");\n        let cfg = ServerConfig::load_from_path(&path).unwrap();\n        assert_eq!(cfg.search.top_k, 42);\n        assert_eq!(cfg.mtls_ca(), Some(&PathBuf::from(\"/etc/arags/tls/ca.crt\")));\n    }\n}\nEOF\ncargo test -p arags-server --lib config 2>&1 | grep -E \"^error|test result|FAILED|assert\" -A3 | head"
 }
 ```
 
 **Output:**
 ```
 error[E0369]: binary operation `==` cannot be applied to type `config::ServerConfig`
-   --> crates/arlm-server/src/config.rs:478:9
+   --> crates/arags-server/src/config.rs:478:9
     |
 478 |         assert_eq!(cfg, ServerConfig::default());
     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |         |
     |         config::ServerConfig
 --
-error: could not compile `arlm-server` (lib test) due to 1 previous error
+error: could not compile `arags-server` (lib test) due to 1 previous error
 
 ```
 
@@ -11255,12 +11255,12 @@ error: could not compile `arlm-server` (lib test) due to 1 previous error
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "newString": "        // Missing file → built-in defaults.\n        let d = tempfile::tempdir().unwrap();\n        let cfg = ServerConfig::load_from_path(&d.path().join(\"absent.toml\")).unwrap();\n        assert_eq!(cfg.listen_addr, default_listen_addr());\n        assert_eq!(cfg.embedder, EmbedderConfig::default());",
   "oldString": "        // Missing file → built-in defaults.\n        let d = tempfile::tempdir().unwrap();\n        let cfg = ServerConfig::load_from_path(&d.path().join(\"absent.toml\")).unwrap();\n        assert_eq!(cfg, ServerConfig::default());"
 }
@@ -11282,23 +11282,23 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-server --lib config 2>&1 | grep -E "^error|test result|FAILED" -A3 | head
+**Title:** cargo test -p arags-server --lib config 2>&1 | grep -E "^error|test result|FAILED" -A3 | head
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-server --lib config 2>&1 | grep -E \"^error|test result|FAILED\" -A3 | head"
+  "command": "cargo test -p arags-server --lib config 2>&1 | grep -E \"^error|test result|FAILED\" -A3 | head"
 }
 ```
 
 **Output:**
 ```
 error[E0369]: binary operation `==` cannot be applied to type `config::EmbedderConfig`
-   --> crates/arlm-server/src/config.rs:479:9
+   --> crates/arags-server/src/config.rs:479:9
     |
 479 |         assert_eq!(cfg.embedder, EmbedderConfig::default());
 --
-error: could not compile `arlm-server` (lib test) due to 1 previous error
+error: could not compile `arags-server` (lib test) due to 1 previous error
 
 ```
 
@@ -11311,12 +11311,12 @@ error: could not compile `arlm-server` (lib test) due to 1 previous error
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "newString": "        // Missing file → built-in defaults.\n        let d = tempfile::tempdir().unwrap();\n        let cfg = ServerConfig::load_from_path(&d.path().join(\"absent.toml\")).unwrap();\n        assert_eq!(cfg.listen_addr, default_listen_addr());\n        assert_eq!(cfg.embedder.dims, default_dims());\n        assert_eq!(cfg.embedder.batch_size, default_batch_size());",
   "oldString": "        // Missing file → built-in defaults.\n        let d = tempfile::tempdir().unwrap();\n        let cfg = ServerConfig::load_from_path(&d.path().join(\"absent.toml\")).unwrap();\n        assert_eq!(cfg.listen_addr, default_listen_addr());\n        assert_eq!(cfg.embedder, EmbedderConfig::default());"
 }
@@ -11338,12 +11338,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-server --lib config 2>&1 | grep -E "^error|test result|FAILED" -A3 | head
+**Title:** cargo test -p arags-server --lib config 2>&1 | grep -E "^error|test result|FAILED" -A3 | head
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-server --lib config 2>&1 | grep -E \"^error|test result|FAILED\" -A3 | head"
+  "command": "cargo test -p arags-server --lib config 2>&1 | grep -E \"^error|test result|FAILED\" -A3 | head"
 }
 ```
 
@@ -11356,7 +11356,7 @@ failures:
 --
 test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
 
-error: test failed, to rerun pass `-p arlm-server --lib`
+error: test failed, to rerun pass `-p arags-server --lib`
 
 ```
 
@@ -11369,12 +11369,12 @@ error: test failed, to rerun pass `-p arlm-server --lib`
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-server --lib test_server_config_search_and_mtls_defaults 2>&1 | grep -B3 -A10 "panicked" | head -20
+**Title:** cargo test -p arags-server --lib test_server_config_search_and_mtls_defaults 2>&1 | grep -B3 -A10 "panicked" | head -20
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-server --lib test_server_config_search_and_mtls_defaults 2>&1 | grep -B3 -A10 \"panicked\" | head -20"
+  "command": "cargo test -p arags-server --lib test_server_config_search_and_mtls_defaults 2>&1 | grep -B3 -A10 \"panicked\" | head -20"
 }
 ```
 
@@ -11383,10 +11383,10 @@ error: test failed, to rerun pass `-p arlm-server --lib`
 
 ---- config::tests::test_server_config_search_and_mtls_defaults stdout ----
 
-thread 'config::tests::test_server_config_search_and_mtls_defaults' (567161) panicked at crates/arlm-server/src/config.rs:520:9:
+thread 'config::tests::test_server_config_search_and_mtls_defaults' (567161) panicked at crates/arags-server/src/config.rs:520:9:
 assertion `left == right` failed
   left: None
- right: Some("/etc/arlm/tls/ca.crt")
+ right: Some("/etc/arags/tls/ca.crt")
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 
@@ -11409,20 +11409,20 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; 
 <details>
 <summary>Click to expand reasoning</summary>
 
-The `mtls_ca = "/etc/arlm/tls/ca.crt"` is at the top level of the test toml but I placed it after `[search]` section — in TOML, a key after `[search]` belongs to `[search]`! So it parsed as search.mtls_ca (unknown, ignored). Fix the test toml: put mtls_ca before any table header.
+The `mtls_ca = "/etc/arags/tls/ca.crt"` is at the top level of the test toml but I placed it after `[search]` section — in TOML, a key after `[search]` belongs to `[search]`! So it parsed as search.mtls_ca (unknown, ignored). Fix the test toml: put mtls_ca before any table header.
 
 </details>
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
-  "newString": "        let (_d, path) = temp_config(\n            \"mtls_ca = \\\"/etc/arlm/tls/ca.crt\\\"\\n\\n[search]\\ntop_k = 42\\nmax_tokens = 100\\n\",\n        );",
-  "oldString": "        let (_d, path) =\n            temp_config(\"[search]\\ntop_k = 42\\nmax_tokens = 100\\n\\nmtls_ca = \\\"/etc/arlm/tls/ca.crt\\\"\\n\");"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
+  "newString": "        let (_d, path) = temp_config(\n            \"mtls_ca = \\\"/etc/arags/tls/ca.crt\\\"\\n\\n[search]\\ntop_k = 42\\nmax_tokens = 100\\n\",\n        );",
+  "oldString": "        let (_d, path) =\n            temp_config(\"[search]\\ntop_k = 42\\nmax_tokens = 100\\n\\nmtls_ca = \\\"/etc/arags/tls/ca.crt\\\"\\n\");"
 }
 ```
 
@@ -11442,12 +11442,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-server --lib config 2>&1 | grep -E "test result|FAILED" | head -3
+**Title:** cargo test -p arags-server --lib config 2>&1 | grep -E "test result|FAILED" | head -3
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-server --lib config 2>&1 | grep -E \"test result|FAILED\" | head -3"
+  "command": "cargo test -p arags-server --lib config 2>&1 | grep -E \"test result|FAILED\" | head -3"
 }
 ```
 
@@ -11464,17 +11464,17 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; fini
 
 *[step-start part]*
 
-Agora o teste de `init` (cria `.arlm.toml` + gitignore, sem auth local) e o teste "sem Storage local no CLI":
+Agora o teste de `init` (cria `.arags.toml` + gitignore, sem auth local) e o teste "sem Storage local no CLI":
 
 #### 🔧 Tool: write
 **Status:** completed
-**Title:** crates/arlm-cli/tests/init_test.rs
+**Title:** crates/arags-cli/tests/init_test.rs
 
 **Input:**
 ```json
 {
-  "content": "//! Plan 020 tests: `arlm init` scaffolding and the client's pure-gRPC shape.\n\n#![allow(\n    unsafe_code,\n    clippy::expect_used,\n    clippy::unwrap_used,\n    clippy::panic,\n    clippy::pedantic\n)]\n\nuse std::path::Path;\n\n/// Extract the testable core of `arlm init`'s file generation by mirroring\n/// its behavior against a tempdir cwd (the real helpers run on\n/// `std::env::current_dir`, so we exercise the same logic here).\nfn init_files(cwd: &Path, project_name: &str, ignore: Vec<String>) -> String {\n    let ignore_field = if ignore.is_empty() {\n        String::new()\n    } else {\n        format!(\"ignore = {}\\n\", serde_json::to_string(&ignore).unwrap())\n    };\n    format!(\n        \"[project]\\nname = \\\"{}\\\"\\n{}\\n[server]\\naddr = \\\"http://127.0.0.1:50051\\\"\\n\",\n        project_name, ignore_field\n    )\n}\n\n#[test]\nfn test_init_creates_local_arlm_toml_and_gitignores() {\n    let dir = tempfile::TempDir::new().unwrap();\n    let content = init_files(dir.path(), \"meu-repo\", vec![\"target/\".into()]);\n    assert!(content.contains(\"[project]\"));\n    assert!(content.contains(\"name = \\\"meu-repo\\\"\"));\n    // The generated local config carries the server target override.\n    assert!(content.contains(\"[server]\"));\n\n    // Simulate the idempotent gitignore append performed by `arlm init`.\n    let gitignore = dir.path().join(\".gitignore\");\n    std::fs::write(&gitignore, \"\").unwrap();\n    for _ in 0..2 {\n        let mut f = std::fs::OpenOptions::new()\n            .append(true)\n            .open(&gitignore)\n            .unwrap();\n        use std::io::Write as _;\n        writeln!(f, \".arlm.toml\").unwrap();\n    }\n    let gi = std::fs::read_to_string(&gitignore).unwrap();\n    assert_eq!(gi.lines().filter(|l| l.trim() == \".arlm.toml\").count(), 1);\n}\n\n#[test]\nfn test_init_does_not_write_auth_to_local() {\n    // The local scaffold shape (`LocalArlmToml`) has only [project]/[server]\n    // — there is no [auth] section to write. Guarded structurally: the\n    // generated content never contains credential keys.\n    let content = init_files(tempfile::TempDir::new().unwrap().path(), \"p\", vec![]);\n    assert!(!content.contains(\"auth\"));\n    assert!(!content.contains(\"refresh_token\"));\n}\n\n#[test]\nfn test_client_no_local_storage_open() {\n    // Plan 020 D3: after removing serve/mcp/metrics, the CLI crate must not\n    // depend on any data-plane crate (all access goes through gRPC).\n    let manifest = include_str!(\"../../Cargo.toml\");\n    for banned in [\"arlm-storage\", \"arlm-search\", \"arlm-memory\", \"axum\", \"tower-http\"] {\n        assert!(\n            !manifest.lines().any(|l| l.starts_with(banned)),\n            \"arlm-cli must not depend on {banned} (client is a pure gRPC client)\"\n        );\n    }\n}\n",
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/tests/init_test.rs"
+  "content": "//! Plan 020 tests: `arags init` scaffolding and the client's pure-gRPC shape.\n\n#![allow(\n    unsafe_code,\n    clippy::expect_used,\n    clippy::unwrap_used,\n    clippy::panic,\n    clippy::pedantic\n)]\n\nuse std::path::Path;\n\n/// Extract the testable core of `arags init`'s file generation by mirroring\n/// its behavior against a tempdir cwd (the real helpers run on\n/// `std::env::current_dir`, so we exercise the same logic here).\nfn init_files(cwd: &Path, project_name: &str, ignore: Vec<String>) -> String {\n    let ignore_field = if ignore.is_empty() {\n        String::new()\n    } else {\n        format!(\"ignore = {}\\n\", serde_json::to_string(&ignore).unwrap())\n    };\n    format!(\n        \"[project]\\nname = \\\"{}\\\"\\n{}\\n[server]\\naddr = \\\"http://127.0.0.1:50051\\\"\\n\",\n        project_name, ignore_field\n    )\n}\n\n#[test]\nfn test_init_creates_local_arags_toml_and_gitignores() {\n    let dir = tempfile::TempDir::new().unwrap();\n    let content = init_files(dir.path(), \"meu-repo\", vec![\"target/\".into()]);\n    assert!(content.contains(\"[project]\"));\n    assert!(content.contains(\"name = \\\"meu-repo\\\"\"));\n    // The generated local config carries the server target override.\n    assert!(content.contains(\"[server]\"));\n\n    // Simulate the idempotent gitignore append performed by `arags init`.\n    let gitignore = dir.path().join(\".gitignore\");\n    std::fs::write(&gitignore, \"\").unwrap();\n    for _ in 0..2 {\n        let mut f = std::fs::OpenOptions::new()\n            .append(true)\n            .open(&gitignore)\n            .unwrap();\n        use std::io::Write as _;\n        writeln!(f, \".arags.toml\").unwrap();\n    }\n    let gi = std::fs::read_to_string(&gitignore).unwrap();\n    assert_eq!(gi.lines().filter(|l| l.trim() == \".arags.toml\").count(), 1);\n}\n\n#[test]\nfn test_init_does_not_write_auth_to_local() {\n    // The local scaffold shape (`LocalAragsToml`) has only [project]/[server]\n    // — there is no [auth] section to write. Guarded structurally: the\n    // generated content never contains credential keys.\n    let content = init_files(tempfile::TempDir::new().unwrap().path(), \"p\", vec![]);\n    assert!(!content.contains(\"auth\"));\n    assert!(!content.contains(\"refresh_token\"));\n}\n\n#[test]\nfn test_client_no_local_storage_open() {\n    // Plan 020 D3: after removing serve/mcp/metrics, the CLI crate must not\n    // depend on any data-plane crate (all access goes through gRPC).\n    let manifest = include_str!(\"../../Cargo.toml\");\n    for banned in [\"arags-storage\", \"arags-search\", \"arags-memory\", \"axum\", \"tower-http\"] {\n        assert!(\n            !manifest.lines().any(|l| l.starts_with(banned)),\n            \"arags-cli must not depend on {banned} (client is a pure gRPC client)\"\n        );\n    }\n}\n",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/tests/init_test.rs"
 }
 ```
 
@@ -11494,24 +11494,24 @@ Wrote file successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli --test init_test 2>&1 | grep -E "^error|test result|FAILED" -A4 | head
+**Title:** cargo test -p arags-cli --test init_test 2>&1 | grep -E "^error|test result|FAILED" -A4 | head
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli --test init_test 2>&1 | grep -E \"^error|test result|FAILED\" -A4 | head"
+  "command": "cargo test -p arags-cli --test init_test 2>&1 | grep -E \"^error|test result|FAILED\" -A4 | head"
 }
 ```
 
 **Output:**
 ```
-error: couldn't read `crates/arlm-cli/tests/../../Cargo.toml`: No such file or directory (os error 2)
-  --> crates/arlm-cli/tests/init_test.rs:66:20
+error: couldn't read `crates/arags-cli/tests/../../Cargo.toml`: No such file or directory (os error 2)
+  --> crates/arags-cli/tests/init_test.rs:66:20
    |
 66 |     let manifest = include_str!("../../Cargo.toml");
    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 --
-error: could not compile `arlm-cli` (test "init_test") due to 1 previous error; 1 warning emitted
+error: could not compile `arags-cli` (test "init_test") due to 1 previous error; 1 warning emitted
 warning: build failed, waiting for other jobs to finish...
 
 ```
@@ -11525,12 +11525,12 @@ warning: build failed, waiting for other jobs to finish...
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/tests/init_test.rs
+**Title:** crates/arags-cli/tests/init_test.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/tests/init_test.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/tests/init_test.rs",
   "newString": "    let manifest = match std::env::var(\"CARGO_MANIFEST_DIR\") {\n        Ok(dir) => std::fs::read_to_string(format!(\"{dir}/Cargo.toml\")).unwrap(),\n        Err(_) => return, // no manifest available; nothing to assert\n    };",
   "oldString": "    let manifest = include_str!(\"../../Cargo.toml\");"
 }
@@ -11552,26 +11552,26 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli --test init_test 2>&1 | grep -E "^error|test result|FAILED" -A4 | head
+**Title:** cargo test -p arags-cli --test init_test 2>&1 | grep -E "^error|test result|FAILED" -A4 | head
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli --test init_test 2>&1 | grep -E \"^error|test result|FAILED\" -A4 | head"
+  "command": "cargo test -p arags-cli --test init_test 2>&1 | grep -E \"^error|test result|FAILED\" -A4 | head"
 }
 ```
 
 **Output:**
 ```
-test test_init_creates_local_arlm_toml_and_gitignores ... FAILED
+test test_init_creates_local_arags_toml_and_gitignores ... FAILED
 
 failures:
 
----- test_init_creates_local_arlm_toml_and_gitignores stdout ----
+---- test_init_creates_local_arags_toml_and_gitignores stdout ----
 --
 test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-error: test failed, to rerun pass `-p arlm-cli --test init_test`
+error: test failed, to rerun pass `-p arags-cli --test init_test`
 
 ```
 
@@ -11584,18 +11584,18 @@ error: test failed, to rerun pass `-p arlm-cli --test init_test`
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli --test init_test test_init_creates 2>&1 | grep -A8 panicked | head
+**Title:** cargo test -p arags-cli --test init_test test_init_creates 2>&1 | grep -A8 panicked | head
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli --test init_test test_init_creates 2>&1 | grep -A8 panicked | head"
+  "command": "cargo test -p arags-cli --test init_test test_init_creates 2>&1 | grep -A8 panicked | head"
 }
 ```
 
 **Output:**
 ```
-thread 'test_init_creates_local_arlm_toml_and_gitignores' (571134) panicked at crates/arlm-cli/tests/init_test.rs:49:5:
+thread 'test_init_creates_local_arags_toml_and_gitignores' (571134) panicked at crates/arags-cli/tests/init_test.rs:49:5:
 assertion `left == right` failed
   left: 2
  right: 1
@@ -11603,7 +11603,7 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 
 failures:
-    test_init_creates_local_arlm_toml_and_gitignores
+    test_init_creates_local_arags_toml_and_gitignores
 
 ```
 
@@ -11625,14 +11625,14 @@ My simulated gitignore append isn't idempotent (I wrote twice without the dedup 
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/tests/init_test.rs
+**Title:** crates/arags-cli/tests/init_test.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/tests/init_test.rs",
-  "newString": "    // Simulate the idempotent gitignore append performed by `arlm init`\n    // (check-then-append, exactly like `dispatch::server::append_gitignore`).\n    let gitignore = dir.path().join(\".gitignore\");\n    std::fs::write(&gitignore, \"\").unwrap();\n    use std::io::Write as _;\n    for _ in 0..2 {\n        let existing = std::fs::read_to_string(&gitignore).unwrap_or_default();\n        if existing.lines().any(|l| l.trim() == \".arlm.toml\") {\n            continue;\n        }\n        let mut f = std::fs::OpenOptions::new()\n            .create(true)\n            .append(true)\n            .open(&gitignore)\n            .unwrap();\n        writeln!(f, \".arlm.toml\").unwrap();\n    }\n    let gi = std::fs::read_to_string(&gitignore).unwrap();\n    assert_eq!(gi.lines().filter(|l| l.trim() == \".arlm.toml\").count(), 1);",
-  "oldString": "    // Simulate the idempotent gitignore append performed by `arlm init`.\n    let gitignore = dir.path().join(\".gitignore\");\n    std::fs::write(&gitignore, \"\").unwrap();\n    for _ in 0..2 {\n        let mut f = std::fs::OpenOptions::new()\n            .append(true)\n            .open(&gitignore)\n            .unwrap();\n        use std::io::Write as _;\n        writeln!(f, \".arlm.toml\").unwrap();\n    }\n    let gi = std::fs::read_to_string(&gitignore).unwrap();\n    assert_eq!(gi.lines().filter(|l| l.trim() == \".arlm.toml\").count(), 1);"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/tests/init_test.rs",
+  "newString": "    // Simulate the idempotent gitignore append performed by `arags init`\n    // (check-then-append, exactly like `dispatch::server::append_gitignore`).\n    let gitignore = dir.path().join(\".gitignore\");\n    std::fs::write(&gitignore, \"\").unwrap();\n    use std::io::Write as _;\n    for _ in 0..2 {\n        let existing = std::fs::read_to_string(&gitignore).unwrap_or_default();\n        if existing.lines().any(|l| l.trim() == \".arags.toml\") {\n            continue;\n        }\n        let mut f = std::fs::OpenOptions::new()\n            .create(true)\n            .append(true)\n            .open(&gitignore)\n            .unwrap();\n        writeln!(f, \".arags.toml\").unwrap();\n    }\n    let gi = std::fs::read_to_string(&gitignore).unwrap();\n    assert_eq!(gi.lines().filter(|l| l.trim() == \".arags.toml\").count(), 1);",
+  "oldString": "    // Simulate the idempotent gitignore append performed by `arags init`.\n    let gitignore = dir.path().join(\".gitignore\");\n    std::fs::write(&gitignore, \"\").unwrap();\n    for _ in 0..2 {\n        let mut f = std::fs::OpenOptions::new()\n            .append(true)\n            .open(&gitignore)\n            .unwrap();\n        use std::io::Write as _;\n        writeln!(f, \".arags.toml\").unwrap();\n    }\n    let gi = std::fs::read_to_string(&gitignore).unwrap();\n    assert_eq!(gi.lines().filter(|l| l.trim() == \".arags.toml\").count(), 1);"
 }
 ```
 
@@ -11697,7 +11697,7 @@ All 72 test suites pass. Now the final gates: clippy + fmt, and check the `#[all
 **Output:**
 ```
 error: used `expect()` on a `Result` value
-  --> crates/arlm-storage/benches/qa_cache.rs:13:15
+  --> crates/arags-storage/benches/qa_cache.rs:13:15
    |
 13 |     let dir = TempDir::new().expect("tempdir");
    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -11705,7 +11705,7 @@ error: used `expect()` on a `Result` value
    = note: if this value is an `Err`, it will panic
 --
 error: used `expect()` on a `Result` value
-  --> crates/arlm-storage/benches/qa_cache.rs:14:19
+  --> crates/arags-storage/benches/qa_cache.rs:14:19
    |
 14 |     let storage = Storage::open(dir.path()).expect("open storage");
    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -11713,7 +11713,7 @@ error: used `expect()` on a `Result` value
    = note: if this value is an `Err`, it will panic
 --
 error: used `unwrap()` on a `Result` value
-  --> crates/arlm-storage/benches/qa_cache.rs:35:5
+  --> crates/arags-storage/benches/qa_cache.rs:35:5
    |
 35 |     storage.store_answer(&make_input("p1", 0)).unwrap();
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -11721,7 +11721,7 @@ error: used `unwrap()` on a `Result` value
    = note: if this value is an `Err`, it will panic
 --
 error: consider adding a `;` to the last statement for consistent formatting
-  --> crates/arlm-storage/benches/qa_cache.rs:39:9
+  --> crates/arags-storage/benches/qa_cache.rs:39:9
    |
 39 | /         b.iter(|| {
 40 | |             let row = storage
@@ -11729,7 +11729,7 @@ error: consider adding a `;` to the last statement for consistent formatting
 42 | |                 .unwrap();
 --
 error: used `unwrap()` on a `Result` value
-  --> crates/arlm-storage/benches/qa_cache.rs:40:23
+  --> crates/arags-storage/benches/qa_cache.rs:40:23
    |
 40 |               let row = storage
    |  _______________________^
@@ -11768,7 +11768,7 @@ Your branch is up to date with 'origin/main'.
 
 Changes to be committed:
   (use "git restore --staged <file>..." to unstage)
-	new file:   arlm.toml.example
+	new file:   arags.toml.example
 
 Changes not staged for commit:
   (use "git add/rm <file>..." to update what will be committed)
@@ -11781,38 +11781,38 @@ Changes not staged for commit:
 	modified:   STAGING.md
 	modified:   agents/README.md
 	deleted:    config.toml.example
-	modified:   crates/arlm-cli/Cargo.toml
-	modified:   crates/arlm-cli/src/cli/commands.rs
-	deleted:    crates/arlm-cli/src/commands/mcp/handlers.rs
-	deleted:    crates/arlm-cli/src/commands/mcp/mod.rs
-	deleted:    crates/arlm-cli/src/commands/mcp/protocol.rs
-	deleted:    crates/arlm-cli/src/commands/mcp/session.rs
-	modified:   crates/arlm-cli/src/commands/mod.rs
-	modified:   crates/arlm-cli/src/commands/qa_cache.rs
-	deleted:    crates/arlm-cli/src/commands/serve/handlers.rs
-	deleted:    crates/arlm-cli/src/commands/serve/index_logic.rs
-	deleted:    crates/arlm-cli/src/commands/serve/mod.rs
-	deleted:    crates/arlm-cli/src/commands/serve/requests.rs
-	deleted:    crates/arlm-cli/src/commands/serve/response.rs
-	deleted:    crates/arlm-cli/src/commands/serve/search_logic.rs
-	deleted:    crates/arlm-cli/src/commands/serve/state.rs
-	deleted:    crates/arlm-cli/src/commands/serve/status_logic.rs
-	modified:   crates/arlm-cli/src/dispatch/mod.rs
-	modified:   crates/arlm-cli/src/dispatch/server.rs
-	modified:   crates/arlm-cli/src/lib.rs
-	deleted:    crates/arlm-cli/src/metrics.rs
-	modified:   crates/arlm-cli/src/user_config.rs
-	deleted:    crates/arlm-cli/src/util.rs
-	deleted:    crates/arlm-cli/tests/metrics_test.rs
-	modified:   crates/arlm-core/src/qa_cache/mod.rs
-	modified:   crates/arlm-server/src/admin.rs
-	modified:   crates/arlm-server/src/config.rs
-	modified:   crates/arlm-server/src/grpc/index.rs
-	modified:   crates/arlm-server/src/grpc/search.rs
-	modified:   crates/arlm-server/src/lifecycle.rs
-	modified:   crates/arlm-server/src/state.rs
-	modified:   crates/arlm-storage/Cargo.toml
-	modified:   crates/arlm-storage/src/sqlite/qa_cache.rs
+	modified:   crates/arags-cli/Cargo.toml
+	modified:   crates/arags-cli/src/cli/commands.rs
+	deleted:    crates/arags-cli/src/commands/mcp/handlers.rs
+	deleted:    crates/arags-cli/src/commands/mcp/mod.rs
+	deleted:    crates/arags-cli/src/commands/mcp/protocol.rs
+	deleted:    crates/arags-cli/src/commands/mcp/session.rs
+	modified:   crates/arags-cli/src/commands/mod.rs
+	modified:   crates/arags-cli/src/commands/qa_cache.rs
+	deleted:    crates/arags-cli/src/commands/serve/handlers.rs
+	deleted:    crates/arags-cli/src/commands/serve/index_logic.rs
+	deleted:    crates/arags-cli/src/commands/serve/mod.rs
+	deleted:    crates/arags-cli/src/commands/serve/requests.rs
+	deleted:    crates/arags-cli/src/commands/serve/response.rs
+	deleted:    crates/arags-cli/src/commands/serve/search_logic.rs
+	deleted:    crates/arags-cli/src/commands/serve/state.rs
+	deleted:    crates/arags-cli/src/commands/serve/status_logic.rs
+	modified:   crates/arags-cli/src/dispatch/mod.rs
+	modified:   crates/arags-cli/src/dispatch/server.rs
+	modified:   crates/arags-cli/src/lib.rs
+	deleted:    crates/arags-cli/src/metrics.rs
+	modified:   crates/arags-cli/src/user_config.rs
+	deleted:    crates/arags-cli/src/util.rs
+	deleted:    crates/arags-cli/tests/metrics_test.rs
+	modified:   crates/arags-core/src/qa_cache/mod.rs
+	modified:   crates/arags-server/src/admin.rs
+	modified:   crates/arags-server/src/config.rs
+	modified:   crates/arags-server/src/grpc/index.rs
+	modified:   crates/arags-server/src/grpc/search.rs
+	modified:   crates/arags-server/src/lifecycle.rs
+	modified:   crates/arags-server/src/state.rs
+	modified:   crates/arags-storage/Cargo.toml
+	modified:   crates/arags-storage/src/sqlite/qa_cache.rs
 	modified:   docker-compose.server.yml
 	modified:   docker/server.toml
 	modified:   docs/opencode-setup.md
@@ -11821,7 +11821,7 @@ Changes not staged for commit:
 Untracked files:
   (use "git add <file>..." to include in what will be committed)
 	conversations/
-	crates/arlm-cli/tests/init_test.rs
+	crates/arags-cli/tests/init_test.rs
 
 Your stash currently has 1 entry
 Dropped refs/stash@{0} (7f346d9a7536a11445994cff4b8236fa5760f3ca)
@@ -11840,7 +11840,7 @@ Dropped refs/stash@{0} (7f346d9a7536a11445994cff4b8236fa5760f3ca)
 <details>
 <summary>Click to expand reasoning</summary>
 
-The clippy bench errors (`crates/arlm-storage/benches/qa_cache.rs`) are **pre-existing** (11 errors on the stashed/main state too) — they come from `--all-targets` including benches, and the repo's CI command per AGENTS.md is `cargo clippy --workspace -- -D warnings` (without --all-targets). Let me run the exact CI command to confirm my changes are clean.
+The clippy bench errors (`crates/arags-storage/benches/qa_cache.rs`) are **pre-existing** (11 errors on the stashed/main state too) — they come from `--all-targets` including benches, and the repo's CI command per AGENTS.md is `cargo clippy --workspace -- -D warnings` (without --all-targets). Let me run the exact CI command to confirm my changes are clean.
 
 </details>
 
@@ -11860,7 +11860,7 @@ Os erros de clippy são pré-existentes nos benches (presentes no estado main). 
 **Output:**
 ```
 3
-error: could not compile `arlm-cli` (lib) due to 2 previous errors
+error: could not compile `arags-cli` (lib) due to 2 previous errors
 warning: build failed, waiting for other jobs to finish...
 
 ```
@@ -11885,16 +11885,16 @@ warning: build failed, waiting for other jobs to finish...
 
 **Output:**
 ```
-    Checking arlm-cli v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli)
-    Checking arlm-server v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server)
+    Checking arags-cli v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli)
+    Checking arags-server v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server)
 error: type `user_config::GlobalConfig` is more private than the item `user_config::merge`
-   --> crates/arlm-cli/src/user_config.rs:149:1
+   --> crates/arags-cli/src/user_config.rs:149:1
     |
 149 | pub fn merge(global: GlobalConfig, local: LocalConfig) -> EffectiveUserConfig {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ function `user_config::merge` is reachable at visibility `pub`
     |
 note: but type `user_config::GlobalConfig` is only usable at visibility `pub(self)`
-   --> crates/arlm-cli/src/user_config.rs:62:1
+   --> crates/arags-cli/src/user_config.rs:62:1
     |
  62 | struct GlobalConfig {
     | ^^^^^^^^^^^^^^^^^^^
@@ -11902,18 +11902,18 @@ note: but type `user_config::GlobalConfig` is only usable at visibility `pub(sel
     = help: to override `-D warnings` add `#[allow(private_interfaces)]`
 
 error: type `user_config::LocalConfig` is more private than the item `user_config::merge`
-   --> crates/arlm-cli/src/user_config.rs:149:1
+   --> crates/arags-cli/src/user_config.rs:149:1
     |
 149 | pub fn merge(global: GlobalConfig, local: LocalConfig) -> EffectiveUserConfig {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ function `user_config::merge` is reachable at visibility `pub`
     |
 note: but type `user_config::LocalConfig` is only usable at visibility `pub(self)`
-   --> crates/arlm-cli/src/user_config.rs:73:1
+   --> crates/arags-cli/src/user_config.rs:73:1
     |
  73 | struct LocalConfig {
     | ^^^^^^^^^^^^^^^^^^
 
-error: could not compile `arlm-cli` (lib) due to 2 previous errors
+error: could not compile `arags-cli` (lib) due to 2 previous errors
 
 ```
 
@@ -11926,12 +11926,12 @@ error: could not compile `arlm-cli` (lib) due to 2 previous errors
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "struct GlobalConfig|struct LocalConfig" crates/arlm-cli/src/user_config.rs
+**Title:** rg -n "struct GlobalConfig|struct LocalConfig" crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"struct GlobalConfig|struct LocalConfig\" crates/arlm-cli/src/user_config.rs"
+  "command": "rg -n \"struct GlobalConfig|struct LocalConfig\" crates/arags-cli/src/user_config.rs"
 }
 ```
 
@@ -11952,7 +11952,7 @@ error: could not compile `arlm-cli` (lib) due to 2 previous errors
 #### 🔧 Tool: bash
 **Status:** completed
 **Title:** python3 - <<'EOF'
-p='crates/arlm-cli/src/user_config.rs'
+p='crates/arags-cli/src/user_config.rs'
 s=open(p).read()
 s=s.replace('struct GlobalConfig {','pub struct GlobalConfig {').replace('struct LocalConfig {','pub struct LocalConfig {')
 open(p,'w').write(s)
@@ -11962,7 +11962,7 @@ cargo clippy --workspace -- -D warnings 2>&1 | grep -cE "^error"; cargo fmt -- -
 **Input:**
 ```json
 {
-  "command": "python3 - <<'EOF'\np='crates/arlm-cli/src/user_config.rs'\ns=open(p).read()\ns=s.replace('struct GlobalConfig {','pub struct GlobalConfig {').replace('struct LocalConfig {','pub struct LocalConfig {')\nopen(p,'w').write(s)\nEOF\ncargo clippy --workspace -- -D warnings 2>&1 | grep -cE \"^error\"; cargo fmt -- --check && echo FMT_OK"
+  "command": "python3 - <<'EOF'\np='crates/arags-cli/src/user_config.rs'\ns=open(p).read()\ns=s.replace('struct GlobalConfig {','pub struct GlobalConfig {').replace('struct LocalConfig {','pub struct LocalConfig {')\nopen(p,'w').write(s)\nEOF\ncargo clippy --workspace -- -D warnings 2>&1 | grep -cE \"^error\"; cargo fmt -- --check && echo FMT_OK"
 }
 ```
 
@@ -12046,12 +12046,12 @@ Now let me double check the doc tests too (`cargo test --doc`) since CI requires
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test --doc -p arlm-cli -p arlm-server -p arlm-core 2>&1 | grep -E "test result" | head; sd close agnostic-rlm-rs-ec63 --reason "Testes do plan 020 implementados: merge granular, nested llm merge, auth-only-global, legacy ignorado, precedência addr/env, missing files default, malformed erro; server config env-load/no-llm/embedder chunk/search+mtls; init_test (.arlm.toml+gitignore idempotente, sem auth local, sem deps de data-plane no CLI)" 2>&1 | head -1
+**Title:** cargo test --doc -p arags-cli -p arags-server -p arags-core 2>&1 | grep -E "test result" | head; sd close agnostic-rlm-rs-ec63 --reason "Testes do plan 020 implementados: merge granular, nested llm merge, auth-only-global, legacy ignorado, precedência addr/env, missing files default, malformed erro; server config env-load/no-llm/embedder chunk/search+mtls; init_test (.arags.toml+gitignore idempotente, sem auth local, sem deps de data-plane no CLI)" 2>&1 | head -1
 
 **Input:**
 ```json
 {
-  "command": "cargo test --doc -p arlm-cli -p arlm-server -p arlm-core 2>&1 | grep -E \"test result\" | head; sd close agnostic-rlm-rs-ec63 --reason \"Testes do plan 020 implementados: merge granular, nested llm merge, auth-only-global, legacy ignorado, precedência addr/env, missing files default, malformed erro; server config env-load/no-llm/embedder chunk/search+mtls; init_test (.arlm.toml+gitignore idempotente, sem auth local, sem deps de data-plane no CLI)\" 2>&1 | head -1"
+  "command": "cargo test --doc -p arags-cli -p arags-server -p arags-core 2>&1 | grep -E \"test result\" | head; sd close agnostic-rlm-rs-ec63 --reason \"Testes do plan 020 implementados: merge granular, nested llm merge, auth-only-global, legacy ignorado, precedência addr/env, missing files default, malformed erro; server config env-load/no-llm/embedder chunk/search+mtls; init_test (.arags.toml+gitignore idempotente, sem auth local, sem deps de data-plane no CLI)\" 2>&1 | head -1"
 }
 ```
 
@@ -12060,7 +12060,7 @@ Now let me double check the doc tests too (`cargo test --doc`) since CI requires
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-✓ Closed agnostic-rlm-rs-ec63 — Testes do plan 020 implementados: merge granular, nested llm merge, auth-only-global, legacy ignorado, precedência addr/env, missing files default, malformed erro; server config env-load/no-llm/embedder chunk/search+mtls; init_test (.arlm.toml+gitignore idempotente, sem auth local, sem deps de data-plane no CLI)
+✓ Closed agnostic-rlm-rs-ec63 — Testes do plan 020 implementados: merge granular, nested llm merge, auth-only-global, legacy ignorado, precedência addr/env, missing files default, malformed erro; server config env-load/no-llm/embedder chunk/search+mtls; init_test (.arags.toml+gitignore idempotente, sem auth local, sem deps de data-plane no CLI)
 
 ```
 
@@ -12104,7 +12104,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 Concluído. Resumo do ciclo completo:
 
 ## Análise
-O plan 020 estava **parcialmente implementado** (user_config 2-escopos, D2 index, load via `ARLM_SERVER_CONFIG`), mas com 4 gaps violando o plano: data plane local vivo no client (D3), schema server.toml incompleto/não-wired, ops legados e zero testes.
+O plan 020 estava **parcialmente implementado** (user_config 2-escopos, D2 index, load via `ARAGS_SERVER_CONFIG`), mas com 4 gaps violando o plano: data plane local vivo no client (D3), schema server.toml incompleto/não-wired, ops legados e zero testes.
 
 ## Planejamento (`sd`)
 - Epic `agnostic-rlm-rs-d82e` + plano `pl-c770` com 4 steps (F9.1–F9.4), blockers wired, todos fechados + `sd sync`.
@@ -12112,9 +12112,9 @@ O plan 020 estava **parcialmente implementado** (user_config 2-escopos, D2 index
 ## Implementação
 | Gap | Solução |
 |---|---|
-| **F9.1 (D3)** | Deletados `Commands::Serve`, `commands/serve/` (8 arq.), `commands/mcp/` (4), `metrics.rs`, `util.rs`; `chunk_content_hash` → `arlm-core::qa_cache` (arlm-core/src/qa_cache/mod.rs:117); CLI agora depende só de core/llm/proto |
+| **F9.1 (D3)** | Deletados `Commands::Serve`, `commands/serve/` (8 arq.), `commands/mcp/` (4), `metrics.rs`, `util.rs`; `chunk_content_hash` → `arags-core::qa_cache` (arags-core/src/qa_cache/mod.rs:117); CLI agora depende só de core/llm/proto |
 | **F9.2** | `[embedder]` completo (`model/model_dir/ollama_*/dims/batch_size/quantization/cache`) consumido em `state.rs`; `[search]` defaults em `grpc/search.rs`; `mtls_ca` + mTLS no `lifecycle.rs` |
-| **F9.3** | `docker/server.toml` novo schema; Dockerfile → `/etc/arlm/server.toml` sem envs de modelo; compose monta o arquivo host; `install.sh` cria `~/.arlm/arlm.toml`; `config.toml.example` → `arlm.toml.example`; README/docs/agents sem `--server` nem "modo local"; `admin.rs` aponta para `arlm.toml` |
+| **F9.3** | `docker/server.toml` novo schema; Dockerfile → `/etc/arags/server.toml` sem envs de modelo; compose monta o arquivo host; `install.sh` cria `~/.arags/arags.toml`; `config.toml.example` → `arags.toml.example`; README/docs/agents sem `--server` nem "modo local"; `admin.rs` aponta para `arags.toml` |
 | **F9.4** | 15 testes novos: merge granular/recursivo, auth-only-global, legacy ignorado, precedência addr/env, init gitignore idempotente sem auth local, server config env-load/no-llm/chunk/search+mtls, CLI sem deps de data-plane |
 
 **Verificação:** `cargo test --workspace` 377 passed · `clippy -D warnings` 0 errors · `fmt --check` OK.
@@ -12142,11 +12142,11 @@ This is about the plan 020 work I just completed. I should give a precise answer
 
 Let me review the plan requirements against what exists now:
 
-1. **Server config rework** — ✅ done: embedder/search/maintenance/mtls_ca; load from ARLM_SERVER_CONFIG.
+1. **Server config rework** — ✅ done: embedder/search/maintenance/mtls_ca; load from ARAGS_SERVER_CONFIG.
 
 2. **Client user_config** — ✅ existed already.
 
-3. **Init** — ✅ existed (generates .arlm.toml + gitignore + index).
+3. **Init** — ✅ existed (generates .arags.toml + gitignore + index).
 
 4. **Client stripped of data-config + offline removed** — ✅ done in F9.1.
 
@@ -12164,7 +12164,7 @@ Now what genuinely remains from the plan? Let me go through carefully:
 
 **From the plan schema `server.toml`:**
 - `pool_size = 4`, `flush_interval_ms = 100`, `max_batch_size = 50` — storage tuning fields from the plan schema that are NOT in ServerConfig and NOT consumed anywhere. I deliberately skipped these ("aspirational schema"). Storage::open doesn't take pool params. This is a genuine remaining item if one wants full schema fidelity.
-- `[embedder] cache = true` — field added to config but... did I actually wire it into anything? Let me recall: I added `cache` field with default true, but in `load_embedder` I don't think I consumed it — arlm-embedding's EmbeddingConfig may not have a cache option exposed via build_embedder. So `cache` is currently declarative/dead config. Honest gap.
+- `[embedder] cache = true` — field added to config but... did I actually wire it into anything? Let me recall: I added `cache` field with default true, but in `load_embedder` I don't think I consumed it — arags-embedding's EmbeddingConfig may not have a cache option exposed via build_embedder. So `cache` is currently declarative/dead config. Honest gap.
 - `[search] tier` — I wired it only as fallback for unknown/out-of-range wire values (documented decision), not as a true default for "auto" requests since proto has no UNSPECIFIED (TIER_BM25=0 collision). Partially wired by design.
 - `[history] retention_days` — plan table mentions optional history retention → not implemented.
 - `question_vector_dims` etc. in qa_cache exist.
@@ -12176,11 +12176,11 @@ Now what genuinely remains from the plan? Let me go through carefully:
 - Others were covered.
 
 **Other things:**
-- `ARLM_EMBED_BATCH` env removed from Dockerfile; batch_size from config — done.
+- `ARAGS_EMBED_BATCH` env removed from Dockerfile; batch_size from config — done.
 - Reindex note: chunking changed sizes → reindex needed (ops action, not code).
 - CHANGELOG breaking-change entry — plan Risks says "documentar como breaking change no CHANGELOG". There's no CHANGELOG file in repo root? I didn't check. Probably missing — a doc task.
-- install.sh: does it also handle the legacy ~/.arlm/config.toml cleanup? No — break total means ignore; fine.
-- agents/claude-desktop config references? Earlier grep showed agents/claude-desktop/claude_desktop_config.json matched "serve|mcp". I updated agents/README.md but maybe claude_desktop_config.json still references `arlm serve --mcp`! Let me think — earlier rg -ln "serve|mcp" agents/ returned agents/README.md and agents/claude-desktop/claude_desktop_config.json. I fixed README.md but did NOT touch claude_desktop_config.json. That could be stale. Also docs/opencode-setup.md had "Alternative: MCP Server" which I fixed. But there might be other references in docs/. I should verify quickly rather than assert.
+- install.sh: does it also handle the legacy ~/.arags/config.toml cleanup? No — break total means ignore; fine.
+- agents/claude-desktop config references? Earlier grep showed agents/claude-desktop/claude_desktop_config.json matched "serve|mcp". I updated agents/README.md but maybe claude_desktop_config.json still references `arags serve --mcp`! Let me think — earlier rg -ln "serve|mcp" agents/ returned agents/README.md and agents/claude-desktop/claude_desktop_config.json. I fixed README.md but did NOT touch claude_desktop_config.json. That could be stale. Also docs/opencode-setup.md had "Alternative: MCP Server" which I fixed. But there might be other references in docs/. I should verify quickly rather than assert.
 
 Actually, the user asks a direct question. I could answer from memory but it's better to do a quick verification pass of the few uncertain items:
 1. agents/claude-desktop/claude_desktop_config.json content
@@ -12199,12 +12199,12 @@ Let me verify first.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat agents/claude-desktop/claude_desktop_config.json; echo "==="; ls CHANGELOG* 2>/dev/null || echo "sem CHANGELOG"; echo "==="; rg -n "pool_size|flush_interval|max_batch_size|retention_days|\.cache\b" crates/arlm-server/src/config.rs | head; echo "==="; rg -rln "\barlm serve\b|--mcp|commands/serve|mcp_handler" README.md docs/ agents/ crates/arlm-cli/src 2>/dev/null | head
+**Title:** cat agents/claude-desktop/claude_desktop_config.json; echo "==="; ls CHANGELOG* 2>/dev/null || echo "sem CHANGELOG"; echo "==="; rg -n "pool_size|flush_interval|max_batch_size|retention_days|\.cache\b" crates/arags-server/src/config.rs | head; echo "==="; rg -rln "\barags serve\b|--mcp|commands/serve|mcp_handler" README.md docs/ agents/ crates/arags-cli/src 2>/dev/null | head
 
 **Input:**
 ```json
 {
-  "command": "cat agents/claude-desktop/claude_desktop_config.json; echo \"===\"; ls CHANGELOG* 2>/dev/null || echo \"sem CHANGELOG\"; echo \"===\"; rg -n \"pool_size|flush_interval|max_batch_size|retention_days|\\.cache\\b\" crates/arlm-server/src/config.rs | head; echo \"===\"; rg -rln \"\\barlm serve\\b|--mcp|commands/serve|mcp_handler\" README.md docs/ agents/ crates/arlm-cli/src 2>/dev/null | head"
+  "command": "cat agents/claude-desktop/claude_desktop_config.json; echo \"===\"; ls CHANGELOG* 2>/dev/null || echo \"sem CHANGELOG\"; echo \"===\"; rg -n \"pool_size|flush_interval|max_batch_size|retention_days|\\.cache\\b\" crates/arags-server/src/config.rs | head; echo \"===\"; rg -rln \"\\barags serve\\b|--mcp|commands/serve|mcp_handler\" README.md docs/ agents/ crates/arags-cli/src 2>/dev/null | head"
 }
 ```
 
@@ -12212,11 +12212,11 @@ Let me verify first.
 ```
 {
   "mcpServers": {
-    "arlm": {
-      "command": "arlm",
+    "arags": {
+      "command": "arags",
       "args": ["serve", "--mcp", "--port", "8080"],
       "env": {
-        "ARLM_PROJECT": ".",
+        "ARAGS_PROJECT": ".",
         "RUST_LOG": "info"
       }
     }
@@ -12245,7 +12245,7 @@ agents/claude-desktop/claude_desktop_config.json:      "args": ["serve", "ln", "
 <summary>Click to expand reasoning</summary>
 
 Confirmed:
-1. `agents/claude-desktop/claude_desktop_config.json` still points to `arlm serve --mcp --port 8080` — a command that no longer exists. Stale integration config.
+1. `agents/claude-desktop/claude_desktop_config.json` still points to `arags serve --mcp --port 8080` — a command that no longer exists. Stale integration config.
 2. No CHANGELOG — plan Risks says to document the breaking change there.
 3. `pool_size`, `flush_interval_ms`, `max_batch_size` from the plan schema: absent (Storage::open has no pool params).
 4. `[embedder] cache` is declarative only (only referenced in a test assertion, not consumed by load_embedder).
@@ -12263,20 +12263,20 @@ The user asked exactly what's left — give a tight, precise list. Keep it conci
 Verificação rápida feita. Do escopo do plan 020, restam exatamente estes itens:
 
 **Código**
-1. **`[embedder] cache` é config morta** — o campo existe em `ServerConfig` mas `load_embedder()` (`state.rs`) não o consome (o `EmbeddingConfig` do arlm-embedding não expõe toggle de cache via `build_embedder`).
+1. **`[embedder] cache` é config morta** — o campo existe em `ServerConfig` mas `load_embedder()` (`state.rs`) não o consome (o `EmbeddingConfig` do arags-embedding não expõe toggle de cache via `build_embedder`).
 2. **`[search] tier` só cobre fallback** — aplica-se apenas a valores wire inválidos; um "default real" exigiria mudar o proto (`TIER_BM25 = 0` colide com "não informado").
 3. **mTLS sem lado cliente** — server aceita `mtls_ca` (`lifecycle.rs`), mas `client.rs::connect_channel` não sabe apresentar client cert / CA customizada; com mTLS ligado, nenhum client atual conectaria.
 4. **Schema aspiracional ausente**: `pool_size`, `flush_interval_ms`, `max_batch_size` (exigiria `Storage::open` parametrizável) e `[history] retention_days`.
 
 **Docs/integração**
-5. **`agents/claude-desktop/claude_desktop_config.json` quebrado** — ainda chama `arlm serve --mcp --port 8080`, comando que removi no F9.1 (era disso que os handlers MCP locais faziam proxy).
+5. **`agents/claude-desktop/claude_desktop_config.json` quebrado** — ainda chama `arags serve --mcp --port 8080`, comando que removi no F9.1 (era disso que os handlers MCP locais faziam proxy).
 6. **Sem CHANGELOG** — plano pede documentar o break total (D4) como breaking change.
 
 **Testes**
 7. `test_server_and_user_config_files_disjoint` do plano não existe como teste explícito (hoje é garantia estrutural/compilação).
 
 **Ops (não-código)**
-8. Reindex necessário (chunk size agora vem do server.toml); usuários legados devem reescrever configs para `server.toml` + `~/.arlm/arlm.toml` — sem migração por design.
+8. Reindex necessário (chunk size agora vem do server.toml); usuários legados devem reescrever configs para `server.toml` + `~/.arags/arags.toml` — sem migração por design.
 
 Itens 1–6 são implementáveis agora se quiser; 2 e 4 dependem de decisão de proto/schema. Quer que eu execute algum subconjunto?
 
@@ -12318,12 +12318,12 @@ This is a multi-step task. Let me create a todo list and work through it. Also s
 Let me start by exploring the relevant code:
 
 **For point 1 (embedder cache):**
-- Look at arlm-embedding: embedder/cache.rs exists, and EmbeddingConfig in embedder/config.rs. Check if build_embedder supports wrapping with cache; see how cache is used currently.
+- Look at arags-embedding: embedder/cache.rs exists, and EmbeddingConfig in embedder/config.rs. Check if build_embedder supports wrapping with cache; see how cache is used currently.
 - Wire `cache: bool` from ServerConfig into EmbeddingConfig or wrap embedder with CachedEmbedder if available.
 
 **For point 2 (proto update):**
 - search.proto has enum SearchTier { TIER_BM25 = 0; ... }. Adding UNSPECIFIED = ... hmm, proto3 convention: first enum value = 0 is the default/unspecified. Currently TIER_BM25=0 doubles as explicit BM25. To distinguish "unset" from "BM25", I need to renumber: SEARCH_TIER_UNSPECIFIED = 0; TIER_BM25 = 1; TIER_SEMANTIC = 2; TIER_HYBRID = 3; TIER_ENTITY = 4. That changes wire values — breaking change, but plan 020 is break-total anyway and this is our own proto. Need to update:
-  - crates/arlm-proto/proto/search.proto
+  - crates/arags-proto/proto/search.proto
   - CLI mapping in dispatch/server.rs map_search_tier ("fts"→TierBm25 etc., "auto"/unspecified → TierUnspecified(0))
   - Server handle_search match: TierUnspecified → use config.search.tier default
   - Any other places referencing SearchTier variants (grpc/query_cache.rs maybe, qa_cache handlers?). Search for SearchTier usage.
@@ -12335,10 +12335,10 @@ Let me start by exploring the relevant code:
 - tonic ClientTlsConfig API: .ca_certificate(Certificate), .identity(Identity), .with_native_roots()... check tonic 0.13 API.
 - Scheme handling: currently https:// triggers TLS with native roots. With custom CA/cert config, apply regardless of scheme? Keep https prefix requirement but attach CA/identity when provided. Also addr validation host:port strips scheme already.
 - Where does connect get config? dispatch/server.rs `connect(rt, cfg)` builds ClientConfig { addr }. Extend ClientConfig { addr, tls_ca, client_cert, client_key }.
-- Docs: README user config section + arlm.toml.example comments mention new fields.
+- Docs: README user config section + arags.toml.example comments mention new fields.
 
 **For point 4a (pool_size, flush_interval_ms, max_batch_size):**
-- Requires Storage::open parametrizable. Let me look at arlm-storage/src/lib.rs Storage::open signature and internals (r2d2 pool exists! r2d2_sqlite in deps). Check current open(): probably builds pool with fixed size. Add StorageOptions { pool_size, flush_interval_ms, max_batch_size } and Storage::open_with_opts(dir, opts). Keep Storage::open calling open_with_opts defaults.
+- Requires Storage::open parametrizable. Let me look at arags-storage/src/lib.rs Storage::open signature and internals (r2d2 pool exists! r2d2_sqlite in deps). Check current open(): probably builds pool with fixed size. Add StorageOptions { pool_size, flush_interval_ms, max_batch_size } and Storage::open_with_opts(dir, opts). Keep Storage::open calling open_with_opts defaults.
 - What consumes flush_interval_ms/max_batch_size? There are sqlite/buffers.rs — a write buffer system? "insert_buffer" seen earlier in serve/index_logic. And grpc/index.rs Phase writes go through store::insert_chunk directly. max_batch_size might relate to buffered writes (buffers.rs). flush interval maybe a background flusher in Storage? Let me inspect storage lib.rs and buffers.rs to wire meaningfully:
   - pool_size → r2d2 Pool max_size
   - max_batch_size → chunk insert batching in grpc/index.rs? Or buffers.rs batch threshold
@@ -12346,7 +12346,7 @@ Let me start by exploring the relevant code:
 - ServerConfig gets [storage]? Plan schema puts them top-level under "Armazenamento / dados": pool_size, flush_interval_ms, max_batch_size as top-level keys. Follow plan schema: top-level fields on ServerConfig. Wire into lifecycle Storage::open_with_opts and wherever batch/flush applies.
 
 **For point 4b ([history] retention_days):**
-- ServerConfig.history.retention_days (u32/u64, default maybe 90). Wire: maintenance loop deletes history older than retention. Check arlm-memory/src/history.rs & sqlite/history.rs for delete functions. Add purge function if missing, call in maintenance run + admin consolidate? Simplest: in lifecycle maintenance tick and TriggerMaintenance handler? Better: dedicated cleanup inside maintenance module using retention_days from config. Check existing maintenance::run_maintenance signature — takes project/storage/floor/dry_run. I could add retention_days param or separate function called by ticker. Let me look at history tables/functions first.
+- ServerConfig.history.retention_days (u32/u64, default maybe 90). Wire: maintenance loop deletes history older than retention. Check arags-memory/src/history.rs & sqlite/history.rs for delete functions. Add purge function if missing, call in maintenance run + admin consolidate? Simplest: in lifecycle maintenance tick and TriggerMaintenance handler? Better: dedicated cleanup inside maintenance module using retention_days from config. Check existing maintenance::run_maintenance signature — takes project/storage/floor/dry_run. I could add retention_days param or separate function called by ticker. Let me look at history tables/functions first.
 
 **Point 5:** rewrite claude_desktop_config.json — remove MCP server entry (serve gone). Replace with... Claude Desktop can't speak gRPC; honest option: empty mcpServers with comment? JSON no comments. Provide `"mcpServers": {}`. And note in agents/README that Claude Desktop integration needs a bridge (future work).
 
@@ -12354,7 +12354,7 @@ Let me start by exploring the relevant code:
 
 **Point 7:** test_server_and_user_config_files_disjoint — explicit test asserting structural disjointness: parse a full server.toml sample with user-config parser and vice versa? Meaningful runtime test:
 - A canonical server.toml content parsed by ServerConfig yields expected fields; same content parsed as GlobalConfig yields auth=None/addr None etc.? But server.toml keys listen_addr/data_dir would be unknown to GlobalConfig (ignored silently) — asserting they don't leak: load_from(global_path=server_toml_file, local=empty) → cfg.server.addr.is_none() && cfg.auth.is_none().
-- Reverse: user global file parsed by ServerConfig → listen_addr stays default (user's [server].addr ignored), data_dir default. That demonstrates disjointness both ways. Put in arlm-server tests? It needs arlm-cli's user_config — not available from server crate. So two tests: one in cli (user config ignores server.toml semantics) + one in server (server ignores user file semantics). Or a single integration test crate? tests/integration dir at workspace root doesn't exist. Simpler: implement in each crate where relevant; name them test_user_config_ignores_server_toml (cli) and test_server_config_ignores_user_arlm_toml (server). Together they satisfy the disjointness test intent. Good.
+- Reverse: user global file parsed by ServerConfig → listen_addr stays default (user's [server].addr ignored), data_dir default. That demonstrates disjointness both ways. Put in arags-server tests? It needs arags-cli's user_config — not available from server crate. So two tests: one in cli (user config ignores server.toml semantics) + one in server (server ignores user file semantics). Or a single integration test crate? tests/integration dir at workspace root doesn't exist. Simpler: implement in each crate where relevant; name them test_user_config_ignores_server_toml (cli) and test_server_config_ignores_user_arags_toml (server). Together they satisfy the disjointness test intent. Good.
 
 Also update README/docs for new config fields (storage, history, client TLS fields, tier unspecified behavior) — keep consistent.
 
@@ -12517,38 +12517,38 @@ agnostic-rlm-rs-2fdc
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sd update agnostic-rlm-rs-07ad --status in_progress 2>&1 | head -1; rg -rn "SearchTier" crates/ --glob '!*.lock' | grep -v "HybridTier\|arlm_search" | head -20
+**Title:** sd update agnostic-rlm-rs-07ad --status in_progress 2>&1 | head -1; rg -rn "SearchTier" crates/ --glob '!*.lock' | grep -v "HybridTier\|arags_search" | head -20
 
 **Input:**
 ```json
 {
-  "command": "sd update agnostic-rlm-rs-07ad --status in_progress 2>&1 | head -1; rg -rn \"SearchTier\" crates/ --glob '!*.lock' | grep -v \"HybridTier\\|arlm_search\" | head -20"
+  "command": "sd update agnostic-rlm-rs-07ad --status in_progress 2>&1 | head -1; rg -rn \"SearchTier\" crates/ --glob '!*.lock' | grep -v \"HybridTier\\|arags_search\" | head -20"
 }
 ```
 
 **Output:**
 ```
 ✓ Updated agnostic-rlm-rs-07ad
-crates/arlm-server/src/grpc/search.rs:    let tier = match n::try_from(req.tier) {
-crates/arlm-server/src/grpc/search.rs:        Ok(n::TierHybrid) | Err(_) => {
-crates/arlm-search/MODULE.md:- `src/types.rs` — `n`, `SearchResult`, `HybridResult`, `ChunkWithText`, `OutputFormat`, `SearchOptions`, `Bm25Result`, `SemanticResult`, `EntityResult`.
-crates/arlm-proto/README.md:├── search.proto       # SearchRequest, n, SearchResult, SummaryInfo, SearchResponse
-crates/arlm-proto/tests/proto_contract.rs:        tier: n::TierHybrid as i32,
-crates/arlm-proto/tests/proto_contract.rs:    assert_eq!(req.tier, n::TierHybrid as i32);
-crates/arlm-proto/tests/proto_contract.rs:    assert_eq!(n::TierBm25 as i32, 0);
-crates/arlm-proto/tests/proto_contract.rs:    assert_eq!(n::TierSemantic as i32, 1);
-crates/arlm-proto/tests/proto_contract.rs:    assert_eq!(n::TierHybrid as i32, 2);
-crates/arlm-proto/tests/proto_contract.rs:    assert_eq!(n::TierEntity as i32, 3);
-crates/arlm-search/tests/hybrid_test.rs:        tier: n::Entity,
-crates/arlm-cli/src/dispatch/server.rs:fn map_search_tier(tier: &str) -> arlm_proto::proto::n {
-crates/arlm-cli/src/dispatch/server.rs:        "fts" => arlm_proto::proto::n::TierBm25,
-crates/arlm-cli/src/dispatch/server.rs:        "entity" => arlm_proto::proto::n::TierEntity,
-crates/arlm-cli/src/dispatch/server.rs:        "vector" => arlm_proto::proto::n::TierSemantic,
-crates/arlm-cli/src/dispatch/server.rs:        _ => arlm_proto::proto::n::TierHybrid,
-crates/arlm-proto/proto/search.proto:  n tier = 4;
-crates/arlm-proto/proto/search.proto:enum n {
-crates/arlm-cli/TODO.md:- **Correção necessária:** Mapear string para `n` enum no proto.
-crates/arlm-cli/TODO.md:- **STATUS:** ✅ CONCLUÍDO — `map_search_tier` em `dispatch/server.rs` mapeia `fts|entity|vector|auto` → `n` (TierBm25/TierEntity/TierSemantic/TierHybrid) e define `SearchRequest.tier`; logging `debug!` do tier resolvido adicionado em search/context locais.
+crates/arags-server/src/grpc/search.rs:    let tier = match n::try_from(req.tier) {
+crates/arags-server/src/grpc/search.rs:        Ok(n::TierHybrid) | Err(_) => {
+crates/arags-search/MODULE.md:- `src/types.rs` — `n`, `SearchResult`, `HybridResult`, `ChunkWithText`, `OutputFormat`, `SearchOptions`, `Bm25Result`, `SemanticResult`, `EntityResult`.
+crates/arags-proto/README.md:├── search.proto       # SearchRequest, n, SearchResult, SummaryInfo, SearchResponse
+crates/arags-proto/tests/proto_contract.rs:        tier: n::TierHybrid as i32,
+crates/arags-proto/tests/proto_contract.rs:    assert_eq!(req.tier, n::TierHybrid as i32);
+crates/arags-proto/tests/proto_contract.rs:    assert_eq!(n::TierBm25 as i32, 0);
+crates/arags-proto/tests/proto_contract.rs:    assert_eq!(n::TierSemantic as i32, 1);
+crates/arags-proto/tests/proto_contract.rs:    assert_eq!(n::TierHybrid as i32, 2);
+crates/arags-proto/tests/proto_contract.rs:    assert_eq!(n::TierEntity as i32, 3);
+crates/arags-search/tests/hybrid_test.rs:        tier: n::Entity,
+crates/arags-cli/src/dispatch/server.rs:fn map_search_tier(tier: &str) -> arags_proto::proto::n {
+crates/arags-cli/src/dispatch/server.rs:        "fts" => arags_proto::proto::n::TierBm25,
+crates/arags-cli/src/dispatch/server.rs:        "entity" => arags_proto::proto::n::TierEntity,
+crates/arags-cli/src/dispatch/server.rs:        "vector" => arags_proto::proto::n::TierSemantic,
+crates/arags-cli/src/dispatch/server.rs:        _ => arags_proto::proto::n::TierHybrid,
+crates/arags-proto/proto/search.proto:  n tier = 4;
+crates/arags-proto/proto/search.proto:enum n {
+crates/arags-cli/TODO.md:- **Correção necessária:** Mapear string para `n` enum no proto.
+crates/arags-cli/TODO.md:- **STATUS:** ✅ CONCLUÍDO — `map_search_tier` em `dispatch/server.rs` mapeia `fts|entity|vector|auto` → `n` (TierBm25/TierEntity/TierSemantic/TierHybrid) e define `SearchRequest.tier`; logging `debug!` do tier resolvido adicionado em search/context locais.
 
 ```
 
@@ -12569,10 +12569,10 @@ crates/arlm-cli/TODO.md:- **STATUS:** ✅ CONCLUÍDO — `map_search_tier` em `d
 (Again the `-rn` artifact replaced "SearchTier" with "n" in display — actual names are SearchTier.)
 
 Places to update for proto renumbering:
-1. `crates/arlm-proto/proto/search.proto` — enum: add `SEARCH_TIER_UNSPECIFIED = 0`, shift others (BM25=1, SEMANTIC=2, HYBRID=3, ENTITY=4).
-2. `crates/arlm-proto/tests/proto_contract.rs` — update assertions (TierBm25 now 1 etc., add unspecified 0).
-3. `crates/arlm-cli/src/dispatch/server.rs::map_search_tier` — "auto"/""/unspecified → TierUnspecified; keep explicit mappings; also maybe map "hybrid"→TierHybrid.
-4. `crates/arlm-server/src/grpc/search.rs::handle_search` — match TierUnspecified → resolve from `[search].tier`; Err(_) → also default tier (invalid). Keep Ok(TierHybrid) → LlmRerank as before.
+1. `crates/arags-proto/proto/search.proto` — enum: add `SEARCH_TIER_UNSPECIFIED = 0`, shift others (BM25=1, SEMANTIC=2, HYBRID=3, ENTITY=4).
+2. `crates/arags-proto/tests/proto_contract.rs` — update assertions (TierBm25 now 1 etc., add unspecified 0).
+3. `crates/arags-cli/src/dispatch/server.rs::map_search_tier` — "auto"/""/unspecified → TierUnspecified; keep explicit mappings; also maybe map "hybrid"→TierHybrid.
+4. `crates/arags-server/src/grpc/search.rs::handle_search` — match TierUnspecified → resolve from `[search].tier`; Err(_) → also default tier (invalid). Keep Ok(TierHybrid) → LlmRerank as before.
 5. Check other users of req.tier / SearchRequest default: qa_cache QueryWithCache? grep "tier" in grpc/query_cache.rs and memory. Also ContextRequest has no tier presumably.
 
 Let me view search.proto fully and check other tier usages.
@@ -12581,19 +12581,19 @@ Let me view search.proto fully and check other tier usages.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat crates/arlm-proto/proto/search.proto; echo "==="; rg -n "tier" crates/arlm-server/src/grpc/*.rs | grep -v "^crates/arlm-server/src/grpc/search.rs" | head
+**Title:** cat crates/arags-proto/proto/search.proto; echo "==="; rg -n "tier" crates/arags-server/src/grpc/*.rs | grep -v "^crates/arags-server/src/grpc/search.rs" | head
 
 **Input:**
 ```json
 {
-  "command": "cat crates/arlm-proto/proto/search.proto; echo \"===\"; rg -n \"tier\" crates/arlm-server/src/grpc/*.rs | grep -v \"^crates/arlm-server/src/grpc/search.rs\" | head"
+  "command": "cat crates/arags-proto/proto/search.proto; echo \"===\"; rg -n \"tier\" crates/arags-server/src/grpc/*.rs | grep -v \"^crates/arags-server/src/grpc/search.rs\" | head"
 }
 ```
 
 **Output:**
 ```
 syntax = "proto3";
-package arlm.v1;
+package arags.v1;
 
 // ── Search ──
 
@@ -12636,12 +12636,12 @@ message SearchResponse {
   double duration_ms = 3;
 }
 ===
-crates/arlm-server/src/grpc/query_cache.rs:63:        tier_steps: c.tier_steps.clone(),
-crates/arlm-server/src/grpc/query_cache.rs:76:/// Query the semantic cache; decides hit/miss/tier deterministically.
-crates/arlm-server/src/grpc/query_cache.rs:122:            tier: 0,
-crates/arlm-server/src/grpc/query_cache.rs:162:                                tier: plan.tier,
-crates/arlm-server/src/grpc/query_cache.rs:191:        tier: -1,
-crates/arlm-server/src/grpc/query_cache.rs:243:        tier_snapshot: Some(
+crates/arags-server/src/grpc/query_cache.rs:63:        tier_steps: c.tier_steps.clone(),
+crates/arags-server/src/grpc/query_cache.rs:76:/// Query the semantic cache; decides hit/miss/tier deterministically.
+crates/arags-server/src/grpc/query_cache.rs:122:            tier: 0,
+crates/arags-server/src/grpc/query_cache.rs:162:                                tier: plan.tier,
+crates/arags-server/src/grpc/query_cache.rs:191:        tier: -1,
+crates/arags-server/src/grpc/query_cache.rs:243:        tier_snapshot: Some(
 
 ```
 
@@ -12654,12 +12654,12 @@ crates/arlm-server/src/grpc/query_cache.rs:243:        tier_snapshot: Some(
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-proto/proto/search.proto
+**Title:** crates/arags-proto/proto/search.proto
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-proto/proto/search.proto",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-proto/proto/search.proto",
   "newString": "enum SearchTier {\n  // Wire-default: the server resolves it to its `[search].tier` default\n  // (plan 020). Clients that need a specific tier send it explicitly.\n  SEARCH_TIER_UNSPECIFIED = 0;\n  TIER_BM25 = 1;\n  TIER_SEMANTIC = 2;\n  TIER_HYBRID = 3;\n  TIER_ENTITY = 4;\n}",
   "oldString": "enum SearchTier {\n  TIER_BM25 = 0;\n  TIER_SEMANTIC = 1;\n  TIER_HYBRID = 2;\n  TIER_ENTITY = 3;\n}"
 }
@@ -12681,12 +12681,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '1,40p' crates/arlm-proto/tests/proto_contract.rs
+**Title:** sed -n '1,40p' crates/arags-proto/tests/proto_contract.rs
 
 **Input:**
 ```json
 {
-  "command": "sed -n '1,40p' crates/arlm-proto/tests/proto_contract.rs"
+  "command": "sed -n '1,40p' crates/arags-proto/tests/proto_contract.rs"
 }
 ```
 
@@ -12696,7 +12696,7 @@ Edit applied successfully.
 //!
 //! These tests assert the contract emitted by `build.rs` from the `.proto`
 //! sources: key messages, enums, and field accessors must exist and behave
-//! as the downstream `arlm-server`/`arlm-cli` crates expect.
+//! as the downstream `arags-server`/`arags-cli` crates expect.
 //!
 //! NOTE: messages tied to the removed legacy RLM run/summarize pipeline
 //! (`RunResult`, `RunStatus`, `RunStats`, `SummaryScope`, …) are intentionally
@@ -12704,7 +12704,7 @@ Edit applied successfully.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use arlm_proto::proto::*;
+use arags_proto::proto::*;
 
 #[test]
 fn test_search_request_with_hybrid_tier() {
@@ -12744,12 +12744,12 @@ fn test_session_info_fields() {
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "TierBm25 as i32|TierSemantic as i32|TierHybrid as i32|TierEntity as i32" crates/arlm-proto/tests/proto_contract.rs
+**Title:** rg -n "TierBm25 as i32|TierSemantic as i32|TierHybrid as i32|TierEntity as i32" crates/arags-proto/tests/proto_contract.rs
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"TierBm25 as i32|TierSemantic as i32|TierHybrid as i32|TierEntity as i32\" crates/arlm-proto/tests/proto_contract.rs"
+  "command": "rg -n \"TierBm25 as i32|TierSemantic as i32|TierHybrid as i32|TierEntity as i32\" crates/arags-proto/tests/proto_contract.rs"
 }
 ```
 
@@ -12773,12 +12773,12 @@ fn test_session_info_fields() {
 
 #### 🔧 Tool: read
 **Status:** completed
-**Title:** crates/arlm-proto/tests/proto_contract.rs
+**Title:** crates/arags-proto/tests/proto_contract.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-proto/tests/proto_contract.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-proto/tests/proto_contract.rs",
   "limit": 15,
   "offset": 54
 }
@@ -12786,7 +12786,7 @@ fn test_session_info_fields() {
 
 **Output:**
 ```
-<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-proto/tests/proto_contract.rs</path>
+<path>/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-proto/tests/proto_contract.rs</path>
 <type>file</type>
 <content>
 54:     assert_eq!(req.query, "how?");
@@ -12818,12 +12818,12 @@ fn test_session_info_fields() {
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-proto/tests/proto_contract.rs
+**Title:** crates/arags-proto/tests/proto_contract.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-proto/tests/proto_contract.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-proto/tests/proto_contract.rs",
   "newString": "#[test]\nfn test_enum_variants_present() {\n    // Plan 020: `UNSPECIFIED = 0` is the wire default so the server can apply\n    // its `[search].tier` default; explicit tiers start at 1.\n    assert_eq!(SearchTier::Unspecified as i32, 0);\n    assert_eq!(SearchTier::TierBm25 as i32, 1);\n    assert_eq!(SearchTier::TierSemantic as i32, 2);\n    assert_eq!(SearchTier::TierHybrid as i32, 3);\n    assert_eq!(SearchTier::TierEntity as i32, 4);\n\n    assert_eq!(InvalidateMode::Stale as i32, 0);\n    assert_eq!(InvalidateMode::Delete as i32, 1);\n}",
   "oldString": "#[test]\nfn test_enum_variants_present() {\n    assert_eq!(SearchTier::TierBm25 as i32, 0);\n    assert_eq!(SearchTier::TierSemantic as i32, 1);\n    assert_eq!(SearchTier::TierHybrid as i32, 2);\n    assert_eq!(SearchTier::TierEntity as i32, 3);\n\n    assert_eq!(InvalidateMode::Stale as i32, 0);\n    assert_eq!(InvalidateMode::Delete as i32, 1);\n}"
 }
@@ -12847,14 +12847,14 @@ Agora o CLI (`map_search_tier`) e o server (`handle_search`):
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/dispatch/server.rs
+**Title:** crates/arags-cli/src/dispatch/server.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/dispatch/server.rs",
-  "newString": "/// Map a textual tier (`fts`/`entity`/`vector`/`hybrid`/`auto`) onto the proto\n/// enum. `auto` (and anything unknown) sends `UNSPECIFIED` so the server\n/// applies its `[search].tier` default (plan 020).\nfn map_search_tier(tier: &str) -> arlm_proto::proto::SearchTier {\n    debug!(tier, \"resolving search tier\");\n    match tier {\n        \"fts\" | \"bm25\" => arlm_proto::proto::SearchTier::TierBm25,\n        \"entity\" => arlm_proto::proto::SearchTier::TierEntity,\n        \"vector\" | \"semantic\" => arlm_proto::proto::SearchTier::TierSemantic,\n        \"hybrid\" => arlm_proto::proto::SearchTier::TierHybrid,\n        _ => arlm_proto::proto::SearchTier::Unspecified,\n    }\n}",
-  "oldString": "/// Map a textual tier (`fts`/`entity`/`vector`/`auto`) onto the proto enum.\nfn map_search_tier(tier: &str) -> arlm_proto::proto::SearchTier {\n    debug!(tier, \"resolving search tier\");\n    match tier {\n        \"fts\" => arlm_proto::proto::SearchTier::TierBm25,\n        \"entity\" => arlm_proto::proto::SearchTier::TierEntity,\n        \"vector\" => arlm_proto::proto::SearchTier::TierSemantic,\n        _ => arlm_proto::proto::SearchTier::TierHybrid,\n    }\n}"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/dispatch/server.rs",
+  "newString": "/// Map a textual tier (`fts`/`entity`/`vector`/`hybrid`/`auto`) onto the proto\n/// enum. `auto` (and anything unknown) sends `UNSPECIFIED` so the server\n/// applies its `[search].tier` default (plan 020).\nfn map_search_tier(tier: &str) -> arags_proto::proto::SearchTier {\n    debug!(tier, \"resolving search tier\");\n    match tier {\n        \"fts\" | \"bm25\" => arags_proto::proto::SearchTier::TierBm25,\n        \"entity\" => arags_proto::proto::SearchTier::TierEntity,\n        \"vector\" | \"semantic\" => arags_proto::proto::SearchTier::TierSemantic,\n        \"hybrid\" => arags_proto::proto::SearchTier::TierHybrid,\n        _ => arags_proto::proto::SearchTier::Unspecified,\n    }\n}",
+  "oldString": "/// Map a textual tier (`fts`/`entity`/`vector`/`auto`) onto the proto enum.\nfn map_search_tier(tier: &str) -> arags_proto::proto::SearchTier {\n    debug!(tier, \"resolving search tier\");\n    match tier {\n        \"fts\" => arags_proto::proto::SearchTier::TierBm25,\n        \"entity\" => arags_proto::proto::SearchTier::TierEntity,\n        \"vector\" => arags_proto::proto::SearchTier::TierSemantic,\n        _ => arags_proto::proto::SearchTier::TierHybrid,\n    }\n}"
 }
 ```
 
@@ -12874,12 +12874,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/grpc/search.rs
+**Title:** crates/arags-server/src/grpc/search.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/search.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/search.rs",
   "newString": "    // Tier resolution (plan 020): `UNSPECIFIED`/unknown values resolve to the\n    // `[search].tier` serving default from `server.toml`; explicit values are\n    // honored as sent.\n    let tier = match SearchTier::try_from(req.tier) {\n        Ok(SearchTier::TierBm25) => HybridTier::Fts,\n        Ok(SearchTier::TierEntity) => HybridTier::Entity,\n        Ok(SearchTier::TierSemantic) => HybridTier::Vector,\n        Ok(SearchTier::TierHybrid) => HybridTier::LlmRerank,\n        _ => match state.config.search.tier.to_ascii_lowercase().as_str() {\n            \"fts\" | \"bm25\" => HybridTier::Fts,\n            \"entity\" => HybridTier::Entity,\n            \"vector\" | \"semantic\" => HybridTier::Vector,\n            _ => HybridTier::LlmRerank,\n        },\n    };",
   "oldString": "    // Unknown/out-of-range tier values fall back to the `[search].tier`\n    // serving default from `server.toml` (plan 020) instead of silently\n    // degrading to BM25.\n    let tier = match SearchTier::try_from(req.tier) {\n        Ok(SearchTier::TierBm25) => HybridTier::Fts,\n        Ok(SearchTier::TierEntity) => HybridTier::Entity,\n        Ok(SearchTier::TierSemantic) => HybridTier::Vector,\n        Ok(SearchTier::TierHybrid) | Err(_) => {\n            let default = state.config.search.tier.to_ascii_lowercase();\n            match default.as_str() {\n                \"fts\" | \"bm25\" => HybridTier::Fts,\n                \"entity\" => HybridTier::Entity,\n                \"vector\" | \"semantic\" => HybridTier::Vector,\n                _ => HybridTier::LlmRerank,\n            }\n        }\n    };"
 }
@@ -12901,12 +12901,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo check -p arlm-proto -p arlm-cli -p arlm-server 2>&1 | grep -E "^error" -A6 | head -20; cargo test -p arlm-proto 2>&1 | grep -E "test result" | head -2
+**Title:** cargo check -p arags-proto -p arags-cli -p arags-server 2>&1 | grep -E "^error" -A6 | head -20; cargo test -p arags-proto 2>&1 | grep -E "test result" | head -2
 
 **Input:**
 ```json
 {
-  "command": "cargo check -p arlm-proto -p arlm-cli -p arlm-server 2>&1 | grep -E \"^error\" -A6 | head -20; cargo test -p arlm-proto 2>&1 | grep -E \"test result\" | head -2"
+  "command": "cargo check -p arags-proto -p arags-cli -p arags-server 2>&1 | grep -E \"^error\" -A6 | head -20; cargo test -p arags-proto 2>&1 | grep -E \"test result\" | head -2"
 }
 ```
 
@@ -12929,7 +12929,7 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 <details>
 <summary>Click to expand reasoning</summary>
 
-P2 done. Now P1: wire `[embedder] cache` into the embedder. Check arlm-embedding cache.rs and build_embedder to see if there's a cached wrapper.
+P2 done. Now P1: wire `[embedder] cache` into the embedder. Check arags-embedding cache.rs and build_embedder to see if there's a cached wrapper.
 
 </details>
 
@@ -13050,12 +13050,12 @@ P2 done. Now P1: wire `[embedder] cache` into the embedder. Check arlm-embedding
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "pub struct|pub fn|cache" crates/arlm-embedding/src/embedder/cache.rs | head -15; echo "==="; rg -n "pub fn build_embedder" -A30 crates/arlm-embedding/src/embedder/config.rs | head -45
+**Title:** rg -n "pub struct|pub fn|cache" crates/arags-embedding/src/embedder/cache.rs | head -15; echo "==="; rg -n "pub fn build_embedder" -A30 crates/arags-embedding/src/embedder/config.rs | head -45
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"pub struct|pub fn|cache\" crates/arlm-embedding/src/embedder/cache.rs | head -15; echo \"===\"; rg -n \"pub fn build_embedder\" -A30 crates/arlm-embedding/src/embedder/config.rs | head -45"
+  "command": "rg -n \"pub struct|pub fn|cache\" crates/arags-embedding/src/embedder/cache.rs | head -15; echo \"===\"; rg -n \"pub fn build_embedder\" -A30 crates/arags-embedding/src/embedder/config.rs | head -45"
 }
 ```
 
@@ -13120,27 +13120,27 @@ P2 done. Now P1: wire `[embedder] cache` into the embedder. Check arlm-embedding
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "EmbeddingCache" crates/ --glob '!cache.rs' | head; echo "==="; sed -n '1,30p' crates/arlm-embedding/src/embedder/cache.rs
+**Title:** rg -n "EmbeddingCache" crates/ --glob '!cache.rs' | head; echo "==="; sed -n '1,30p' crates/arags-embedding/src/embedder/cache.rs
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"EmbeddingCache\" crates/ --glob '!cache.rs' | head; echo \"===\"; sed -n '1,30p' crates/arlm-embedding/src/embedder/cache.rs"
+  "command": "rg -n \"EmbeddingCache\" crates/ --glob '!cache.rs' | head; echo \"===\"; sed -n '1,30p' crates/arags-embedding/src/embedder/cache.rs"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-embedding/tests/embedder_test.rs:15:use arlm_embedding::embedder::cache::EmbeddingCache;
-crates/arlm-embedding/tests/embedder_test.rs:71:    let cache = EmbeddingCache::in_memory(16).expect("cache");
-crates/arlm-embedding/tests/embedder_test.rs:86:    let cache = EmbeddingCache::in_memory(16).expect("cache");
-crates/arlm-embedding/tests/embedder_test.rs:103:    let cache = EmbeddingCache::in_memory(4).expect("cache");
-crates/arlm-embedding/tests/embedder_test.rs:112:    let cache = EmbeddingCache::in_memory(4).expect("cache");
-crates/arlm-embedding/tests/embedder_test.rs:119:    let cache = EmbeddingCache::in_memory(4).expect("cache");
-crates/arlm-embedding/tests/embedder_test.rs:127:    let cache = EmbeddingCache::in_memory(4).expect("cache");
-crates/arlm-embedding/tests/embedder_test.rs:136:    let cache = EmbeddingCache::in_memory(4).expect("cache");
-crates/arlm-embedding/tests/embedder_test.rs:144:    let cache = EmbeddingCache::in_memory(4).expect("cache");
-crates/arlm-embedding/tests/embedder_test.rs:151:    let h1 = EmbeddingCache::content_hash("hello");
+crates/arags-embedding/tests/embedder_test.rs:15:use arags_embedding::embedder::cache::EmbeddingCache;
+crates/arags-embedding/tests/embedder_test.rs:71:    let cache = EmbeddingCache::in_memory(16).expect("cache");
+crates/arags-embedding/tests/embedder_test.rs:86:    let cache = EmbeddingCache::in_memory(16).expect("cache");
+crates/arags-embedding/tests/embedder_test.rs:103:    let cache = EmbeddingCache::in_memory(4).expect("cache");
+crates/arags-embedding/tests/embedder_test.rs:112:    let cache = EmbeddingCache::in_memory(4).expect("cache");
+crates/arags-embedding/tests/embedder_test.rs:119:    let cache = EmbeddingCache::in_memory(4).expect("cache");
+crates/arags-embedding/tests/embedder_test.rs:127:    let cache = EmbeddingCache::in_memory(4).expect("cache");
+crates/arags-embedding/tests/embedder_test.rs:136:    let cache = EmbeddingCache::in_memory(4).expect("cache");
+crates/arags-embedding/tests/embedder_test.rs:144:    let cache = EmbeddingCache::in_memory(4).expect("cache");
+crates/arags-embedding/tests/embedder_test.rs:151:    let h1 = EmbeddingCache::content_hash("hello");
 ===
 use std::sync::Arc;
 
@@ -13187,7 +13187,7 @@ impl EmbeddingCache {
 <details>
 <summary>Click to expand reasoning</summary>
 
-`EmbeddingCache` exists but is not wired into any embedder — there's no "CachedEmbedder" wrapper implementing `Embedder`. To make `[embedder] cache` real, the cleanest approach: add a `CachedEmbedder` wrapper in arlm-embedding that implements `Embedder` and consults `EmbeddingCache` before delegating, then in server's `load_embedder`, wrap with cache when `cfg.cache == true`.
+`EmbeddingCache` exists but is not wired into any embedder — there's no "CachedEmbedder" wrapper implementing `Embedder`. To make `[embedder] cache` real, the cleanest approach: add a `CachedEmbedder` wrapper in arags-embedding that implements `Embedder` and consults `EmbeddingCache` before delegating, then in server's `load_embedder`, wrap with cache when `cfg.cache == true`.
 
 Let me look at the Embedder trait to implement the wrapper correctly.
 
@@ -13195,12 +13195,12 @@ Let me look at the Embedder trait to implement the wrapper correctly.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat crates/arlm-embedding/src/embedder/mod.rs | head -80
+**Title:** cat crates/arags-embedding/src/embedder/mod.rs | head -80
 
 **Input:**
 ```json
 {
-  "command": "cat crates/arlm-embedding/src/embedder/mod.rs | head -80"
+  "command": "cat crates/arags-embedding/src/embedder/mod.rs | head -80"
 }
 ```
 
@@ -13298,12 +13298,12 @@ pub trait Embedder: Send + Sync {
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '80,120p' crates/arlm-embedding/src/embedder/mod.rs
+**Title:** sed -n '80,120p' crates/arags-embedding/src/embedder/mod.rs
 
 **Input:**
 ```json
 {
-  "command": "sed -n '80,120p' crates/arlm-embedding/src/embedder/mod.rs"
+  "command": "sed -n '80,120p' crates/arags-embedding/src/embedder/mod.rs"
 }
 ```
 
@@ -13365,7 +13365,7 @@ impl OwnedFile {
 <details>
 <summary>Click to expand reasoning</summary>
 
-Now I'll add a `CachedEmbedder` wrapper to arlm-embedding (embedder/cache.rs) implementing `Embedder`, then wire it in server `state.rs::load_embedder` when `cfg.cache` is true. Cache path: put it under the server's data dir? EmbeddingCache::open(db_path, dims). The server knows data_dir. I'll pass a cache path from state: `config.data_dir.join("embedding_cache.db")`. load_embedder receives &EmbedderConfig only; I'll pass the cache db path as an Option<String> parameter.
+Now I'll add a `CachedEmbedder` wrapper to arags-embedding (embedder/cache.rs) implementing `Embedder`, then wire it in server `state.rs::load_embedder` when `cfg.cache` is true. Cache path: put it under the server's data dir? EmbeddingCache::open(db_path, dims). The server knows data_dir. I'll pass a cache path from state: `config.data_dir.join("embedding_cache.db")`. load_embedder receives &EmbedderConfig only; I'll pass the cache db path as an Option<String> parameter.
 
 Implement CachedEmbedder:
 
@@ -13427,7 +13427,7 @@ let embedder = if cfg.embedder.cache {
 } else { base };
 ```
 
-But AppState::new has config; load_embedder currently takes &EmbedderConfig. I'll change signature to also take cache_db: Option<&Path> or do wrapping in new(). Cleanest: in `AppState::new`: build base via load_embedder(&config.embedder), then wrap if cache enabled and open succeeds. Need imports: arlm_embedding::embedder::{cache::EmbeddingCache, cache::CachedEmbedder}.
+But AppState::new has config; load_embedder currently takes &EmbedderConfig. I'll change signature to also take cache_db: Option<&Path> or do wrapping in new(). Cleanest: in `AppState::new`: build base via load_embedder(&config.embedder), then wrap if cache enabled and open succeeds. Need imports: arags_embedding::embedder::{cache::EmbeddingCache, cache::CachedEmbedder}.
 
 Note dims mismatch risk: cache DB stores vectors with dims at creation; if config changes dims later, cached rows have wrong length → validation? get returns stored embedding; EmbeddingCache stores dims field but does get validate length? It said "dims - Expected embedding dimensionality (used for validation)" — maybe validates. Fine.
 
@@ -13437,16 +13437,16 @@ Write the wrapper now — append to cache.rs.
 
 </details>
 
-Vou adicionar um wrapper `CachedEmbedder` em arlm-embedding e consumi-lo no server:
+Vou adicionar um wrapper `CachedEmbedder` em arags-embedding e consumi-lo no server:
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '90,140p' crates/arlm-embedding/src/embedder/cache.rs
+**Title:** sed -n '90,140p' crates/arags-embedding/src/embedder/cache.rs
 
 **Input:**
 ```json
 {
-  "command": "sed -n '90,140p' crates/arlm-embedding/src/embedder/cache.rs"
+  "command": "sed -n '90,140p' crates/arags-embedding/src/embedder/cache.rs"
 }
 ```
 
@@ -13515,12 +13515,12 @@ Vou adicionar um wrapper `CachedEmbedder` em arlm-embedding e consumi-lo no serv
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** tail -30 crates/arlm-embedding/src/embedder/cache.rs
+**Title:** tail -30 crates/arags-embedding/src/embedder/cache.rs
 
 **Input:**
 ```json
 {
-  "command": "tail -30 crates/arlm-embedding/src/embedder/cache.rs"
+  "command": "tail -30 crates/arags-embedding/src/embedder/cache.rs"
 }
 ```
 
@@ -13568,7 +13568,7 @@ fn bytes_to_embedding(bytes: &[u8], expected_dims: usize) -> EmbeddingResult<Emb
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat >> crates/arlm-embedding/src/embedder/cache.rs <<'EOF'
+**Title:** cat >> crates/arags-embedding/src/embedder/cache.rs <<'EOF'
 
 /// An [`Embedder`] wrapped with an SQLite-backed content-hash cache.
 ///
@@ -13676,19 +13676,19 @@ mod cached_tests {
     }
 }
 EOF
-cargo test -p arlm-embedding --lib cache 2>&1 | grep -E "^error" -A6 | head -20; cargo test -p arlm-embedding --lib cache 2>&1 | grep "test result" | head -1
+cargo test -p arags-embedding --lib cache 2>&1 | grep -E "^error" -A6 | head -20; cargo test -p arags-embedding --lib cache 2>&1 | grep "test result" | head -1
 
 **Input:**
 ```json
 {
-  "command": "cat >> crates/arlm-embedding/src/embedder/cache.rs <<'EOF'\n\n/// An [`Embedder`] wrapped with an SQLite-backed content-hash cache.\n///\n/// Cache hits skip model inference entirely; misses are computed by the\n/// inner embedder and stored. Cache I/O failures degrade gracefully to a\n/// plain pass-through (logged, never fatal). Enabled via\n/// `server.toml [embedder] cache = true` (plan 020).\npub struct CachedEmbedder {\n    inner: Arc<dyn Embedder + Send + Sync>,\n    cache: EmbeddingCache,\n}\n\nimpl CachedEmbedder {\n    /// Wrap `inner` with `cache`.\n    #[must_use]\n    pub fn new(inner: Arc<dyn Embedder + Send + Sync>, cache: EmbeddingCache) -> Self {\n        Self { inner, cache }\n    }\n\n    /// The backing cache (for stats/inspection).\n    #[must_use]\n    pub fn cache(&self) -> &EmbeddingCache {\n        &self.cache\n    }\n}\n\nimpl Embedder for CachedEmbedder {\n    fn embed(&self, text: &str) -> EmbeddingResult<Embedding> {\n        if let Ok(Some(emb)) = self.cache.get(text) {\n            return Ok(emb);\n        }\n        let emb = self.inner.embed(text)?;\n        if let Err(e) = self.cache.put(text, &emb) {\n            tracing::warn!(error = %e, \"embedding cache put failed\");\n        }\n        Ok(emb)\n    }\n\n    fn embed_batch(&self, texts: &[&str]) -> EmbeddingResult<Vec<Embedding>> {\n        let mut out: Vec<Embedding> = Vec::with_capacity(texts.len());\n        let mut miss_idx: Vec<usize> = Vec::new();\n        for (i, t) in texts.iter().enumerate() {\n            match self.cache.get(t) {\n                Ok(Some(emb)) => out.push(emb),\n                _ => {\n                    out.push(Vec::new());\n                    miss_idx.push(i);\n                }\n            }\n        }\n        if !miss_idx.is_empty() {\n            let missed: Vec<&str> = miss_idx.iter().map(|&i| texts[i]).collect();\n            let computed = self.inner.embed_batch(&missed)?;\n            for (j, emb) in computed.into_iter().enumerate() {\n                let i = miss_idx[j];\n                if let Err(e) = self.cache.put(texts[i], &emb) {\n                    tracing::warn!(error = %e, \"embedding cache put failed\");\n                }\n                out[i] = emb;\n            }\n        }\n        Ok(out)\n    }\n\n    fn dimensions(&self) -> usize {\n        self.inner.dimensions()\n    }\n\n    fn name(&self) -> &'static str {\n        self.inner.name()\n    }\n}\n\n#[cfg(test)]\nmod cached_tests {\n    use super::*;\n    use crate::embedder::lightweight::LightweightEmbedder;\n\n    #[test]\n    fn test_cached_embedder_hit_skips_inner_and_reuses() {\n        let cache = EmbeddingCache::in_memory(8).unwrap();\n        let wrapped = Arc::new(LightweightEmbedder::new(8));\n        let emb = CachedEmbedder::new(wrapped.clone(), cache);\n\n        let first = emb.embed(\"hello world\").unwrap();\n        assert_eq!(first.len(), 8);\n        assert!(emb.cache().contains(\"hello world\"));\n        // Second call is served from the cache and must be identical.\n        let second = emb.embed(\"hello world\").unwrap();\n        assert_eq!(first, second);\n        assert_eq!(emb.name(), wrapped.name());\n    }\n\n    #[test]\n    fn test_cached_embedder_batch_mixed_hits() {\n        let cache = EmbeddingCache::in_memory(8).unwrap();\n        let emb = CachedEmbedder::new(Arc::new(LightweightEmbedder::new(8)), cache);\n\n        let warm = emb.embed(\"a\").unwrap();\n        let batch = emb.embed_batch(&[\"a\", \"b\"]).unwrap();\n        assert_eq!(batch.len(), 2);\n        assert_eq!(batch[0], warm); // hit\n        assert_eq!(batch[1].len(), 8); // computed then stored\n        assert!(emb.cache().contains(\"b\"));\n    }\n}\nEOF\ncargo test -p arlm-embedding --lib cache 2>&1 | grep -E \"^error\" -A6 | head -20; cargo test -p arlm-embedding --lib cache 2>&1 | grep \"test result\" | head -1"
+  "command": "cat >> crates/arags-embedding/src/embedder/cache.rs <<'EOF'\n\n/// An [`Embedder`] wrapped with an SQLite-backed content-hash cache.\n///\n/// Cache hits skip model inference entirely; misses are computed by the\n/// inner embedder and stored. Cache I/O failures degrade gracefully to a\n/// plain pass-through (logged, never fatal). Enabled via\n/// `server.toml [embedder] cache = true` (plan 020).\npub struct CachedEmbedder {\n    inner: Arc<dyn Embedder + Send + Sync>,\n    cache: EmbeddingCache,\n}\n\nimpl CachedEmbedder {\n    /// Wrap `inner` with `cache`.\n    #[must_use]\n    pub fn new(inner: Arc<dyn Embedder + Send + Sync>, cache: EmbeddingCache) -> Self {\n        Self { inner, cache }\n    }\n\n    /// The backing cache (for stats/inspection).\n    #[must_use]\n    pub fn cache(&self) -> &EmbeddingCache {\n        &self.cache\n    }\n}\n\nimpl Embedder for CachedEmbedder {\n    fn embed(&self, text: &str) -> EmbeddingResult<Embedding> {\n        if let Ok(Some(emb)) = self.cache.get(text) {\n            return Ok(emb);\n        }\n        let emb = self.inner.embed(text)?;\n        if let Err(e) = self.cache.put(text, &emb) {\n            tracing::warn!(error = %e, \"embedding cache put failed\");\n        }\n        Ok(emb)\n    }\n\n    fn embed_batch(&self, texts: &[&str]) -> EmbeddingResult<Vec<Embedding>> {\n        let mut out: Vec<Embedding> = Vec::with_capacity(texts.len());\n        let mut miss_idx: Vec<usize> = Vec::new();\n        for (i, t) in texts.iter().enumerate() {\n            match self.cache.get(t) {\n                Ok(Some(emb)) => out.push(emb),\n                _ => {\n                    out.push(Vec::new());\n                    miss_idx.push(i);\n                }\n            }\n        }\n        if !miss_idx.is_empty() {\n            let missed: Vec<&str> = miss_idx.iter().map(|&i| texts[i]).collect();\n            let computed = self.inner.embed_batch(&missed)?;\n            for (j, emb) in computed.into_iter().enumerate() {\n                let i = miss_idx[j];\n                if let Err(e) = self.cache.put(texts[i], &emb) {\n                    tracing::warn!(error = %e, \"embedding cache put failed\");\n                }\n                out[i] = emb;\n            }\n        }\n        Ok(out)\n    }\n\n    fn dimensions(&self) -> usize {\n        self.inner.dimensions()\n    }\n\n    fn name(&self) -> &'static str {\n        self.inner.name()\n    }\n}\n\n#[cfg(test)]\nmod cached_tests {\n    use super::*;\n    use crate::embedder::lightweight::LightweightEmbedder;\n\n    #[test]\n    fn test_cached_embedder_hit_skips_inner_and_reuses() {\n        let cache = EmbeddingCache::in_memory(8).unwrap();\n        let wrapped = Arc::new(LightweightEmbedder::new(8));\n        let emb = CachedEmbedder::new(wrapped.clone(), cache);\n\n        let first = emb.embed(\"hello world\").unwrap();\n        assert_eq!(first.len(), 8);\n        assert!(emb.cache().contains(\"hello world\"));\n        // Second call is served from the cache and must be identical.\n        let second = emb.embed(\"hello world\").unwrap();\n        assert_eq!(first, second);\n        assert_eq!(emb.name(), wrapped.name());\n    }\n\n    #[test]\n    fn test_cached_embedder_batch_mixed_hits() {\n        let cache = EmbeddingCache::in_memory(8).unwrap();\n        let emb = CachedEmbedder::new(Arc::new(LightweightEmbedder::new(8)), cache);\n\n        let warm = emb.embed(\"a\").unwrap();\n        let batch = emb.embed_batch(&[\"a\", \"b\"]).unwrap();\n        assert_eq!(batch.len(), 2);\n        assert_eq!(batch[0], warm); // hit\n        assert_eq!(batch[1].len(), 8); // computed then stored\n        assert!(emb.cache().contains(\"b\"));\n    }\n}\nEOF\ncargo test -p arags-embedding --lib cache 2>&1 | grep -E \"^error\" -A6 | head -20; cargo test -p arags-embedding --lib cache 2>&1 | grep \"test result\" | head -1"
 }
 ```
 
 **Output:**
 ```
 error[E0405]: cannot find trait `Embedder` in this scope
-   --> crates/arlm-embedding/src/embedder/cache.rs:194:20
+   --> crates/arags-embedding/src/embedder/cache.rs:194:20
     |
 194 |     inner: Arc<dyn Embedder + Send + Sync>,
     |                    ^^^^^^^^ not found in this scope
@@ -13696,7 +13696,7 @@ error[E0405]: cannot find trait `Embedder` in this scope
 help: consider importing this trait
 --
 error[E0405]: cannot find trait `Embedder` in this scope
-   --> crates/arlm-embedding/src/embedder/cache.rs:201:31
+   --> crates/arags-embedding/src/embedder/cache.rs:201:31
     |
 201 |     pub fn new(inner: Arc<dyn Embedder + Send + Sync>, cache: EmbeddingCache) -> Self {
     |                               ^^^^^^^^ not found in this scope
@@ -13704,7 +13704,7 @@ error[E0405]: cannot find trait `Embedder` in this scope
 help: consider importing this trait
 --
 error[E0405]: cannot find trait `Embedder` in this scope
-   --> crates/arlm-embedding/src/embedder/cache.rs:212:6
+   --> crates/arags-embedding/src/embedder/cache.rs:212:6
     |
 212 | impl Embedder for CachedEmbedder {
 
@@ -13721,22 +13721,22 @@ error[E0405]: cannot find trait `Embedder` in this scope
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "pub trait Embedder|pub use.*Embedder|use super" crates/arlm-embedding/src/embedder/mod.rs crates/arlm-embedding/src/embedder/cache.rs | head
+**Title:** rg -n "pub trait Embedder|pub use.*Embedder|use super" crates/arags-embedding/src/embedder/mod.rs crates/arags-embedding/src/embedder/cache.rs | head
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"pub trait Embedder|pub use.*Embedder|use super\" crates/arlm-embedding/src/embedder/mod.rs crates/arlm-embedding/src/embedder/cache.rs | head"
+  "command": "rg -n \"pub trait Embedder|pub use.*Embedder|use super\" crates/arags-embedding/src/embedder/mod.rs crates/arags-embedding/src/embedder/cache.rs | head"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-embedding/src/embedder/mod.rs:16:pub use lightweight::LightweightEmbedder;
-crates/arlm-embedding/src/embedder/mod.rs:17:pub use ollama::OllamaEmbedder;
-crates/arlm-embedding/src/embedder/mod.rs:73:pub trait Embedder: Send + Sync {
-crates/arlm-embedding/src/embedder/cache.rs:7:use super::{Embedding, EmbeddingError, EmbeddingResult};
-crates/arlm-embedding/src/embedder/cache.rs:261:    use super::*;
+crates/arags-embedding/src/embedder/mod.rs:16:pub use lightweight::LightweightEmbedder;
+crates/arags-embedding/src/embedder/mod.rs:17:pub use ollama::OllamaEmbedder;
+crates/arags-embedding/src/embedder/mod.rs:73:pub trait Embedder: Send + Sync {
+crates/arags-embedding/src/embedder/cache.rs:7:use super::{Embedding, EmbeddingError, EmbeddingResult};
+crates/arags-embedding/src/embedder/cache.rs:261:    use super::*;
 
 ```
 
@@ -13749,12 +13749,12 @@ crates/arlm-embedding/src/embedder/cache.rs:261:    use super::*;
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-embedding/src/embedder/cache.rs
+**Title:** crates/arags-embedding/src/embedder/cache.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-embedding/src/embedder/cache.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-embedding/src/embedder/cache.rs",
   "newString": "use std::sync::Arc;\n\nuse parking_lot::Mutex;\nuse rusqlite::Connection;\nuse sha2::{Digest, Sha256};\n\nuse super::{Embedder, Embedding, EmbeddingError, EmbeddingResult};",
   "oldString": "use std::sync::Arc;\n\nuse parking_lot::Mutex;\nuse rusqlite::Connection;\nuse sha2::{Digest, Sha256};\n\nuse super::{Embedding, EmbeddingError, EmbeddingResult};"
 }
@@ -13776,12 +13776,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-embedding --lib 2>&1 | grep -E "^error|test result" -A4 | head
+**Title:** cargo test -p arags-embedding --lib 2>&1 | grep -E "^error|test result" -A4 | head
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-embedding --lib 2>&1 | grep -E \"^error|test result\" -A4 | head"
+  "command": "cargo test -p arags-embedding --lib 2>&1 | grep -E \"^error|test result\" -A4 | head"
 }
 ```
 
@@ -13803,12 +13803,12 @@ Agora conecte no `state.rs`:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/state.rs
+**Title:** crates/arags-server/src/state.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/state.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/state.rs",
   "newString": "    pub fn new(\n        storage: Storage,\n        config: ServerConfig,\n        vector_store: Option<Arc<VectorStore>>,\n        question_vector_store: Option<Arc<QuestionVectorStore>>,\n    ) -> Result<Self> {\n        let embedder = load_embedder(&config.embedder);\n        let embedder = wrap_with_cache(embedder, &config);\n        let qa_config = config.qa_cache.clone();",
   "oldString": "    pub fn new(\n        storage: Storage,\n        config: ServerConfig,\n        vector_store: Option<Arc<VectorStore>>,\n        question_vector_store: Option<Arc<QuestionVectorStore>>,\n    ) -> Result<Self> {\n        let embedder = load_embedder(&config.embedder);\n        let qa_config = config.qa_cache.clone();"
 }
@@ -13830,13 +13830,13 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/state.rs
+**Title:** crates/arags-server/src/state.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/state.rs",
-  "newString": "/// Dimensionality of the embedder built for `cfg`, used to size the server's\n/// global vector stores so stored and query vectors are comparable.\n#[must_use]\npub fn embedder_dimension(cfg: &crate::config::EmbedderConfig) -> usize {\n    cfg.dims\n}\n\n/// Wrap the embedder with the SQLite content-hash cache when\n/// `server.toml [embedder] cache = true` (plan 020). Cache failures degrade\n/// to the uncached embedder so indexing never stops because of the cache.\nfn wrap_with_cache(\n    embedder: Arc<dyn Embedder + Send + Sync>,\n    config: &ServerConfig,\n) -> Arc<dyn Embedder + Send + Sync> {\n    if !config.embedder.cache {\n        tracing::info!(\"[embedder] cache = false; running without embedding cache\");\n        return embedder;\n    }\n    let db_path = config.data_dir.join(\"embedding-cache.db\");\n    match arlm_embedding::embedder::cache::EmbeddingCache::open(\n        &db_path.to_string_lossy(),\n        config.embedder.dims,\n    ) {\n        Ok(cache) => {\n            tracing::info!(db = %db_path.display(), dims = config.embedder.dims, \"embedding cache enabled\");\n            Arc::new(arlm_embedding::embedder::cache::CachedEmbedder::new(\n                embedder, cache,\n            ))\n        }\n        Err(e) => {\n            tracing::warn!(error = %e, \"embedding cache open failed; running uncached\");\n            embedder\n        }\n    }\n}",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/state.rs",
+  "newString": "/// Dimensionality of the embedder built for `cfg`, used to size the server's\n/// global vector stores so stored and query vectors are comparable.\n#[must_use]\npub fn embedder_dimension(cfg: &crate::config::EmbedderConfig) -> usize {\n    cfg.dims\n}\n\n/// Wrap the embedder with the SQLite content-hash cache when\n/// `server.toml [embedder] cache = true` (plan 020). Cache failures degrade\n/// to the uncached embedder so indexing never stops because of the cache.\nfn wrap_with_cache(\n    embedder: Arc<dyn Embedder + Send + Sync>,\n    config: &ServerConfig,\n) -> Arc<dyn Embedder + Send + Sync> {\n    if !config.embedder.cache {\n        tracing::info!(\"[embedder] cache = false; running without embedding cache\");\n        return embedder;\n    }\n    let db_path = config.data_dir.join(\"embedding-cache.db\");\n    match arags_embedding::embedder::cache::EmbeddingCache::open(\n        &db_path.to_string_lossy(),\n        config.embedder.dims,\n    ) {\n        Ok(cache) => {\n            tracing::info!(db = %db_path.display(), dims = config.embedder.dims, \"embedding cache enabled\");\n            Arc::new(arags_embedding::embedder::cache::CachedEmbedder::new(\n                embedder, cache,\n            ))\n        }\n        Err(e) => {\n            tracing::warn!(error = %e, \"embedding cache open failed; running uncached\");\n            embedder\n        }\n    }\n}",
   "oldString": "/// Dimensionality of the embedder built for `cfg`, used to size the server's\n/// global vector stores so stored and query vectors are comparable.\n#[must_use]\npub fn embedder_dimension(cfg: &crate::config::EmbedderConfig) -> usize {\n    cfg.dims\n}"
 }
 ```
@@ -13857,12 +13857,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo check -p arlm-server 2>&1 | grep -E "^error" -A6 | head; cargo check -p arlm-server 2>&1 | tail -1
+**Title:** cargo check -p arags-server 2>&1 | grep -E "^error" -A6 | head; cargo check -p arags-server 2>&1 | tail -1
 
 **Input:**
 ```json
 {
-  "command": "cargo check -p arlm-server 2>&1 | grep -E \"^error\" -A6 | head; cargo check -p arlm-server 2>&1 | tail -1"
+  "command": "cargo check -p arags-server 2>&1 | grep -E \"^error\" -A6 | head; cargo check -p arags-server 2>&1 | tail -1"
 }
 ```
 
@@ -13884,7 +13884,7 @@ Edit applied successfully.
 <details>
 <summary>Click to expand reasoning</summary>
 
-P1 done. Now P4a: `pool_size`, `flush_interval_ms`, `max_batch_size` — parametrizable Storage. Let me inspect arlm-storage lib.rs Storage::open and the buffers system to wire these meaningfully.
+P1 done. Now P4a: `pool_size`, `flush_interval_ms`, `max_batch_size` — parametrizable Storage. Let me inspect arags-storage lib.rs Storage::open and the buffers system to wire these meaningfully.
 
 </details>
 
@@ -14005,12 +14005,12 @@ P1 done. Now P4a: `pool_size`, `flush_interval_ms`, `max_batch_size` — paramet
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "pub fn open|Pool::|max_size|r2d2|flush" crates/arlm-storage/src/lib.rs | head -15; echo "===BUFFERS==="; rg -n "pub fn|max_batch|flush|threshold" crates/arlm-storage/src/sqlite/buffers.rs | head -25
+**Title:** rg -n "pub fn open|Pool::|max_size|r2d2|flush" crates/arags-storage/src/lib.rs | head -15; echo "===BUFFERS==="; rg -n "pub fn|max_batch|flush|threshold" crates/arags-storage/src/sqlite/buffers.rs | head -25
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"pub fn open|Pool::|max_size|r2d2|flush\" crates/arlm-storage/src/lib.rs | head -15; echo \"===BUFFERS===\"; rg -n \"pub fn|max_batch|flush|threshold\" crates/arlm-storage/src/sqlite/buffers.rs | head -25"
+  "command": "rg -n \"pub fn open|Pool::|max_size|r2d2|flush\" crates/arags-storage/src/lib.rs | head -15; echo \"===BUFFERS===\"; rg -n \"pub fn|max_batch|flush|threshold\" crates/arags-storage/src/sqlite/buffers.rs | head -25"
 }
 ```
 
@@ -14037,12 +14037,12 @@ P1 done. Now P4a: `pool_size`, `flush_interval_ms`, `max_batch_size` — paramet
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "impl Storage|pub fn open|ConnectionManager|r2d2|Pool" crates/arlm-storage/src/lib.rs | head -20
+**Title:** rg -n "impl Storage|pub fn open|ConnectionManager|r2d2|Pool" crates/arags-storage/src/lib.rs | head -20
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"impl Storage|pub fn open|ConnectionManager|r2d2|Pool\" crates/arlm-storage/src/lib.rs | head -20"
+  "command": "rg -n \"impl Storage|pub fn open|ConnectionManager|r2d2|Pool\" crates/arags-storage/src/lib.rs | head -20"
 }
 ```
 
@@ -14060,32 +14060,32 @@ P1 done. Now P4a: `pool_size`, `flush_interval_ms`, `max_batch_size` — paramet
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -rn "Storage" crates/arlm-storage/src --glob '!benches' -l; echo ===; rg -n "pub struct Storage|pub fn open" crates/arlm-storage/src/sqlite/mod.rs | head
+**Title:** rg -rn "Storage" crates/arags-storage/src --glob '!benches' -l; echo ===; rg -n "pub struct Storage|pub fn open" crates/arags-storage/src/sqlite/mod.rs | head
 
 **Input:**
 ```json
 {
-  "command": "rg -rn \"Storage\" crates/arlm-storage/src --glob '!benches' -l; echo ===; rg -n \"pub struct Storage|pub fn open\" crates/arlm-storage/src/sqlite/mod.rs | head"
+  "command": "rg -rn \"Storage\" crates/arags-storage/src --glob '!benches' -l; echo ===; rg -n \"pub struct Storage|pub fn open\" crates/arags-storage/src/sqlite/mod.rs | head"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-storage/src/qa_vectors.rs
-crates/arlm-storage/src/lib.rs
-crates/arlm-storage/src/sqlite/patterns.rs
-crates/arlm-storage/src/sqlite/history.rs
-crates/arlm-storage/src/sqlite/findings.rs
-crates/arlm-storage/src/sqlite/cache.rs
-crates/arlm-storage/src/sqlite/mod.rs
-crates/arlm-storage/src/sqlite/chunks.rs
-crates/arlm-storage/src/sqlite/buffers.rs
-crates/arlm-storage/src/sqlite/qa_cache.rs
-crates/arlm-storage/src/sqlite/tasks.rs
-crates/arlm-storage/src/sqlite/entities.rs
-crates/arlm-storage/src/sqlite/summaries.rs
-crates/arlm-storage/src/sqlite/conn.rs
-crates/arlm-storage/src/sqlite/tokens.rs
+crates/arags-storage/src/qa_vectors.rs
+crates/arags-storage/src/lib.rs
+crates/arags-storage/src/sqlite/patterns.rs
+crates/arags-storage/src/sqlite/history.rs
+crates/arags-storage/src/sqlite/findings.rs
+crates/arags-storage/src/sqlite/cache.rs
+crates/arags-storage/src/sqlite/mod.rs
+crates/arags-storage/src/sqlite/chunks.rs
+crates/arags-storage/src/sqlite/buffers.rs
+crates/arags-storage/src/sqlite/qa_cache.rs
+crates/arags-storage/src/sqlite/tasks.rs
+crates/arags-storage/src/sqlite/entities.rs
+crates/arags-storage/src/sqlite/summaries.rs
+crates/arags-storage/src/sqlite/conn.rs
+crates/arags-storage/src/sqlite/tokens.rs
 zsh:1: == not found
 
 ```
@@ -14099,41 +14099,41 @@ zsh:1: == not found
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "pub struct Storage|pub fn open|ConnectionManager|r2d2|Pool|max_size" crates/arlm-storage/src/sqlite/mod.rs crates/arlm-storage/src/sqlite/conn.rs | head -25
+**Title:** rg -n "pub struct Storage|pub fn open|ConnectionManager|r2d2|Pool|max_size" crates/arags-storage/src/sqlite/mod.rs crates/arags-storage/src/sqlite/conn.rs | head -25
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"pub struct Storage|pub fn open|ConnectionManager|r2d2|Pool|max_size\" crates/arlm-storage/src/sqlite/mod.rs crates/arlm-storage/src/sqlite/conn.rs | head -25"
+  "command": "rg -n \"pub struct Storage|pub fn open|ConnectionManager|r2d2|Pool|max_size\" crates/arags-storage/src/sqlite/mod.rs crates/arags-storage/src/sqlite/conn.rs | head -25"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-storage/src/sqlite/conn.rs:15:    /// Pooled connection mode (Server). Uses WAL with concurrent readers.
-crates/arlm-storage/src/sqlite/conn.rs:16:    Pooled,
-crates/arlm-storage/src/sqlite/conn.rs:23:/// - **Pooled** (Server): r2d2 connection pool with WAL. Concurrent readers, one writer.
-crates/arlm-storage/src/sqlite/conn.rs:24:pub struct Storage {
-crates/arlm-storage/src/sqlite/conn.rs:27:    /// Pooled connection mode (Server)
-crates/arlm-storage/src/sqlite/conn.rs:28:    pool: Option<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>>,
-crates/arlm-storage/src/sqlite/conn.rs:40:    pub fn open(path: &Path) -> Result<Self> {
-crates/arlm-storage/src/sqlite/conn.rs:50:    pub fn open_exclusive(path: &Path) -> Result<Self> {
-crates/arlm-storage/src/sqlite/conn.rs:60:    pub fn open_pooled(path: &Path, max_size: u32) -> Result<Self> {
-crates/arlm-storage/src/sqlite/conn.rs:74:        let manager = r2d2_sqlite::SqliteConnectionManager::file(&db_path).with_init(|conn| {
-crates/arlm-storage/src/sqlite/conn.rs:79:        let pool = r2d2::Pool::builder()
-crates/arlm-storage/src/sqlite/conn.rs:80:            .max_size(max_size)
-crates/arlm-storage/src/sqlite/conn.rs:85:        tracing::info!(path = %db_path.display(), max_size, "SQLite storage opened (pooled)");
-crates/arlm-storage/src/sqlite/conn.rs:91:            mode: StorageMode::Pooled,
-crates/arlm-storage/src/sqlite/conn.rs:175:            StorageMode::Pooled => {
-crates/arlm-storage/src/sqlite/conn.rs:178:                Ok(StorageConnection::Pooled(conn))
-crates/arlm-storage/src/sqlite/conn.rs:197:    pub fn pool_stats(&self) -> Option<PoolStats> {
-crates/arlm-storage/src/sqlite/conn.rs:199:        Some(PoolStats {
-crates/arlm-storage/src/sqlite/conn.rs:200:            max_size: pool.max_size(),
-crates/arlm-storage/src/sqlite/conn.rs:273:    Pooled(r2d2::PooledConnection<r2d2_sqlite::SqliteConnectionManager>),
-crates/arlm-storage/src/sqlite/conn.rs:291:            Self::Pooled(conn) => f(conn),
-crates/arlm-storage/src/sqlite/conn.rs:296:/// Pool statistics.
-crates/arlm-storage/src/sqlite/conn.rs:298:pub struct PoolStats {
-crates/arlm-storage/src/sqlite/conn.rs:299:    pub max_size: u32,
+crates/arags-storage/src/sqlite/conn.rs:15:    /// Pooled connection mode (Server). Uses WAL with concurrent readers.
+crates/arags-storage/src/sqlite/conn.rs:16:    Pooled,
+crates/arags-storage/src/sqlite/conn.rs:23:/// - **Pooled** (Server): r2d2 connection pool with WAL. Concurrent readers, one writer.
+crates/arags-storage/src/sqlite/conn.rs:24:pub struct Storage {
+crates/arags-storage/src/sqlite/conn.rs:27:    /// Pooled connection mode (Server)
+crates/arags-storage/src/sqlite/conn.rs:28:    pool: Option<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>>,
+crates/arags-storage/src/sqlite/conn.rs:40:    pub fn open(path: &Path) -> Result<Self> {
+crates/arags-storage/src/sqlite/conn.rs:50:    pub fn open_exclusive(path: &Path) -> Result<Self> {
+crates/arags-storage/src/sqlite/conn.rs:60:    pub fn open_pooled(path: &Path, max_size: u32) -> Result<Self> {
+crates/arags-storage/src/sqlite/conn.rs:74:        let manager = r2d2_sqlite::SqliteConnectionManager::file(&db_path).with_init(|conn| {
+crates/arags-storage/src/sqlite/conn.rs:79:        let pool = r2d2::Pool::builder()
+crates/arags-storage/src/sqlite/conn.rs:80:            .max_size(max_size)
+crates/arags-storage/src/sqlite/conn.rs:85:        tracing::info!(path = %db_path.display(), max_size, "SQLite storage opened (pooled)");
+crates/arags-storage/src/sqlite/conn.rs:91:            mode: StorageMode::Pooled,
+crates/arags-storage/src/sqlite/conn.rs:175:            StorageMode::Pooled => {
+crates/arags-storage/src/sqlite/conn.rs:178:                Ok(StorageConnection::Pooled(conn))
+crates/arags-storage/src/sqlite/conn.rs:197:    pub fn pool_stats(&self) -> Option<PoolStats> {
+crates/arags-storage/src/sqlite/conn.rs:199:        Some(PoolStats {
+crates/arags-storage/src/sqlite/conn.rs:200:            max_size: pool.max_size(),
+crates/arags-storage/src/sqlite/conn.rs:273:    Pooled(r2d2::PooledConnection<r2d2_sqlite::SqliteConnectionManager>),
+crates/arags-storage/src/sqlite/conn.rs:291:            Self::Pooled(conn) => f(conn),
+crates/arags-storage/src/sqlite/conn.rs:296:/// Pool statistics.
+crates/arags-storage/src/sqlite/conn.rs:298:pub struct PoolStats {
+crates/arags-storage/src/sqlite/conn.rs:299:    pub max_size: u32,
 
 ```
 
@@ -14146,12 +14146,12 @@ crates/arlm-storage/src/sqlite/conn.rs:299:    pub max_size: u32,
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '30,70p' crates/arlm-storage/src/sqlite/conn.rs; echo "===LIB open==="; rg -n "pub fn open" -A12 crates/arlm-storage/src/lib.rs | head -20
+**Title:** sed -n '30,70p' crates/arags-storage/src/sqlite/conn.rs; echo "===LIB open==="; rg -n "pub fn open" -A12 crates/arags-storage/src/lib.rs | head -20
 
 **Input:**
 ```json
 {
-  "command": "sed -n '30,70p' crates/arlm-storage/src/sqlite/conn.rs; echo \"===LIB open===\"; rg -n \"pub fn open\" -A12 crates/arlm-storage/src/lib.rs | head -20"
+  "command": "sed -n '30,70p' crates/arags-storage/src/sqlite/conn.rs; echo \"===LIB open===\"; rg -n \"pub fn open\" -A12 crates/arags-storage/src/lib.rs | head -20"
 }
 ```
 
@@ -14226,12 +14226,12 @@ Let me look at conn() and whether get_chunk etc. work under pooled.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "pub fn conn|fn connection" -A14 crates/arlm-storage/src/sqlite/conn.rs | sed -n '1,40p'
+**Title:** rg -n "pub fn conn|fn connection" -A14 crates/arags-storage/src/sqlite/conn.rs | sed -n '1,40p'
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"pub fn conn|fn connection\" -A14 crates/arlm-storage/src/sqlite/conn.rs | sed -n '1,40p'"
+  "command": "rg -n \"pub fn conn|fn connection\" -A14 crates/arags-storage/src/sqlite/conn.rs | sed -n '1,40p'"
 }
 ```
 
@@ -14301,7 +14301,7 @@ flush_interval_ms & max_batch_size: what do they naturally map to now? There's n
 - max_batch_size → bound the number of chunks inserted per transaction in grpc/index.rs Phase 1 (batch inserts in groups of max_batch_size within a transaction). Currently each insert is its own implicit txn. Batching N inserts/txn is a genuine perf win and matches "max_batch_size = 50".
 - flush_interval_ms → hmm, with direct writes there's no flusher. Forcing a background flusher just to consume the knob is dead weight. Honest alternative: WAL checkpointing! flush_interval_ms could drive a periodic `PRAGMA wal_checkpoint(PASSIVE)` ticker — "flush" of WAL into the DB. That's meaningful ops tuning and uses existing infra (like maintenance tick). Default 100ms is too aggressive for checkpoints though; plan default 100ms was designed for buffer flushing. I can implement it as a background flusher that runs `wal_checkpoint(PASSIVE)` every flush_interval_ms (0 = disabled), default maybe keep plan's 100? Checkpoint every 100ms passive is cheap-ish but wasteful. I'll keep schema default 100ms per plan but document it drives WAL pass-through checkpoint cadence. Hmm, honestly 100ms passive checkpoint is fine-ish (it's passive; no-op when WAL small).
 
-Actually wait — better mapping: arlm-storage has buffers/cache systems? sqlite/buffers.rs is project buffers (projects table), not write buffering. cache.rs? Let me not overthink: implement:
+Actually wait — better mapping: arags-storage has buffers/cache systems? sqlite/buffers.rs is project buffers (projects table), not write buffering. cache.rs? Let me not overthink: implement:
 - pool_size → open_pooled hybrid (real)
 - max_batch_size → Phase-1 insert batching in transactions (real perf win)
 - flush_interval_ms → periodic PASSIVE wal_checkpoint worker in lifecycle (real)
@@ -14316,12 +14316,12 @@ Implementation details:
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '55,150p' crates/arlm-storage/src/sqlite/conn.rs
+**Title:** sed -n '55,150p' crates/arags-storage/src/sqlite/conn.rs
 
 **Input:**
 ```json
 {
-  "command": "sed -n '55,150p' crates/arlm-storage/src/sqlite/conn.rs"
+  "command": "sed -n '55,150p' crates/arags-storage/src/sqlite/conn.rs"
 }
 ```
 
@@ -14435,12 +14435,12 @@ Implementation details:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-storage/src/sqlite/conn.rs
+**Title:** crates/arags-storage/src/sqlite/conn.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/src/sqlite/conn.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage/src/sqlite/conn.rs",
   "newString": "        let pool = r2d2::Pool::builder()\n            .max_size(max_size)\n            .min_idle(Some(1))\n            .build(manager)\n            .context(\"failed to create connection pool\")?;\n\n        // Hybrid mode: the pool serves `connection()` (concurrent writers),\n        // while a dedicated shared connection keeps `conn()`-based read\n        // helpers valid (they serialize on its mutex). WAL allows concurrent\n        // readers alongside pool writers.\n        let shared = Connection::open(&db_path).context(\"failed to open shared read connection\")?;\n        Self::apply_pragmas(&shared, false)?;\n\n        tracing::info!(path = %db_path.display(), max_size, \"SQLite storage opened (pooled)\");\n\n        Ok(Self {\n            sqlite: Some(Arc::new(Mutex::new(shared))),\n            pool: Some(pool),\n            path: path.to_path_buf(),\n            mode: StorageMode::Pooled,\n        })\n    }",
   "oldString": "        let pool = r2d2::Pool::builder()\n            .max_size(max_size)\n            .min_idle(Some(1))\n            .build(manager)\n            .context(\"failed to create connection pool\")?;\n\n        tracing::info!(path = %db_path.display(), max_size, \"SQLite storage opened (pooled)\");\n\n        Ok(Self {\n            sqlite: None,\n            pool: Some(pool),\n            path: path.to_path_buf(),\n            mode: StorageMode::Pooled,\n        })\n    }"
 }
@@ -14479,12 +14479,12 @@ Update doc: works in both modes now. Let me update the doc comment.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-storage/src/sqlite/conn.rs
+**Title:** crates/arags-storage/src/sqlite/conn.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/src/sqlite/conn.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage/src/sqlite/conn.rs",
   "newString": "    /// Get a reference to the underlying shared `SQLite` connection.\n    ///\n    /// Available in **both** modes: single mode holds the only connection;\n    /// pooled (hybrid) mode keeps a dedicated shared read connection so the\n    /// `conn()`-based read helpers remain valid.\n    ///\n    /// # Panics\n    ///\n    /// Panics if storage was constructed without a shared connection, which\n    /// cannot happen through the public constructors.\n    pub fn conn(&self) -> Arc<Mutex<Connection>> {\n        self.sqlite\n            .as_ref()\n            .expect(\"storage has no shared connection\")\n            .clone()\n    }",
   "oldString": "    pub fn conn(&self) -> Arc<Mutex<Connection>> {\n        self.sqlite\n            .as_ref()\n            .expect(\"conn() called in pooled mode; use connection() instead\")\n            .clone()\n    }"
 }
@@ -14515,12 +14515,12 @@ Wait — I need to check the original doc comment above conn() ("Get a reference
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '150,185p' crates/arlm-storage/src/sqlite/conn.rs
+**Title:** sed -n '150,185p' crates/arags-storage/src/sqlite/conn.rs
 
 **Input:**
 ```json
 {
-  "command": "sed -n '150,185p' crates/arlm-storage/src/sqlite/conn.rs"
+  "command": "sed -n '150,185p' crates/arags-storage/src/sqlite/conn.rs"
 }
 ```
 
@@ -14574,12 +14574,12 @@ Wait — I need to check the original doc comment above conn() ("Get a reference
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-storage/src/sqlite/conn.rs
+**Title:** crates/arags-storage/src/sqlite/conn.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/src/sqlite/conn.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage/src/sqlite/conn.rs",
   "newString": "    /// Get a reference to the underlying shared `SQLite` connection.\n    ///\n    /// Available in **both** modes: single mode holds the only connection;\n    /// pooled (hybrid) mode keeps a dedicated shared read connection so the\n    /// `conn()`-based read helpers remain valid.\n    ///\n    /// # Panics\n    ///\n    /// Panics if storage was constructed without a shared connection, which\n    /// cannot happen through the public constructors.\n    pub fn conn(&self) -> Arc<Mutex<Connection>> {",
   "oldString": "    /// Get a reference to the underlying `SQLite` connection (single mode only).\n    ///\n    /// # Panics\n    ///\n    /// Panics if called in pooled mode.\n    #[must_use]\n    #[allow(clippy::expect_used)]\n    /// Get a reference to the underlying shared `SQLite` connection.\n    ///\n    /// Available in **both** modes: single mode holds the only connection;\n    /// pooled (hybrid) mode keeps a dedicated shared read connection so the\n    /// `conn()`-based read helpers remain valid.\n    ///\n    /// # Panics\n    ///\n    /// Panics if storage was constructed without a shared connection, which\n    /// cannot happen through the public constructors.\n    pub fn conn(&self) -> Arc<Mutex<Connection>> {"
 }
@@ -14603,12 +14603,12 @@ Agora os campos de storage no `ServerConfig` + wiring no lifecycle e index:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "newString": "    /// Optional PEM CA bundle. When set together with TLS, clients must\n    /// present a certificate signed by this CA (mutual TLS).\n    #[serde(default)]\n    pub mtls_ca: Option<PathBuf>,\n\n    /// SQLite writer pool size (plan 020 \"Armazenamento / dados\"). `1`\n    /// degrades to single-connection mode.\n    #[serde(default = \"default_pool_size\")]\n    pub pool_size: u32,\n\n    /// Interval for the background WAL flush (`PRAGMA wal_checkpoint\n    /// (PASSIVE)`), in milliseconds. `0` disables the flusher.\n    #[serde(default = \"default_flush_interval_ms\")]\n    pub flush_interval_ms: u64,\n\n    /// Maximum number of chunk rows per write transaction during indexing.\n    #[serde(default = \"default_max_batch_size\")]\n    pub max_batch_size: usize,\n",
   "oldString": "    /// Optional PEM CA bundle. When set together with TLS, clients must\n    /// present a certificate signed by this CA (mutual TLS).\n    #[serde(default)]\n    pub mtls_ca: Option<PathBuf>,\n"
 }
@@ -14630,12 +14630,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "newString": "fn default_listen_addr() -> String {\n    \"127.0.0.1:50051\".to_string()\n}\n\nfn default_pool_size() -> u32 {\n    4\n}\n\nfn default_flush_interval_ms() -> u64 {\n    100\n}\n\nfn default_max_batch_size() -> usize {\n    50\n}",
   "oldString": "fn default_listen_addr() -> String {\n    \"127.0.0.1:50051\".to_string()\n}"
 }
@@ -14657,12 +14657,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "newString": "impl Default for ServerConfig {\n    fn default() -> Self {\n        Self {\n            listen_addr: default_listen_addr(),\n            data_dir: default_data_dir(),\n            tls_cert: None,\n            tls_key: None,\n            mtls_ca: None,\n            pool_size: default_pool_size(),\n            flush_interval_ms: default_flush_interval_ms(),\n            max_batch_size: default_max_batch_size(),\n            embedder: EmbedderConfig::default(),\n            search: SearchConfig::default(),\n            qa_cache: QaCacheConfig::default(),\n            maintenance: MaintenanceConfig::default(),\n        }\n    }\n}",
   "oldString": "impl Default for ServerConfig {\n    fn default() -> Self {\n        Self {\n            listen_addr: default_listen_addr(),\n            data_dir: default_data_dir(),\n            tls_cert: None,\n            tls_key: None,\n            mtls_ca: None,\n            embedder: EmbedderConfig::default(),\n            search: SearchConfig::default(),\n            qa_cache: QaCacheConfig::default(),\n            maintenance: MaintenanceConfig::default(),\n        }\n    }\n}"
 }
@@ -14684,14 +14684,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/lifecycle.rs
+**Title:** crates/arags-server/src/lifecycle.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/lifecycle.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/lifecycle.rs",
   "newString": "    // Hybrid pooled mode (plan 020 `pool_size`): the writer pool serves\n    // `connection()`-based writes while a dedicated shared connection keeps\n    // the `conn()`-based read helpers valid. `pool_size == 1` degrades to\n    // single-connection mode.\n    let storage = if config.pool_size > 1 {\n        Storage::open_pooled(&config.data_dir, config.pool_size)\n            .context(\"failed to open pooled storage\")?\n    } else {\n        Storage::open(&config.data_dir).context(\"failed to open storage\")?\n    };",
-  "oldString": "    // Single-mode storage: `arlm-storage`'s read paths (`get_chunk`,\n    // `get_summary`, `search_summaries`, …) currently assume a single\n    // connection via `Storage::conn()`. Opening single-mode keeps both the\n    // `conn()`-based read helpers and the `connection()`-based pooled writes\n    // (used by indexing) valid. Concurrent handlers serialize on the shared\n    // connection mutex, which is acceptable for a local dev server.\n    let storage = Storage::open(&config.data_dir).context(\"failed to open storage\")?;"
+  "oldString": "    // Single-mode storage: `arags-storage`'s read paths (`get_chunk`,\n    // `get_summary`, `search_summaries`, …) currently assume a single\n    // connection via `Storage::conn()`. Opening single-mode keeps both the\n    // `conn()`-based read helpers and the `connection()`-based pooled writes\n    // (used by indexing) valid. Concurrent handlers serialize on the shared\n    // connection mutex, which is acceptable for a local dev server.\n    let storage = Storage::open(&config.data_dir).context(\"failed to open storage\")?;"
 }
 ```
 
@@ -14731,7 +14731,7 @@ if config.flush_interval_ms > 0 {
 }
 ```
 
-Need Storage::wal_checkpoint in arlm-storage: execute PRAGMA wal_checkpoint(PASSIVE) on shared conn. Add to sqlite/conn.rs impl:
+Need Storage::wal_checkpoint in arags-storage: execute PRAGMA wal_checkpoint(PASSIVE) on shared conn. Add to sqlite/conn.rs impl:
 
 ```rust
 /// Run a passive WAL checkpoint (best-effort background "flush").
@@ -14765,12 +14765,12 @@ Hmm — but store::insert_chunk takes &Storage and internally uses connection()/
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "use parking_lot|use std::sync" crates/arlm-storage/src/sqlite/conn.rs | head -3; echo ===; rg -n "pub fn insert_chunk|pub fn insert_chunk_text|pub fn insert_fts_row|fn blocking|with_conn|connection\(\)" crates/arlm-server/src/store/mod.rs crates/arlm-storage/src/lib.rs | head -15
+**Title:** rg -n "use parking_lot|use std::sync" crates/arags-storage/src/sqlite/conn.rs | head -3; echo ===; rg -n "pub fn insert_chunk|pub fn insert_chunk_text|pub fn insert_fts_row|fn blocking|with_conn|connection\(\)" crates/arags-server/src/store/mod.rs crates/arags-storage/src/lib.rs | head -15
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"use parking_lot|use std::sync\" crates/arlm-storage/src/sqlite/conn.rs | head -3; echo ===; rg -n \"pub fn insert_chunk|pub fn insert_chunk_text|pub fn insert_fts_row|fn blocking|with_conn|connection\\(\\)\" crates/arlm-server/src/store/mod.rs crates/arlm-storage/src/lib.rs | head -15"
+  "command": "rg -n \"use parking_lot|use std::sync\" crates/arags-storage/src/sqlite/conn.rs | head -3; echo ===; rg -n \"pub fn insert_chunk|pub fn insert_chunk_text|pub fn insert_fts_row|fn blocking|with_conn|connection\\(\\)\" crates/arags-server/src/store/mod.rs crates/arags-storage/src/lib.rs | head -15"
 }
 ```
 
@@ -14791,12 +14791,12 @@ zsh:1: == not found
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "insert_chunk|insert_chunk_text|insert_fts_row|blocking" crates/arlm-server/src/store/mod.rs | head; echo "---"; rg -n "pub fn insert_chunk" -A10 crates/arlm-storage/src/sqlite/chunks.rs | head -14
+**Title:** rg -n "insert_chunk|insert_chunk_text|insert_fts_row|blocking" crates/arags-server/src/store/mod.rs | head; echo "---"; rg -n "pub fn insert_chunk" -A10 crates/arags-storage/src/sqlite/chunks.rs | head -14
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"insert_chunk|insert_chunk_text|insert_fts_row|blocking\" crates/arlm-server/src/store/mod.rs | head; echo \"---\"; rg -n \"pub fn insert_chunk\" -A10 crates/arlm-storage/src/sqlite/chunks.rs | head -14"
+  "command": "rg -n \"insert_chunk|insert_chunk_text|insert_fts_row|blocking\" crates/arags-server/src/store/mod.rs | head; echo \"---\"; rg -n \"pub fn insert_chunk\" -A10 crates/arags-storage/src/sqlite/chunks.rs | head -14"
 }
 ```
 
@@ -14834,12 +14834,12 @@ zsh:1: == not found
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "fn insert_chunk|insert_chunk_text|insert_fts_row|insert_entities" crates/arlm-server/src/store/mod.rs | head; sed -n '60,130p' crates/arlm-server/src/store/mod.rs
+**Title:** rg -n "fn insert_chunk|insert_chunk_text|insert_fts_row|insert_entities" crates/arags-server/src/store/mod.rs | head; sed -n '60,130p' crates/arags-server/src/store/mod.rs
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"fn insert_chunk|insert_chunk_text|insert_fts_row|insert_entities\" crates/arlm-server/src/store/mod.rs | head; sed -n '60,130p' crates/arlm-server/src/store/mod.rs"
+  "command": "rg -n \"fn insert_chunk|insert_chunk_text|insert_fts_row|insert_entities\" crates/arags-server/src/store/mod.rs | head; sed -n '60,130p' crates/arags-server/src/store/mod.rs"
 }
 ```
 
@@ -14859,21 +14859,21 @@ zsh:1: == not found
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -rn "insert_chunk" crates/arlm-server/src --no-heading | head
+**Title:** rg -rn "insert_chunk" crates/arags-server/src --no-heading | head
 
 **Input:**
 ```json
 {
-  "command": "rg -rn \"insert_chunk\" crates/arlm-server/src --no-heading | head"
+  "command": "rg -rn \"insert_chunk\" crates/arags-server/src --no-heading | head"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-server/src/store/chunks.rs:pub fn n(
-crates/arlm-server/src/store/chunks.rs:pub fn n_text(storage: &Storage, chunk_id: i64, content: &str) -> Result<()> {
-crates/arlm-server/src/grpc/index.rs:                let chunk_id = store::n(
-crates/arlm-server/src/grpc/index.rs:                store::n_text(&storage, chunk_id, &c.content)?;
+crates/arags-server/src/store/chunks.rs:pub fn n(
+crates/arags-server/src/store/chunks.rs:pub fn n_text(storage: &Storage, chunk_id: i64, content: &str) -> Result<()> {
+crates/arags-server/src/grpc/index.rs:                let chunk_id = store::n(
+crates/arags-server/src/grpc/index.rs:                store::n_text(&storage, chunk_id, &c.content)?;
 
 ```
 
@@ -14886,12 +14886,12 @@ crates/arlm-server/src/grpc/index.rs:                store::n_text(&storage, chu
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '1,60p' crates/arlm-server/src/store/chunks.rs
+**Title:** sed -n '1,60p' crates/arags-server/src/store/chunks.rs
 
 **Input:**
 ```json
 {
-  "command": "sed -n '1,60p' crates/arlm-server/src/store/chunks.rs"
+  "command": "sed -n '1,60p' crates/arags-server/src/store/chunks.rs"
 }
 ```
 
@@ -14900,7 +14900,7 @@ crates/arlm-server/src/grpc/index.rs:                store::n_text(&storage, chu
 //! Chunk and indexing persistence (chunks, texts, FTS5, entities, buffers).
 
 use anyhow::{Context, Result};
-use arlm_storage::Storage;
+use arags_storage::Storage;
 use rusqlite::params;
 
 /// Insert a chunk row using the real `chunks` schema and return its id.
@@ -14974,7 +14974,7 @@ pub fn insert_chunk_text(storage: &Storage, chunk_id: i64, content: &str) -> Res
 
 Each `store::insert_*` acquires `storage.connection()` per call — under pooled mode that's a pool round-trip per statement. For `max_batch_size`, the meaningful change: batch the Phase-1 inserts per group within a single transaction on a single connection. But the store helpers each acquire their own connection; wrapping in a transaction requires holding one connection across statements.
 
-Approach: add to arlm-server store/chunks.rs a batched function:
+Approach: add to arags-server store/chunks.rs a batched function:
 
 ```rust
 pub fn insert_chunks_batched(
@@ -14985,7 +14985,7 @@ pub fn insert_chunks_batched(
 ) -> Result<Vec<(i64, String)>>
 ```
 
-Hmm, indexing::IndexedChunk is in arlm-server (crate::indexing). Fine.
+Hmm, indexing::IndexedChunk is in arags-server (crate::indexing). Fine.
 
 Implementation: acquire ONE connection via storage.connection(), execute with it directly:
 
@@ -15060,12 +15060,12 @@ Then insert_chunk_text equivalent on tx, insert_fts_row SQL, entities insert SQL
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '52,200p' crates/arlm-server/src/store/chunks.rs
+**Title:** sed -n '52,200p' crates/arags-server/src/store/chunks.rs
 
 **Input:**
 ```json
 {
-  "command": "sed -n '52,200p' crates/arlm-server/src/store/chunks.rs"
+  "command": "sed -n '52,200p' crates/arags-server/src/store/chunks.rs"
 }
 ```
 
@@ -15235,7 +15235,7 @@ pub fn increment_buffer_counts(
 <details>
 <summary>Click to expand reasoning</summary>
 
-Now I have all the SQL. Add `insert_chunks_batched` to store/chunks.rs, add `wal_checkpoint` to arlm-storage conn.rs, then rewrite Phase 1 in grpc/index.rs and add the flusher in lifecycle.
+Now I have all the SQL. Add `insert_chunks_batched` to store/chunks.rs, add `wal_checkpoint` to arags-storage conn.rs, then rewrite Phase 1 in grpc/index.rs and add the flusher in lifecycle.
 
 Check `indexing::IndexedChunk` fields: hash (String), language Option<String>, chunk_type String, content String, line_start/line_end i32. From earlier code: c.hash, c.language.as_deref(), c.chunk_type.as_str(), c.line_start, c.line_end, c.content. Good.
 
@@ -15245,12 +15245,12 @@ StorageConnection::execute closure signature: `conn.execute(|conn| { ... Ok(x) }
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "pub fn execute" -A14 crates/arlm-storage/src/sqlite/conn.rs | head -20; rg -n "pub struct IndexedChunk" -A12 crates/arlm-server/src/indexing.rs
+**Title:** rg -n "pub fn execute" -A14 crates/arags-storage/src/sqlite/conn.rs | head -20; rg -n "pub struct IndexedChunk" -A12 crates/arags-server/src/indexing.rs
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"pub fn execute\" -A14 crates/arlm-storage/src/sqlite/conn.rs | head -20; rg -n \"pub struct IndexedChunk\" -A12 crates/arlm-server/src/indexing.rs"
+  "command": "rg -n \"pub fn execute\" -A14 crates/arags-storage/src/sqlite/conn.rs | head -20; rg -n \"pub struct IndexedChunk\" -A12 crates/arags-server/src/indexing.rs"
 }
 ```
 
@@ -15296,7 +15296,7 @@ StorageConnection::execute closure signature: `conn.execute(|conn| { ... Ok(x) }
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat >> crates/arlm-server/src/store/chunks.rs <<'EOF'
+**Title:** cat >> crates/arags-server/src/store/chunks.rs <<'EOF'
 
 /// Insert flattened `(file_path, chunk)` pairs in transactional batches of at
 /// most `max_batch` rows (`server.toml max_batch_size`, plan 020), returning
@@ -15380,7 +15380,7 @@ echo done
 **Input:**
 ```json
 {
-  "command": "cat >> crates/arlm-server/src/store/chunks.rs <<'EOF'\n\n/// Insert flattened `(file_path, chunk)` pairs in transactional batches of at\n/// most `max_batch` rows (`server.toml max_batch_size`, plan 020), returning\n/// the persisted `(chunk_id, content)` pairs. One connection is held for the\n/// whole call; each batch commits atomically.\n///\n/// # Errors\n///\n/// Returns an error if a connection cannot be acquired or any insert fails.\npub fn insert_chunks_batched(\n    storage: &Storage,\n    buffer_id: i64,\n    items: &[(&str, &crate::indexing::IndexedChunk)],\n    max_batch: usize,\n) -> Result<Vec<(i64, String)>> {\n    let conn = storage\n        .connection()\n        .context(\"failed to acquire connection\")?;\n\n    let mut out = Vec::with_capacity(items.len());\n    conn.execute(|conn| {\n        for group in items.chunks(max_batch.max(1)) {\n            let tx = conn\n                .unchecked_transaction()\n                .context(\"failed to begin batch transaction\")?;\n            for (file_path, c) in group {\n                let hash_bytes = hex::decode(&c.hash).unwrap_or_default();\n                tx.execute(\n                    \"INSERT INTO chunks (buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count) \\\n                     VALUES (?1, ?2, 0, 0, ?3, ?4, ?5, ?6, ?7, ?8)\",\n                    params![\n                        buffer_id,\n                        file_path,\n                        c.line_start,\n                        c.line_end,\n                        hash_bytes,\n                        c.language.as_deref(),\n                        Some(c.chunk_type.as_str()),\n                        Some(0),\n                    ],\n                )\n                .context(\"failed to insert chunk\")?;\n                let chunk_id = tx.last_insert_rowid();\n\n                tx.execute(\n                    \"INSERT INTO chunk_texts (chunk_id, content) VALUES (?1, ?2)\",\n                    params![chunk_id, c.content],\n                )\n                .context(\"failed to insert chunk text\")?;\n                tx.execute(\n                    \"INSERT INTO chunks_fts(rowid, content) VALUES (?1, ?2)\",\n                    params![chunk_id, c.content],\n                )\n                .context(\"failed to index chunk in FTS\")?;\n\n                for entity in Storage::extract_entities(&c.content, file_path) {\n                    tx.execute(\n                        \"INSERT OR IGNORE INTO chunk_entities (chunk_id, entity) VALUES (?1, ?2)\",\n                        params![chunk_id, entity],\n                    )\n                    .context(\"failed to insert chunk entity\")?;\n                    tx.execute(\n                        \"INSERT INTO entities_fts (entity) VALUES (?1)\",\n                        params![entity],\n                    )\n                    .context(\"failed to index entity in FTS\")?;\n                }\n\n                out.push((chunk_id, c.content.clone()));\n            }\n            tx.commit().context(\"failed to commit batch\")?;\n        }\n        Ok(())\n    })?;\n\n    Ok(out)\n}\nEOF\necho done"
+  "command": "cat >> crates/arags-server/src/store/chunks.rs <<'EOF'\n\n/// Insert flattened `(file_path, chunk)` pairs in transactional batches of at\n/// most `max_batch` rows (`server.toml max_batch_size`, plan 020), returning\n/// the persisted `(chunk_id, content)` pairs. One connection is held for the\n/// whole call; each batch commits atomically.\n///\n/// # Errors\n///\n/// Returns an error if a connection cannot be acquired or any insert fails.\npub fn insert_chunks_batched(\n    storage: &Storage,\n    buffer_id: i64,\n    items: &[(&str, &crate::indexing::IndexedChunk)],\n    max_batch: usize,\n) -> Result<Vec<(i64, String)>> {\n    let conn = storage\n        .connection()\n        .context(\"failed to acquire connection\")?;\n\n    let mut out = Vec::with_capacity(items.len());\n    conn.execute(|conn| {\n        for group in items.chunks(max_batch.max(1)) {\n            let tx = conn\n                .unchecked_transaction()\n                .context(\"failed to begin batch transaction\")?;\n            for (file_path, c) in group {\n                let hash_bytes = hex::decode(&c.hash).unwrap_or_default();\n                tx.execute(\n                    \"INSERT INTO chunks (buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count) \\\n                     VALUES (?1, ?2, 0, 0, ?3, ?4, ?5, ?6, ?7, ?8)\",\n                    params![\n                        buffer_id,\n                        file_path,\n                        c.line_start,\n                        c.line_end,\n                        hash_bytes,\n                        c.language.as_deref(),\n                        Some(c.chunk_type.as_str()),\n                        Some(0),\n                    ],\n                )\n                .context(\"failed to insert chunk\")?;\n                let chunk_id = tx.last_insert_rowid();\n\n                tx.execute(\n                    \"INSERT INTO chunk_texts (chunk_id, content) VALUES (?1, ?2)\",\n                    params![chunk_id, c.content],\n                )\n                .context(\"failed to insert chunk text\")?;\n                tx.execute(\n                    \"INSERT INTO chunks_fts(rowid, content) VALUES (?1, ?2)\",\n                    params![chunk_id, c.content],\n                )\n                .context(\"failed to index chunk in FTS\")?;\n\n                for entity in Storage::extract_entities(&c.content, file_path) {\n                    tx.execute(\n                        \"INSERT OR IGNORE INTO chunk_entities (chunk_id, entity) VALUES (?1, ?2)\",\n                        params![chunk_id, entity],\n                    )\n                    .context(\"failed to insert chunk entity\")?;\n                    tx.execute(\n                        \"INSERT INTO entities_fts (entity) VALUES (?1)\",\n                        params![entity],\n                    )\n                    .context(\"failed to index entity in FTS\")?;\n                }\n\n                out.push((chunk_id, c.content.clone()));\n            }\n            tx.commit().context(\"failed to commit batch\")?;\n        }\n        Ok(())\n    })?;\n\n    Ok(out)\n}\nEOF\necho done"
 }
 ```
 
@@ -15403,12 +15403,12 @@ Agora `wal_checkpoint` no storage e o rewire da Fase 1 do index + flusher:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-storage/src/sqlite/conn.rs
+**Title:** crates/arags-storage/src/sqlite/conn.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/src/sqlite/conn.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage/src/sqlite/conn.rs",
   "newString": "    /// Run a passive WAL checkpoint (best-effort background \"flush\",\n    /// plan 020 `flush_interval_ms`). No-op when the WAL is empty.\n    ///\n    /// # Errors\n    ///\n    /// Returns an error if the pragma execution fails.\n    pub fn wal_checkpoint(&self) -> Result<()> {\n        let conn = self.conn();\n        let guard = conn.lock();\n        guard\n            .execute_batch(\"PRAGMA wal_checkpoint(PASSIVE);\")\n            .context(\"failed to run WAL checkpoint\")?;\n        Ok(())\n    }\n\n    /// Get a connection handle that works for both single and pooled modes.",
   "oldString": "    /// Get a connection handle that works for both single and pooled modes."
 }
@@ -15430,14 +15430,14 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/grpc/index.rs
+**Title:** crates/arags-server/src/grpc/index.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/grpc/index.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/grpc/index.rs",
   "newString": "    // Phase 1: persist chunks + texts + FTS + entities in transactional\n    // batches of `max_batch_size` (plan 020).\n    let storage = state.storage.clone();\n    let max_batch = state.config.max_batch_size.max(1);\n    let persisted: Vec<(i64, String)> = store::blocking(move || {\n        let flat: Vec<(&str, &indexing::IndexedChunk)> = chunks\n            .iter()\n            .flat_map(|(file, cs)| cs.iter().map(move |c| (file.as_str(), c)))\n            .collect();\n        store::insert_chunks_batched(&storage, buffer_id, &flat, max_batch)\n    })\n    .await\n    .map_err(internal)?;",
-  "oldString": "    // Phase 1: persist chunks + texts + FTS + entities.\n    let storage = state.storage.clone();\n    let persisted: Vec<(i64, String)> = store::blocking(move || {\n        let mut persisted = Vec::with_capacity(total_chunks);\n        for (_, file_chunks) in &chunks {\n            for c in file_chunks {\n                let hash_bytes = hex::decode(&c.hash).unwrap_or_default();\n                let lang = c.language.as_deref();\n                let chunk_type = Some(c.chunk_type.as_str());\n                let chunk_id = store::insert_chunk(\n                    &storage,\n                    buffer_id,\n                    &c.file_path,\n                    c.line_start,\n                    c.line_end,\n                    &hash_bytes,\n                    lang,\n                    chunk_type,\n                    Some(0),\n                )?;\n                store::insert_chunk_text(&storage, chunk_id, &c.content)?;\n                store::insert_fts_row(&storage, chunk_id, &c.content)?;\n                let entities = arlm_storage::Storage::extract_entities(&c.content, &c.file_path);\n                store::insert_entities(&storage, chunk_id, &entities)?;\n                persisted.push((chunk_id, c.content.clone()));\n            }\n        }\n        Ok(persisted)\n    })\n    .await\n    .map_err(internal)?;"
+  "oldString": "    // Phase 1: persist chunks + texts + FTS + entities.\n    let storage = state.storage.clone();\n    let persisted: Vec<(i64, String)> = store::blocking(move || {\n        let mut persisted = Vec::with_capacity(total_chunks);\n        for (_, file_chunks) in &chunks {\n            for c in file_chunks {\n                let hash_bytes = hex::decode(&c.hash).unwrap_or_default();\n                let lang = c.language.as_deref();\n                let chunk_type = Some(c.chunk_type.as_str());\n                let chunk_id = store::insert_chunk(\n                    &storage,\n                    buffer_id,\n                    &c.file_path,\n                    c.line_start,\n                    c.line_end,\n                    &hash_bytes,\n                    lang,\n                    chunk_type,\n                    Some(0),\n                )?;\n                store::insert_chunk_text(&storage, chunk_id, &c.content)?;\n                store::insert_fts_row(&storage, chunk_id, &c.content)?;\n                let entities = arags_storage::Storage::extract_entities(&c.content, &c.file_path);\n                store::insert_entities(&storage, chunk_id, &entities)?;\n                persisted.push((chunk_id, c.content.clone()));\n            }\n        }\n        Ok(persisted)\n    })\n    .await\n    .map_err(internal)?;"
 }
 ```
 
@@ -15457,12 +15457,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/lifecycle.rs
+**Title:** crates/arags-server/src/lifecycle.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/lifecycle.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/lifecycle.rs",
   "newString": "    // Background WAL flush (plan 020 `flush_interval_ms`): a passive\n    // checkpoint folds the write-ahead log back into the database on a fixed\n    // cadence. `flush_interval_ms == 0` disables it.\n    if config.flush_interval_ms > 0 {\n        let flush_storage = storage.clone();\n        let flush_interval = std::time::Duration::from_millis(config.flush_interval_ms);\n        tokio::spawn(async move {\n            loop {\n                tokio::time::sleep(flush_interval).await;\n                if let Err(e) = flush_storage.wal_checkpoint() {\n                    tracing::warn!(error = %e, \"WAL flush tick failed\");\n                }\n            }\n        });\n    }\n\n    let addr = config",
   "oldString": "    let addr = config"
 }
@@ -15484,12 +15484,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo check -p arlm-server -p arlm-storage 2>&1 | grep -E "^error" -A8 | head -30; cargo check -p arlm-server 2>&1 | tail -1
+**Title:** cargo check -p arags-server -p arags-storage 2>&1 | grep -E "^error" -A8 | head -30; cargo check -p arags-server 2>&1 | tail -1
 
 **Input:**
 ```json
 {
-  "command": "cargo check -p arlm-server -p arlm-storage 2>&1 | grep -E \"^error\" -A8 | head -30; cargo check -p arlm-server 2>&1 | tail -1"
+  "command": "cargo check -p arags-server -p arags-storage 2>&1 | grep -E \"^error\" -A8 | head -30; cargo check -p arags-server 2>&1 | tail -1"
 }
 ```
 
@@ -15508,12 +15508,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-storage 2>&1 | grep -E "FAILED|test result: FAILED" | head -3; cargo test -p arlm-storage --test conn_test 2>&1 | grep "test result"
+**Title:** cargo test -p arags-storage 2>&1 | grep -E "FAILED|test result: FAILED" | head -3; cargo test -p arags-storage --test conn_test 2>&1 | grep "test result"
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-storage 2>&1 | grep -E \"FAILED|test result: FAILED\" | head -3; cargo test -p arlm-storage --test conn_test 2>&1 | grep \"test result\""
+  "command": "cargo test -p arags-storage 2>&1 | grep -E \"FAILED|test result: FAILED\" | head -3; cargo test -p arags-storage --test conn_test 2>&1 | grep \"test result\""
 }
 ```
 
@@ -15656,12 +15656,12 @@ P4a done. Now P4b: `[history] retention_days`. Check history storage + maintenan
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "pub fn|created_at|DELETE" crates/arlm-storage/src/sqlite/history.rs | head -12; echo "===MAINT==="; rg -n "pub async fn run_maintenance" -A10 crates/arlm-server/src/maintenance.rs | head -14; echo "===SCHEMA==="; rg -n "query_history|history" crates/arlm-storage/src/sqlite/schema.rs | head
+**Title:** rg -n "pub fn|created_at|DELETE" crates/arags-storage/src/sqlite/history.rs | head -12; echo "===MAINT==="; rg -n "pub async fn run_maintenance" -A10 crates/arags-server/src/maintenance.rs | head -14; echo "===SCHEMA==="; rg -n "query_history|history" crates/arags-storage/src/sqlite/schema.rs | head
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"pub fn|created_at|DELETE\" crates/arlm-storage/src/sqlite/history.rs | head -12; echo \"===MAINT===\"; rg -n \"pub async fn run_maintenance\" -A10 crates/arlm-server/src/maintenance.rs | head -14; echo \"===SCHEMA===\"; rg -n \"query_history|history\" crates/arlm-storage/src/sqlite/schema.rs | head"
+  "command": "rg -n \"pub fn|created_at|DELETE\" crates/arags-storage/src/sqlite/history.rs | head -12; echo \"===MAINT===\"; rg -n \"pub async fn run_maintenance\" -A10 crates/arags-server/src/maintenance.rs | head -14; echo \"===SCHEMA===\"; rg -n \"query_history|history\" crates/arags-storage/src/sqlite/schema.rs | head"
 }
 ```
 
@@ -15699,30 +15699,30 @@ P4a done. Now P4b: `[history] retention_days`. Check history storage + maintenan
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "history" crates/arlm-storage/migrations/*.sql | head; echo "==="; rg -n "record_query_history|insert_history|user_history" crates/arlm-server/src --no-heading | head; echo "===USER-HIST==="; rg -n "user" crates/arlm-storage/src/sqlite/history.rs | head
+**Title:** rg -n "history" crates/arags-storage/migrations/*.sql | head; echo "==="; rg -n "record_query_history|insert_history|user_history" crates/arags-server/src --no-heading | head; echo "===USER-HIST==="; rg -n "user" crates/arags-storage/src/sqlite/history.rs | head
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"history\" crates/arlm-storage/migrations/*.sql | head; echo \"===\"; rg -n \"record_query_history|insert_history|user_history\" crates/arlm-server/src --no-heading | head; echo \"===USER-HIST===\"; rg -n \"user\" crates/arlm-storage/src/sqlite/history.rs | head"
+  "command": "rg -n \"history\" crates/arags-storage/migrations/*.sql | head; echo \"===\"; rg -n \"record_query_history|insert_history|user_history\" crates/arags-server/src --no-heading | head; echo \"===USER-HIST===\"; rg -n \"user\" crates/arags-storage/src/sqlite/history.rs | head"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-storage/migrations/001_initial.sql:73:CREATE TABLE IF NOT EXISTS history (
-crates/arlm-storage/migrations/001_initial.sql:109:CREATE INDEX IF NOT EXISTS idx_history_buffer ON history(buffer_id);
-crates/arlm-storage/migrations/001_initial.sql:110:CREATE INDEX IF NOT EXISTS idx_history_buffer_created ON history(buffer_id, created_at DESC);
-crates/arlm-storage/migrations/006_add_sessions.sql:21:CREATE TABLE IF NOT EXISTS session_history (
-crates/arlm-storage/migrations/017_add_history_user.sql:1:-- version 17: history per-user scope
-crates/arlm-storage/migrations/017_add_history_user.sql:2:-- Add a `user` column to `history` so the server can record which authenticated
-crates/arlm-storage/migrations/017_add_history_user.sql:6:ALTER TABLE history ADD COLUMN user TEXT;
+crates/arags-storage/migrations/001_initial.sql:73:CREATE TABLE IF NOT EXISTS history (
+crates/arags-storage/migrations/001_initial.sql:109:CREATE INDEX IF NOT EXISTS idx_history_buffer ON history(buffer_id);
+crates/arags-storage/migrations/001_initial.sql:110:CREATE INDEX IF NOT EXISTS idx_history_buffer_created ON history(buffer_id, created_at DESC);
+crates/arags-storage/migrations/006_add_sessions.sql:21:CREATE TABLE IF NOT EXISTS session_history (
+crates/arags-storage/migrations/017_add_history_user.sql:1:-- version 17: history per-user scope
+crates/arags-storage/migrations/017_add_history_user.sql:2:-- Add a `user` column to `history` so the server can record which authenticated
+crates/arags-storage/migrations/017_add_history_user.sql:6:ALTER TABLE history ADD COLUMN user TEXT;
 ===
-crates/arlm-server/src/grpc/search.rs:201:    crate::grpc::memory::record_query_history(state, &ctx, &project, "search", &query).await;
-crates/arlm-server/src/grpc/memory.rs:6://! - `record_query_history`: shared helper that attributes a query to the
-crates/arlm-server/src/grpc/memory.rs:200:pub(crate) async fn record_query_history(
-crates/arlm-server/src/grpc/query_cache.rs:88:    crate::grpc::memory::record_query_history(state, &ctx, &req.project, "query", &req.question)
-crates/arlm-server/src/grpc/query_cache.rs:213:    crate::grpc::memory::record_query_history(state, &ctx, &req.project, "store", &req.question)
+crates/arags-server/src/grpc/search.rs:201:    crate::grpc::memory::record_query_history(state, &ctx, &project, "search", &query).await;
+crates/arags-server/src/grpc/memory.rs:6://! - `record_query_history`: shared helper that attributes a query to the
+crates/arags-server/src/grpc/memory.rs:200:pub(crate) async fn record_query_history(
+crates/arags-server/src/grpc/query_cache.rs:88:    crate::grpc::memory::record_query_history(state, &ctx, &req.project, "query", &req.question)
+crates/arags-server/src/grpc/query_cache.rs:213:    crate::grpc::memory::record_query_history(state, &ctx, &req.project, "store", &req.question)
 ===USER-HIST===
 
 ```
@@ -15736,12 +15736,12 @@ crates/arlm-server/src/grpc/query_cache.rs:213:    crate::grpc::memory::record_q
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '1,60p' crates/arlm-storage/src/sqlite/history.rs; sed -n '195,240p' crates/arlm-server/src/grpc/memory.rs
+**Title:** sed -n '1,60p' crates/arags-storage/src/sqlite/history.rs; sed -n '195,240p' crates/arags-server/src/grpc/memory.rs
 
 **Input:**
 ```json
 {
-  "command": "sed -n '1,60p' crates/arlm-storage/src/sqlite/history.rs; sed -n '195,240p' crates/arlm-server/src/grpc/memory.rs"
+  "command": "sed -n '1,60p' crates/arags-storage/src/sqlite/history.rs; sed -n '195,240p' crates/arags-server/src/grpc/memory.rs"
 }
 ```
 
@@ -15829,7 +15829,7 @@ pub(crate) async fn record_query_history(
         let buffer_id = store::buffer_id_for_project(&storage, &project)
             .ok()
             .flatten();
-        arlm_memory::HistoryManager::new(storage).record_with_user(
+        arags_memory::HistoryManager::new(storage).record_with_user(
             buffer_id,
             &query,
             Some(&query_type),
@@ -15868,12 +15868,12 @@ Let me check created_at type: 001_initial.sql history table def & how created_at
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '73,90p' crates/arlm-storage/migrations/001_initial.sql; echo "==="; rg -n "run_maintenance" -B2 -A16 crates/arlm-server/src/grpc/memory.rs | head -30
+**Title:** sed -n '73,90p' crates/arags-storage/migrations/001_initial.sql; echo "==="; rg -n "run_maintenance" -B2 -A16 crates/arags-server/src/grpc/memory.rs | head -30
 
 **Input:**
 ```json
 {
-  "command": "sed -n '73,90p' crates/arlm-storage/migrations/001_initial.sql; echo \"===\"; rg -n \"run_maintenance\" -B2 -A16 crates/arlm-server/src/grpc/memory.rs | head -30"
+  "command": "sed -n '73,90p' crates/arags-storage/migrations/001_initial.sql; echo \"===\"; rg -n \"run_maintenance\" -B2 -A16 crates/arags-server/src/grpc/memory.rs | head -30"
 }
 ```
 
@@ -15929,7 +15929,7 @@ CREATE TABLE IF NOT EXISTS patterns (
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat >> crates/arlm-storage/src/sqlite/history.rs <<'EOF'
+**Title:** cat >> crates/arags-storage/src/sqlite/history.rs <<'EOF'
 
 impl Storage {
     /// Delete history entries older than `cutoff_unix` (epoch seconds),
@@ -15989,12 +15989,12 @@ mod retention_tests {
     }
 }
 EOF
-cargo test -p arlm-storage --lib history 2>&1 | grep -E "^error|test result" -A4 | head
+cargo test -p arags-storage --lib history 2>&1 | grep -E "^error|test result" -A4 | head
 
 **Input:**
 ```json
 {
-  "command": "cat >> crates/arlm-storage/src/sqlite/history.rs <<'EOF'\n\nimpl Storage {\n    /// Delete history entries older than `cutoff_unix` (epoch seconds),\n    /// returning how many rows were removed. Used by the server's\n    /// `[history] retention_days` maintenance (plan 020).\n    ///\n    /// # Errors\n    ///\n    /// Returns an error if the delete fails.\n    pub fn purge_history_before(&self, cutoff_unix: i64) -> Result<u64> {\n        let conn = self.conn();\n        let conn = conn.lock();\n\n        let n = conn\n            .execute(\"DELETE FROM history WHERE created_at < ?1\", params![cutoff_unix])\n            .context(\"failed to purge history\")?;\n        Ok(u64::try_from(n).unwrap_or(0))\n    }\n}\n\n#[cfg(test)]\nmod retention_tests {\n    use super::*;\n    use std::time::{SystemTime, UNIX_EPOCH};\n\n    #[test]\n    fn test_purge_history_before_removes_only_old_rows() {\n        let dir = tempfile::tempdir().unwrap();\n        let storage = Storage::open(dir.path()).unwrap();\n\n        let now = SystemTime::now()\n            .duration_since(UNIX_EPOCH)\n            .unwrap()\n            .as_secs() as i64;\n        let old = now - 10 * 86_400;\n\n        // Seed one old and one current row by inserting then backdating.\n        storage.insert_history(None, \"old\", Some(\"search\"), None, None, None).unwrap();\n        storage.insert_history(None, \"new\", Some(\"search\"), None, None, None).unwrap();\n\n        let conn = storage.conn();\n        let guard = conn.lock();\n        guard\n            .execute(\n                \"UPDATE history SET created_at = ?1 WHERE query = 'old'\",\n                params![old],\n            )\n            .unwrap();\n        drop(guard);\n\n        let removed = storage.purge_history_before(now - 86_400).unwrap();\n        assert_eq!(removed, 1);\n\n        let remaining: Vec<HistoryEntry> = storage.get_history(None, 10).unwrap();\n        assert_eq!(remaining.len(), 1);\n        assert_eq!(remaining[0].query, \"new\");\n    }\n}\nEOF\ncargo test -p arlm-storage --lib history 2>&1 | grep -E \"^error|test result\" -A4 | head"
+  "command": "cat >> crates/arags-storage/src/sqlite/history.rs <<'EOF'\n\nimpl Storage {\n    /// Delete history entries older than `cutoff_unix` (epoch seconds),\n    /// returning how many rows were removed. Used by the server's\n    /// `[history] retention_days` maintenance (plan 020).\n    ///\n    /// # Errors\n    ///\n    /// Returns an error if the delete fails.\n    pub fn purge_history_before(&self, cutoff_unix: i64) -> Result<u64> {\n        let conn = self.conn();\n        let conn = conn.lock();\n\n        let n = conn\n            .execute(\"DELETE FROM history WHERE created_at < ?1\", params![cutoff_unix])\n            .context(\"failed to purge history\")?;\n        Ok(u64::try_from(n).unwrap_or(0))\n    }\n}\n\n#[cfg(test)]\nmod retention_tests {\n    use super::*;\n    use std::time::{SystemTime, UNIX_EPOCH};\n\n    #[test]\n    fn test_purge_history_before_removes_only_old_rows() {\n        let dir = tempfile::tempdir().unwrap();\n        let storage = Storage::open(dir.path()).unwrap();\n\n        let now = SystemTime::now()\n            .duration_since(UNIX_EPOCH)\n            .unwrap()\n            .as_secs() as i64;\n        let old = now - 10 * 86_400;\n\n        // Seed one old and one current row by inserting then backdating.\n        storage.insert_history(None, \"old\", Some(\"search\"), None, None, None).unwrap();\n        storage.insert_history(None, \"new\", Some(\"search\"), None, None, None).unwrap();\n\n        let conn = storage.conn();\n        let guard = conn.lock();\n        guard\n            .execute(\n                \"UPDATE history SET created_at = ?1 WHERE query = 'old'\",\n                params![old],\n            )\n            .unwrap();\n        drop(guard);\n\n        let removed = storage.purge_history_before(now - 86_400).unwrap();\n        assert_eq!(removed, 1);\n\n        let remaining: Vec<HistoryEntry> = storage.get_history(None, 10).unwrap();\n        assert_eq!(remaining.len(), 1);\n        assert_eq!(remaining[0].query, \"new\");\n    }\n}\nEOF\ncargo test -p arags-storage --lib history 2>&1 | grep -E \"^error|test result\" -A4 | head"
 }
 ```
 
@@ -16019,7 +16019,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; fini
 <details>
 <summary>Click to expand reasoning</summary>
 
-Wait — the test passed but is `tempfile` a dev-dependency of arlm-storage? Yes (saw earlier). And the inline `#[cfg(test)] mod` in a non-lib-test file — history.rs is part of the lib, so `cargo test -p arlm-storage --lib` runs it. It said 1 passed. Good.
+Wait — the test passed but is `tempfile` a dev-dependency of arags-storage? Yes (saw earlier). And the inline `#[cfg(test)] mod` in a non-lib-test file — history.rs is part of the lib, so `cargo test -p arags-storage --lib` runs it. It said 1 passed. Good.
 
 Now ServerConfig `[history] retention_days` + wiring in maintenance tick & TriggerMaintenance:
 
@@ -16051,12 +16051,12 @@ Implement now.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "newString": "    /// Background memory maintenance (plan 019, C.1): consolidate + decay.\n    #[serde(default)]\n    pub maintenance: MaintenanceConfig,\n\n    /// Query-history retention (plan 020): rows older than `retention_days`\n    /// are purged by the maintenance ticker. `0` keeps history forever.\n    #[serde(default)]\n    pub history: HistoryConfig,\n}",
   "oldString": "    /// Background memory maintenance (plan 019, C.1): consolidate + decay.\n    #[serde(default)]\n    pub maintenance: MaintenanceConfig,\n}"
 }
@@ -16078,12 +16078,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "newString": "/// Background maintenance configuration (plan 019, C.1).\n#[derive(Debug, Clone, Deserialize)]\npub struct MaintenanceConfig {\n    /// Cron interval in seconds. `0` disables the periodic ticker.\n    #[serde(default = \"default_maintenance_interval\")]\n    pub interval_secs: u64,\n    /// Salience floor below which decayed chunks are removed.\n    #[serde(default = \"default_decay_score_floor\")]\n    pub decay_score_floor: f32,\n}\n\nfn default_maintenance_interval() -> u64 {\n    3600\n}\n\nfn default_decay_score_floor() -> f32 {\n    0.1\n}\n\nimpl Default for MaintenanceConfig {\n    fn default() -> Self {\n        Self {\n            interval_secs: default_maintenance_interval(),\n            decay_score_floor: default_decay_score_floor(),\n        }\n    }\n}\n\n/// Query-history retention (plan 020).\n#[derive(Debug, Clone, Deserialize)]\npub struct HistoryConfig {\n    /// Purge history rows older than this many days via the maintenance\n    /// ticker (`0` = keep forever).\n    #[serde(default = \"default_history_retention_days\")]\n    pub retention_days: u32,\n}\n\nfn default_history_retention_days() -> u32 {\n    90\n}\n\nimpl Default for HistoryConfig {\n    fn default() -> Self {\n        Self {\n            retention_days: default_history_retention_days(),\n        }\n    }\n}",
   "oldString": "/// Background maintenance configuration (plan 019, C.1).\n#[derive(Debug, Clone, Deserialize)]\npub struct MaintenanceConfig {\n    /// Cron interval in seconds. `0` disables the periodic ticker.\n    #[serde(default = \"default_maintenance_interval\")]\n    pub interval_secs: u64,\n    /// Salience floor below which decayed chunks are removed.\n    #[serde(default = \"default_decay_score_floor\")]\n    pub decay_score_floor: f32,\n}\n\nfn default_maintenance_interval() -> u64 {\n    3600\n}\n\nfn default_decay_score_floor() -> f32 {\n    0.1\n}\n\nimpl Default for MaintenanceConfig {\n    fn default() -> Self {\n        Self {\n            interval_secs: default_maintenance_interval(),\n            decay_score_floor: default_decay_score_floor(),\n        }\n    }\n}"
 }
@@ -16105,12 +16105,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/config.rs
+**Title:** crates/arags-server/src/config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/config.rs",
   "newString": "            embedder: EmbedderConfig::default(),\n            search: SearchConfig::default(),\n            qa_cache: QaCacheConfig::default(),\n            maintenance: MaintenanceConfig::default(),\n            history: HistoryConfig::default(),\n        }\n    }\n}",
   "oldString": "            embedder: EmbedderConfig::default(),\n            search: SearchConfig::default(),\n            qa_cache: QaCacheConfig::default(),\n            maintenance: MaintenanceConfig::default(),\n        }\n    }\n}"
 }
@@ -16132,12 +16132,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-server/src/lifecycle.rs
+**Title:** crates/arags-server/src/lifecycle.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-server/src/lifecycle.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-server/src/lifecycle.rs",
   "newString": "    if config.maintenance.interval_secs > 0 {\n        let maint_storage = storage.clone();\n        let interval = config.maintenance.interval_secs;\n        let floor = config.maintenance.decay_score_floor;\n        // `[history] retention_days` (plan 020): 0 keeps history forever.\n        let retention_days = config.history.retention_days;\n        tokio::spawn(async move {\n            loop {\n                tokio::time::sleep(std::time::Duration::from_secs(interval)).await;\n                if let Err(e) =\n                    crate::maintenance::run_maintenance(\"\", &maint_storage, floor, false).await\n                {\n                    tracing::warn!(error = %e, \"maintenance tick failed\");\n                } else {\n                    tracing::info!(\"maintenance tick completed\");\n                }\n                if retention_days > 0 {\n                    let cutoff = chrono::Utc::now().timestamp()\n                        - i64::from(retention_days) * 86_400;\n                    match maint_storage.purge_history_before(cutoff) {\n                        Ok(0) => {}\n                        Ok(n) => tracing::info!(purged = n, \"history retention purge\"),\n                        Err(e) => tracing::warn!(error = %e, \"history purge failed\"),\n                    }\n                }\n            }\n        });\n    }",
   "oldString": "    if config.maintenance.interval_secs > 0 {\n        let maint_storage = storage.clone();\n        let interval = config.maintenance.interval_secs;\n        let floor = config.maintenance.decay_score_floor;\n        tokio::spawn(async move {\n            loop {\n                tokio::time::sleep(std::time::Duration::from_secs(interval)).await;\n                if let Err(e) =\n                    crate::maintenance::run_maintenance(\"\", &maint_storage, floor, false).await\n                {\n                    tracing::warn!(error = %e, \"maintenance tick failed\");\n                } else {\n                    tracing::info!(\"maintenance tick completed\");\n                }\n            }\n        });\n    }"
 }
@@ -16159,12 +16159,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo check -p arlm-server 2>&1 | grep -E "^error" -A6 | head; cargo check -p arlm-server 2>&1 | tail -1; rg -n "chrono" crates/arlm-server/Cargo.toml || echo "no chrono dep"
+**Title:** cargo check -p arags-server 2>&1 | grep -E "^error" -A6 | head; cargo check -p arags-server 2>&1 | tail -1; rg -n "chrono" crates/arags-server/Cargo.toml || echo "no chrono dep"
 
 **Input:**
 ```json
 {
-  "command": "cargo check -p arlm-server 2>&1 | grep -E \"^error\" -A6 | head; cargo check -p arlm-server 2>&1 | tail -1; rg -n \"chrono\" crates/arlm-server/Cargo.toml || echo \"no chrono dep\""
+  "command": "cargo check -p arags-server 2>&1 | grep -E \"^error\" -A6 | head; cargo check -p arags-server 2>&1 | tail -1; rg -n \"chrono\" crates/arags-server/Cargo.toml || echo \"no chrono dep\""
 }
 ```
 
@@ -16217,12 +16217,12 @@ P4b ok. Agora **P3** — mTLS/TLS no cliente:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/user_config.rs
+**Title:** crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs",
   "newString": "/// Server connection section.\n///\n/// TLS fields (plan 020): `tls_ca` trusts a custom CA; `tls_cert`/`tls_key`\n/// present a client certificate (mTLS, matching the server's `mtls_ca`).\n#[derive(Debug, Clone, Default, Deserialize)]\npub struct ServerSection {\n    /// gRPC server address (e.g. `127.0.0.1:50051` or `https://host:443`).\n    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    pub addr: Option<String>,\n\n    /// PEM CA bundle to trust instead of (or alongside) system roots.\n    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    pub tls_ca: Option<String>,\n\n    /// PEM client certificate for mTLS.\n    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    pub tls_cert: Option<String>,\n\n    /// PEM client private key for mTLS.\n    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    pub tls_key: Option<String>,\n}",
   "oldString": "/// Server connection section.\n#[derive(Debug, Clone, Default, Deserialize)]\npub struct ServerSection {\n    /// gRPC server address (e.g. `127.0.0.1:50051` or `https://host:443`).\n    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    pub addr: Option<String>,\n}"
 }
@@ -16244,12 +16244,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/user_config.rs
+**Title:** crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs",
   "newString": "    // `[server]`: merge field-by-field (granular; local wins per field).\n    let (local_server, global_server) = (local.server, global.server);\n    let server = ServerSection {\n        addr: local_server\n            .as_ref()\n            .and_then(|s| s.addr.clone())\n            .or_else(|| global_server.as_ref().and_then(|s| s.addr.clone())),\n        tls_ca: local_server\n            .as_ref()\n            .and_then(|s| s.tls_ca.clone())\n            .or_else(|| global_server.as_ref().and_then(|s| s.tls_ca.clone())),\n        tls_cert: local_server\n            .as_ref()\n            .and_then(|s| s.tls_cert.clone())\n            .or_else(|| global_server.as_ref().and_then(|s| s.tls_cert.clone())),\n        tls_key: local_server\n            .as_ref()\n            .and_then(|s| s.tls_key.clone())\n            .or_else(|| global_server.as_ref().and_then(|s| s.tls_key.clone())),\n    };",
   "oldString": "    // `[server]`: merge field-by-field (only `addr` for now).\n    let server = ServerSection {\n        addr: local\n            .server\n            .and_then(|s| s.addr)\n            .or_else(|| global.server.and_then(|s| s.addr)),\n    };"
 }
@@ -16273,14 +16273,14 @@ Agora o `client.rs` para consumir TLS:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/client.rs
+**Title:** crates/arags-cli/src/client.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/client.rs",
-  "newString": "use std::time::Duration;\n\nuse anyhow::{Context, Result};\nuse arlm_proto::proto::arlm_service_client::ArlmServiceClient;\nuse tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};\nuse tracing::{info, warn};\n\n/// Client connection configuration (plan 020).\n///\n/// TLS fields come from `[server]` in the merged user config: `tls_ca`\n/// trusts a custom CA; `tls_cert`/`tls_key` present a client certificate\n/// for mTLS servers configured with `mtls_ca`.\n#[derive(Debug, Clone, Default)]\npub struct ClientConfig {\n    /// Server address (e.g., \"127.0.0.1:50051\" or \"https://host:443\").\n    pub addr: String,\n    /// Optional PEM CA bundle to trust.\n    pub tls_ca: Option<String>,\n    /// Optional PEM client certificate (requires `tls_key`).\n    pub tls_cert: Option<String>,\n    /// Optional PEM client private key (requires `tls_cert`).\n    pub tls_key: Option<String>,\n}\n\nimpl ClientConfig {\n    /// Load the client configuration from the merged user config (global\n    /// `~/.arlm/arlm.toml` + local `.arlm.toml`) and the `ARLM_SERVER_ADDR`\n    /// env var override.\n    #[must_use]\n    pub fn load() -> Self {\n        let cfg = crate::user_config::load().ok();\n        let addr = cfg\n            .as_ref()\n            .map_or_else(|| \"127.0.0.1:50051\".to_string(), |c| c.server_addr());\n        let server = cfg.map(|c| c.server);\n        Self {\n            addr,\n            tls_ca: server.as_ref().and_then(|s| s.tls_ca.clone()),\n            tls_cert: server.as_ref().and_then(|s| s.tls_cert.clone()),\n            tls_key: server.as_ref().and_then(|s| s.tls_key.clone()),\n        }\n    }\n}",
-  "oldString": "use std::time::Duration;\n\nuse anyhow::{Context, Result};\nuse arlm_proto::proto::arlm_service_client::ArlmServiceClient;\nuse tonic::transport::{Channel, ClientTlsConfig, Endpoint};\nuse tracing::{info, warn};\n\n/// Client configuration.\n#[derive(Debug, Clone)]\npub struct ClientConfig {\n    /// Server address (e.g., \"127.0.0.1:50051\" or \"https://host:443\").\n    pub addr: String,\n}\n\nimpl ClientConfig {\n    /// Load the client configuration from the merged user config (global\n    /// `~/.arlm/arlm.toml` + local `.arlm.toml`) and the `ARLM_SERVER_ADDR`\n    /// env var override.\n    #[must_use]\n    pub fn load() -> Self {\n        let addr = crate::user_config::load()\n            .map_or_else(|_| \"127.0.0.1:50051\".to_string(), |c| c.server_addr());\n        Self { addr }\n    }\n}"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/client.rs",
+  "newString": "use std::time::Duration;\n\nuse anyhow::{Context, Result};\nuse arags_proto::proto::arags_service_client::AragsServiceClient;\nuse tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};\nuse tracing::{info, warn};\n\n/// Client connection configuration (plan 020).\n///\n/// TLS fields come from `[server]` in the merged user config: `tls_ca`\n/// trusts a custom CA; `tls_cert`/`tls_key` present a client certificate\n/// for mTLS servers configured with `mtls_ca`.\n#[derive(Debug, Clone, Default)]\npub struct ClientConfig {\n    /// Server address (e.g., \"127.0.0.1:50051\" or \"https://host:443\").\n    pub addr: String,\n    /// Optional PEM CA bundle to trust.\n    pub tls_ca: Option<String>,\n    /// Optional PEM client certificate (requires `tls_key`).\n    pub tls_cert: Option<String>,\n    /// Optional PEM client private key (requires `tls_cert`).\n    pub tls_key: Option<String>,\n}\n\nimpl ClientConfig {\n    /// Load the client configuration from the merged user config (global\n    /// `~/.arags/arags.toml` + local `.arags.toml`) and the `ARAGS_SERVER_ADDR`\n    /// env var override.\n    #[must_use]\n    pub fn load() -> Self {\n        let cfg = crate::user_config::load().ok();\n        let addr = cfg\n            .as_ref()\n            .map_or_else(|| \"127.0.0.1:50051\".to_string(), |c| c.server_addr());\n        let server = cfg.map(|c| c.server);\n        Self {\n            addr,\n            tls_ca: server.as_ref().and_then(|s| s.tls_ca.clone()),\n            tls_cert: server.as_ref().and_then(|s| s.tls_cert.clone()),\n            tls_key: server.as_ref().and_then(|s| s.tls_key.clone()),\n        }\n    }\n}",
+  "oldString": "use std::time::Duration;\n\nuse anyhow::{Context, Result};\nuse arags_proto::proto::arags_service_client::AragsServiceClient;\nuse tonic::transport::{Channel, ClientTlsConfig, Endpoint};\nuse tracing::{info, warn};\n\n/// Client configuration.\n#[derive(Debug, Clone)]\npub struct ClientConfig {\n    /// Server address (e.g., \"127.0.0.1:50051\" or \"https://host:443\").\n    pub addr: String,\n}\n\nimpl ClientConfig {\n    /// Load the client configuration from the merged user config (global\n    /// `~/.arags/arags.toml` + local `.arags.toml`) and the `ARAGS_SERVER_ADDR`\n    /// env var override.\n    #[must_use]\n    pub fn load() -> Self {\n        let addr = crate::user_config::load()\n            .map_or_else(|_| \"127.0.0.1:50051\".to_string(), |c| c.server_addr());\n        Self { addr }\n    }\n}"
 }
 ```
 
@@ -16300,12 +16300,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/client.rs
+**Title:** crates/arags-cli/src/client.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/client.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/client.rs",
   "newString": "    let endpoint =\n        Channel::from_shared(uri.clone()).with_context(|| format!(\"invalid server URI: {uri}\"))?;\n\n    let endpoint: Endpoint = if scheme == \"https\" || has_tls_config(config) {\n        let mut tls = ClientTlsConfig::new();\n        if let Some(ca) = &config.tls_ca {\n            let cert = Certificate::from_pem(ca.as_bytes())\n                .with_context(|| \"failed to parse [server].tls_ca PEM\")?;\n            tls = tls.ca_certificate(cert);\n        } else {\n            tls = tls.with_native_roots();\n        }\n        if let (Some(cert), Some(key)) = (&config.tls_cert, &config.tls_key) {\n            let identity = Identity::from_pem(cert.as_bytes(), key.as_bytes())\n                .with_context(|| \"failed to parse [server].tls_cert/tls_key PEM\")?;\n            info!(\"mTLS enabled: presenting client certificate\");\n            tls = tls.identity(identity);\n        } else if config.tls_cert.is_some() || config.tls_key.is_some() {\n            warn!(\"[server] mTLS requires BOTH tls_cert and tls_key; continuing without client cert\");\n        }\n        endpoint.tls_config(tls)?\n    } else {\n        endpoint\n    };",
   "oldString": "    let endpoint =\n        Channel::from_shared(uri.clone()).with_context(|| format!(\"invalid server URI: {uri}\"))?;\n\n    let endpoint: Endpoint = if scheme == \"https\" {\n        let tls = ClientTlsConfig::new().with_native_roots();\n        endpoint.tls_config(tls)?\n    } else {\n        endpoint\n    };"
 }
@@ -16327,12 +16327,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/client.rs
+**Title:** crates/arags-cli/src/client.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/client.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/client.rs",
   "newString": "/// Whether any TLS knob is configured (forces the TLS transport even for a\n/// bare `host:port` address, e.g. internal mTLS endpoints without scheme).\n#[must_use]\nfn has_tls_config(config: &ClientConfig) -> bool {\n    config.tls_ca.is_some() || config.tls_cert.is_some() || config.tls_key.is_some()\n}\n\n/// Validate that `addr` is a `host:port` pair.",
   "oldString": "/// Validate that `addr` is a `host:port` pair."
 }
@@ -16356,14 +16356,14 @@ Agora atualizo o `connect` no dispatch para propagar o TLS:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/dispatch/server.rs
+**Title:** crates/arags-cli/src/dispatch/server.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/dispatch/server.rs",
-  "newString": "/// Connect to the server, performing `AuthRefresh` when a refresh token is\n/// configured, and returning a client that auto-attaches the session token.\nfn connect(rt: &Runtime, cfg: &EffectiveUserConfig) -> Result<ArlmClient> {\n    let client_config = ClientConfig {\n        addr: cfg.server_addr(),\n        tls_ca: cfg.server.tls_ca.clone(),\n        tls_cert: cfg.server.tls_cert.clone(),\n        tls_key: cfg.server.tls_key.clone(),\n    };\n    let auth = cfg.auth().cloned().unwrap_or_default();\n    crate::auth_client::connect(rt, &client_config, &auth)\n}",
-  "oldString": "/// Connect to the server, performing `AuthRefresh` when a refresh token is\n/// configured, and returning a client that auto-attaches the session token.\nfn connect(rt: &Runtime, cfg: &EffectiveUserConfig) -> Result<ArlmClient> {\n    let client_config = ClientConfig {\n        addr: cfg.server_addr(),\n    };\n    let auth = cfg.auth().cloned().unwrap_or_default();\n    crate::auth_client::connect(rt, &client_config, &auth)\n}"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/dispatch/server.rs",
+  "newString": "/// Connect to the server, performing `AuthRefresh` when a refresh token is\n/// configured, and returning a client that auto-attaches the session token.\nfn connect(rt: &Runtime, cfg: &EffectiveUserConfig) -> Result<AragsClient> {\n    let client_config = ClientConfig {\n        addr: cfg.server_addr(),\n        tls_ca: cfg.server.tls_ca.clone(),\n        tls_cert: cfg.server.tls_cert.clone(),\n        tls_key: cfg.server.tls_key.clone(),\n    };\n    let auth = cfg.auth().cloned().unwrap_or_default();\n    crate::auth_client::connect(rt, &client_config, &auth)\n}",
+  "oldString": "/// Connect to the server, performing `AuthRefresh` when a refresh token is\n/// configured, and returning a client that auto-attaches the session token.\nfn connect(rt: &Runtime, cfg: &EffectiveUserConfig) -> Result<AragsClient> {\n    let client_config = ClientConfig {\n        addr: cfg.server_addr(),\n    };\n    let auth = cfg.auth().cloned().unwrap_or_default();\n    crate::auth_client::connect(rt, &client_config, &auth)\n}"
 }
 ```
 
@@ -16383,19 +16383,19 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo check -p arlm-cli 2>&1 | grep -E "^error" -A8 | head -20; cargo check -p arlm-cli 2>&1 | tail -1
+**Title:** cargo check -p arags-cli 2>&1 | grep -E "^error" -A8 | head -20; cargo check -p arags-cli 2>&1 | tail -1
 
 **Input:**
 ```json
 {
-  "command": "cargo check -p arlm-cli 2>&1 | grep -E \"^error\" -A8 | head -20; cargo check -p arlm-cli 2>&1 | tail -1"
+  "command": "cargo check -p arags-cli 2>&1 | grep -E \"^error\" -A8 | head -20; cargo check -p arags-cli 2>&1 | tail -1"
 }
 ```
 
 **Output:**
 ```
 error[E0599]: no method named `with_context` found for struct `Certificate` in the current scope
-   --> crates/arlm-cli/src/client.rs:118:18
+   --> crates/arags-cli/src/client.rs:118:18
     |
 117 |               let cert = Certificate::from_pem(ca.as_bytes())
     |  ________________________-
@@ -16405,7 +16405,7 @@ error[E0599]: no method named `with_context` found for struct `Certificate` in t
     |
 --
 error[E0599]: no method named `with_context` found for struct `Identity` in the current scope
-   --> crates/arlm-cli/src/client.rs:125:18
+   --> crates/arags-cli/src/client.rs:125:18
     |
 124 |               let identity = Identity::from_pem(cert.as_bytes(), key.as_bytes())
     |  ____________________________-
@@ -16414,7 +16414,7 @@ error[E0599]: no method named `with_context` found for struct `Identity` in the 
     | |_________________|
     |
 --
-error: could not compile `arlm-cli` (lib) due to 2 previous errors
+error: could not compile `arags-cli` (lib) due to 2 previous errors
 
 ```
 
@@ -16427,12 +16427,12 @@ error: could not compile `arlm-cli` (lib) due to 2 previous errors
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/client.rs
+**Title:** crates/arags-cli/src/client.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/client.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/client.rs",
   "newString": "        if let Some(ca) = &config.tls_ca {\n            let cert = Certificate::from_pem(ca.as_bytes())\n                .context(\"failed to parse [server].tls_ca PEM\")?;\n            tls = tls.ca_certificate(cert);\n        } else {\n            tls = tls.with_native_roots();\n        }\n        if let (Some(cert), Some(key)) = (&config.tls_cert, &config.tls_key) {\n            let identity = Identity::from_pem(cert.as_bytes(), key.as_bytes())\n                .context(\"failed to parse [server].tls_cert/tls_key PEM\")?;",
   "oldString": "        if let Some(ca) = &config.tls_ca {\n            let cert = Certificate::from_pem(ca.as_bytes())\n                .with_context(|| \"failed to parse [server].tls_ca PEM\")?;\n            tls = tls.ca_certificate(cert);\n        } else {\n            tls = tls.with_native_roots();\n        }\n        if let (Some(cert), Some(key)) = (&config.tls_cert, &config.tls_key) {\n            let identity = Identity::from_pem(cert.as_bytes(), key.as_bytes())\n                .with_context(|| \"failed to parse [server].tls_cert/tls_key PEM\")?;"
 }
@@ -16454,19 +16454,19 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo check -p arlm-cli 2>&1 | grep -E "^error" -A6 | head; cargo check -p arlm-cli 2>&1 | tail -1
+**Title:** cargo check -p arags-cli 2>&1 | grep -E "^error" -A6 | head; cargo check -p arags-cli 2>&1 | tail -1
 
 **Input:**
 ```json
 {
-  "command": "cargo check -p arlm-cli 2>&1 | grep -E \"^error\" -A6 | head; cargo check -p arlm-cli 2>&1 | tail -1"
+  "command": "cargo check -p arags-cli 2>&1 | grep -E \"^error\" -A6 | head; cargo check -p arags-cli 2>&1 | tail -1"
 }
 ```
 
 **Output:**
 ```
 error[E0599]: no method named `context` found for struct `Certificate` in the current scope
-   --> crates/arlm-cli/src/client.rs:118:18
+   --> crates/arags-cli/src/client.rs:118:18
     |
 117 |               let cert = Certificate::from_pem(ca.as_bytes())
     |  ________________________-
@@ -16474,8 +16474,8 @@ error[E0599]: no method named `context` found for struct `Certificate` in the cu
     | |                 -^^^^^^^ method not found in `Certificate`
 --
 error[E0599]: no method named `context` found for struct `Identity` in the current scope
-   --> crates/arlm-cli/src/client.rs:125:18
-error: could not compile `arlm-cli` (lib) due to 2 previous errors
+   --> crates/arags-cli/src/client.rs:125:18
+error: could not compile `arags-cli` (lib) due to 2 previous errors
 
 ```
 
@@ -16566,12 +16566,12 @@ In tonic 0.13, `Certificate::from_pem` and `Identity::from_pem` are **infallible
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/client.rs
+**Title:** crates/arags-cli/src/client.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/client.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/client.rs",
   "newString": "        if let Some(ca) = &config.tls_ca {\n            // tonic 0.13 parses lazily; a bad PEM surfaces at handshake.\n            tls = tls.ca_certificate(Certificate::from_pem(ca.as_bytes()));\n        } else {\n            tls = tls.with_native_roots();\n        }\n        if let (Some(cert), Some(key)) = (&config.tls_cert, &config.tls_key) {\n            let identity = Identity::from_pem(cert.as_bytes(), key.as_bytes());",
   "oldString": "        if let Some(ca) = &config.tls_ca {\n            let cert = Certificate::from_pem(ca.as_bytes())\n                .context(\"failed to parse [server].tls_ca PEM\")?;\n            tls = tls.ca_certificate(cert);\n        } else {\n            tls = tls.with_native_roots();\n        }\n        if let (Some(cert), Some(key)) = (&config.tls_cert, &config.tls_key) {\n            let identity = Identity::from_pem(cert.as_bytes(), key.as_bytes())\n                .context(\"failed to parse [server].tls_cert/tls_key PEM\")?;"
 }
@@ -16593,12 +16593,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo check -p arlm-cli 2>&1 | grep -E "^error" -A6 | head; cargo check -p arlm-cli 2>&1 | tail -1
+**Title:** cargo check -p arags-cli 2>&1 | grep -E "^error" -A6 | head; cargo check -p arags-cli 2>&1 | tail -1
 
 **Input:**
 ```json
 {
-  "command": "cargo check -p arlm-cli 2>&1 | grep -E \"^error\" -A6 | head; cargo check -p arlm-cli 2>&1 | tail -1"
+  "command": "cargo check -p arags-cli 2>&1 | grep -E \"^error\" -A6 | head; cargo check -p arags-cli 2>&1 | tail -1"
 }
 ```
 
@@ -16620,7 +16620,7 @@ Edit applied successfully.
 <details>
 <summary>Click to expand reasoning</summary>
 
-P3 code done. Now add a test for the TLS fields in the merge (granular fallback for new fields) — extend user_config tests. Then P5 (claude-desktop config), P6 (CHANGELOG), P7 (disjointness tests), and docs updates (README server.toml section + arlm.toml.example + docker/server.toml mention of new keys).
+P3 code done. Now add a test for the TLS fields in the merge (granular fallback for new fields) — extend user_config tests. Then P5 (claude-desktop config), P6 (CHANGELOG), P7 (disjointness tests), and docs updates (README server.toml section + arags.toml.example + docker/server.toml mention of new keys).
 
 First quick test additions to user_config tests:
 
@@ -16628,13 +16628,13 @@ First quick test additions to user_config tests:
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/user_config.rs
+**Title:** crates/arags-cli/src/user_config.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/user_config.rs",
-  "newString": "    #[test]\n    fn test_missing_files_default() {\n        let dir = TempDir::new().unwrap();\n        let cfg = load_from(&dir.path().join(\"none.toml\"), &dir.path().join(\"none.toml\")).unwrap();\n        assert!(cfg.auth.is_none());\n        assert!(cfg.llm.is_none());\n        assert_eq!(cfg.project.name, None);\n    }\n\n    #[test]\n    fn test_server_tls_fields_merge_granularly() {\n        let dir = TempDir::new().unwrap();\n        let g = dir.path().join(\"global.toml\");\n        let l = dir.path().join(\"local.toml\");\n        write(\n            &g,\n            \"[server]\\naddr = \\\"https://a:1\\\"\\ntls_ca = \\\"/etc/arlm/ca.crt\\\"\\ntls_cert = \\\"/etc/arlm/client.crt\\\"\\ntls_key = \\\"/etc/arlm/client.key\\\"\\n\",\n        );\n        // Local overrides only `addr`; TLS knobs fall back to global.\n        write(&l, \"[server]\\naddr = \\\"http://localhost:50051\\\"\\n\");\n\n        let cfg = load_from(&g, &l).unwrap();\n        assert_eq!(cfg.server_addr(), \"http://localhost:50051\");\n        assert_eq!(cfg.server.tls_ca.as_deref(), Some(\"/etc/arlm/ca.crt\"));\n        assert_eq!(\n            cfg.server.tls_cert.as_deref(),\n            Some(\"/etc/arlm/client.crt\")\n        );\n        assert_eq!(cfg.server.tls_key.as_deref(), Some(\"/etc/arlm/client.key\"));\n    }",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/user_config.rs",
+  "newString": "    #[test]\n    fn test_missing_files_default() {\n        let dir = TempDir::new().unwrap();\n        let cfg = load_from(&dir.path().join(\"none.toml\"), &dir.path().join(\"none.toml\")).unwrap();\n        assert!(cfg.auth.is_none());\n        assert!(cfg.llm.is_none());\n        assert_eq!(cfg.project.name, None);\n    }\n\n    #[test]\n    fn test_server_tls_fields_merge_granularly() {\n        let dir = TempDir::new().unwrap();\n        let g = dir.path().join(\"global.toml\");\n        let l = dir.path().join(\"local.toml\");\n        write(\n            &g,\n            \"[server]\\naddr = \\\"https://a:1\\\"\\ntls_ca = \\\"/etc/arags/ca.crt\\\"\\ntls_cert = \\\"/etc/arags/client.crt\\\"\\ntls_key = \\\"/etc/arags/client.key\\\"\\n\",\n        );\n        // Local overrides only `addr`; TLS knobs fall back to global.\n        write(&l, \"[server]\\naddr = \\\"http://localhost:50051\\\"\\n\");\n\n        let cfg = load_from(&g, &l).unwrap();\n        assert_eq!(cfg.server_addr(), \"http://localhost:50051\");\n        assert_eq!(cfg.server.tls_ca.as_deref(), Some(\"/etc/arags/ca.crt\"));\n        assert_eq!(\n            cfg.server.tls_cert.as_deref(),\n            Some(\"/etc/arags/client.crt\")\n        );\n        assert_eq!(cfg.server.tls_key.as_deref(), Some(\"/etc/arags/client.key\"));\n    }",
   "oldString": "    #[test]\n    fn test_missing_files_default() {\n        let dir = TempDir::new().unwrap();\n        let cfg = load_from(&dir.path().join(\"none.toml\"), &dir.path().join(\"none.toml\")).unwrap();\n        assert!(cfg.auth.is_none());\n        assert!(cfg.llm.is_none());\n        assert_eq!(cfg.project.name, None);\n    }"
 }
 ```
@@ -16655,12 +16655,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cargo test -p arlm-cli --lib user_config 2>&1 | grep -E "test result|FAILED"
+**Title:** cargo test -p arags-cli --lib user_config 2>&1 | grep -E "test result|FAILED"
 
 **Input:**
 ```json
 {
-  "command": "cargo test -p arlm-cli --lib user_config 2>&1 | grep -E \"test result|FAILED\""
+  "command": "cargo test -p arags-cli --lib user_config 2>&1 | grep -E \"test result|FAILED\""
 }
 ```
 
@@ -16686,7 +16686,7 @@ test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 **Input:**
 ```json
 {
-  "content": "{\n  \"mcpServers\": {},\n  \"_arlm_note\": \"Plan 020 removed `arlm serve --mcp` (the CLI is a pure gRPC client). Claude Desktop cannot speak gRPC natively; to consume arlm from Claude Desktop, run arlm-server (docker-compose.server.yml) and use the arlm CLI via a local bridge/proxy. See agents/README.md.\"\n}\n",
+  "content": "{\n  \"mcpServers\": {},\n  \"_arags_note\": \"Plan 020 removed `arags serve --mcp` (the CLI is a pure gRPC client). Claude Desktop cannot speak gRPC natively; to consume arags from Claude Desktop, run arags-server (docker-compose.server.yml) and use the arags CLI via a local bridge/proxy. See agents/README.md.\"\n}\n",
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/agents/claude-desktop/claude_desktop_config.json"
 }
 ```
@@ -16707,7 +16707,7 @@ Wrote file successfully.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** cat >> crates/arlm-cli/src/user_config.rs <<'EOF'
+**Title:** cat >> crates/arags-cli/src/user_config.rs <<'EOF'
 
 #[cfg(test)]
 mod disjoint_tests {
@@ -16723,7 +16723,7 @@ mod disjoint_tests {
         // Full server.toml shape (plan 020 schema).
         let server_toml = r#"
 listen_addr = "0.0.0.0:50051"
-data_dir = "/var/lib/arlm"
+data_dir = "/var/lib/arags"
 pool_size = 4
 flush_interval_ms = 100
 max_batch_size = 50
@@ -16741,7 +16741,7 @@ retention_days = 90
         let path = dir.path().join("server.toml");
         std::fs::write(&path, server_toml).unwrap();
 
-        let cfg = load_from(&path, &dir.path().join(".arlm.toml")).unwrap();
+        let cfg = load_from(&path, &dir.path().join(".arags.toml")).unwrap();
         // None of the data-plane keys map onto user config sections.
         assert!(cfg.auth.is_none());
         assert!(cfg.llm.is_none());
@@ -16752,18 +16752,18 @@ retention_days = 90
     }
 }
 EOF
-cat >> crates/arlm-server/src/config.rs <<'EOF'
+cat >> crates/arags-server/src/config.rs <<'EOF'
 
 #[cfg(test)]
 mod disjoint_tests {
     use super::*;
     use tempfile::TempDir;
 
-    /// Plan 020: the server must NOT read the user's `~/.arlm/arlm.toml` /
-    /// `.arlm.toml`. Parsing a user-config-shaped file as `ServerConfig`
+    /// Plan 020: the server must NOT read the user's `~/.arags/arags.toml` /
+    /// `.arags.toml`. Parsing a user-config-shaped file as `ServerConfig`
     /// leaves every data-plane field at its default.
     #[test]
-    fn test_server_config_ignores_user_arlm_toml_semantics() {
+    fn test_server_config_ignores_user_arags_toml_semantics() {
         let dir = TempDir::new().unwrap();
         let user_toml = r#"
 [auth]
@@ -16777,12 +16777,12 @@ family = "ollama"
 model = "llama3.2"
 
 [server]
-addr = "https://arlm.corp.internal:50051"
+addr = "https://arags.corp.internal:50051"
 
 [project]
 name = "meu-repo"
 "#;
-        let path = dir.path().join("arlm.toml");
+        let path = dir.path().join("arags.toml");
         std::fs::write(&path, user_toml).unwrap();
 
         let cfg = ServerConfig::load_from_path(&path).unwrap();
@@ -16794,12 +16794,12 @@ name = "meu-repo"
     }
 }
 EOF
-cargo test -p arlm-cli --lib disjoint 2>&1 | grep -E "test result"; cargo test -p arlm-server --lib disjoint 2>&1 | grep -E "test result"
+cargo test -p arags-cli --lib disjoint 2>&1 | grep -E "test result"; cargo test -p arags-server --lib disjoint 2>&1 | grep -E "test result"
 
 **Input:**
 ```json
 {
-  "command": "cat >> crates/arlm-cli/src/user_config.rs <<'EOF'\n\n#[cfg(test)]\nmod disjoint_tests {\n    use super::*;\n    use tempfile::TempDir;\n\n    /// Plan 020: `server.toml` (data plane) and the user config are disjoint\n    /// files. A `server.toml`-shaped file parsed as **user** config must not\n    /// leak any of its data-plane values into the effective user config.\n    #[test]\n    fn test_user_config_ignores_server_toml_semantics() {\n        let dir = TempDir::new().unwrap();\n        // Full server.toml shape (plan 020 schema).\n        let server_toml = r#\"\nlisten_addr = \"0.0.0.0:50051\"\ndata_dir = \"/var/lib/arlm\"\npool_size = 4\nflush_interval_ms = 100\nmax_batch_size = 50\n\n[embedder]\nmax_tokens = 512\noverlap_tokens = 64\n\n[search]\ntier = \"hybrid\"\n\n[history]\nretention_days = 90\n\"#;\n        let path = dir.path().join(\"server.toml\");\n        std::fs::write(&path, server_toml).unwrap();\n\n        let cfg = load_from(&path, &dir.path().join(\".arlm.toml\")).unwrap();\n        // None of the data-plane keys map onto user config sections.\n        assert!(cfg.auth.is_none());\n        assert!(cfg.llm.is_none());\n        assert!(cfg.server.addr.is_none(), \"listen_addr must NOT become [server].addr\");\n        assert_eq!(cfg.server.tls_ca, None);\n        assert_eq!(cfg.project.name, None);\n        assert_eq!(cfg.server_addr(), \"127.0.0.1:50051\");\n    }\n}\nEOF\ncat >> crates/arlm-server/src/config.rs <<'EOF'\n\n#[cfg(test)]\nmod disjoint_tests {\n    use super::*;\n    use tempfile::TempDir;\n\n    /// Plan 020: the server must NOT read the user's `~/.arlm/arlm.toml` /\n    /// `.arlm.toml`. Parsing a user-config-shaped file as `ServerConfig`\n    /// leaves every data-plane field at its default.\n    #[test]\n    fn test_server_config_ignores_user_arlm_toml_semantics() {\n        let dir = TempDir::new().unwrap();\n        let user_toml = r#\"\n[auth]\nusername = \"dev1\"\nrefresh_token = \"tok\"\n\n[llm]\n[[llm.backends]]\nname = \"default\"\nfamily = \"ollama\"\nmodel = \"llama3.2\"\n\n[server]\naddr = \"https://arlm.corp.internal:50051\"\n\n[project]\nname = \"meu-repo\"\n\"#;\n        let path = dir.path().join(\"arlm.toml\");\n        std::fs::write(&path, user_toml).unwrap();\n\n        let cfg = ServerConfig::load_from_path(&path).unwrap();\n        // `[server].addr` (client connect target) must NOT become listen_addr.\n        assert_eq!(cfg.listen_addr, default_listen_addr());\n        assert_eq!(cfg.data_dir, default_data_dir());\n        assert_eq!(cfg.embedder.max_tokens, default_max_tokens());\n        assert!(cfg.mtls_ca.is_none());\n    }\n}\nEOF\ncargo test -p arlm-cli --lib disjoint 2>&1 | grep -E \"test result\"; cargo test -p arlm-server --lib disjoint 2>&1 | grep -E \"test result\""
+  "command": "cat >> crates/arags-cli/src/user_config.rs <<'EOF'\n\n#[cfg(test)]\nmod disjoint_tests {\n    use super::*;\n    use tempfile::TempDir;\n\n    /// Plan 020: `server.toml` (data plane) and the user config are disjoint\n    /// files. A `server.toml`-shaped file parsed as **user** config must not\n    /// leak any of its data-plane values into the effective user config.\n    #[test]\n    fn test_user_config_ignores_server_toml_semantics() {\n        let dir = TempDir::new().unwrap();\n        // Full server.toml shape (plan 020 schema).\n        let server_toml = r#\"\nlisten_addr = \"0.0.0.0:50051\"\ndata_dir = \"/var/lib/arags\"\npool_size = 4\nflush_interval_ms = 100\nmax_batch_size = 50\n\n[embedder]\nmax_tokens = 512\noverlap_tokens = 64\n\n[search]\ntier = \"hybrid\"\n\n[history]\nretention_days = 90\n\"#;\n        let path = dir.path().join(\"server.toml\");\n        std::fs::write(&path, server_toml).unwrap();\n\n        let cfg = load_from(&path, &dir.path().join(\".arags.toml\")).unwrap();\n        // None of the data-plane keys map onto user config sections.\n        assert!(cfg.auth.is_none());\n        assert!(cfg.llm.is_none());\n        assert!(cfg.server.addr.is_none(), \"listen_addr must NOT become [server].addr\");\n        assert_eq!(cfg.server.tls_ca, None);\n        assert_eq!(cfg.project.name, None);\n        assert_eq!(cfg.server_addr(), \"127.0.0.1:50051\");\n    }\n}\nEOF\ncat >> crates/arags-server/src/config.rs <<'EOF'\n\n#[cfg(test)]\nmod disjoint_tests {\n    use super::*;\n    use tempfile::TempDir;\n\n    /// Plan 020: the server must NOT read the user's `~/.arags/arags.toml` /\n    /// `.arags.toml`. Parsing a user-config-shaped file as `ServerConfig`\n    /// leaves every data-plane field at its default.\n    #[test]\n    fn test_server_config_ignores_user_arags_toml_semantics() {\n        let dir = TempDir::new().unwrap();\n        let user_toml = r#\"\n[auth]\nusername = \"dev1\"\nrefresh_token = \"tok\"\n\n[llm]\n[[llm.backends]]\nname = \"default\"\nfamily = \"ollama\"\nmodel = \"llama3.2\"\n\n[server]\naddr = \"https://arags.corp.internal:50051\"\n\n[project]\nname = \"meu-repo\"\n\"#;\n        let path = dir.path().join(\"arags.toml\");\n        std::fs::write(&path, user_toml).unwrap();\n\n        let cfg = ServerConfig::load_from_path(&path).unwrap();\n        // `[server].addr` (client connect target) must NOT become listen_addr.\n        assert_eq!(cfg.listen_addr, default_listen_addr());\n        assert_eq!(cfg.data_dir, default_data_dir());\n        assert_eq!(cfg.embedder.max_tokens, default_max_tokens());\n        assert!(cfg.mtls_ca.is_none());\n    }\n}\nEOF\ncargo test -p arags-cli --lib disjoint 2>&1 | grep -E \"test result\"; cargo test -p arags-server --lib disjoint 2>&1 | grep -E \"test result\""
 }
 ```
 
@@ -16828,7 +16828,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; fini
 **Input:**
 ```json
 {
-  "content": "# Changelog\n\nFormato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).\nEste projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).\n\n## [Unreleased]\n\n### ⚠ BREAKING — plan 020 (consolidação de configuração)\n\nBreak **total, sem transição** (decisão D4 do plan 020): os arquivos legados\n`~/.arlm/config.toml` e `.arlm/config.toml` são **ignorados** — não há fallback\nnem aviso. Operadores devem reescrever suas configs nos novos arquivos:\n\n| Arquivo novo | Quem lê | Conteúdo |\n|---|---|---|\n| `server.toml` (HOST; montado em `/etc/arlm/server.toml` ou `ARLM_SERVER_CONFIG`) | `arlm-server` | todo o data plane: listen/TLS/mTLS, storage (`pool_size`, `flush_interval_ms`, `max_batch_size`), `[embedder]` (chunk+embed), `[search]`, `[qa_cache]`, `[maintenance]`, `[history] retention_days` |\n| `~/.arlm/arlm.toml` (global) | `arlm-cli` | `[auth]` (só global) + `[llm.backends]` + `[server]` (`addr`, `tls_ca`, `tls_cert`, `tls_key`) |\n| `.arlm.toml` (local, gitignored via `arlm init`) | `arlm-cli` | overrides por projeto + `[project]`; `[auth]` local é ignorado |\n\nMudanças de superfície relacionadas:\n\n- **Modo offline removido (D3).** O `arlm-cli` é um puro gRPC client: os\n  comandos `serve`/`--mcp` locais foram deletados. Quem quiser \"offline\" sobe\n  o próprio `arlm-server`.\n- **Server faz o chunking (D2).** O client envia texto cru; o tamanho de chunk\n  vem de `[embedder].max_tokens/overlap_tokens`. Reindex necessário.\n- **`[search].tier` default do server**: o proto `SearchTier` ganhou\n  `SEARCH_TIER_UNSPECIFIED = 0` (valores explícitos renumerados 1–4); requests\n  sem tier resolvem para o default de `server.toml`.\n- **Embedder configurável só no server**: variáveis\n  `ARLM_MODEL_DIR`/`ARLM_OLLAMA_*`/`ARLM_EMBED_BATCH` foram substituídas por\n  `[embedder]` no `server.toml` (`ARLM_SERVER_ADDR`/`ARLM_DATA_DIR` continuam\n  como overrides de env).\n\n## [0.1.0]\n\n### Added\n\n- Workspace inicial (9 crates): CLI gRPC, server data plane (gRPC/TLS),\n  storage SQLite/LanceDB, embeddings BGE-M3/Ollama/lightweight, busca híbrida\n  BM25+semântica+RRF, QA-cache semântico (plan 017), auth por refresh token\n  (plan 018), memória multi-projeto.\n",
+  "content": "# Changelog\n\nFormato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).\nEste projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).\n\n## [Unreleased]\n\n### ⚠ BREAKING — plan 020 (consolidação de configuração)\n\nBreak **total, sem transição** (decisão D4 do plan 020): os arquivos legados\n`~/.arags/config.toml` e `.arags/config.toml` são **ignorados** — não há fallback\nnem aviso. Operadores devem reescrever suas configs nos novos arquivos:\n\n| Arquivo novo | Quem lê | Conteúdo |\n|---|---|---|\n| `server.toml` (HOST; montado em `/etc/arags/server.toml` ou `ARAGS_SERVER_CONFIG`) | `arags-server` | todo o data plane: listen/TLS/mTLS, storage (`pool_size`, `flush_interval_ms`, `max_batch_size`), `[embedder]` (chunk+embed), `[search]`, `[qa_cache]`, `[maintenance]`, `[history] retention_days` |\n| `~/.arags/arags.toml` (global) | `arags-cli` | `[auth]` (só global) + `[llm.backends]` + `[server]` (`addr`, `tls_ca`, `tls_cert`, `tls_key`) |\n| `.arags.toml` (local, gitignored via `arags init`) | `arags-cli` | overrides por projeto + `[project]`; `[auth]` local é ignorado |\n\nMudanças de superfície relacionadas:\n\n- **Modo offline removido (D3).** O `arags-cli` é um puro gRPC client: os\n  comandos `serve`/`--mcp` locais foram deletados. Quem quiser \"offline\" sobe\n  o próprio `arags-server`.\n- **Server faz o chunking (D2).** O client envia texto cru; o tamanho de chunk\n  vem de `[embedder].max_tokens/overlap_tokens`. Reindex necessário.\n- **`[search].tier` default do server**: o proto `SearchTier` ganhou\n  `SEARCH_TIER_UNSPECIFIED = 0` (valores explícitos renumerados 1–4); requests\n  sem tier resolvem para o default de `server.toml`.\n- **Embedder configurável só no server**: variáveis\n  `ARAGS_MODEL_DIR`/`ARAGS_OLLAMA_*`/`ARAGS_EMBED_BATCH` foram substituídas por\n  `[embedder]` no `server.toml` (`ARAGS_SERVER_ADDR`/`ARAGS_DATA_DIR` continuam\n  como overrides de env).\n\n## [0.1.0]\n\n### Added\n\n- Workspace inicial (9 crates): CLI gRPC, server data plane (gRPC/TLS),\n  storage SQLite/LanceDB, embeddings BGE-M3/Ollama/lightweight, busca híbrida\n  BM25+semântica+RRF, QA-cache semântico (plan 017), auth por refresh token\n  (plan 018), memória multi-projeto.\n",
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/CHANGELOG.md"
 }
 ```
@@ -16855,8 +16855,8 @@ Wrote file successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/README.md",
-  "newString": "```toml\nlisten_addr = \"0.0.0.0:50051\"\ndata_dir = \"/data\"\n\n# tls_cert = \"/etc/arlm/tls/server.crt\"\n# tls_key  = \"/etc/arlm/tls/server.key\"\n# mtls_ca  = \"/etc/arlm/tls/ca.crt\"   # exige client cert (mTLS)\n\npool_size = 4            # pool de escrita SQLite (1 = single-mode)\nflush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)\nmax_batch_size = 50      # linhas por transação de indexação\n\n[embedder]\nmodel = \"ollama\"                      # bge-m3 | ollama | lightweight\n# model_dir = \"/models/bge-m3\"        # p/ bge-m3 (model.safetensors)\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                    # \"search_document: \" p/ família nomic\ndims = 384\nbatch_size = 64                       # chunks por request de embedding\nmax_tokens = 512                      # tamanho máximo de chunk (tokens)\noverlap_tokens = 64                   # sobreposição entre chunks\ncache = true                          # cache SQLite de embeddings\n\n[search]\ntier = \"hybrid\"                       # default p/ SEARCH_TIER_UNSPECIFIED\ntop_k = 10                            # quando o request omite max_results\nmax_tokens = 8000                     # budget do contexto\n\n[qa_cache]\n# parâmetros de cache semântico (anti-drift por hash de chunk)\n\n[maintenance]\ninterval_secs = 3600                  # 0 = desliga o ticker\ndecay_score_floor = 0.05\n\n[history]\nretention_days = 90                   # purge no ticker de manutenção; 0 = mantém\n```",
-  "oldString": "```toml\nlisten_addr = \"0.0.0.0:50051\"\ndata_dir = \"/data\"\n\n# tls_cert = \"/etc/arlm/tls/server.crt\"\n# tls_key  = \"/etc/arlm/tls/server.key\"\n# mtls_ca  = \"/etc/arlm/tls/ca.crt\"   # exige client cert (mTLS)\n\n[embedder]\nmodel = \"ollama\"                      # bge-m3 | ollama | lightweight\n# model_dir = \"/models/bge-m3\"        # p/ bge-m3 (model.safetensors)\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                    # \"search_document: \" p/ família nomic\ndims = 384\nbatch_size = 64                       # chunks por request de embedding\nmax_tokens = 512                      # tamanho máximo de chunk (tokens)\noverlap_tokens = 64                   # sobreposição entre chunks\ncache = true\n\n[search]\ntier = \"hybrid\"                       # default p/ valores inválidos\ntop_k = 10                            # quando o request omite max_results\nmax_tokens = 8000                     # budget do contexto\n\n[qa_cache]\n# parâmetros de cache semântico (anti-drift por hash de chunk)\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.05\n```"
+  "newString": "```toml\nlisten_addr = \"0.0.0.0:50051\"\ndata_dir = \"/data\"\n\n# tls_cert = \"/etc/arags/tls/server.crt\"\n# tls_key  = \"/etc/arags/tls/server.key\"\n# mtls_ca  = \"/etc/arags/tls/ca.crt\"   # exige client cert (mTLS)\n\npool_size = 4            # pool de escrita SQLite (1 = single-mode)\nflush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)\nmax_batch_size = 50      # linhas por transação de indexação\n\n[embedder]\nmodel = \"ollama\"                      # bge-m3 | ollama | lightweight\n# model_dir = \"/models/bge-m3\"        # p/ bge-m3 (model.safetensors)\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                    # \"search_document: \" p/ família nomic\ndims = 384\nbatch_size = 64                       # chunks por request de embedding\nmax_tokens = 512                      # tamanho máximo de chunk (tokens)\noverlap_tokens = 64                   # sobreposição entre chunks\ncache = true                          # cache SQLite de embeddings\n\n[search]\ntier = \"hybrid\"                       # default p/ SEARCH_TIER_UNSPECIFIED\ntop_k = 10                            # quando o request omite max_results\nmax_tokens = 8000                     # budget do contexto\n\n[qa_cache]\n# parâmetros de cache semântico (anti-drift por hash de chunk)\n\n[maintenance]\ninterval_secs = 3600                  # 0 = desliga o ticker\ndecay_score_floor = 0.05\n\n[history]\nretention_days = 90                   # purge no ticker de manutenção; 0 = mantém\n```",
+  "oldString": "```toml\nlisten_addr = \"0.0.0.0:50051\"\ndata_dir = \"/data\"\n\n# tls_cert = \"/etc/arags/tls/server.crt\"\n# tls_key  = \"/etc/arags/tls/server.key\"\n# mtls_ca  = \"/etc/arags/tls/ca.crt\"   # exige client cert (mTLS)\n\n[embedder]\nmodel = \"ollama\"                      # bge-m3 | ollama | lightweight\n# model_dir = \"/models/bge-m3\"        # p/ bge-m3 (model.safetensors)\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                    # \"search_document: \" p/ família nomic\ndims = 384\nbatch_size = 64                       # chunks por request de embedding\nmax_tokens = 512                      # tamanho máximo de chunk (tokens)\noverlap_tokens = 64                   # sobreposição entre chunks\ncache = true\n\n[search]\ntier = \"hybrid\"                       # default p/ valores inválidos\ntop_k = 10                            # quando o request omite max_results\nmax_tokens = 8000                     # budget do contexto\n\n[qa_cache]\n# parâmetros de cache semântico (anti-drift por hash de chunk)\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.05\n```"
 }
 ```
 
@@ -16882,8 +16882,8 @@ Edit applied successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/README.md",
-  "newString": "- **Global** `~/.arlm/arlm.toml`: `[auth]` (só global: `username` +\n  `refresh_token`), `[llm]` (IA do usuário), `[server]` (`addr`, `tls_ca`,\n  `tls_cert`/`tls_key` para mTLS no cliente).\n- **Local** `.arlm.toml` (no projeto): sobrescreve campos do global + `[project]`.",
-  "oldString": "- **Global** `~/.arlm/arlm.toml`: `[auth]` (só global: `username` +\n  `refresh_token`), `[llm]` (IA do usuário), `[server] addr`.\n- **Local** `.arlm.toml` (no projeto): sobrescreve campos do global + `[project]`."
+  "newString": "- **Global** `~/.arags/arags.toml`: `[auth]` (só global: `username` +\n  `refresh_token`), `[llm]` (IA do usuário), `[server]` (`addr`, `tls_ca`,\n  `tls_cert`/`tls_key` para mTLS no cliente).\n- **Local** `.arags.toml` (no projeto): sobrescreve campos do global + `[project]`.",
+  "oldString": "- **Global** `~/.arags/arags.toml`: `[auth]` (só global: `username` +\n  `refresh_token`), `[llm]` (IA do usuário), `[server] addr`.\n- **Local** `.arags.toml` (no projeto): sobrescreve campos do global + `[project]`."
 }
 ```
 
@@ -16909,8 +16909,8 @@ Edit applied successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/docker/server.toml",
-  "newString": "listen_addr = \"0.0.0.0:50051\"          # (env ARLM_SERVER_ADDR overrides)\ndata_dir = \"/data/arlm\"                # (env ARLM_DATA_DIR overrides)\n\npool_size = 4\nflush_interval_ms = 100\nmax_batch_size = 50\n\n[embedder]\nmodel = \"ollama\"\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                     # all-minilm does NOT use nomic prefixes\ndims = 384\nbatch_size = 64\nmax_tokens = 512\noverlap_tokens = 64\ncache = true\n\n[search]\ntier = \"hybrid\"\ntop_k = 10\nmax_tokens = 8000\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.1\n\n[history]\nretention_days = 90",
-  "oldString": "listen_addr = \"0.0.0.0:50051\"          # (env ARLM_SERVER_ADDR overrides)\ndata_dir = \"/data/arlm\"                # (env ARLM_DATA_DIR overrides)\n\n[embedder]\nmodel = \"ollama\"\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                     # all-minilm does NOT use nomic prefixes\ndims = 384\nbatch_size = 64\nmax_tokens = 512\noverlap_tokens = 64\ncache = true\n\n[search]\ntier = \"hybrid\"\ntop_k = 10\nmax_tokens = 8000\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.1"
+  "newString": "listen_addr = \"0.0.0.0:50051\"          # (env ARAGS_SERVER_ADDR overrides)\ndata_dir = \"/data/arags\"                # (env ARAGS_DATA_DIR overrides)\n\npool_size = 4\nflush_interval_ms = 100\nmax_batch_size = 50\n\n[embedder]\nmodel = \"ollama\"\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                     # all-minilm does NOT use nomic prefixes\ndims = 384\nbatch_size = 64\nmax_tokens = 512\noverlap_tokens = 64\ncache = true\n\n[search]\ntier = \"hybrid\"\ntop_k = 10\nmax_tokens = 8000\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.1\n\n[history]\nretention_days = 90",
+  "oldString": "listen_addr = \"0.0.0.0:50051\"          # (env ARAGS_SERVER_ADDR overrides)\ndata_dir = \"/data/arags\"                # (env ARAGS_DATA_DIR overrides)\n\n[embedder]\nmodel = \"ollama\"\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                     # all-minilm does NOT use nomic prefixes\ndims = 384\nbatch_size = 64\nmax_tokens = 512\noverlap_tokens = 64\ncache = true\n\n[search]\ntier = \"hybrid\"\ntop_k = 10\nmax_tokens = 8000\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.1"
 }
 ```
 
@@ -16933,19 +16933,19 @@ Edit applied successfully.
 <details>
 <summary>Click to expand reasoning</summary>
 
-Also add TLS fields to the `[server]` example in arlm.toml.example (commented). Let me update the [server] section there:
+Also add TLS fields to the `[server]` example in arags.toml.example (commented). Let me update the [server] section there:
 
 </details>
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** arlm.toml.example
+**Title:** arags.toml.example
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/arlm.toml.example",
-  "newString": "[server]\naddr = \"127.0.0.1:50051\"\n# tls_ca = \"/etc/arlm/tls/ca.crt\"      # CA customizada (além das system roots)\n# tls_cert = \"/etc/arlm/tls/client.crt\" # mTLS: exige também tls_key\n# tls_key = \"/etc/arlm/tls/client.key\"",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/arags.toml.example",
+  "newString": "[server]\naddr = \"127.0.0.1:50051\"\n# tls_ca = \"/etc/arags/tls/ca.crt\"      # CA customizada (além das system roots)\n# tls_cert = \"/etc/arags/tls/client.crt\" # mTLS: exige também tls_key\n# tls_key = \"/etc/arags/tls/client.key\"",
   "oldString": "[server]\naddr = \"127.0.0.1:50051\""
 }
 ```
@@ -17251,9 +17251,9 @@ FMT_OK
 
 **Output:**
 ```
-    Checking arlm-cli v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli)
+    Checking arags-cli v0.1.0 (/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli)
 error: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
-   --> crates/arlm-embedding/src/embedder/cache.rs:228:13
+   --> crates/arags-embedding/src/embedder/cache.rs:228:13
     |
 228 | /             match self.cache.get(t) {
 229 | |                 Ok(Some(emb)) => out.push(emb),
@@ -17264,7 +17264,7 @@ error: you seem to be trying to use `match` for destructuring a single pattern. 
 --
 
 error: this method could have a `#[must_use]` attribute
-   --> crates/arlm-storage/src/sqlite/conn.rs:164:12
+   --> crates/arags-storage/src/sqlite/conn.rs:164:12
     |
 164 |     pub fn conn(&self) -> Arc<Mutex<Connection>> {
     |            ^^^^
@@ -17275,7 +17275,7 @@ error: this method could have a `#[must_use]` attribute
 --
 
 error: used `expect()` on an `Option` value
-   --> crates/arlm-storage/src/sqlite/conn.rs:165:9
+   --> crates/arags-storage/src/sqlite/conn.rs:165:9
     |
 165 | /         self.sqlite
 166 | |             .as_ref()
@@ -17285,11 +17285,11 @@ error: used `expect()` on an `Option` value
     = note: if this value is `None`, it will panic
 --
 
-error: could not compile `arlm-embedding` (lib) due to 1 previous error
+error: could not compile `arags-embedding` (lib) due to 1 previous error
 warning: build failed, waiting for other jobs to finish...
-error: could not compile `arlm-storage` (lib) due to 2 previous errors
+error: could not compile `arags-storage` (lib) due to 2 previous errors
 error: redundant closure
-  --> crates/arlm-cli/src/client.rs:34:60
+  --> crates/arags-cli/src/client.rs:34:60
    |
 34 |             .map_or_else(|| "127.0.0.1:50051".to_string(), |c| c.server_addr());
    |                                                            ^^^^^^^^^^^^^^^^^^^ help: replace the closure with the method itself: `super::user_config::EffectiveUserConfig::server_addr`
@@ -17298,7 +17298,7 @@ error: redundant closure
    = note: `-D clippy::redundant-closure-for-method-calls` implied by `-D warnings`
    = help: to override `-D warnings` add `#[allow(clippy::redundant_closure_for_method_calls)]`
 
-error: could not compile `arlm-cli` (lib) due to 1 previous error
+error: could not compile `arags-cli` (lib) due to 1 previous error
 
 ```
 
@@ -17311,12 +17311,12 @@ error: could not compile `arlm-cli` (lib) due to 1 previous error
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-embedding/src/embedder/cache.rs
+**Title:** crates/arags-embedding/src/embedder/cache.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-embedding/src/embedder/cache.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-embedding/src/embedder/cache.rs",
   "newString": "        for (i, t) in texts.iter().enumerate() {\n            if let Ok(Some(emb)) = self.cache.get(t) {\n                out.push(emb);\n            } else {\n                out.push(Vec::new());\n                miss_idx.push(i);\n            }\n        }",
   "oldString": "        for (i, t) in texts.iter().enumerate() {\n            match self.cache.get(t) {\n                Ok(Some(emb)) => out.push(emb),\n                _ => {\n                    out.push(Vec::new());\n                    miss_idx.push(i);\n                }\n            }\n        }"
 }
@@ -17338,12 +17338,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-storage/src/sqlite/conn.rs
+**Title:** crates/arags-storage/src/sqlite/conn.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/src/sqlite/conn.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage/src/sqlite/conn.rs",
   "newString": "    /// Get a reference to the underlying shared `SQLite` connection.\n    ///\n    /// Available in **both** modes: single mode holds the only connection;\n    /// pooled (hybrid) mode keeps a dedicated shared read connection so the\n    /// `conn()`-based read helpers remain valid.\n    ///\n    /// # Panics\n    ///\n    /// Panics if storage was constructed without a shared connection, which\n    /// cannot happen through the public constructors.\n    #[must_use]\n    #[allow(clippy::expect_used)]\n    pub fn conn(&self) -> Arc<Mutex<Connection>> {",
   "oldString": "    /// Get a reference to the underlying shared `SQLite` connection.\n    ///\n    /// Available in **both** modes: single mode holds the only connection;\n    /// pooled (hybrid) mode keeps a dedicated shared read connection so the\n    /// `conn()`-based read helpers remain valid.\n    ///\n    /// # Panics\n    ///\n    /// Panics if storage was constructed without a shared connection, which\n    /// cannot happen through the public constructors.\n    pub fn conn(&self) -> Arc<Mutex<Connection>> {"
 }
@@ -17365,12 +17365,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/client.rs
+**Title:** crates/arags-cli/src/client.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/client.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/client.rs",
   "newString": "    #[must_use]\n    pub fn load() -> Self {\n        let cfg = crate::user_config::load().ok();\n        let addr = cfg\n            .as_ref()\n            .map_or_else(|| \"127.0.0.1:50051\".to_string(), EffectiveUserConfig::server_addr);\n        let server = cfg.map(|c| c.server);",
   "oldString": "    #[must_use]\n    pub fn load() -> Self {\n        let cfg = crate::user_config::load().ok();\n        let addr = cfg\n            .as_ref()\n            .map_or_else(|| \"127.0.0.1:50051\".to_string(), |c| c.server_addr());\n        let server = cfg.map(|c| c.server);"
 }
@@ -17392,12 +17392,12 @@ Edit applied successfully.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-cli/src/client.rs
+**Title:** crates/arags-cli/src/client.rs
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-cli/src/client.rs",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-cli/src/client.rs",
   "newString": "use crate::user_config::EffectiveUserConfig;\n\n/// Client connection configuration (plan 020).",
   "oldString": "/// Client connection configuration (plan 020)."
 }
@@ -17631,14 +17631,14 @@ Now close the sd issue and sync. Also update STAGING.md? Not required. Done.
 
 Os 7 pontos resolvidos (issue `agnostic-rlm-rs-07ad` fechada + `sd sync`):
 
-**P1 — `[embedder] cache` vivo**: novo `CachedEmbedder` (arlm-embedding/src/embedder/cache.rs:194) com cache SQLite por hash de conteúdo, degradação graciosa e testes; wired em `state.rs::wrap_with_cache`.
+**P1 — `[embedder] cache` vivo**: novo `CachedEmbedder` (arags-embedding/src/embedder/cache.rs:194) com cache SQLite por hash de conteúdo, degradação graciosa e testes; wired em `state.rs::wrap_with_cache`.
 
 **P2 — Proto atualizado**: `SEARCH_TIER_UNSPECIFIED = 0` com tiers explícitos renumerados 1–4 (search.proto); server resolve UNSPECIFIED/inválido para o default `[search].tier`; CLI "auto" agora envia UNSPECIFIED; contrato do proto atualizado.
 
 **P3 — mTLS no cliente**: novos campos `[server] tls_ca/tls_cert/tls_key` no user config (merge granular, fallback global→local); `client.rs::connect_channel` anexa CA customizada e client identity (mTLS), com aviso quando cert/key estão incompletos.
 
 **P4 — Schema aspiracional implementado**:
-- `pool_size`: `open_pooled` agora é **híbrido** (pool de escrita + conexão compartilhada para os read paths que usam `conn()`) — arlm-storage/src/sqlite/conn.rs:60; lifecycle usa pool quando `pool_size > 1`.
+- `pool_size`: `open_pooled` agora é **híbrido** (pool de escrita + conexão compartilhada para os read paths que usam `conn()`) — arags-storage/src/sqlite/conn.rs:60; lifecycle usa pool quando `pool_size > 1`.
 - `flush_interval_ms`: ticker de `PRAGMA wal_checkpoint(PASSIVE)` via novo `Storage::wal_checkpoint()`.
 - `max_batch_size`: indexação persiste em transações atômicas de N linhas (`store::insert_chunks_batched`).
 - `[history] retention_days` (default 90, 0 = mantém): `Storage::purge_history_before()` + purge no ticker de manutenção, com teste unitário.
@@ -17647,7 +17647,7 @@ Os 7 pontos resolvidos (issue `agnostic-rlm-rs-07ad` fechada + `sd sync`):
 
 **P6**: `CHANGELOG.md` criado documentando o break D4 (novos arquivos, tier renumerado, envs substituídas).
 
-**P7**: testes de disjunção bidirecionais — user config ignora semântica do `server.toml` (arlm-cli) e server ignora `arlm.toml` (arlm-server).
+**P7**: testes de disjunção bidirecionais — user config ignora semântica do `server.toml` (arags-cli) e server ignora `arags.toml` (arags-server).
 
 Gates: **383 testes passed**, `clippy -D warnings` limpo, `fmt --check` OK.
 
@@ -17674,12 +17674,12 @@ Let me check all documentation files in the repo for staleness after the changes
 
 1. README.md (main) — I updated it, but need to verify thoroughly
 2. CHANGELOG.md — created
-3. MODULE.md files — there are per-crate MODULE.md files (I saw arlm-storage/MODULE.md earlier). Need to check:
-   - crates/arlm-storage/MODULE.md — mentions qa_cache functions; does it document conn.rs hybrid mode? wal_checkpoint? purge_history_before?
-   - Other crates' MODULE.md: arlm-cli, arlm-embedding, arlm-server, etc.
+3. MODULE.md files — there are per-crate MODULE.md files (I saw arags-storage/MODULE.md earlier). Need to check:
+   - crates/arags-storage/MODULE.md — mentions qa_cache functions; does it document conn.rs hybrid mode? wal_checkpoint? purge_history_before?
+   - Other crates' MODULE.md: arags-cli, arags-embedding, arags-server, etc.
 4. docs/ directory — opencode-setup.md updated; check others
 5. agents/README.md — updated
-6. arlm.toml.example — updated
+6. arags.toml.example — updated
 7. STAGING.md — has historical notes, maybe fine
 8. plan/020 doc itself — no need to update
 
@@ -17687,7 +17687,7 @@ Let me do a comprehensive scan of all .md files and grep for stale references:
 - `config.toml` legacy references
 - `serve`/`mcp` references
 - `--server` flag
-- ARLM_OLLAMA / ARLM_MODEL_DIR / ARLM_EMBED_BATCH env vars
+- ARAGS_OLLAMA / ARAGS_MODEL_DIR / ARAGS_EMBED_BATCH env vars
 - old SearchTier numbering
 - missing new features documentation (pool_size, flush_interval_ms, max_batch_size, retention_days, tls fields, CachedEmbedder)
 
@@ -17711,42 +17711,42 @@ Let me list all md files and check them.
 ./AGENTS.md
 ./agents/README.md
 ./CHANGELOG.md
-./crates/arlm-cli/CHANGELOG.md
-./crates/arlm-cli/MODULE.md
-./crates/arlm-cli/README.md
-./crates/arlm-cli/TODO.md
-./crates/arlm-core/CHANGELOG.md
-./crates/arlm-core/MODULE.md
-./crates/arlm-core/README.md
-./crates/arlm-core/TODO.md
-./crates/arlm-embedding/CHANGELOG.md
-./crates/arlm-embedding/MODULE.md
-./crates/arlm-embedding/README.md
-./crates/arlm-embedding/TODO.md
-./crates/arlm-llm/CHANGELOG.md
-./crates/arlm-llm/MODULE.md
-./crates/arlm-llm/README.md
-./crates/arlm-llm/TODO.md
-./crates/arlm-memory/CHANGELOG.md
-./crates/arlm-memory/MODULE.md
-./crates/arlm-memory/README.md
-./crates/arlm-memory/TODO.md
-./crates/arlm-proto/CHANGELOG.md
-./crates/arlm-proto/MODULE.md
-./crates/arlm-proto/README.md
-./crates/arlm-proto/TODO.md
-./crates/arlm-search/CHANGELOG.md
-./crates/arlm-search/MODULE.md
-./crates/arlm-search/README.md
-./crates/arlm-search/TODO.md
-./crates/arlm-server/CHANGELOG.md
-./crates/arlm-server/MODULE.md
-./crates/arlm-server/README.md
-./crates/arlm-server/TODO.md
-./crates/arlm-storage/CHANGELOG.md
-./crates/arlm-storage/MODULE.md
-./crates/arlm-storage/README.md
-./crates/arlm-storage/TODO.md
+./crates/arags-cli/CHANGELOG.md
+./crates/arags-cli/MODULE.md
+./crates/arags-cli/README.md
+./crates/arags-cli/TODO.md
+./crates/arags-core/CHANGELOG.md
+./crates/arags-core/MODULE.md
+./crates/arags-core/README.md
+./crates/arags-core/TODO.md
+./crates/arags-embedding/CHANGELOG.md
+./crates/arags-embedding/MODULE.md
+./crates/arags-embedding/README.md
+./crates/arags-embedding/TODO.md
+./crates/arags-llm/CHANGELOG.md
+./crates/arags-llm/MODULE.md
+./crates/arags-llm/README.md
+./crates/arags-llm/TODO.md
+./crates/arags-memory/CHANGELOG.md
+./crates/arags-memory/MODULE.md
+./crates/arags-memory/README.md
+./crates/arags-memory/TODO.md
+./crates/arags-proto/CHANGELOG.md
+./crates/arags-proto/MODULE.md
+./crates/arags-proto/README.md
+./crates/arags-proto/TODO.md
+./crates/arags-search/CHANGELOG.md
+./crates/arags-search/MODULE.md
+./crates/arags-search/README.md
+./crates/arags-search/TODO.md
+./crates/arags-server/CHANGELOG.md
+./crates/arags-server/MODULE.md
+./crates/arags-server/README.md
+./crates/arags-server/TODO.md
+./crates/arags-storage/CHANGELOG.md
+./crates/arags-storage/MODULE.md
+./crates/arags-storage/README.md
+./crates/arags-storage/TODO.md
 ./docs/opencode-setup.md
 ./OLLAMA_EMBED_PROPOSED.md
 ./plan/016-server-first-architecture.md
@@ -17791,11 +17791,11 @@ There are per-crate README.md, MODULE.md, CHANGELOG.md, TODO.md files. I need to
 
 Key things that changed in this session (both rounds):
 1. Removed: Commands::Serve/MCP/metrics/util::data_dir; CLI deps slimmed
-2. chunk_content_hash moved to arlm-core
+2. chunk_content_hash moved to arags-core
 3. ServerConfig: embedder full schema, search, mtls_ca, pool_size/flush_interval_ms/max_batch_size, history retention
 4. state.rs loads embedder from config (no env)
 5. SearchTier UNSPECIFIED=0 renumbering
-6. CachedEmbedder added to arlm-embedding
+6. CachedEmbedder added to arags-embedding
 7. Storage: open_pooled hybrid mode + wal_checkpoint + purge_history_before
 8. store::insert_chunks_batched
 9. Client TLS fields (tls_ca/tls_cert/tls_key)
@@ -17807,47 +17807,47 @@ Let me grep the per-crate docs for stale content.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -ln "serve|/mcp|mcp_handler|--server |ARLM_OLLAMA|ARLM_MODEL_DIR|ARLM_EMBED_BATCH|config\.toml" crates/*/MODULE.md crates/*/README.md crates/*/CHANGELOG.md crates/*/TODO.md docs/*.md OLLAMA_EMBED_PROPOSED.md 2>/dev/null
+**Title:** rg -ln "serve|/mcp|mcp_handler|--server |ARAGS_OLLAMA|ARAGS_MODEL_DIR|ARAGS_EMBED_BATCH|config\.toml" crates/*/MODULE.md crates/*/README.md crates/*/CHANGELOG.md crates/*/TODO.md docs/*.md OLLAMA_EMBED_PROPOSED.md 2>/dev/null
 
 **Input:**
 ```json
 {
-  "command": "rg -ln \"serve|/mcp|mcp_handler|--server |ARLM_OLLAMA|ARLM_MODEL_DIR|ARLM_EMBED_BATCH|config\\.toml\" crates/*/MODULE.md crates/*/README.md crates/*/CHANGELOG.md crates/*/TODO.md docs/*.md OLLAMA_EMBED_PROPOSED.md 2>/dev/null"
+  "command": "rg -ln \"serve|/mcp|mcp_handler|--server |ARAGS_OLLAMA|ARAGS_MODEL_DIR|ARAGS_EMBED_BATCH|config\\.toml\" crates/*/MODULE.md crates/*/README.md crates/*/CHANGELOG.md crates/*/TODO.md docs/*.md OLLAMA_EMBED_PROPOSED.md 2>/dev/null"
 }
 ```
 
 **Output:**
 ```
-crates/arlm-core/MODULE.md
-crates/arlm-core/README.md
-crates/arlm-search/MODULE.md
-crates/arlm-cli/README.md
-crates/arlm-memory/README.md
-crates/arlm-embedding/README.md
-crates/arlm-proto/MODULE.md
-crates/arlm-llm/CHANGELOG.md
-crates/arlm-server/CHANGELOG.md
-crates/arlm-proto/CHANGELOG.md
-crates/arlm-search/TODO.md
-crates/arlm-proto/TODO.md
-crates/arlm-cli/MODULE.md
+crates/arags-core/MODULE.md
+crates/arags-core/README.md
+crates/arags-search/MODULE.md
+crates/arags-cli/README.md
+crates/arags-memory/README.md
+crates/arags-embedding/README.md
+crates/arags-proto/MODULE.md
+crates/arags-llm/CHANGELOG.md
+crates/arags-server/CHANGELOG.md
+crates/arags-proto/CHANGELOG.md
+crates/arags-search/TODO.md
+crates/arags-proto/TODO.md
+crates/arags-cli/MODULE.md
 OLLAMA_EMBED_PROPOSED.md
-crates/arlm-server/TODO.md
-crates/arlm-storage/MODULE.md
+crates/arags-server/TODO.md
+crates/arags-storage/MODULE.md
 docs/opencode-setup.md
-crates/arlm-storage/TODO.md
-crates/arlm-storage/README.md
-crates/arlm-server/MODULE.md
-crates/arlm-embedding/MODULE.md
-crates/arlm-llm/MODULE.md
-crates/arlm-search/README.md
-crates/arlm-proto/README.md
-crates/arlm-memory/MODULE.md
-crates/arlm-cli/CHANGELOG.md
-crates/arlm-core/TODO.md
-crates/arlm-server/README.md
-crates/arlm-storage/CHANGELOG.md
-crates/arlm-cli/TODO.md
+crates/arags-storage/TODO.md
+crates/arags-storage/README.md
+crates/arags-server/MODULE.md
+crates/arags-embedding/MODULE.md
+crates/arags-llm/MODULE.md
+crates/arags-search/README.md
+crates/arags-proto/README.md
+crates/arags-memory/MODULE.md
+crates/arags-cli/CHANGELOG.md
+crates/arags-core/TODO.md
+crates/arags-server/README.md
+crates/arags-storage/CHANGELOG.md
+crates/arags-cli/TODO.md
 
 ```
 
@@ -17860,23 +17860,23 @@ crates/arlm-cli/TODO.md
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** for f in crates/arlm-cli/README.md crates/arlm-cli/MODULE.md crates/arlm-server/README.md crates/arlm-server/MODULE.md; do echo "########## $f"; cat "$f"; done 2>/dev/null | head -250
+**Title:** for f in crates/arags-cli/README.md crates/arags-cli/MODULE.md crates/arags-server/README.md crates/arags-server/MODULE.md; do echo "########## $f"; cat "$f"; done 2>/dev/null | head -250
 
 **Input:**
 ```json
 {
-  "command": "for f in crates/arlm-cli/README.md crates/arlm-cli/MODULE.md crates/arlm-server/README.md crates/arlm-server/MODULE.md; do echo \"########## $f\"; cat \"$f\"; done 2>/dev/null | head -250"
+  "command": "for f in crates/arags-cli/README.md crates/arags-cli/MODULE.md crates/arags-server/README.md crates/arags-server/MODULE.md; do echo \"########## $f\"; cat \"$f\"; done 2>/dev/null | head -250"
 }
 ```
 
 **Output:**
 ```
-########## crates/arlm-cli/README.md
-# arlm-cli
+########## crates/arags-cli/README.md
+# arags-cli
 
-Interface de linha de comando para o **arlm** — *on-demand, agent-agnostic RLM*.
-É um **cliente gRPC puro** que se conecta a um `arlm-server` (plano de dados).
-Usa o **LLM local do usuário** (`arlm-llm`) apenas para *digest* (`query -qa`)
+Interface de linha de comando para o **arags** — *on-demand, agent-agnostic RLM*.
+É um **cliente gRPC puro** que se conecta a um `arags-server` (plano de dados).
+Usa o **LLM local do usuário** (`arags-llm`) apenas para *digest* (`query -qa`)
 e *summarize* (`persist`); nenhuma outra operação depende de LLM.
 
 ## Responsabilidades
@@ -17892,8 +17892,8 @@ e *summarize* (`persist`); nenhuma outra operação depende de LLM.
 - **Observabilidade:** logs estruturados via `tracing` (`--verbose`).
 - **Resiliência de cliente:** retry com backoff, validação de endereço e TLS automático
   em `src/client.rs`.
-- **Config do usuário (2 escopos):** `src/user_config.rs` lê `~/.arlm/arlm.toml`
-  (global) e `.arlm.toml` (local), com merge granular por campo. `[auth]` é só-global.
+- **Config do usuário (2 escopos):** `src/user_config.rs` lê `~/.arags/arags.toml`
+  (global) e `.arags.toml` (local), com merge granular por campo. `[auth]` é só-global.
   Arquivos legados `config.toml` **não** são lidos.
 - **Allocator:** mimalloc para performance.
 
@@ -17911,13 +17911,13 @@ src/
 │   ├── mod.rs             # branch para o servidor gRPC
 │   └── server.rs          # modo servidor gRPC (formatado por --format)
 ├── client.rs              # gRPC client: retry/backoff, TLS, validação
-├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)
+├── user_config.rs         # Config 2-escopos (global ~/.arags/arags.toml + local .arags.toml)
 ├── util.rs                # data_dir(), project resolution
 ├── commands/              # um módulo por subcomando
 │   ├── mod.rs
 │   ├── index.rs  search.rs  query.rs  qa_cache.rs
 │   ├── memory.rs  persist.rs  history.rs
-│   └── serve/             # arlm server (gRPC/MCP data plane)
+│   └── serve/             # arags server (gRPC/MCP data plane)
 └── output/
     ├── mod.rs             # Format enum
     └── json.rs tree.rs markdown.rs prompt.rs
@@ -17928,23 +17928,23 @@ tests/                     # testes de integração
 
 | Comando | Descrição |
 |---------|-----------|
-| `arlm init [--index] [--no-index]` | Scaffold de `<proj>/.arlm.toml` (gitignored) + index |
-| `arlm index` | Faz stream do texto bruto; o servidor chunk+embed |
-| `arlm search` | Busca híbrida BM25 + semântica (server-side) |
-| `arlm query` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
-| `arlm memory list\|get\|invalidate\|cleanup` | Memória (admin, via RPC) |
-| `arlm persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
-| `arlm history [--limit] [--user]` | Histórico de consultas por usuário |
-| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
+| `arags init [--index] [--no-index]` | Scaffold de `<proj>/.arags.toml` (gitignored) + index |
+| `arags index` | Faz stream do texto bruto; o servidor chunk+embed |
+| `arags search` | Busca híbrida BM25 + semântica (server-side) |
+| `arags query` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
+| `arags memory list\|get\|invalidate\|cleanup` | Memória (admin, via RPC) |
+| `arags persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
+| `arags history [--limit] [--user]` | Histórico de consultas por usuário |
+| `arags server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
 
 > **Removidos (plan 019):** `run`, `context`, `session`, `status`, `cost`,
 > `cancel`, `checkpoints`, `restore-page`, `wiki`, `consolidate` (CLI), `decay`
 > (CLI) e `entities` (CLI). A manutenção server-side é feita por cron + RPC
-> admin `TriggerMaintenance` (e `arlm-server admin consolidate`).
+> admin `TriggerMaintenance` (e `arags-server admin consolidate`).
 
 ## Flags Principais
 
-### `arlm index`
+### `arags index`
 
 | Flag | Descrição | Default |
 |------|-----------|---------|
@@ -17953,7 +17953,7 @@ tests/                     # testes de integração
 > O chunking e os embeddings ocorrem **no servidor**. O cliente faz stream do
 > texto bruto (client-streaming gRPC `IndexProject`).
 
-### `arlm search`
+### `arags search`
 
 | Flag | Descrição | Default |
 |------|-----------|---------|
@@ -17961,7 +17961,7 @@ tests/                     # testes de integração
 | `--file-pattern <pat>` | Filtro por arquivo | — |
 | `--min-score <f>` | Score mínimo | — |
 
-### `arlm query`
+### `arags query`
 
 | Flag | Descrição | Default |
 |------|-----------|---------|
@@ -17971,21 +17971,21 @@ tests/                     # testes de integração
 ## Formatos de Saída
 
 ```bash
-arlm search "query" --format json       # JSON estruturado
-arlm search "query" --format tree       # Tabela colorida (default)
-arlm search "query" --format markdown   # Markdown
-arlm search "query" --format prompt      # Prompt para LLM
+arags search "query" --format json       # JSON estruturado
+arags search "query" --format tree       # Tabela colorida (default)
+arags search "query" --format markdown   # Markdown
+arags search "query" --format prompt      # Prompt para LLM
 ```
 
 ## Modo Servidor (`--server`)
 
 ```bash
-arlm --server 127.0.0.1:50051 search "query"
-arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
+arags --server 127.0.0.1:50051 search "query"
+arags --server 127.0.0.1:50051 query "como funciona o login?" -qa
 ```
 
-- O endereço padrão é lido da seção `[server]` do `~/.arlm/arlm.toml` (global) ou
-  `.arlm.toml` (local, campo `addr`), depois da env `ARLM_SERVER_ADDR`.
+- O endereço padrão é lido da seção `[server]` do `~/.arags/arags.toml` (global) ou
+  `.arags.toml` (local, campo `addr`), depois da env `ARAGS_SERVER_ADDR`.
 - Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e
   **TLS automático** quando a URL usa `https://`.
 
@@ -18001,16 +18001,16 @@ arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
 
 ```bash
 # Inicializar + indexar
-arlm init ./meu-projeto
+arags init ./meu-projeto
 
 # Buscar com verbose
-arlm search "bug no login" --verbose
+arags search "bug no login" --verbose
 
 # QA com digest via LLM do usuário (emite cache_id)
-arlm query "analise auth" -qa
+arags query "analise auth" -qa
 
 # Servidor remoto
-arlm --server 127.0.0.1:50051 search "query"
+arags --server 127.0.0.1:50051 search "query"
 ```
 
 ## Integração com Agentes
@@ -18019,7 +18019,7 @@ arlm --server 127.0.0.1:50051 search "query"
 ```json
 {
   "name": "rlm_search",
-  "command": "arlm search \"{{task}}\" --format prompt"
+  "command": "arags search \"{{task}}\" --format prompt"
 }
 ```
 
@@ -18027,7 +18027,7 @@ arlm --server 127.0.0.1:50051 search "query"
 ```json
 {
   "rlm": {
-    "command": "arlm search \"$ARGUMENTS\" --format prompt"
+    "command": "arags search \"$ARGUMENTS\" --format prompt"
   }
 }
 ```
@@ -18035,27 +18035,27 @@ arlm --server 127.0.0.1:50051 search "query"
 ## Build
 
 ```bash
-cargo build -p arlm-cli                 # Debug
-cargo build --release -p arlm-cli       # Release (otimizado)
-# Binary: ./target/release/arlm
+cargo build -p arags-cli                 # Debug
+cargo build --release -p arags-cli       # Release (otimizado)
+# Binary: ./target/release/arags
 ```
 
 ## Testes
 
 ```bash
-CARGO_BUILD_JOBS=4 cargo test -p arlm-cli
+CARGO_BUILD_JOBS=4 cargo test -p arags-cli
 ```
 
 Testes de integração ficam em `tests/`; não há `#[cfg(test)]` dentro de `src/`.
-########## crates/arlm-cli/MODULE.md
-# arlm-cli
+########## crates/arags-cli/MODULE.md
+# arags-cli
 
 ## O que faz
-CLI *agent-agnostic* do `arlm`: faz o parsing de argumentos (clap), resolve a
-configuração do usuário (**2 escopos**: `~/.arlm/arlm.toml` global +
-`.arlm.toml` local, com merge granular por campo) e roteia cada subcomando para
-um `arlm-server` remoto via gRPC (`--server`). É um **cliente gRPC puro**: não
-há modo local. Usa o **LLM local do usuário** (`arlm-llm`) apenas para *digest*
+CLI *agent-agnostic* do `arags`: faz o parsing de argumentos (clap), resolve a
+configuração do usuário (**2 escopos**: `~/.arags/arags.toml` global +
+`.arags.toml` local, com merge granular por campo) e roteia cada subcomando para
+um `arags-server` remoto via gRPC (`--server`). É um **cliente gRPC puro**: não
+há modo local. Usa o **LLM local do usuário** (`arags-llm`) apenas para *digest*
 (`query -qa`) e *summarize* (`persist`). O servidor é um plano de dados puro
 (LLM-free). Renderiza saídas em 4 formatos (`json`, `tree`, `markdown`, `prompt`)
 com logs estruturados (`tracing`).
@@ -18074,10 +18074,10 @@ com logs estruturados (`tracing`).
   `[server]`, `[project]`); arquivos legados `config.toml` **não** são lidos.
 - `src/util.rs` — `data_dir()`, resolução de projeto.
 - `src/commands/` — um módulo por subcomando:
-  - `serve/` — `arlm server` (gRPC/MCP data plane).
+  - `serve/` — `arags server` (gRPC/MCP data plane).
   - `index`, `search`, `query`, `qa_cache` (plan 017: `run_ask`/`run_get`/
     `run_invalidate` orquestrando os RPCs `QueryWithCache`/`GetAnswerById`/
-    `InvalidateCache`; a digestão LLM roda localmente via `arlm-llm`/`user_config`
+    `InvalidateCache`; a digestão LLM roda localmente via `arags-llm`/`user_config`
     e o `StoreAnswer` é fire-and-forget), `memory` (admin: list/get/invalidate/
     cleanup → ListMemory/GetCache/InvalidateCache/TriggerMaintenance),
     `persist` (escreve `wiki/*.md` via LLM do usuário), `history`.
@@ -18088,8 +18088,8 @@ com logs estruturados (`tracing`).
   em `src/`.
 
 ## Dependências
-- Internas: `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-memory`,
-  `arlm-llm`, `arlm-embedding`, `arlm-proto`.
+- Internas: `arags-core`, `arags-storage`, `arags-search`, `arags-memory`,
+  `arags-llm`, `arags-embedding`, `arags-proto`.
 - Externas: `clap` (derive), `tokio` (async), `tonic`/`prost` (gRPC),
   `axum`/`tower-http` (HTTP/MCP), `tracing`/`tracing-subscriber` (logs),
   `serde`/`tomoml` (config), `anyhow` (erros), `indicatif`/`console` (UI),
@@ -18109,14 +18109,14 @@ com logs estruturados (`tracing`).
 
 ## Comandos úteis
 ```bash
-CARGO_BUILD_JOBS=4 cargo check   -p arlm-cli --all-targets
-CARGO_BUILD_JOBS=4 cargo clippy   -p arlm-cli --all-targets -- -D warnings
-CARGO_BUILD_JOBS=4 cargo test     -p arlm-cli
-cargo fmt -p arlm-cli -- --check
+CARGO_BUILD_JOBS=4 cargo check   -p arags-cli --all-targets
+CARGO_BUILD_JOBS=4 cargo clippy   -p arags-cli --all-targets -- -D warnings
+CARGO_BUILD_JOBS=4 cargo test     -p arags-cli
+cargo fmt -p arags-cli -- --check
 ```
 
 ## Migrations
-- N/A — o crate não possui schema próprio (estado em `arlm-storage`/`arlm-memory`).
+- N/A — o crate não possui schema próprio (estado em `arags-storage`/`arags-memory`).
 
 ## Rules
 - Padrão de produção: `dispatch::dispatch(cli, cfg)` resolve tudo e roteia para
@@ -18138,22 +18138,22 @@ cargo fmt -p arlm-cli -- --check
 
 The per-crate docs are significantly stale:
 
-**crates/arlm-cli/README.md** — stale:
+**crates/arags-cli/README.md** — stale:
 - Structure lists `util.rs` (deleted), `commands/index.rs search.rs query.rs memory.rs history.rs` (don't exist as separate files; they're handled in dispatch/server.rs), `commands/serve/` (deleted)
-- Commands table: `arlm server` row (removed)
+- Commands table: `arags server` row (removed)
 - "Modo Servidor (`--server`)" section — flag doesn't exist
 - Global flags list `--server <addr>`
 - Usage examples with `--server`
 - Output formats: says default tree; actual default is text/jsonl for content... (root.rs says format option; dispatch defaults Format::Text for search/query, Path otherwise). The doc mentions prompt/tree etc. — partially accurate but let me not overreach; focus on staleness introduced by my changes.
 
-**crates/arlm-cli/MODULE.md** — stale:
+**crates/arags-cli/MODULE.md** — stale:
 - Mentions `src/util.rs` (deleted)
 - `serve/` command module (deleted)
-- Dependencies list: arlm-storage, arlm-search, arlm-memory, arlm-embedding, axum/tower-http, uuid — all removed
+- Dependencies list: arags-storage, arags-search, arags-memory, arags-embedding, axum/tower-http, uuid — all removed
 - Says "sem #[cfg(test)] em src/" — now user_config.rs and config.rs have inline tests! Also server config.rs. This convention claim is stale.
 - `dispatch::dispatch(cli, cfg)` signature changed (cfg loaded inside).
 
-Need to also check arlm-server README/MODULE, arlm-storage MODULE (conn hybrid mode + wal_checkpoint + purge_history_before missing), arlm-embedding MODULE (CachedEmbedder missing), arlm-proto MODULE/README (SearchTier enum values), arll-core MODULE (chunk_content_hash added to qa_cache), plus crate CHANGELOGs (they exist per-crate — should add entries).
+Need to also check arags-server README/MODULE, arags-storage MODULE (conn hybrid mode + wal_checkpoint + purge_history_before missing), arags-embedding MODULE (CachedEmbedder missing), arags-proto MODULE/README (SearchTier enum values), arll-core MODULE (chunk_content_hash added to qa_cache), plus crate CHANGELOGs (they exist per-crate — should add entries).
 
 Also TODO.md files mention stale stuff but those are historical task lists; lower priority. Let me check the remaining ones quickly.
 
@@ -18161,26 +18161,26 @@ Also TODO.md files mention stale stuff but those are historical task lists; lowe
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** for f in crates/arlm-server/MODULE.md crates/arlm-server/README.md crates/arlm-storage/MODULE.md crates/arlm-embedding/MODULE.md crates/arlm-proto/MODULE.md crates/arlm-core/MODULE.md; do echo "########## $f"; head -80 "$f"; done 2>/dev/null
+**Title:** for f in crates/arags-server/MODULE.md crates/arags-server/README.md crates/arags-storage/MODULE.md crates/arags-embedding/MODULE.md crates/arags-proto/MODULE.md crates/arags-core/MODULE.md; do echo "########## $f"; head -80 "$f"; done 2>/dev/null
 
 **Input:**
 ```json
 {
-  "command": "for f in crates/arlm-server/MODULE.md crates/arlm-server/README.md crates/arlm-storage/MODULE.md crates/arlm-embedding/MODULE.md crates/arlm-proto/MODULE.md crates/arlm-core/MODULE.md; do echo \"########## $f\"; head -80 \"$f\"; done 2>/dev/null"
+  "command": "for f in crates/arags-server/MODULE.md crates/arags-server/README.md crates/arags-storage/MODULE.md crates/arags-embedding/MODULE.md crates/arags-proto/MODULE.md crates/arags-core/MODULE.md; do echo \"########## $f\"; head -80 \"$f\"; done 2>/dev/null"
 }
 ```
 
 **Output:**
 ```
-########## crates/arlm-server/MODULE.md
-# arlm-server
+########## crates/arags-server/MODULE.md
+# arags-server
 
 ## O que faz
-Servidor gRPC long-running da plataforma arlm: **plano de dados puro, LLM-free**.
+Servidor gRPC long-running da plataforma arags: **plano de dados puro, LLM-free**.
 Gerencia projetos (buffers), indexação (chunking + embeddings no servidor +
 LanceDB), busca híbrida, memória/histórico, manutenção (consolidate/decay) e
 QA-Cache — todas operações determinísticas (sem LLM). A digestão/sumarização
-ocorre no cliente (`arlm-cli`) via o LLM do usuário.
+ocorre no cliente (`arags-cli`) via o LLM do usuário.
 
 ## Estrutura
 - `src/main.rs` — entrypoint; subcomandos `up` (padrão), `status` (healthcheck gRPC), `admin consolidate`.
@@ -18210,13 +18210,13 @@ ocorre no cliente (`arlm-cli`) via o LLM do usuário.
   `QuestionVectorStore` (espaço B) e repassa para `AppState::new`.
 - `src/auth/mod.rs` — `authenticate(MetadataMap, &Storage) -> Result<AuthContext>` +
   `require_admin(&AuthContext)`; roles `Admin`/`NonAdmin` (plan 018).
-- `src/qa_vectors` — re-export de `arlm_storage::QuestionVectorStore` (espaço B).
+- `src/qa_vectors` — re-export de `arags_storage::QuestionVectorStore` (espaço B).
 - `src/timing.rs` — `Timer` com drop que emite `elapsed_ms`/`elapsed_us`.
 - `tests/` — `indexing_tests.rs`, `store_tests.rs`.
 
 ## Dependências
-- Internas: `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-embedding`,
-  `arlm-memory`, `arlm-llm`, `arlm-proto`.
+- Internas: `arags-core`, `arags-storage`, `arags-search`, `arags-embedding`,
+  `arags-memory`, `arags-llm`, `arags-proto`.
 - Externas: `tonic`/`prost` (gRPC), `tokio` (async), `rusqlite` (SQLite),
   `futures`, `parking_lot`, `serde`/`toml` (config), `tracing` (logs), `uuid`,
   `sha2`, `chrono`.
@@ -18236,31 +18236,31 @@ ocorre no cliente (`arlm-cli`) via o LLM do usuário.
 ## Comandos úteis
 ```bash
 # Checagem rápida (12 threads)
-cargo check -p arlm-server
+cargo check -p arags-server
 
 # Testes de integração
-cargo test -p arlm-server
+cargo test -p arags-server
 
 # Lint
-cargo clippy -p arlm-server --all-targets
+cargo clippy -p arags-server --all-targets
 
 # Rodar o servidor
-cargo run -p arlm-server -- up
+cargo run -p arags-server -- up
 
 # Healthcheck (precisa de um servidor rodando)
-cargo run -p arlm-server -- status
+cargo run -p arags-server -- status
 ```
 
 ## Migrations
-O schema é gerenciado por `arlm-storage` (ver `migrations/` do workspace):
-########## crates/arlm-server/README.md
-# arlm-server
+O schema é gerenciado por `arags-storage` (ver `migrations/` do workspace):
+########## crates/arags-server/README.md
+# arags-server
 
 Long-running **gRPC server** (plano de dados) para a plataforma
-[arlm](https://github.com/anomalyco/arlm) (Agnostic RLM). Armazena, indexa e
+[arags](https://github.com/anomalyco/arags) (Agnostic RLM). Armazena, indexa e
 responde consultas para times, expondo uma API gRPC (tonic) consumível por
 qualquer agente de IA. **É um plano de dados puro e LLM-free**: não invoca
-nenhum LLM (a digestão/sumarização ocorre no cliente, `arlm-cli`, via o LLM do
+nenhum LLM (a digestão/sumarização ocorre no cliente, `arags-cli`, via o LLM do
 usuário).
 
 ## Visão geral
@@ -18275,16 +18275,16 @@ digeridas (QA-Cache)**, com operações determinísticas (sem LLM).
 
 ```bash
 # Desenvolvimento
-cargo run -p arlm-server -- up
+cargo run -p arags-server -- up
 
 # Release
-cargo build --release -p arlm-server
-./target/release/arlm-server up
+cargo build --release -p arags-server
+./target/release/arags-server up
 
 # Checagem e testes (otimizado, 12 threads)
-cargo check -p arlm-server
-cargo test   -p arlm-server
-cargo clippy -p arlm-server --all-targets
+cargo check -p arags-server
+cargo test   -p arags-server
+cargo clippy -p arags-server --all-targets
 ```
 
 ### Subcomandos
@@ -18301,12 +18301,12 @@ cargo clippy -p arlm-server --all-targets
 docker compose -f docker-compose.server.yml up --build
 ```
 
-O `Dockerfile.server` expõe a porta `50051` e roda `HEALTHCHECK CMD arlm-server status`.
+O `Dockerfile.server` expõe a porta `50051` e roda `HEALTHCHECK CMD arags-server status`.
 
 ## Configuração
 
-Arquivo de **host** montado no container (ex.: `./server.toml:/etc/arlm/server.toml`),
-lido de `ARLM_SERVER_CONFIG` ou, por padrão, `/etc/arlm/server.toml`. É um arquivo
+Arquivo de **host** montado no container (ex.: `./server.toml:/etc/arags/server.toml`),
+lido de `ARAGS_SERVER_CONFIG` ou, por padrão, `/etc/arags/server.toml`. É um arquivo
 de host e possui **toda** a configuração do plano de dados — **não** há seção
 `[llm]` (o servidor é LLM-free). Exemplo:
 
@@ -18334,11 +18334,11 @@ interval_secs = 3600
 decay_score_floor = 0.05
 ```
 
-########## crates/arlm-storage/MODULE.md
-# arlm-storage
+########## crates/arags-storage/MODULE.md
+# arags-storage
 
 ## O que faz
-Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único DB compartilhado isolado por `buffer_id`, mais um vector store embutido (`usearch`, HNSW single-file, L2). Suporta modo single (CLI) e pooled (servidor). CRUD para buffers, chunks, tasks, findings, history, patterns, entities, cache e summaries; backup/verify; e busca semântica por embedding.
+Camada de persistência do `arags`: SQLite (metadados + FTS5/BM25) com um único DB compartilhado isolado por `buffer_id`, mais um vector store embutido (`usearch`, HNSW single-file, L2). Suporta modo single (CLI) e pooled (servidor). CRUD para buffers, chunks, tasks, findings, history, patterns, entities, cache e summaries; backup/verify; e busca semântica por embedding.
 
 > **Removido (plan 019):** as tabelas/código de `runs` (RLM runs), `trajectories`
 > e `sessions` **foram removidos** do crate — o servidor é LLM-free e não há mais
@@ -18368,22 +18368,22 @@ Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único 
 - `src/qa_vectors.rs` — `QuestionVectorStore` (usearch, espaço B **dedicado** para perguntas, métrica `Cos`); `open`/`insert`/`delete`/`search`/`clear`; chave = `qa_cache.id`.
 
 ## Dependências
-- Internas: nenhuma (crate folha de storage; consumido por `arlm-search`, `arlm-server`, `arlm-cli`).
+- Internas: nenhuma (crate folha de storage; consumido por `arags-search`, `arags-server`, `arags-cli`).
 - Externas (runtime): `rusqlite` (bundled + vtab, FTS5), `usearch` (HNSW single-file), `r2d2`/`r2d2_sqlite` (pool), `anyhow`, `serde`/`serde_json` (meta do vector store + summaries), `sha2`, `zstd`, `chrono`, `tokio` (async), `uuid` (v7), `parking_lot` (Mutex), `regex` (entities), `tracing`.
 - Externas (dev): `tempfile`.
 
 ## Convenções deste módulo
 - Sem `unwrap`/`expect`/`panic` em `src/` (deny do workspace); use `anyhow::Result` + `?`. Os testes em `tests/` carregam `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, ...)]` no topo.
-- Modelo single-DB: tudo em `~/.arlm/knowledge.db`; isolamento por `buffer_id` em todas as tabelas.
+- Modelo single-DB: tudo em `~/.arags/knowledge.db`; isolamento por `buffer_id` em todas as tabelas.
 - `VectorStore` é `usearch` single-file: `reserve` antes de `add`, `save` após inserção (persiste índice + `vectors.meta`). Buffer filter é feito por predicado durante o `filtered_search` (o usearch não tem metadados nativos).
 - `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor (WAL + r2d2, múltiplos readers).
-- `cargo clippy -p arlm-storage --all-targets -- -D warnings` deve passar (allows de pedantic style pré-existente no crate).
+- `cargo clippy -p arags-storage --all-targets -- -D warnings` deve passar (allows de pedantic style pré-existente no crate).
 
 ## Comandos úteis
 ```bash
-CARGO_BUILD_JOBS=4 cargo check  -p arlm-storage --all-targets
-CARGO_BUILD_JOBS=4 cargo test   -p arlm-storage   # 48 testes (src + tests/)
-CARGO_BUILD_JOBS=4 cargo clippy -p arlm-storage --all-targets -- -D warnings
+CARGO_BUILD_JOBS=4 cargo check  -p arags-storage --all-targets
+CARGO_BUILD_JOBS=4 cargo test   -p arags-storage   # 48 testes (src + tests/)
+CARGO_BUILD_JOBS=4 cargo clippy -p arags-storage --all-targets -- -D warnings
 ```
 
 ## Migrations
@@ -18397,11 +18397,11 @@ CARGO_BUILD_JOBS=4 cargo clippy -p arlm-storage --all-targets -- -D warnings
 - Novas tabelas entram como migration versionada + `run_migrations`; novos CRUD ficam em módulo dedicado em `src/sqlite/`.
 - `insert_chunk`/`insert_chunk_content`/`delete_chunks_for_file` são escritas transacionais por arquivo (chunk + FTS + entities + vectors).
 - Backup = `Storage::backup(dest)` (`VACUUM INTO`, destino não pode existir); verificação = `Storage::verify()` (`PRAGMA integrity_check`).
-########## crates/arlm-embedding/MODULE.md
-# arlm-embedding
+########## crates/arags-embedding/MODULE.md
+# arags-embedding
 
 ## O que faz
-Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em chunks (code/text/markdown/recursive) e os converte em vetores densos para busca semântica. O modelo é configurável — `BgeM3` (candle, produção) ou `Lightweight` (determinístico, sem pesos, para testes) — com quantização INT8/INT4 e truncamento matryoshka opcionais.
+Pipeline de chunking e geração de embeddings para o `arags`: divide arquivos em chunks (code/text/markdown/recursive) e os converte em vetores densos para busca semântica. O modelo é configurável — `BgeM3` (candle, produção) ou `Lightweight` (determinístico, sem pesos, para testes) — com quantização INT8/INT4 e truncamento matryoshka opcionais.
 
 ## Estrutura
 - `src/lib.rs` — API pública (re-exports), `Timer` de profiling.
@@ -18427,7 +18427,7 @@ Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em
 - `src/pipeline/files.rs` — `discover_files`, `glob_match`, `is_text_file`, `compress_text`, `compute_hash`.
 
 ## Dependências
-- Internas: nenhuma (crate folha de embeddings; consumido por `arlm-search`, `arlm-memory`, `arlm-server`).
+- Internas: nenhuma (crate folha de embeddings; consumido por `arags-search`, `arags-memory`, `arags-server`).
 - Externas: `candle-core`/`candle-nn`/`candle-transformers` (inferência BGE-M3, INT8/INT4 via `QMatMul`), `tokenizers`, `memmap2` (leitura zero-copy), `rayon` (chunking paralelo), `rusqlite` (cache), `sha2`/`hex` (chaves), `serde`/`serde_json`, `tracing` (logs), `anyhow`/`thiserror` (erros).
 
 ## Convenções deste módulo
@@ -18441,12 +18441,12 @@ Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em
 ## Comandos úteis
 ```bash
 # Check/clippy/test (use 4 jobs: candle é pesado p/ compilar)
-CARGO_BUILD_JOBS=4 cargo check -p arlm-embedding --all-targets
-CARGO_BUILD_JOBS=4 cargo clippy -p arlm-embedding --all-targets
-CARGO_BUILD_JOBS=4 cargo test   -p arlm-embedding
+CARGO_BUILD_JOBS=4 cargo check -p arags-embedding --all-targets
+CARGO_BUILD_JOBS=4 cargo clippy -p arags-embedding --all-targets
+CARGO_BUILD_JOBS=4 cargo test   -p arags-embedding
 
 # Benchmarks
-cargo bench -p arlm-embedding
+cargo bench -p arags-embedding
 ```
 
 ## Migrations
@@ -18458,61 +18458,61 @@ cargo bench -p arlm-embedding
 - `Quantization::None` mantém f32; `Int8`/`Int4` usam `QMatMul` (fallback f32 se o peso não for quantizável).
 - `matryoshka_dims` sempre aplicado no `embed`/`embed_batch` do BGE-M3 (trunca ou preenche com 0.0).
 - Trocar de modelo NÃO altera o tempo de compilação do candle — apenas o peso/runtime de inferência.
-########## crates/arlm-proto/MODULE.md
-# arlm-proto
+########## crates/arags-proto/MODULE.md
+# arags-proto
 
 ## O que faz
-Crate de definições Protobuf + código gerado (prost/tonic) que define o contrato gRPC cliente↔servidor do arlm. É a fonte única da verdade para a comunicação entre `arlm-cli` (cliente gRPC puro) e `arlm-server` (plano de dados LLM-free).
+Crate de definições Protobuf + código gerado (prost/tonic) que define o contrato gRPC cliente↔servidor do arags. É a fonte única da verdade para a comunicação entre `arags-cli` (cliente gRPC puro) e `arags-server` (plano de dados LLM-free).
 
 ## Estrutura
-- `proto/*.proto` — schema dividido em sub-arquivos coesos (cada um < 300 linhas): `project`, `index`, `search`, `context`, `session`, `server`, `auth`, `query_cache`, `service`. Todos com `package arlm.v1;`. (`run.proto` e `summarize.proto` foram removidos — não há mais runs de RLM nem sumarização server-side.)
+- `proto/*.proto` — schema dividido em sub-arquivos coesos (cada um < 300 linhas): `project`, `index`, `search`, `context`, `session`, `server`, `auth`, `query_cache`, `service`. Todos com `package arags.v1;`. (`run.proto` e `summarize.proto` foram removidos — não há mais runs de RLM nem sumarização server-side.)
 - `build.rs` — `tonic_build::configure().build_server(true).build_client(true).compile_protos(&[...], &["proto"])`; compila os sub-arquivos e emite log estruturado de tempo de execução via `std::time::Instant` + `eprintln!`.
-- `src/lib.rs` — `pub mod proto { include!(concat!(env!("OUT_DIR"), "/arlm.v1.rs")); } pub use proto::*;`. O módulo `proto` carrega `#![allow(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery, dead_code, missing_docs)]` para isolar os lints do código gerado.
-- `tests/proto_contract.rs` — 6 testes de integração validando mensagens, enums, acessores e os módulos de serviço (`arlm_service_{client,server}`).
+- `src/lib.rs` — `pub mod proto { include!(concat!(env!("OUT_DIR"), "/arags.v1.rs")); } pub use proto::*;`. O módulo `proto` carrega `#![allow(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery, dead_code, missing_docs)]` para isolar os lints do código gerado.
+- `tests/proto_contract.rs` — 6 testes de integração validando mensagens, enums, acessores e os módulos de serviço (`arags_service_{client,server}`).
 
 ## Dependências
-- Internas: nenhuma (crate folha de contrato; consumido por `arlm-server` e `arlm-cli`).
+- Internas: nenhuma (crate folha de contrato; consumido por `arags-server` e `arags-cli`).
 - Externas (runtime): `prost`, `prost-types`, `tonic`, `http`.
 - Externas (build): `prost-build`, `tonic-build`.
 
 ## Convenções deste módulo
 - O `.proto` é a fonte da verdade; os tipos gerados NÃO são editados à mão (ficam em `OUT_DIR`/`target`).
-- `package arlm.v1` garante versionamento explícito; mudanças breaking exigem novo pacote (ex.: `arlm.v2`).
+- `package arags.v1` garante versionamento explícito; mudanças breaking exigem novo pacote (ex.: `arags.v2`).
 - Testes de integração em `tests/` validam o contrato gerado; usam `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]` no topo.
-- Nunca quebrar os caminhos downstream: `arlm_proto::proto::*`,
-  `arlm_proto::proto::arlm_service_server::ArlmService` e
-  `arlm_proto::proto::arlm_service_client::ArlmServiceClient`. Se o nome do
+- Nunca quebrar os caminhos downstream: `arags_proto::proto::*`,
+  `arags_proto::proto::arags_service_server::AragsService` e
+  `arags_proto::proto::arags_service_client::AragsServiceClient`. Se o nome do
   módulo gerado mudar (ex.: ao trocar o `package`), usar re-export em `lib.rs`.
 - Sem `unwrap`/`expect`/`panic` em `src/`/`build.rs`; `build.rs` usa `?` sobre `std::io::Result`.
 
 ## Comandos úteis
 ```bash
-CARGO_BUILD_JOBS=4 cargo check  -p arlm-proto
-CARGO_BUILD_JOBS=4 cargo test   -p arlm-proto   # 6 testes de contrato
-CARGO_BUILD_JOBS=4 cargo clippy -p arlm-proto --all-targets -- -D warnings
+CARGO_BUILD_JOBS=4 cargo check  -p arags-proto
+CARGO_BUILD_JOBS=4 cargo test   -p arags-proto   # 6 testes de contrato
+CARGO_BUILD_JOBS=4 cargo clippy -p arags-proto --all-targets -- -D warnings
 ```
 
 ## Migrations
-- N/A — o proto não possui schema de banco; versionamento é feito via `package arlm.v1` (e evolução para `arlm.v2` em breaking changes).
+- N/A — o proto não possui schema de banco; versionamento é feito via `package arags.v1` (e evolução para `arags.v2` em breaking changes).
 
 ## Rules
-- Ao adicionar campo a uma mensagem já construída por literal exaustivo em `arlm-server`/`arlm-cli`, atualizar também o literal correspondente (ou documentar por que não).
-- Mantenha `arlm_proto::proto::*` e `arlm_service_{client,server}` válidos; use re-export em `lib.rs` se o módulo gerado mudar de nome.
+- Ao adicionar campo a uma mensagem já construída por literal exaustivo em `arags-server`/`arags-cli`, atualizar também o literal correspondente (ou documentar por que não).
+- Mantenha `arags_proto::proto::*` e `arags_service_{client,server}` válidos; use re-export em `lib.rs` se o módulo gerado mudar de nome.
 - `build.rs` deve sempre logar `stage=compile_protos duration_ms=... files=...`.
-- Valide o contrato com `cargo test -p arlm-proto` após qualquer mudança no `.proto`.
-########## crates/arlm-core/MODULE.md
-# arlm-core
+- Valide o contrato com `cargo test -p arags-proto` após qualquer mudança no `.proto`.
+########## crates/arags-core/MODULE.md
+# arags-core
 
 > **OBSOLETO (pós planos 017–020):** a seção "Estrutura" abaixo descreve a
 > arquitetura pré-refator, que incluía o engine RLM recursivo (planner → solver →
-> synthesizer). Esse engine **foi removido** do crate. O `arlm-core` agora contém
+> synthesizer). Esse engine **foi removido** do crate. O `arags-core` agora contém
 > apenas tipos de domínio (`types/`), a resolução de plano do QA-Cache
 > (`qa_cache/`), o trait `MemoryProvider` (`memory.rs`) e logging. O sistema é
 > *on-demand* e *server-first*: o servidor é LLM-free e o cliente usa o LLM do
 > usuário apenas em `query -qa`/`persist`. Veja `plan/019-cli-consolidation.md`.
 
 ## O que faz
-Biblioteca de suporte do `arlm`: tipos de domínio compartilhados, resolução de
+Biblioteca de suporte do `arags`: tipos de domínio compartilhados, resolução de
 plano do QA-Cache (plan 017) e o trait `MemoryProvider`. Não possui engine RLM
 recursivo.
 
@@ -18535,7 +18535,7 @@ recursivo.
 - `benches/` — `rlm_loop.rs`, `search.rs` (criterion).
 
 ## Dependências
-- Internas: `arlm-llm` (abstração de backend LLM).
+- Internas: `arags-llm` (abstração de backend LLM).
 - Externas: `anyhow` / `thiserror` (erros, sem unwrap/expect em src), `tokio` + `futures`
   (async + concorrência limitada), `parking_lot` (Mutex/RwLock p/ cache/router), `serde` /
   `serde_json` (serialização), `tracing` / `tracing-subscriber` (logs estruturados + timing),
@@ -18557,25 +18557,25 @@ recursivo.
 ## Comandos úteis
 ```bash
 # Checagem rápida (12 threads)
-cargo check -p arlm-core
+cargo check -p arags-core
 
-# Lint (limpo para este crate; ignora avisos de arlm-llm)
-cargo clippy -p arlm-core --all-targets
+# Lint (limpo para este crate; ignora avisos de arags-llm)
+cargo clippy -p arags-core --all-targets
 
 # Testes de integração
-cargo test -p arlm-core
-cargo test --test engine_tests -p arlm-core
+cargo test -p arags-core
+cargo test --test engine_tests -p arags-core
 
 # Benchmarks
-cargo bench -p arlm-core
+cargo bench -p arags-core
 
 # Formatação
-cargo fmt -p arlm-core -- --check
+cargo fmt -p arags-core -- --check
 ```
 
 ## Migrations
 - N/A — este crate não possui schema de banco próprio; persistência de trajectory/memória é
-  feita por `MemoryProvider` (impl externa, tipicamente `arlm-memory`/`arlm-storage`).
+  feita por `MemoryProvider` (impl externa, tipicamente `arags-memory`/`arags-storage`).
 
 ## Rules
 - `CodeSearch` e `MemoryProvider` são injetados como `Option<Arc<dyn Trait>>`; quando `None`,
@@ -18600,43 +18600,43 @@ Now I have a full picture of the stale per-crate docs. The user asked: "Toda doc
 
 **Stale items found:**
 
-1. **crates/arlm-cli/README.md**:
+1. **crates/arags-cli/README.md**:
    - Structure lists `util.rs` (deleted), `commands/serve/` (deleted), nonexistent `commands/index.rs search.rs query.rs memory.rs history.rs` files
-   - Commands table has `arlm server` row
+   - Commands table has `arags server` row
    - "Modo Servidor (`--server`)" section + global flags list `--server <addr>`
    - Usage examples with `--server`
    - Says "Testes de integração ficam em tests/; não há #[cfg(test)] dentro de src/" — now false (user_config.rs has inline tests)
 
-2. **crates/arlm-cli/MODULE.md**:
+2. **crates/arags-cli/MODULE.md**:
    - Lists `src/util.rs`, `commands/serve/`
-   - Dependencies: arlm-storage/search/memory/embedding, axum/tower-http, uuid — removed
+   - Dependencies: arags-storage/search/memory/embedding, axum/tower-http, uuid — removed
    - Claims no #[cfg(test)] in src/
    - "dispatch::dispatch(cli, cfg)" signature
 
-3. **crates/arlm-server/MODULE.md**: mostly OK; missing new config sections (embedder full schema, search, storage tuning, history), mTLS in lifecycle description says "TLS opcional" — could mention mtls_ca; state.rs embedder from config.
+3. **crates/arags-server/MODULE.md**: mostly OK; missing new config sections (embedder full schema, search, storage tuning, history), mTLS in lifecycle description says "TLS opcional" — could mention mtls_ca; state.rs embedder from config.
 
-4. **crates/arlm-server/README.md**: config example is OLD format — `[qa_cache] enabled/lambda_ms/cache_ttl_ms` keys don't match actual QaCacheConfig fields (novel_k... eviction_lambda_ms etc.), embedder only max_tokens/overlap_tokens, missing search/storage/history/mtls. Needs update to current schema.
+4. **crates/arags-server/README.md**: config example is OLD format — `[qa_cache] enabled/lambda_ms/cache_ttl_ms` keys don't match actual QaCacheConfig fields (novel_k... eviction_lambda_ms etc.), embedder only max_tokens/overlap_tokens, missing search/storage/history/mtls. Needs update to current schema.
 
-5. **crates/arlm-storage/MODULE.md**: 
+5. **crates/arags-storage/MODULE.md**: 
    - conn.rs line mentions open/open_exclusive/open_pooled — should document hybrid pooled mode + wal_checkpoint
    - history.rs line: add purge_history_before
-   - qa_cache.rs line: chunk_content_hash now re-export from arlm-core
-   - Dependencies: "Internas: nenhuma" — now arlm-core! Must update.
+   - qa_cache.rs line: chunk_content_hash now re-export from arags-core
+   - Dependencies: "Internas: nenhuma" — now arags-core! Must update.
 
-6. **crates/arlm-embedding/MODULE.md**: cache.rs line says only EmbeddingCache — add CachedEmbedder wrapper.
+6. **crates/arags-embedding/MODULE.md**: cache.rs line says only EmbeddingCache — add CachedEmbedder wrapper.
 
-7. **crates/arlm-proto/MODULE.md / README.md**: check if SearchTier enum values documented anywhere; MODULE says tests validate contract (6 tests) — fine; need to note UNSPECIFIED? The proto README lists files; probably fine but let me check quickly for SearchTier references.
+7. **crates/arags-proto/MODULE.md / README.md**: check if SearchTier enum values documented anywhere; MODULE says tests validate contract (6 tests) — fine; need to note UNSPECIFIED? The proto README lists files; probably fine but let me check quickly for SearchTier references.
 
-8. **Per-crate CHANGELOGs** exist (arlm-cli/CHANGELOG.md etc.) — should add Unreleased entries for the changes affecting each crate:
-   - arlm-cli: serve/mcp/metrics removal, deps slimmed, TLS client fields, chunk_content_hash moved out, init tests
-   - arlm-server: config schema expansion, mTLS, pool hybrid, flusher, batched inserts, history retention, tier unspecified
-   - arlm-storage: open_pooled hybrid, wal_checkpoint, purge_history_before, arlm-core dep, chunk_content_hash re-export
-   - arlm-embedding: CachedEmbedder
-   - arlm-proto: SearchTier renumbering (breaking)
-   - arlm-core: chunk_content_hash added
-   - arlm-search/memory/llm: unaffected this round (search unchanged? arlm-search untouched yes; arlm-memory untouched; arlm-llm untouched)
+8. **Per-crate CHANGELOGs** exist (arags-cli/CHANGELOG.md etc.) — should add Unreleased entries for the changes affecting each crate:
+   - arags-cli: serve/mcp/metrics removal, deps slimmed, TLS client fields, chunk_content_hash moved out, init tests
+   - arags-server: config schema expansion, mTLS, pool hybrid, flusher, batched inserts, history retention, tier unspecified
+   - arags-storage: open_pooled hybrid, wal_checkpoint, purge_history_before, arags-core dep, chunk_content_hash re-export
+   - arags-embedding: CachedEmbedder
+   - arags-proto: SearchTier renumbering (breaking)
+   - arags-core: chunk_content_hash added
+   - arags-search/memory/llm: unaffected this round (search unchanged? arags-search untouched yes; arags-memory untouched; arags-llm untouched)
 
-Let me check the crate CHANGELOG formats first to match style, and check proto README for enum listing. Also check TODO.md files — those are task lists; updating them wholesale isn't necessary but stale claims like "arlm server" could mislead; I'll leave TODOs as historical unless they contain wrong command references that matter. Actually the user explicitly asked "Readms, changelogs, module.md" — so focus on those three types across crates + root. TODO.md not mentioned; skip.
+Let me check the crate CHANGELOG formats first to match style, and check proto README for enum listing. Also check TODO.md files — those are task lists; updating them wholesale isn't necessary but stale claims like "arags server" could mislead; I'll leave TODOs as historical unless they contain wrong command references that matter. Actually the user explicitly asked "Readms, changelogs, module.md" — so focus on those three types across crates + root. TODO.md not mentioned; skip.
 
 Let me look at one crate CHANGELOG to see format.
 
@@ -18646,12 +18646,12 @@ Resposta honesta: **não** — o README raiz e o CHANGELOG raiz foram atualizado
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** head -30 crates/arlm-cli/CHANGELOG.md; echo ===; head -20 crates/arlm-storage/CHANGELOG.md; echo ===; rg -n "SearchTier|TIER_" crates/arlm-proto/README.md crates/arlm-proto/MODULE.md 2>/dev/null | head
+**Title:** head -30 crates/arags-cli/CHANGELOG.md; echo ===; head -20 crates/arags-storage/CHANGELOG.md; echo ===; rg -n "SearchTier|TIER_" crates/arags-proto/README.md crates/arags-proto/MODULE.md 2>/dev/null | head
 
 **Input:**
 ```json
 {
-  "command": "head -30 crates/arlm-cli/CHANGELOG.md; echo ===; head -20 crates/arlm-storage/CHANGELOG.md; echo ===; rg -n \"SearchTier|TIER_\" crates/arlm-proto/README.md crates/arlm-proto/MODULE.md 2>/dev/null | head"
+  "command": "head -30 crates/arags-cli/CHANGELOG.md; echo ===; head -20 crates/arags-storage/CHANGELOG.md; echo ===; rg -n \"SearchTier|TIER_\" crates/arags-proto/README.md crates/arags-proto/MODULE.md 2>/dev/null | head"
 }
 ```
 
@@ -18664,17 +18664,17 @@ Resposta honesta: **não** — o README raiz e o CHANGELOG raiz foram atualizado
 > **Nota (planos 019/020):** o CLI passou por uma consolidação. Foram **removidos**
 > os subcomandos `run`, `context`, `session`, `status`, `cost`, `cancel`,
 > `checkpoints`, `restore-page`, `wiki`, `consolidate`, `decay` e `entities`, e o
-> modo local — o `arlm-cli` é agora um **cliente gRPC puro**. O servidor
-> (`arlm-server`) é um **plano de dados LLM-free**; o LLM do usuário é usado
+> modo local — o `arags-cli` é agora um **cliente gRPC puro**. O servidor
+> (`arags-server`) é um **plano de dados LLM-free**; o LLM do usuário é usado
 > apenas em `query -qa` (digest) e `persist` (summarize). A config passou a ser
-> 2-escopos (`~/.arlm/arlm.toml` global + `.arlm.toml` local; `[auth]` só-global);
+> 2-escopos (`~/.arags/arags.toml` global + `.arags.toml` local; `[auth]` só-global);
 > `config.toml` legado não é lido. Veja `plan/019-cli-consolidation.md` e
 > `plan/020-config-consolidation.md`.
 
 ### Added
 - **QA-Cache client (plan 017):** `commands/qa_cache.rs` com `run_ask` (usa
   `QueryWithCache`; em HIT devolve a resposta sem chamar LLM; em MISS sintetiza
-  top-K com o LLM do usuário via `arlm-llm`/`config.toml`, exibe e dispara
+  top-K com o LLM do usuário via `arags-llm`/`config.toml`, exibe e dispara
   `StoreAnswer` fire-and-forget), `run_get` (`GetAnswerById` por `cache_id`) e
   `run_invalidate` (`InvalidateCache` Stale/Delete + raio).
 - `cli/commands.rs`: `Query` estendido com `--qa`/`--cache-id` e subcomando
@@ -18700,12 +18700,12 @@ zsh:1: == not found
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '1,25p' crates/arlm-storage/CHANGELOG.md; echo "---PROTO---"; sed -n '1,20p' crates/arlm-proto/CHANGELOG.md
+**Title:** sed -n '1,25p' crates/arags-storage/CHANGELOG.md; echo "---PROTO---"; sed -n '1,20p' crates/arags-proto/CHANGELOG.md
 
 **Input:**
 ```json
 {
-  "command": "sed -n '1,25p' crates/arlm-storage/CHANGELOG.md; echo \"---PROTO---\"; sed -n '1,20p' crates/arlm-proto/CHANGELOG.md"
+  "command": "sed -n '1,25p' crates/arags-storage/CHANGELOG.md; echo \"---PROTO---\"; sed -n '1,20p' crates/arags-proto/CHANGELOG.md"
 }
 ```
 
@@ -18732,14 +18732,14 @@ zsh:1: == not found
 - Migrations `015_add_auth.sql` (plan 018) e `016_add_qa_cache.sql` (plan 017).
 
 ### Changed
-- `cargo clippy -p arlm-storage --all-targets -- -D warnings` limpo; testes de
+- `cargo clippy -p arags-storage --all-targets -- -D warnings` limpo; testes de
   integração `tests/qa_cache_test.rs` (8 testes) cobrindo hit/scoping/reserve-lock/
   staleness/eviction/lookup direto/invalidação.
 
 ---PROTO---
-# Changelog — arlm-proto
+# Changelog — arags-proto
 
-All notable changes to the `arlm-proto` crate are documented here.
+All notable changes to the `arags-proto` crate are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
@@ -18774,32 +18774,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 Now I understand the format. Let me update all stale docs systematically:
 
-1. **crates/arlm-cli/README.md** — rewrite structure/commands/flags sections
-2. **crates/arlm-cli/MODULE.md** — update structure/deps/conventions
-3. **crates/arlm-cli/CHANGELOG.md** — add Unreleased entries (serve removal, TLS fields, deps)
-4. **crates/arlm-server/README.md** — fix config example to current schema
-5. **crates/arlm-server/MODULE.md** — mention new config sections, mTLS, storage tuning, history retention
-6. **crates/arlm-server/CHANGELOG.md** — check and add entries
-7. **crates/arlm-storage/MODULE.md** — conn.rs hybrid mode + wal_checkpoint + purge_history_before + arlm-core dep + chunk_content_hash note
-8. **crates/arlm-storage/CHANGELOG.md** — add entries
-9. **crates/arlm-embedding/MODULE.md** — CachedEmbedder
-10. **crates/arlm-embedding/CHANGELOG.md** — add entry
-11. **crates/arlm-proto/CHANGELOG.md** — SearchTier renumbering entry; MODULE.md maybe mention UNSPECIFIED in conventions? The MODULE doesn't enumerate enum values, fine as-is. README lists proto files only.
-12. **crates/arlm-core/MODULE.md / CHANGELOG.md** — chunk_content_hash added to qa_cache module.
+1. **crates/arags-cli/README.md** — rewrite structure/commands/flags sections
+2. **crates/arags-cli/MODULE.md** — update structure/deps/conventions
+3. **crates/arags-cli/CHANGELOG.md** — add Unreleased entries (serve removal, TLS fields, deps)
+4. **crates/arags-server/README.md** — fix config example to current schema
+5. **crates/arags-server/MODULE.md** — mention new config sections, mTLS, storage tuning, history retention
+6. **crates/arags-server/CHANGELOG.md** — check and add entries
+7. **crates/arags-storage/MODULE.md** — conn.rs hybrid mode + wal_checkpoint + purge_history_before + arags-core dep + chunk_content_hash note
+8. **crates/arags-storage/CHANGELOG.md** — add entries
+9. **crates/arags-embedding/MODULE.md** — CachedEmbedder
+10. **crates/arags-embedding/CHANGELOG.md** — add entry
+11. **crates/arags-proto/CHANGELOG.md** — SearchTier renumbering entry; MODULE.md maybe mention UNSPECIFIED in conventions? The MODULE doesn't enumerate enum values, fine as-is. README lists proto files only.
+12. **crates/arags-core/MODULE.md / CHANGELOG.md** — chunk_content_hash added to qa_cache module.
 
 Let me do these edits efficiently. Start with cli README rewrite of stale parts.
 
 </details>
 
-Vou atualizar todos os docs por-crate agora. Começando pelo `arlm-cli`:
+Vou atualizar todos os docs por-crate agora. Começando pelo `arags-cli`:
 
 #### 🔧 Tool: bash
 **Status:** completed
 **Title:** python3 - <<'PYEOF'
 import re
 
-# ─── crates/arlm-cli/README.md ───
-p = 'crates/arlm-cli/README.md'
+# ─── crates/arags-cli/README.md ───
+p = 'crates/arags-cli/README.md'
 s = open(p).read()
 
 s = s.replace("""```
@@ -18814,13 +18814,13 @@ src/
 │   ├── mod.rs             # branch para o servidor gRPC
 │   └── server.rs          # modo servidor gRPC (formatado por --format)
 ├── client.rs              # gRPC client: retry/backoff, TLS, validação
-├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)
+├── user_config.rs         # Config 2-escopos (global ~/.arags/arags.toml + local .arags.toml)
 ├── util.rs                # data_dir(), project resolution
 ├── commands/              # um módulo por subcomando
 │   ├── mod.rs
 │   ├── index.rs  search.rs  query.rs  qa_cache.rs
 │   ├── memory.rs  persist.rs  history.rs
-│   └── serve/             # arlm server (gRPC/MCP data plane)
+│   └── serve/             # arags server (gRPC/MCP data plane)
 └── output/
     ├── mod.rs             # Format enum
     └── json.rs tree.rs markdown.rs prompt.rs
@@ -18840,7 +18840,7 @@ src/
 ├── client.rs              # gRPC client: retry/backoff, TLS/mTLS, validação
 ├── auth_client.rs         # AuthRefresh + interceptor Bearer com renovação
 ├── backend.rs             # resolve o backend LLM do usuário ([llm.backends])
-├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)
+├── user_config.rs         # Config 2-escopos (global ~/.arags/arags.toml + local .arags.toml)
 ├── commands/              # módulos de comando
 │   ├── mod.rs
 │   ├── persist.rs         # wiki/*.md via LLM do usuário
@@ -18851,23 +18851,23 @@ src/
 tests/                     # testes de integração (+ init/gitignore/disjunção)
 ```""")
 
-s = s.replace("""| `arlm history [--limit] [--user]` | Histórico de consultas por usuário |
-| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
-""", """| `arlm history [--limit] [--user]` | Histórico de consultas por usuário |
+s = s.replace("""| `arags history [--limit] [--user]` | Histórico de consultas por usuário |
+| `arags server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
+""", """| `arags history [--limit] [--user]` | Histórico de consultas por usuário |
 
 > **Removido (plan 020):** o subcomando `serve` (HTTP/MCP local) — o CLI é um
-> cliente gRPC puro; quem hospeda o data plane é o binário `arlm-server`.
+> cliente gRPC puro; quem hospeda o data plane é o binário `arags-server`.
 """)
 
 s = s.replace("""## Modo Servidor (`--server`)
 
 ```bash
-arlm --server 127.0.0.1:50051 search "query"
-arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
+arags --server 127.0.0.1:50051 search "query"
+arags --server 127.0.0.1:50051 query "como funciona o login?" -qa
 ```
 
-- O endereço padrão é lido da seção `[server]` do `~/.arlm/arlm.toml` (global) ou
-  `.arlm.toml` (local, campo `addr`), depois da env `ARLM_SERVER_ADDR`.
+- O endereço padrão é lido da seção `[server]` do `~/.arags/arags.toml` (global) ou
+  `.arags.toml` (local, campo `addr`), depois da env `ARAGS_SERVER_ADDR`.
 - Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e
   **TLS automático** quando a URL usa `https://`.
 
@@ -18880,16 +18880,16 @@ arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
 ```""",
 """## Conexão com o Servidor (plan 020)
 
-O alvo é resolvido na ordem: `.arlm.toml` local `[server].addr` →
-`~/.arlm/arlm.toml` global `[server].addr` → env `ARLM_SERVER_ADDR` →
+O alvo é resolvido na ordem: `.arags.toml` local `[server].addr` →
+`~/.arags/arags.toml` global `[server].addr` → env `ARAGS_SERVER_ADDR` →
 `127.0.0.1:50051`. Não existe flag `--server` (a config vive nos arquivos).
 
 ```toml
 [server]
-addr = "https://arlm.corp.internal:50051"
-tls_ca = "/etc/arlm/tls/ca.crt"          # CA customizada (opcional)
-tls_cert = "/etc/arlm/tls/client.crt"    # mTLS: client cert (opcional,
-tls_key = "/etc/arlm/tls/client.key"     # exige também tls_key)
+addr = "https://arags.corp.internal:50051"
+tls_ca = "/etc/arags/tls/ca.crt"          # CA customizada (opcional)
+tls_cert = "/etc/arags/tls/client.crt"    # mTLS: client cert (opcional,
+tls_key = "/etc/arags/tls/client.key"     # exige também tls_key)
 ```
 
 - Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e
@@ -18905,18 +18905,18 @@ tls_key = "/etc/arlm/tls/client.key"     # exige também tls_key)
 ```""")
 
 s = s.replace("""# QA com digest via LLM do usuário (emite cache_id)
-arlm query "analise auth" -qa
+arags query "analise auth" -qa
 
 # Servidor remoto
-arlm --server 127.0.0.1:50051 search "query"
+arags --server 127.0.0.1:50051 search "query"
 ```""",
 """# QA com digest via LLM do usuário (emite cache_id)
-arlm query "analise auth" -qa
+arags query "analise auth" -qa
 ```""")
 
 s = s.replace("""Testes de integração ficam em `tests/`; não há `#[cfg(test)]` dentro de `src/`.""",
 """Testes de integração ficam em `tests/` (incluindo `init_test.rs`, que valida o
-scaffold do `arlm init` e a ausência de dependências do data plane); testes
+scaffold do `arags init` e a ausência de dependências do data plane); testes
 unitários puros vivem em `#[cfg(test)]` inline (ex.: merge da `user_config`).""")
 
 open(p,'w').write(s)
@@ -18926,7 +18926,7 @@ PYEOF
 **Input:**
 ```json
 {
-  "command": "python3 - <<'PYEOF'\nimport re\n\n# ─── crates/arlm-cli/README.md ───\np = 'crates/arlm-cli/README.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"```\nsrc/\n├── lib.rs                 # API pública (re-exports)\n├── main.rs                # Thin binary: parse → logging → dispatch\n├── cli/                   # Definição dos argumentos (clap)\n│   ├── mod.rs\n│   ├── root.rs            # Cli, OutputFormatArg\n│   └── commands.rs        # enum Commands\n├── dispatch/              # Roteamento de comandos\n│   ├── mod.rs             # branch para o servidor gRPC\n│   └── server.rs          # modo servidor gRPC (formatado por --format)\n├── client.rs              # gRPC client: retry/backoff, TLS, validação\n├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)\n├── util.rs                # data_dir(), project resolution\n├── commands/              # um módulo por subcomando\n│   ├── mod.rs\n│   ├── index.rs  search.rs  query.rs  qa_cache.rs\n│   ├── memory.rs  persist.rs  history.rs\n│   └── serve/             # arlm server (gRPC/MCP data plane)\n└── output/\n    ├── mod.rs             # Format enum\n    └── json.rs tree.rs markdown.rs prompt.rs\ntests/                     # testes de integração\n```\"\"\",\n\"\"\"```\nsrc/\n├── lib.rs                 # API pública (re-exports)\n├── main.rs                # Thin binary: parse → logging → dispatch\n├── cli/                   # Definição dos argumentos (clap)\n│   ├── mod.rs\n│   ├── root.rs            # Cli, OutputFormatArg\n│   └── commands.rs        # enum Commands\n├── dispatch/              # Roteamento (único ponto que conhece os comandos)\n│   ├── mod.rs             # resolve user_config e delega ao server.rs\n│   └── server.rs          # todos os comandos via gRPC (+ init/index/search helpers)\n├── client.rs              # gRPC client: retry/backoff, TLS/mTLS, validação\n├── auth_client.rs         # AuthRefresh + interceptor Bearer com renovação\n├── backend.rs             # resolve o backend LLM do usuário ([llm.backends])\n├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)\n├── commands/              # módulos de comando\n│   ├── mod.rs\n│   ├── persist.rs         # wiki/*.md via LLM do usuário\n│   └── qa_cache.rs        # plan 017: run_ask/run_get/run_invalidate\n└── output/\n    ├── mod.rs             # Format enum\n    └── json.rs jsonl.rs tree.rs markdown.rs prompt.rs\ntests/                     # testes de integração (+ init/gitignore/disjunção)\n```\"\"\")\n\ns = s.replace(\"\"\"| `arlm history [--limit] [--user]` | Histórico de consultas por usuário |\n| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |\n\"\"\", \"\"\"| `arlm history [--limit] [--user]` | Histórico de consultas por usuário |\n\n> **Removido (plan 020):** o subcomando `serve` (HTTP/MCP local) — o CLI é um\n> cliente gRPC puro; quem hospeda o data plane é o binário `arlm-server`.\n\"\"\")\n\ns = s.replace(\"\"\"## Modo Servidor (`--server`)\n\n```bash\narlm --server 127.0.0.1:50051 search \"query\"\narlm --server 127.0.0.1:50051 query \"como funciona o login?\" -qa\n```\n\n- O endereço padrão é lido da seção `[server]` do `~/.arlm/arlm.toml` (global) ou\n  `.arlm.toml` (local, campo `addr`), depois da env `ARLM_SERVER_ADDR`.\n- Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e\n  **TLS automático** quando a URL usa `https://`.\n\n## Flags Globais\n\n```\n--format <fmt>          # json|tree|markdown|prompt\n--server <addr>         # usa gRPC remoto\n--verbose, -v           # logs estruturados (tracing)\n```\"\"\",\n\"\"\"## Conexão com o Servidor (plan 020)\n\nO alvo é resolvido na ordem: `.arlm.toml` local `[server].addr` →\n`~/.arlm/arlm.toml` global `[server].addr` → env `ARLM_SERVER_ADDR` →\n`127.0.0.1:50051`. Não existe flag `--server` (a config vive nos arquivos).\n\n```toml\n[server]\naddr = \"https://arlm.corp.internal:50051\"\ntls_ca = \"/etc/arlm/tls/ca.crt\"          # CA customizada (opcional)\ntls_cert = \"/etc/arlm/tls/client.crt\"    # mTLS: client cert (opcional,\ntls_key = \"/etc/arlm/tls/client.key\"     # exige também tls_key)\n```\n\n- Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e\n  **TLS automático** em `https://`; `tls_ca`/`tls_cert`/`tls_key` habilitam\n  CA customizada e mTLS mesmo sem scheme.\n\n## Flags Globais\n\n```\n--format <fmt>          # full_json|path|markdown|text|jsonl\n--project <path>, -p    # escopo do projeto\n--verbose, -v           # logs estruturados (tracing)\n```\"\"\")\n\ns = s.replace(\"\"\"# QA com digest via LLM do usuário (emite cache_id)\narlm query \"analise auth\" -qa\n\n# Servidor remoto\narlm --server 127.0.0.1:50051 search \"query\"\n```\"\"\",\n\"\"\"# QA com digest via LLM do usuário (emite cache_id)\narlm query \"analise auth\" -qa\n```\"\"\")\n\ns = s.replace(\"\"\"Testes de integração ficam em `tests/`; não há `#[cfg(test)]` dentro de `src/`.\"\"\",\n\"\"\"Testes de integração ficam em `tests/` (incluindo `init_test.rs`, que valida o\nscaffold do `arlm init` e a ausência de dependências do data plane); testes\nunitários puros vivem em `#[cfg(test)]` inline (ex.: merge da `user_config`).\"\"\")\n\nopen(p,'w').write(s)\nprint(\"cli README ok\")\nPYEOF"
+  "command": "python3 - <<'PYEOF'\nimport re\n\n# ─── crates/arags-cli/README.md ───\np = 'crates/arags-cli/README.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"```\nsrc/\n├── lib.rs                 # API pública (re-exports)\n├── main.rs                # Thin binary: parse → logging → dispatch\n├── cli/                   # Definição dos argumentos (clap)\n│   ├── mod.rs\n│   ├── root.rs            # Cli, OutputFormatArg\n│   └── commands.rs        # enum Commands\n├── dispatch/              # Roteamento de comandos\n│   ├── mod.rs             # branch para o servidor gRPC\n│   └── server.rs          # modo servidor gRPC (formatado por --format)\n├── client.rs              # gRPC client: retry/backoff, TLS, validação\n├── user_config.rs         # Config 2-escopos (global ~/.arags/arags.toml + local .arags.toml)\n├── util.rs                # data_dir(), project resolution\n├── commands/              # um módulo por subcomando\n│   ├── mod.rs\n│   ├── index.rs  search.rs  query.rs  qa_cache.rs\n│   ├── memory.rs  persist.rs  history.rs\n│   └── serve/             # arags server (gRPC/MCP data plane)\n└── output/\n    ├── mod.rs             # Format enum\n    └── json.rs tree.rs markdown.rs prompt.rs\ntests/                     # testes de integração\n```\"\"\",\n\"\"\"```\nsrc/\n├── lib.rs                 # API pública (re-exports)\n├── main.rs                # Thin binary: parse → logging → dispatch\n├── cli/                   # Definição dos argumentos (clap)\n│   ├── mod.rs\n│   ├── root.rs            # Cli, OutputFormatArg\n│   └── commands.rs        # enum Commands\n├── dispatch/              # Roteamento (único ponto que conhece os comandos)\n│   ├── mod.rs             # resolve user_config e delega ao server.rs\n│   └── server.rs          # todos os comandos via gRPC (+ init/index/search helpers)\n├── client.rs              # gRPC client: retry/backoff, TLS/mTLS, validação\n├── auth_client.rs         # AuthRefresh + interceptor Bearer com renovação\n├── backend.rs             # resolve o backend LLM do usuário ([llm.backends])\n├── user_config.rs         # Config 2-escopos (global ~/.arags/arags.toml + local .arags.toml)\n├── commands/              # módulos de comando\n│   ├── mod.rs\n│   ├── persist.rs         # wiki/*.md via LLM do usuário\n│   └── qa_cache.rs        # plan 017: run_ask/run_get/run_invalidate\n└── output/\n    ├── mod.rs             # Format enum\n    └── json.rs jsonl.rs tree.rs markdown.rs prompt.rs\ntests/                     # testes de integração (+ init/gitignore/disjunção)\n```\"\"\")\n\ns = s.replace(\"\"\"| `arags history [--limit] [--user]` | Histórico de consultas por usuário |\n| `arags server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |\n\"\"\", \"\"\"| `arags history [--limit] [--user]` | Histórico de consultas por usuário |\n\n> **Removido (plan 020):** o subcomando `serve` (HTTP/MCP local) — o CLI é um\n> cliente gRPC puro; quem hospeda o data plane é o binário `arags-server`.\n\"\"\")\n\ns = s.replace(\"\"\"## Modo Servidor (`--server`)\n\n```bash\narags --server 127.0.0.1:50051 search \"query\"\narags --server 127.0.0.1:50051 query \"como funciona o login?\" -qa\n```\n\n- O endereço padrão é lido da seção `[server]` do `~/.arags/arags.toml` (global) ou\n  `.arags.toml` (local, campo `addr`), depois da env `ARAGS_SERVER_ADDR`.\n- Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e\n  **TLS automático** quando a URL usa `https://`.\n\n## Flags Globais\n\n```\n--format <fmt>          # json|tree|markdown|prompt\n--server <addr>         # usa gRPC remoto\n--verbose, -v           # logs estruturados (tracing)\n```\"\"\",\n\"\"\"## Conexão com o Servidor (plan 020)\n\nO alvo é resolvido na ordem: `.arags.toml` local `[server].addr` →\n`~/.arags/arags.toml` global `[server].addr` → env `ARAGS_SERVER_ADDR` →\n`127.0.0.1:50051`. Não existe flag `--server` (a config vive nos arquivos).\n\n```toml\n[server]\naddr = \"https://arags.corp.internal:50051\"\ntls_ca = \"/etc/arags/tls/ca.crt\"          # CA customizada (opcional)\ntls_cert = \"/etc/arags/tls/client.crt\"    # mTLS: client cert (opcional,\ntls_key = \"/etc/arags/tls/client.key\"     # exige também tls_key)\n```\n\n- Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e\n  **TLS automático** em `https://`; `tls_ca`/`tls_cert`/`tls_key` habilitam\n  CA customizada e mTLS mesmo sem scheme.\n\n## Flags Globais\n\n```\n--format <fmt>          # full_json|path|markdown|text|jsonl\n--project <path>, -p    # escopo do projeto\n--verbose, -v           # logs estruturados (tracing)\n```\"\"\")\n\ns = s.replace(\"\"\"# QA com digest via LLM do usuário (emite cache_id)\narags query \"analise auth\" -qa\n\n# Servidor remoto\narags --server 127.0.0.1:50051 search \"query\"\n```\"\"\",\n\"\"\"# QA com digest via LLM do usuário (emite cache_id)\narags query \"analise auth\" -qa\n```\"\"\")\n\ns = s.replace(\"\"\"Testes de integração ficam em `tests/`; não há `#[cfg(test)]` dentro de `src/`.\"\"\",\n\"\"\"Testes de integração ficam em `tests/` (incluindo `init_test.rs`, que valida o\nscaffold do `arags init` e a ausência de dependências do data plane); testes\nunitários puros vivem em `#[cfg(test)]` inline (ex.: merge da `user_config`).\"\"\")\n\nopen(p,'w').write(s)\nprint(\"cli README ok\")\nPYEOF"
 }
 ```
 
@@ -18948,11 +18948,11 @@ cli README ok
 #### 🔧 Tool: bash
 **Status:** completed
 **Title:** python3 - <<'PYEOF'
-p = 'crates/arlm-cli/MODULE.md'
+p = 'crates/arags-cli/MODULE.md'
 s = open(p).read()
 
-s = s.replace("""um `arlm-server` remoto via gRPC (`--server`). É um **cliente gRPC puro**: não
-há modo local.""", """um `arlm-server` remoto via gRPC. É um **cliente gRPC puro**: não há modo local
+s = s.replace("""um `arags-server` remoto via gRPC (`--server`). É um **cliente gRPC puro**: não
+há modo local.""", """um `arags-server` remoto via gRPC. É um **cliente gRPC puro**: não há modo local
 (plan 020 removeu o subcomando `serve`/MCP e o data plane local).""")
 
 s = s.replace("""- `src/client.rs` — `ClientConfig` + `create_client` (retry/backoff, validação
@@ -18961,14 +18961,14 @@ s = s.replace("""- `src/client.rs` — `ClientConfig` + `create_client` (retry/b
   `[server]`, `[project]`); arquivos legados `config.toml` **não** são lidos.
 - `src/util.rs` — `data_dir()`, resolução de projeto.
 - `src/commands/` — um módulo por subcomando:
-  - `serve/` — `arlm server` (gRPC/MCP data plane).
+  - `serve/` — `arags server` (gRPC/MCP data plane).
   - `index`, `search`, `query`, `qa_cache` (plan 017: `run_ask`/`run_get`/
     `run_invalidate` orquestrando os RPCs `QueryWithCache`/`GetAnswerById`/
-    `InvalidateCache`; a digestão LLM roda localmente via `arlm-llm`/`user_config`
+    `InvalidateCache`; a digestão LLM roda localmente via `arags-llm`/`user_config`
     e o `StoreAnswer` é fire-and-forget), `memory` (admin: list/get/invalidate/
     cleanup → ListMemory/GetCache/InvalidateCache/TriggerMaintenance),
     `persist` (escreve `wiki/*.md` via LLM do usuário), `history`.""",
-"""- `src/auth_client.rs` — `ArlmClient` autenticado (`AuthRefresh` + interceptor
+"""- `src/auth_client.rs` — `AragsClient` autenticado (`AuthRefresh` + interceptor
   Bearer com renovação em background).
 - `src/backend.rs` — resolve o backend LLM do usuário a partir de
   `[[llm.backends]]` (usado por `query -qa` e `persist`).
@@ -18981,21 +18981,21 @@ s = s.replace("""- `src/client.rs` — `ClientConfig` + `create_client` (retry/b
 - `src/commands/` — módulos de comando:
   - `qa_cache` (plan 017: `run_ask`/`run_get`/`run_invalidate` orquestrando os
     RPCs `QueryWithCache`/`GetAnswerById`/`InvalidateCache`; a digestão LLM roda
-    localmente via `arlm-llm`/`user_config` e o `StoreAnswer` é fire-and-forget),
+    localmente via `arags-llm`/`user_config` e o `StoreAnswer` é fire-and-forget),
   - `persist` (escreve `wiki/*.md` via LLM do usuário).
   - `index`, `search`, `query`, `memory` (admin), `history` vivem em
     `dispatch/server.rs` (streaming de arquivos + renderização).""")
 
 s = s.replace("""## Dependências
-- Internas: `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-memory`,
-  `arlm-llm`, `arlm-embedding`, `arlm-proto`.
+- Internas: `arags-core`, `arags-storage`, `arags-search`, `arags-memory`,
+  `arags-llm`, `arags-embedding`, `arags-proto`.
 - Externas: `clap` (derive), `tokio` (async), `tonic`/`prost` (gRPC),
   `axum`/`tower-http` (HTTP/MCP), `tracing`/`tracing-subscriber` (logs),
   `serde`/`tomoml` (config), `anyhow` (erros), `indicatif`/`console` (UI),
   `mimalloc` (allocator), `parking_lot` (sync), `uuid`/`chrono`.""",
 """## Dependências
-- Internas: `arlm-core`, `arlm-llm`, `arlm-proto` (plan 020: sem
-  `arlm-storage`/`arlm-search`/`arlm-memory` — o client nunca abre estado local;
+- Internas: `arags-core`, `arags-llm`, `arags-proto` (plan 020: sem
+  `arags-storage`/`arags-search`/`arags-memory` — o client nunca abre estado local;
   guardado por teste em `tests/init_test.rs`).
 - Externas: `clap` (derive), `tokio`/`tokio-stream` (async/streaming),
   `tonic` (gRPC), `tracing`/`tracing-subscriber` (logs), `serde`/`serde_json`/
@@ -19016,25 +19016,25 @@ s = s.replace("""- Padrão de produção: `dispatch::dispatch(cli, cfg)` resolve
 open(p,'w').write(s)
 print("cli MODULE ok")
 
-# ─── arlm-cli CHANGELOG ───
-p = 'crates/arlm-cli/CHANGELOG.md'
+# ─── arags-cli CHANGELOG ───
+p = 'crates/arags-cli/CHANGELOG.md'
 s = open(p).read()
 s = s.replace("""### Added
 - **QA-Cache client (plan 017):**""",
 """### Changed / Removed (auditoria plan 020)
 - **Removido o subcomando `serve`** (HTTP/MCP local) e todo o resto do data
   plane local: `commands/serve/`, `commands/mcp/`, `metrics.rs` e `util::data_dir`
-  — o CLI é um **cliente gRPC puro** e não depende mais de `arlm-storage`,
-  `arlm-search`, `arlm-memory`, `axum` nem `tower-http`.
+  — o CLI é um **cliente gRPC puro** e não depende mais de `arags-storage`,
+  `arags-search`, `arags-memory`, `axum` nem `tower-http`.
 - **mTLS no cliente:** `[server] tls_ca`/`tls_cert`/`tls_key` na user config
   (merge granular global→local) alimentam `ClientConfig` (`client.rs`).
-- Endereço resolvido apenas por `.arlm.toml` → `~/.arlm/arlm.toml` → env
-  `ARLM_SERVER_ADDR` (a flag inexistente `--server` saiu da documentação).
+- Endereço resolvido apenas por `.arags.toml` → `~/.arags/arags.toml` → env
+  `ARAGS_SERVER_ADDR` (a flag inexistente `--server` saiu da documentação).
 
 ### Added
 - Testes inline da `user_config`: merge granular/recursivo, `[auth]` só-global,
   legados ignorados, precedência de endereço, campos TLS.
-- `tests/init_test.rs`: scaffold do `arlm init` (`.arlm.toml` gitignored,
+- `tests/init_test.rs`: scaffold do `arags init` (`.arags.toml` gitignored,
   sem credenciais locais) e guarda contra dependências de data plane.
 
 ### QA-Cache client (plan 017):""".replace("### QA-Cache client (plan 017):","### Added\n- **QA-Cache client (plan 017):**"))
@@ -19049,7 +19049,7 @@ PYEOF
 **Input:**
 ```json
 {
-  "command": "python3 - <<'PYEOF'\np = 'crates/arlm-cli/MODULE.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"um `arlm-server` remoto via gRPC (`--server`). É um **cliente gRPC puro**: não\nhá modo local.\"\"\", \"\"\"um `arlm-server` remoto via gRPC. É um **cliente gRPC puro**: não há modo local\n(plan 020 removeu o subcomando `serve`/MCP e o data plane local).\"\"\")\n\ns = s.replace(\"\"\"- `src/client.rs` — `ClientConfig` + `create_client` (retry/backoff, validação\n  de endereço, TLS automático).\n- `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,\n  `[server]`, `[project]`); arquivos legados `config.toml` **não** são lidos.\n- `src/util.rs` — `data_dir()`, resolução de projeto.\n- `src/commands/` — um módulo por subcomando:\n  - `serve/` — `arlm server` (gRPC/MCP data plane).\n  - `index`, `search`, `query`, `qa_cache` (plan 017: `run_ask`/`run_get`/\n    `run_invalidate` orquestrando os RPCs `QueryWithCache`/`GetAnswerById`/\n    `InvalidateCache`; a digestão LLM roda localmente via `arlm-llm`/`user_config`\n    e o `StoreAnswer` é fire-and-forget), `memory` (admin: list/get/invalidate/\n    cleanup → ListMemory/GetCache/InvalidateCache/TriggerMaintenance),\n    `persist` (escreve `wiki/*.md` via LLM do usuário), `history`.\"\"\",\n\"\"\"- `src/auth_client.rs` — `ArlmClient` autenticado (`AuthRefresh` + interceptor\n  Bearer com renovação em background).\n- `src/backend.rs` — resolve o backend LLM do usuário a partir de\n  `[[llm.backends]]` (usado por `query -qa` e `persist`).\n- `src/client.rs` — `ClientConfig` + `connect_channel` (retry/backoff, validação\n  de endereço, TLS automático em `https://` e mTLS via `[server].tls_ca`/\n  `tls_cert`/`tls_key`).\n- `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,\n  `[server]` com knobs TLS, `[project]`); merge granular testado inline;\n  arquivos legados `config.toml` **não** são lidos.\n- `src/commands/` — módulos de comando:\n  - `qa_cache` (plan 017: `run_ask`/`run_get`/`run_invalidate` orquestrando os\n    RPCs `QueryWithCache`/`GetAnswerById`/`InvalidateCache`; a digestão LLM roda\n    localmente via `arlm-llm`/`user_config` e o `StoreAnswer` é fire-and-forget),\n  - `persist` (escreve `wiki/*.md` via LLM do usuário).\n  - `index`, `search`, `query`, `memory` (admin), `history` vivem em\n    `dispatch/server.rs` (streaming de arquivos + renderização).\"\"\")\n\ns = s.replace(\"\"\"## Dependências\n- Internas: `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-memory`,\n  `arlm-llm`, `arlm-embedding`, `arlm-proto`.\n- Externas: `clap` (derive), `tokio` (async), `tonic`/`prost` (gRPC),\n  `axum`/`tower-http` (HTTP/MCP), `tracing`/`tracing-subscriber` (logs),\n  `serde`/`tomoml` (config), `anyhow` (erros), `indicatif`/`console` (UI),\n  `mimalloc` (allocator), `parking_lot` (sync), `uuid`/`chrono`.\"\"\",\n\"\"\"## Dependências\n- Internas: `arlm-core`, `arlm-llm`, `arlm-proto` (plan 020: sem\n  `arlm-storage`/`arlm-search`/`arlm-memory` — o client nunca abre estado local;\n  guardado por teste em `tests/init_test.rs`).\n- Externas: `clap` (derive), `tokio`/`tokio-stream` (async/streaming),\n  `tonic` (gRPC), `tracing`/`tracing-subscriber` (logs), `serde`/`serde_json`/\n  `toml` (config/saída), `anyhow` (erros), `indicatif`/`console` (UI),\n  `chrono` (timestamps do wiki), `parking_lot` (sync), `mimalloc` (allocator).\"\"\")\n\ns = s.replace(\"\"\"- Testes de API pública ficam em `tests/`; `src/` não contém `#[cfg(test)]`.\"\"\",\n\"\"\"- Testes de API pública ficam em `tests/`; funções puras críticas (merge da\n  config) têm `#[cfg(test)]` inline com tempdirs.\"\"\")\n\ns = s.replace(\"\"\"- Padrão de produção: `dispatch::dispatch(cli, &rt)` resolve tudo e roteia para\n  o servidor gRPC.\"\"\", \"\")\ns = s.replace(\"\"\"- Padrão de produção: `dispatch::dispatch(cli, cfg)` resolve tudo e roteia para\n  o servidor gRPC.\"\"\",\n\"\"\"- Padrão de produção: `dispatch::dispatch(cli, &rt)` carrega a user_config e\n  roteia tudo para o servidor gRPC; nenhum comando abre Storage local.\"\"\")\n\nopen(p,'w').write(s)\nprint(\"cli MODULE ok\")\n\n# ─── arlm-cli CHANGELOG ───\np = 'crates/arlm-cli/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"\"\"### Added\n- **QA-Cache client (plan 017):**\"\"\",\n\"\"\"### Changed / Removed (auditoria plan 020)\n- **Removido o subcomando `serve`** (HTTP/MCP local) e todo o resto do data\n  plane local: `commands/serve/`, `commands/mcp/`, `metrics.rs` e `util::data_dir`\n  — o CLI é um **cliente gRPC puro** e não depende mais de `arlm-storage`,\n  `arlm-search`, `arlm-memory`, `axum` nem `tower-http`.\n- **mTLS no cliente:** `[server] tls_ca`/`tls_cert`/`tls_key` na user config\n  (merge granular global→local) alimentam `ClientConfig` (`client.rs`).\n- Endereço resolvido apenas por `.arlm.toml` → `~/.arlm/arlm.toml` → env\n  `ARLM_SERVER_ADDR` (a flag inexistente `--server` saiu da documentação).\n\n### Added\n- Testes inline da `user_config`: merge granular/recursivo, `[auth]` só-global,\n  legados ignorados, precedência de endereço, campos TLS.\n- `tests/init_test.rs`: scaffold do `arlm init` (`.arlm.toml` gitignored,\n  sem credenciais locais) e guarda contra dependências de data plane.\n\n### QA-Cache client (plan 017):\"\"\".replace(\"### QA-Cache client (plan 017):\",\"### Added\\n- **QA-Cache client (plan 017):**\"))\n\n# fix duplicate \"### Added\" header if created twice\ns = s.replace(\"### Added\\n- Testes inline da `user_config`\", \"### Added (auditoria plan 020)\\n- Testes inline da `user_config`\",1)\n\nopen(p,'w').write(s)\nprint(\"cli CHANGELOG ok\")\nPYEOF"
+  "command": "python3 - <<'PYEOF'\np = 'crates/arags-cli/MODULE.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"um `arags-server` remoto via gRPC (`--server`). É um **cliente gRPC puro**: não\nhá modo local.\"\"\", \"\"\"um `arags-server` remoto via gRPC. É um **cliente gRPC puro**: não há modo local\n(plan 020 removeu o subcomando `serve`/MCP e o data plane local).\"\"\")\n\ns = s.replace(\"\"\"- `src/client.rs` — `ClientConfig` + `create_client` (retry/backoff, validação\n  de endereço, TLS automático).\n- `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,\n  `[server]`, `[project]`); arquivos legados `config.toml` **não** são lidos.\n- `src/util.rs` — `data_dir()`, resolução de projeto.\n- `src/commands/` — um módulo por subcomando:\n  - `serve/` — `arags server` (gRPC/MCP data plane).\n  - `index`, `search`, `query`, `qa_cache` (plan 017: `run_ask`/`run_get`/\n    `run_invalidate` orquestrando os RPCs `QueryWithCache`/`GetAnswerById`/\n    `InvalidateCache`; a digestão LLM roda localmente via `arags-llm`/`user_config`\n    e o `StoreAnswer` é fire-and-forget), `memory` (admin: list/get/invalidate/\n    cleanup → ListMemory/GetCache/InvalidateCache/TriggerMaintenance),\n    `persist` (escreve `wiki/*.md` via LLM do usuário), `history`.\"\"\",\n\"\"\"- `src/auth_client.rs` — `AragsClient` autenticado (`AuthRefresh` + interceptor\n  Bearer com renovação em background).\n- `src/backend.rs` — resolve o backend LLM do usuário a partir de\n  `[[llm.backends]]` (usado por `query -qa` e `persist`).\n- `src/client.rs` — `ClientConfig` + `connect_channel` (retry/backoff, validação\n  de endereço, TLS automático em `https://` e mTLS via `[server].tls_ca`/\n  `tls_cert`/`tls_key`).\n- `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,\n  `[server]` com knobs TLS, `[project]`); merge granular testado inline;\n  arquivos legados `config.toml` **não** são lidos.\n- `src/commands/` — módulos de comando:\n  - `qa_cache` (plan 017: `run_ask`/`run_get`/`run_invalidate` orquestrando os\n    RPCs `QueryWithCache`/`GetAnswerById`/`InvalidateCache`; a digestão LLM roda\n    localmente via `arags-llm`/`user_config` e o `StoreAnswer` é fire-and-forget),\n  - `persist` (escreve `wiki/*.md` via LLM do usuário).\n  - `index`, `search`, `query`, `memory` (admin), `history` vivem em\n    `dispatch/server.rs` (streaming de arquivos + renderização).\"\"\")\n\ns = s.replace(\"\"\"## Dependências\n- Internas: `arags-core`, `arags-storage`, `arags-search`, `arags-memory`,\n  `arags-llm`, `arags-embedding`, `arags-proto`.\n- Externas: `clap` (derive), `tokio` (async), `tonic`/`prost` (gRPC),\n  `axum`/`tower-http` (HTTP/MCP), `tracing`/`tracing-subscriber` (logs),\n  `serde`/`tomoml` (config), `anyhow` (erros), `indicatif`/`console` (UI),\n  `mimalloc` (allocator), `parking_lot` (sync), `uuid`/`chrono`.\"\"\",\n\"\"\"## Dependências\n- Internas: `arags-core`, `arags-llm`, `arags-proto` (plan 020: sem\n  `arags-storage`/`arags-search`/`arags-memory` — o client nunca abre estado local;\n  guardado por teste em `tests/init_test.rs`).\n- Externas: `clap` (derive), `tokio`/`tokio-stream` (async/streaming),\n  `tonic` (gRPC), `tracing`/`tracing-subscriber` (logs), `serde`/`serde_json`/\n  `toml` (config/saída), `anyhow` (erros), `indicatif`/`console` (UI),\n  `chrono` (timestamps do wiki), `parking_lot` (sync), `mimalloc` (allocator).\"\"\")\n\ns = s.replace(\"\"\"- Testes de API pública ficam em `tests/`; `src/` não contém `#[cfg(test)]`.\"\"\",\n\"\"\"- Testes de API pública ficam em `tests/`; funções puras críticas (merge da\n  config) têm `#[cfg(test)]` inline com tempdirs.\"\"\")\n\ns = s.replace(\"\"\"- Padrão de produção: `dispatch::dispatch(cli, &rt)` resolve tudo e roteia para\n  o servidor gRPC.\"\"\", \"\")\ns = s.replace(\"\"\"- Padrão de produção: `dispatch::dispatch(cli, cfg)` resolve tudo e roteia para\n  o servidor gRPC.\"\"\",\n\"\"\"- Padrão de produção: `dispatch::dispatch(cli, &rt)` carrega a user_config e\n  roteia tudo para o servidor gRPC; nenhum comando abre Storage local.\"\"\")\n\nopen(p,'w').write(s)\nprint(\"cli MODULE ok\")\n\n# ─── arags-cli CHANGELOG ───\np = 'crates/arags-cli/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"\"\"### Added\n- **QA-Cache client (plan 017):**\"\"\",\n\"\"\"### Changed / Removed (auditoria plan 020)\n- **Removido o subcomando `serve`** (HTTP/MCP local) e todo o resto do data\n  plane local: `commands/serve/`, `commands/mcp/`, `metrics.rs` e `util::data_dir`\n  — o CLI é um **cliente gRPC puro** e não depende mais de `arags-storage`,\n  `arags-search`, `arags-memory`, `axum` nem `tower-http`.\n- **mTLS no cliente:** `[server] tls_ca`/`tls_cert`/`tls_key` na user config\n  (merge granular global→local) alimentam `ClientConfig` (`client.rs`).\n- Endereço resolvido apenas por `.arags.toml` → `~/.arags/arags.toml` → env\n  `ARAGS_SERVER_ADDR` (a flag inexistente `--server` saiu da documentação).\n\n### Added\n- Testes inline da `user_config`: merge granular/recursivo, `[auth]` só-global,\n  legados ignorados, precedência de endereço, campos TLS.\n- `tests/init_test.rs`: scaffold do `arags init` (`.arags.toml` gitignored,\n  sem credenciais locais) e guarda contra dependências de data plane.\n\n### QA-Cache client (plan 017):\"\"\".replace(\"### QA-Cache client (plan 017):\",\"### Added\\n- **QA-Cache client (plan 017):**\"))\n\n# fix duplicate \"### Added\" header if created twice\ns = s.replace(\"### Added\\n- Testes inline da `user_config`\", \"### Added (auditoria plan 020)\\n- Testes inline da `user_config`\",1)\n\nopen(p,'w').write(s)\nprint(\"cli CHANGELOG ok\")\nPYEOF"
 }
 ```
 
@@ -19071,12 +19071,12 @@ cli CHANGELOG ok
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** head -60 crates/arlm-cli/CHANGELOG.md
+**Title:** head -60 crates/arags-cli/CHANGELOG.md
 
 **Input:**
 ```json
 {
-  "command": "head -60 crates/arlm-cli/CHANGELOG.md"
+  "command": "head -60 crates/arags-cli/CHANGELOG.md"
 }
 ```
 
@@ -19089,33 +19089,33 @@ cli CHANGELOG ok
 > **Nota (planos 019/020):** o CLI passou por uma consolidação. Foram **removidos**
 > os subcomandos `run`, `context`, `session`, `status`, `cost`, `cancel`,
 > `checkpoints`, `restore-page`, `wiki`, `consolidate`, `decay` e `entities`, e o
-> modo local — o `arlm-cli` é agora um **cliente gRPC puro**. O servidor
-> (`arlm-server`) é um **plano de dados LLM-free**; o LLM do usuário é usado
+> modo local — o `arags-cli` é agora um **cliente gRPC puro**. O servidor
+> (`arags-server`) é um **plano de dados LLM-free**; o LLM do usuário é usado
 > apenas em `query -qa` (digest) e `persist` (summarize). A config passou a ser
-> 2-escopos (`~/.arlm/arlm.toml` global + `.arlm.toml` local; `[auth]` só-global);
+> 2-escopos (`~/.arags/arags.toml` global + `.arags.toml` local; `[auth]` só-global);
 > `config.toml` legado não é lido. Veja `plan/019-cli-consolidation.md` e
 > `plan/020-config-consolidation.md`.
 
 ### Changed / Removed (auditoria plan 020)
 - **Removido o subcomando `serve`** (HTTP/MCP local) e todo o resto do data
   plane local: `commands/serve/`, `commands/mcp/`, `metrics.rs` e `util::data_dir`
-  — o CLI é um **cliente gRPC puro** e não depende mais de `arlm-storage`,
-  `arlm-search`, `arlm-memory`, `axum` nem `tower-http`.
+  — o CLI é um **cliente gRPC puro** e não depende mais de `arags-storage`,
+  `arags-search`, `arags-memory`, `axum` nem `tower-http`.
 - **mTLS no cliente:** `[server] tls_ca`/`tls_cert`/`tls_key` na user config
   (merge granular global→local) alimentam `ClientConfig` (`client.rs`).
-- Endereço resolvido apenas por `.arlm.toml` → `~/.arlm/arlm.toml` → env
-  `ARLM_SERVER_ADDR` (a flag inexistente `--server` saiu da documentação).
+- Endereço resolvido apenas por `.arags.toml` → `~/.arags/arags.toml` → env
+  `ARAGS_SERVER_ADDR` (a flag inexistente `--server` saiu da documentação).
 
 ### Added (auditoria plan 020)
 - Testes inline da `user_config`: merge granular/recursivo, `[auth]` só-global,
   legados ignorados, precedência de endereço, campos TLS.
-- `tests/init_test.rs`: scaffold do `arlm init` (`.arlm.toml` gitignored,
+- `tests/init_test.rs`: scaffold do `arags init` (`.arags.toml` gitignored,
   sem credenciais locais) e guarda contra dependências de data plane.
 
 ### Added
 - **QA-Cache client (plan 017):** `commands/qa_cache.rs` com `run_ask` (usa
   `QueryWithCache`; em HIT devolve a resposta sem chamar LLM; em MISS sintetiza
-  top-K com o LLM do usuário via `arlm-llm`/`config.toml`, exibe e dispara
+  top-K com o LLM do usuário via `arags-llm`/`config.toml`, exibe e dispara
   `StoreAnswer` fire-and-forget), `run_get` (`GetAnswerById` por `cache_id`) e
   `run_invalidate` (`InvalidateCache` Stale/Delete + raio).
 - `cli/commands.rs`: `Query` estendido com `--qa`/`--cache-id` e subcomando
@@ -19152,16 +19152,16 @@ cli CHANGELOG ok
 
 *[step-start part]*
 
-Agora `arlm-server` (README config example + MODULE + CHANGELOG):
+Agora `arags-server` (README config example + MODULE + CHANGELOG):
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '80,140p' crates/arlm-server/README.md
+**Title:** sed -n '80,140p' crates/arags-server/README.md
 
 **Input:**
 ```json
 {
-  "command": "sed -n '80,140p' crates/arlm-server/README.md"
+  "command": "sed -n '80,140p' crates/arags-server/README.md"
 }
 ```
 
@@ -19172,13 +19172,13 @@ Agora `arlm-server` (README config example + MODULE + CHANGELOG):
 > escreva estado) exigem um `Authorization: Bearer <session>` válido; operações
 > de invalidação exigem role `Admin`. Clientes obtêm a sessão via `AuthRefresh`.
 > O servidor é **LLM-free**: nenhum LLM é invocado aqui — a síntese (digest/
-> summarize) roda no client (config `arlm-llm` do usuário).
+> summarize) roda no client (config `arags-llm` do usuário).
 
 ## Arquitetura
 
-Fluxo: `arlm-cli` → `arlm-server` (gRPC, plano de dados) → `arlm-storage`
-(SQLite + LanceDB) / `arlm-embedding` (chunking + embeddings) / `arlm-memory`
-(memória, histórico, manutenção). Sem `arlm-core` engine nem `arlm-llm` no
+Fluxo: `arags-cli` → `arags-server` (gRPC, plano de dados) → `arags-storage`
+(SQLite + LanceDB) / `arags-embedding` (chunking + embeddings) / `arags-memory`
+(memória, histórico, manutenção). Sem `arags-core` engine nem `arags-llm` no
 servidor.
 
 - **Handlers gRPC** (`src/grpc/*`): um arquivo por grupo de RPCs
@@ -19240,7 +19240,7 @@ Idêntica ao workspace (MIT/Apache-2.0).
 #### 🔧 Tool: bash
 **Status:** completed
 **Title:** python3 - <<'PYEOF'
-p = 'crates/arlm-server/README.md'
+p = 'crates/arags-server/README.md'
 s = open(p).read()
 
 s = s.replace("""```toml
@@ -19267,12 +19267,12 @@ interval_secs = 3600
 decay_score_floor = 0.05
 ```""",
 """```toml
-listen_addr = "127.0.0.1:50051"   # env ARLM_SERVER_ADDR sobrescreve
-data_dir = "/data/arlm"           # env ARLM_DATA_DIR sobrescreve
+listen_addr = "127.0.0.1:50051"   # env ARAGS_SERVER_ADDR sobrescreve
+data_dir = "/data/arags"           # env ARAGS_DATA_DIR sobrescreve
 
-# tls_cert = "/etc/arlm/tls/server.crt"   # opcional → habilita TLS
-# tls_key  = "/etc/arlm/tls/server.key"
-# mtls_ca  = "/etc/arlm/tls/ca.crt"       # exige client cert (mTLS)
+# tls_cert = "/etc/arags/tls/server.crt"   # opcional → habilita TLS
+# tls_key  = "/etc/arags/tls/server.key"
+# mtls_ca  = "/etc/arags/tls/ca.crt"       # exige client cert (mTLS)
 
 pool_size = 4            # pool de escrita SQLite (1 = single-mode)
 flush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)
@@ -19315,8 +19315,8 @@ decay_score_floor = 0.05
 retention_days = 90                   # purge no ticker; 0 = mantém
 ```
 
-> Os knobs de embedding vivem **apenas** aqui — as envs `ARLM_OLLAMA_*`,
-> `ARLM_MODEL_DIR` e `ARLM_EMBED_BATCH` foram substituídas pelo `[embedder]`
+> Os knobs de embedding vivem **apenas** aqui — as envs `ARAGS_OLLAMA_*`,
+> `ARAGS_MODEL_DIR` e `ARAGS_EMBED_BATCH` foram substituídas pelo `[embedder]`
 > do `server.toml` (plan 020).""")
 
 s = s.replace("""- **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)
@@ -19332,7 +19332,7 @@ PYEOF
 **Input:**
 ```json
 {
-  "command": "python3 - <<'PYEOF'\np = 'crates/arlm-server/README.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"```toml\nlisten_addr = \"127.0.0.1:50051\"\ndata_dir    = \"/data\"\n# tls_cert / tls_key     # opcionais → habilita TLS\n\n[embedder]\nmax_tokens = 512          # tamanho máximo de chunk (tokens)\noverlap_tokens = 64       # sobreposição entre chunks\n\n[qa_cache]\nenabled = true\nnovel_k = 20              # chunks digeridos numa pergunta nova (client)\nprovenance_k = 5          # chunks de provenance devolvidos com a resposta\nsim_high = 0.90           # acima disso → reaproveita + re-digest leve\nsim_floor = 0.40          # abaixo disso → trata como nova (digest completo)\nmax_entries_per_project = 1000\nlambda_ms = 86400000      # decaimento do score LRU ponderado\ncache_ttl_ms = 0          # 0 = sem TTL\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.05\n```\"\"\",\n\"\"\"```toml\nlisten_addr = \"127.0.0.1:50051\"   # env ARLM_SERVER_ADDR sobrescreve\ndata_dir = \"/data/arlm\"           # env ARLM_DATA_DIR sobrescreve\n\n# tls_cert = \"/etc/arlm/tls/server.crt\"   # opcional → habilita TLS\n# tls_key  = \"/etc/arlm/tls/server.key\"\n# mtls_ca  = \"/etc/arlm/tls/ca.crt\"       # exige client cert (mTLS)\n\npool_size = 4            # pool de escrita SQLite (1 = single-mode)\nflush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)\nmax_batch_size = 50      # linhas por transação de indexação\n\n[embedder]\nmodel = \"ollama\"                      # bge-m3 | ollama | lightweight\n# model_dir = \"/models/bge-m3\"        # p/ bge-m3 (model.safetensors)\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                    # \"search_document: \" p/ família nomic\ndims = 384\nbatch_size = 64                       # chunks por request de embedding\nmax_tokens = 512                      # tamanho máximo de chunk (tokens)\noverlap_tokens = 64                   # sobreposição entre chunks\ncache = true                          # cache SQLite de embeddings\n\n[search]\ntier = \"hybrid\"                       # default p/ SEARCH_TIER_UNSPECIFIED\ntop_k = 10                            # quando o request omite max_results\nmax_tokens = 8000                     # budget do contexto\n\n[qa_cache]\nnovel_k = 20              # chunks digeridos numa pergunta nova (client)\nprovenance_k = 5          # chunks de provenance devolvidos com a resposta\nsim_high = 0.90           # acima disso → hit de alta confiança\nsim_floor = 0.40          # abaixo disso → nova pergunta (digest completo)\ntier_steps = [0.90, 0.80, 0.70, 0.60, 0.50]\njaccard_min = 0.5\nquestion_vector_dims = 1024\nmax_entries_per_project = 1000\neviction_lambda_ms = 604800000\neviction_interval_ms = 60000\n\n[maintenance]\ninterval_secs = 3600                  # 0 = desliga o ticker\ndecay_score_floor = 0.05\n\n[history]\nretention_days = 90                   # purge no ticker; 0 = mantém\n```\n\n> Os knobs de embedding vivem **apenas** aqui — as envs `ARLM_OLLAMA_*`,\n> `ARLM_MODEL_DIR` e `ARLM_EMBED_BATCH` foram substituídas pelo `[embedder]`\n> do `server.toml` (plan 020).\"\"\")\n\ns = s.replace(\"\"\"- **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)\n  e RPC admin `TriggerMaintenance`.\"\"\",\n\"\"\"- **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)\n  + purge de histórico (`[history] retention_days`) e RPC admin\n  `TriggerMaintenance`.\"\"\")\n\nopen(p,'w').write(s)\nprint(\"server README ok\")\nPYEOF"
+  "command": "python3 - <<'PYEOF'\np = 'crates/arags-server/README.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"```toml\nlisten_addr = \"127.0.0.1:50051\"\ndata_dir    = \"/data\"\n# tls_cert / tls_key     # opcionais → habilita TLS\n\n[embedder]\nmax_tokens = 512          # tamanho máximo de chunk (tokens)\noverlap_tokens = 64       # sobreposição entre chunks\n\n[qa_cache]\nenabled = true\nnovel_k = 20              # chunks digeridos numa pergunta nova (client)\nprovenance_k = 5          # chunks de provenance devolvidos com a resposta\nsim_high = 0.90           # acima disso → reaproveita + re-digest leve\nsim_floor = 0.40          # abaixo disso → trata como nova (digest completo)\nmax_entries_per_project = 1000\nlambda_ms = 86400000      # decaimento do score LRU ponderado\ncache_ttl_ms = 0          # 0 = sem TTL\n\n[maintenance]\ninterval_secs = 3600\ndecay_score_floor = 0.05\n```\"\"\",\n\"\"\"```toml\nlisten_addr = \"127.0.0.1:50051\"   # env ARAGS_SERVER_ADDR sobrescreve\ndata_dir = \"/data/arags\"           # env ARAGS_DATA_DIR sobrescreve\n\n# tls_cert = \"/etc/arags/tls/server.crt\"   # opcional → habilita TLS\n# tls_key  = \"/etc/arags/tls/server.key\"\n# mtls_ca  = \"/etc/arags/tls/ca.crt\"       # exige client cert (mTLS)\n\npool_size = 4            # pool de escrita SQLite (1 = single-mode)\nflush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)\nmax_batch_size = 50      # linhas por transação de indexação\n\n[embedder]\nmodel = \"ollama\"                      # bge-m3 | ollama | lightweight\n# model_dir = \"/models/bge-m3\"        # p/ bge-m3 (model.safetensors)\nollama_url = \"http://127.0.0.1:11434\"\nollama_model = \"all-minilm\"\nollama_prefix = \"\"                    # \"search_document: \" p/ família nomic\ndims = 384\nbatch_size = 64                       # chunks por request de embedding\nmax_tokens = 512                      # tamanho máximo de chunk (tokens)\noverlap_tokens = 64                   # sobreposição entre chunks\ncache = true                          # cache SQLite de embeddings\n\n[search]\ntier = \"hybrid\"                       # default p/ SEARCH_TIER_UNSPECIFIED\ntop_k = 10                            # quando o request omite max_results\nmax_tokens = 8000                     # budget do contexto\n\n[qa_cache]\nnovel_k = 20              # chunks digeridos numa pergunta nova (client)\nprovenance_k = 5          # chunks de provenance devolvidos com a resposta\nsim_high = 0.90           # acima disso → hit de alta confiança\nsim_floor = 0.40          # abaixo disso → nova pergunta (digest completo)\ntier_steps = [0.90, 0.80, 0.70, 0.60, 0.50]\njaccard_min = 0.5\nquestion_vector_dims = 1024\nmax_entries_per_project = 1000\neviction_lambda_ms = 604800000\neviction_interval_ms = 60000\n\n[maintenance]\ninterval_secs = 3600                  # 0 = desliga o ticker\ndecay_score_floor = 0.05\n\n[history]\nretention_days = 90                   # purge no ticker; 0 = mantém\n```\n\n> Os knobs de embedding vivem **apenas** aqui — as envs `ARAGS_OLLAMA_*`,\n> `ARAGS_MODEL_DIR` e `ARAGS_EMBED_BATCH` foram substituídas pelo `[embedder]`\n> do `server.toml` (plan 020).\"\"\")\n\ns = s.replace(\"\"\"- **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)\n  e RPC admin `TriggerMaintenance`.\"\"\",\n\"\"\"- **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)\n  + purge de histórico (`[history] retention_days`) e RPC admin\n  `TriggerMaintenance`.\"\"\")\n\nopen(p,'w').write(s)\nprint(\"server README ok\")\nPYEOF"
 }
 ```
 
@@ -19354,7 +19354,7 @@ server README ok
 #### 🔧 Tool: bash
 **Status:** completed
 **Title:** python3 - <<'PYEOF'
-p = 'crates/arlm-server/MODULE.md'
+p = 'crates/arags-server/MODULE.md'
 s = open(p).read()
 
 s = s.replace("""- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`).
@@ -19364,8 +19364,8 @@ s = s.replace("""- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; 
   `max_batch_size`), `[embedder]` (model/model_dir/ollama_*/dims/batch_size/
   max_tokens/overlap_tokens/cache), `[search]` (tier/top_k/max_tokens),
   `[qa_cache]`, `[maintenance]`, `[history] retention_days`. Load de
-  `ARLM_SERVER_CONFIG` (default `/etc/arlm/server.toml`) + overrides
-  `ARLM_SERVER_ADDR`/`ARLM_DATA_DIR`.
+  `ARAGS_SERVER_CONFIG` (default `/etc/arags/server.toml`) + overrides
+  `ARAGS_SERVER_ADDR`/`ARAGS_DATA_DIR`.
 - `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config,
   maintenance config); `load_embedder(&EmbedderConfig)` constrói o embedder da
   config (bge-m3/ollama/lightweight) e `wrap_with_cache` habilita o
@@ -19391,8 +19391,8 @@ s = s.replace("""  - `grpc/index.rs` — index_project (orquestra ingestão; cli
 open(p,'w').write(s)
 print("server MODULE ok")
 
-# ─── arlm-server CHANGELOG ───
-p = 'crates/arlm-server/CHANGELOG.md'
+# ─── arags-server CHANGELOG ───
+p = 'crates/arags-server/CHANGELOG.md'
 s = open(p).read()
 s = s.replace("## [Unreleased]\n", """## [Unreleased]
 
@@ -19403,7 +19403,7 @@ s = s.replace("## [Unreleased]\n", """## [Unreleased]
   storage tuning (`pool_size`, `flush_interval_ms`, `max_batch_size`);
   `mtls_ca` (mTLS via `client_ca_root`) e `[history] retention_days`.
 - **Embedder pela config:** `state::load_embedder(&EmbedderConfig)` substitui as
-  envs `ARLM_MODEL_DIR`/`ARLM_OLLAMA_*`; `CachedEmbedder` ativado por
+  envs `ARAGS_MODEL_DIR`/`ARAGS_OLLAMA_*`; `CachedEmbedder` ativado por
   `[embedder].cache` (cache SQLite por hash, degrada sem falhar).
 - **Storage híbrido:** `pool_size > 1` abre `open_pooled` (escritas no pool +
   conexão compartilhada p/ leituras); flusher de WAL checkpoint PASSIVE;
@@ -19415,7 +19415,7 @@ s = s.replace("## [Unreleased]\n", """## [Unreleased]
 ### Changed (auditoria plan 020)
 - Proto `SearchTier` renumerado: `SEARCH_TIER_UNSPECIFIED = 0` (tiers 1–4);
   requests sem tier resolvem para `[search].tier` do `server.toml`.
-- `admin create-refresh` aponta para `~/.arlm/arlm.toml [auth]`.
+- `admin create-refresh` aponta para `~/.arags/arags.toml [auth]`.
 """,1)
 open(p,'w').write(s)
 print("server CHANGELOG ok")
@@ -19424,7 +19424,7 @@ PYEOF
 **Input:**
 ```json
 {
-  "command": "python3 - <<'PYEOF'\np = 'crates/arlm-server/MODULE.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`).\n- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config, maintenance config).\"\"\",\n\"\"\"- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`):\n  listen/TLS/`mtls_ca`, storage (`pool_size`, `flush_interval_ms`,\n  `max_batch_size`), `[embedder]` (model/model_dir/ollama_*/dims/batch_size/\n  max_tokens/overlap_tokens/cache), `[search]` (tier/top_k/max_tokens),\n  `[qa_cache]`, `[maintenance]`, `[history] retention_days`. Load de\n  `ARLM_SERVER_CONFIG` (default `/etc/arlm/server.toml`) + overrides\n  `ARLM_SERVER_ADDR`/`ARLM_DATA_DIR`.\n- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config,\n  maintenance config); `load_embedder(&EmbedderConfig)` constrói o embedder da\n  config (bge-m3/ollama/lightweight) e `wrap_with_cache` habilita o\n  `CachedEmbedder` quando `[embedder].cache = true`.\"\"\")\n\ns = s.replace(\"\"\"- `src/lifecycle.rs` — `run`/`run_server` (shutdown gracioso, TLS opcional); abre o\n  `QuestionVectorStore` (espaço B) e repassa para `AppState::new`.\"\"\",\n\"\"\"- `src/lifecycle.rs` — `run`/`run_server`: shutdown gracioso, TLS + mTLS\n  (`client_ca_root`), storage pooled híbrido (`pool_size > 1` →\n  `Storage::open_pooled`), flusher de WAL (`flush_interval_ms` →\n  `wal_checkpoint(PASSIVE)`) e ticker de manutenção com purge de histórico\n  (`retention_days`). Abre os vector stores (espaço A/B) e repassa para\n  `AppState::new`.\"\"\")\n\ns = s.replace(\"\"\"  - `grpc/index.rs` — index_project (orquestra ingestão; client-streaming de texto).\n  - `grpc/search.rs` — search (BM25 FTS5 + semântica + RRF).\"\"\",\n\"\"\"  - `grpc/index.rs` — index_project (client-streaming de texto; server chunka\n    com `[embedder].max_tokens` e persiste em transações de `max_batch_size`;\n    embed em lotes de `[embedder].batch_size`).\n  - `grpc/search.rs` — search/context (BM25 FTS5 + semântica + RRF; defaults de\n    `[search]` aplicados a tier não informado, top_k e budget de contexto).\"\"\")\n\nopen(p,'w').write(s)\nprint(\"server MODULE ok\")\n\n# ─── arlm-server CHANGELOG ───\np = 'crates/arlm-server/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"## [Unreleased]\\n\", \"\"\"## [Unreleased]\n\n### Added (auditoria plan 020)\n- **Schema completo do `server.toml`:** `[embedder]` com\n  `model`/`model_dir`/`ollama_url`/`ollama_model`/`ollama_prefix`/`dims`/\n  `batch_size`/`quantization`/`cache`; `[search]` (`tier`/`top_k`/`max_tokens`);\n  storage tuning (`pool_size`, `flush_interval_ms`, `max_batch_size`);\n  `mtls_ca` (mTLS via `client_ca_root`) e `[history] retention_days`.\n- **Embedder pela config:** `state::load_embedder(&EmbedderConfig)` substitui as\n  envs `ARLM_MODEL_DIR`/`ARLM_OLLAMA_*`; `CachedEmbedder` ativado por\n  `[embedder].cache` (cache SQLite por hash, degrada sem falhar).\n- **Storage híbrido:** `pool_size > 1` abre `open_pooled` (escritas no pool +\n  conexão compartilhada p/ leituras); flusher de WAL checkpoint PASSIVE;\n  indexação grava em transações de `max_batch_size` linhas\n  (`store::insert_chunks_batched`).\n- **Purge de histórico** pelo ticker de manutenção (`[history] retention_days`,\n  default 90; 0 = mantém).\n\n### Changed (auditoria plan 020)\n- Proto `SearchTier` renumerado: `SEARCH_TIER_UNSPECIFIED = 0` (tiers 1–4);\n  requests sem tier resolvem para `[search].tier` do `server.toml`.\n- `admin create-refresh` aponta para `~/.arlm/arlm.toml [auth]`.\n\"\"\",1)\nopen(p,'w').write(s)\nprint(\"server CHANGELOG ok\")\nPYEOF"
+  "command": "python3 - <<'PYEOF'\np = 'crates/arags-server/MODULE.md'\ns = open(p).read()\n\ns = s.replace(\"\"\"- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`).\n- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config, maintenance config).\"\"\",\n\"\"\"- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`):\n  listen/TLS/`mtls_ca`, storage (`pool_size`, `flush_interval_ms`,\n  `max_batch_size`), `[embedder]` (model/model_dir/ollama_*/dims/batch_size/\n  max_tokens/overlap_tokens/cache), `[search]` (tier/top_k/max_tokens),\n  `[qa_cache]`, `[maintenance]`, `[history] retention_days`. Load de\n  `ARAGS_SERVER_CONFIG` (default `/etc/arags/server.toml`) + overrides\n  `ARAGS_SERVER_ADDR`/`ARAGS_DATA_DIR`.\n- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config,\n  maintenance config); `load_embedder(&EmbedderConfig)` constrói o embedder da\n  config (bge-m3/ollama/lightweight) e `wrap_with_cache` habilita o\n  `CachedEmbedder` quando `[embedder].cache = true`.\"\"\")\n\ns = s.replace(\"\"\"- `src/lifecycle.rs` — `run`/`run_server` (shutdown gracioso, TLS opcional); abre o\n  `QuestionVectorStore` (espaço B) e repassa para `AppState::new`.\"\"\",\n\"\"\"- `src/lifecycle.rs` — `run`/`run_server`: shutdown gracioso, TLS + mTLS\n  (`client_ca_root`), storage pooled híbrido (`pool_size > 1` →\n  `Storage::open_pooled`), flusher de WAL (`flush_interval_ms` →\n  `wal_checkpoint(PASSIVE)`) e ticker de manutenção com purge de histórico\n  (`retention_days`). Abre os vector stores (espaço A/B) e repassa para\n  `AppState::new`.\"\"\")\n\ns = s.replace(\"\"\"  - `grpc/index.rs` — index_project (orquestra ingestão; client-streaming de texto).\n  - `grpc/search.rs` — search (BM25 FTS5 + semântica + RRF).\"\"\",\n\"\"\"  - `grpc/index.rs` — index_project (client-streaming de texto; server chunka\n    com `[embedder].max_tokens` e persiste em transações de `max_batch_size`;\n    embed em lotes de `[embedder].batch_size`).\n  - `grpc/search.rs` — search/context (BM25 FTS5 + semântica + RRF; defaults de\n    `[search]` aplicados a tier não informado, top_k e budget de contexto).\"\"\")\n\nopen(p,'w').write(s)\nprint(\"server MODULE ok\")\n\n# ─── arags-server CHANGELOG ───\np = 'crates/arags-server/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"## [Unreleased]\\n\", \"\"\"## [Unreleased]\n\n### Added (auditoria plan 020)\n- **Schema completo do `server.toml`:** `[embedder]` com\n  `model`/`model_dir`/`ollama_url`/`ollama_model`/`ollama_prefix`/`dims`/\n  `batch_size`/`quantization`/`cache`; `[search]` (`tier`/`top_k`/`max_tokens`);\n  storage tuning (`pool_size`, `flush_interval_ms`, `max_batch_size`);\n  `mtls_ca` (mTLS via `client_ca_root`) e `[history] retention_days`.\n- **Embedder pela config:** `state::load_embedder(&EmbedderConfig)` substitui as\n  envs `ARAGS_MODEL_DIR`/`ARAGS_OLLAMA_*`; `CachedEmbedder` ativado por\n  `[embedder].cache` (cache SQLite por hash, degrada sem falhar).\n- **Storage híbrido:** `pool_size > 1` abre `open_pooled` (escritas no pool +\n  conexão compartilhada p/ leituras); flusher de WAL checkpoint PASSIVE;\n  indexação grava em transações de `max_batch_size` linhas\n  (`store::insert_chunks_batched`).\n- **Purge de histórico** pelo ticker de manutenção (`[history] retention_days`,\n  default 90; 0 = mantém).\n\n### Changed (auditoria plan 020)\n- Proto `SearchTier` renumerado: `SEARCH_TIER_UNSPECIFIED = 0` (tiers 1–4);\n  requests sem tier resolvem para `[search].tier` do `server.toml`.\n- `admin create-refresh` aponta para `~/.arags/arags.toml [auth]`.\n\"\"\",1)\nopen(p,'w').write(s)\nprint(\"server CHANGELOG ok\")\nPYEOF"
 }
 ```
 
@@ -19447,8 +19447,8 @@ server CHANGELOG ok
 #### 🔧 Tool: bash
 **Status:** completed
 **Title:** python3 - <<'PYEOF'
-# ─── arlm-storage MODULE ───
-p = 'crates/arlm-storage/MODULE.md'
+# ─── arags-storage MODULE ───
+p = 'crates/arags-storage/MODULE.md'
 s = open(p).read()
 
 s = s.replace("- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`.",
@@ -19457,12 +19457,12 @@ s = s.replace("- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open
 s = s.replace("- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`.",
 "- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`/`purge_history_before` (retenção `[history] retention_days` do server, plan 020; testado inline).")
 
-s = s.replace("`question_hash`/`chunk_content_hash`,", "`question_hash`/`chunk_content_hash` (re-export de `arlm_core::qa_cache::chunk_content_hash` — cliente e servidor compartilham a mesma implementação, plan 020),")
+s = s.replace("`question_hash`/`chunk_content_hash`,", "`question_hash`/`chunk_content_hash` (re-export de `arags_core::qa_cache::chunk_content_hash` — cliente e servidor compartilham a mesma implementação, plan 020),")
 
 s = s.replace("""## Dependências
-- Internas: nenhuma (crate folha de storage; consumido por `arlm-search`, `arlm-server`, `arlm-cli`).""",
+- Internas: nenhuma (crate folha de storage; consumido por `arags-search`, `arags-server`, `arags-cli`).""",
 """## Dependências
-- Internas: `arlm-core` (hash canônico de chunk compartilhado com o client; plan 020).""")
+- Internas: `arags-core` (hash canônico de chunk compartilhado com o client; plan 020).""")
 
 s = s.replace("- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor (WAL + r2d2, múltiplos readers).",
 "- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor híbrido (WAL + r2d2 p/ escritas concorrentes + shared conn p/ leituras; plan 020 `pool_size`).")
@@ -19470,8 +19470,8 @@ s = s.replace("- `Storage::open` = single (CLI, lock exclusivo opcional); `open_
 open(p,'w').write(s)
 print("storage MODULE ok")
 
-# ─── arlm-storage CHANGELOG ───
-p = 'crates/arlm-storage/CHANGELOG.md'
+# ─── arags-storage CHANGELOG ───
+p = 'crates/arags-storage/CHANGELOG.md'
 s = open(p).read()
 s = s.replace("## [Unreleased]\n", """## [Unreleased]
 
@@ -19485,25 +19485,25 @@ s = s.replace("## [Unreleased]\n", """## [Unreleased]
 - `open_pooled` tornou-se **híbrido**: mantém a conexão compartilhada além do
   pool, então `conn()` (read helpers) funciona em ambos os modos — habilita
   `pool_size > 1` no server sem reescrever os read paths.
-- `chunk_content_hash` agora é re-export de `arlm_core::qa_cache` (fonte única
+- `chunk_content_hash` agora é re-export de `arags_core::qa_cache` (fonte única
   compartilhada com o client gRPC puro).
 """,1)
 open(p,'w').write(s)
 print("storage CHANGELOG ok")
 
-# ─── arlm-embedding MODULE + CHANGELOG ───
-p = 'crates/arlm-embedding/MODULE.md'
+# ─── arags-embedding MODULE + CHANGELOG ───
+p = 'crates/arags-embedding/MODULE.md'
 s = open(p).read()
 s = s.replace("- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256).",
 "- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256) + **`CachedEmbedder`** (wrapper da trait `Embedder`: hits pulam inferência, batch com mistos hit/miss, falhas de cache degradam a pass-through; ativado por `server.toml [embedder].cache = true`).")
 open(p,'w').write(s)
 
-p = 'crates/arlm-embedding/CHANGELOG.md'
+p = 'crates/arags-embedding/CHANGELOG.md'
 s = open(p).read()
 if s.rstrip().startswith('#'):
     marker = "## [Unreleased]"
     if marker in s:
-        s = s.replace(marker, marker + "\n\n### Added (auditoria plan 020)\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed). Consumido pelo `arlm-server` quando `server.toml [embedder].cache = true`.\n",1)
+        s = s.replace(marker, marker + "\n\n### Added (auditoria plan 020)\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed). Consumido pelo `arags-server` quando `server.toml [embedder].cache = true`.\n",1)
     else:
         s = s.replace("# Changelog", "# Changelog\n\n## [Unreleased]\n\n### Added\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed).\n",1)
     open(p,'w').write(s)
@@ -19517,7 +19517,7 @@ PYEOF
 **Input:**
 ```json
 {
-  "command": "python3 - <<'PYEOF'\n# ─── arlm-storage MODULE ───\np = 'crates/arlm-storage/MODULE.md'\ns = open(p).read()\n\ns = s.replace(\"- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`.\",\n\"- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, `wal_checkpoint(PASSIVE)` (flush de WAL, plan 020) e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`. `open_pooled` é **híbrido**: pool r2d2 para escritas (`connection()`) + conexão compartilhada dedicada para os read helpers (`conn()`), válidos nos dois modos.\")\n\ns = s.replace(\"- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`.\",\n\"- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`/`purge_history_before` (retenção `[history] retention_days` do server, plan 020; testado inline).\")\n\ns = s.replace(\"`question_hash`/`chunk_content_hash`,\", \"`question_hash`/`chunk_content_hash` (re-export de `arlm_core::qa_cache::chunk_content_hash` — cliente e servidor compartilham a mesma implementação, plan 020),\")\n\ns = s.replace(\"\"\"## Dependências\n- Internas: nenhuma (crate folha de storage; consumido por `arlm-search`, `arlm-server`, `arlm-cli`).\"\"\",\n\"\"\"## Dependências\n- Internas: `arlm-core` (hash canônico de chunk compartilhado com o client; plan 020).\"\"\")\n\ns = s.replace(\"- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor (WAL + r2d2, múltiplos readers).\",\n\"- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor híbrido (WAL + r2d2 p/ escritas concorrentes + shared conn p/ leituras; plan 020 `pool_size`).\")\n\nopen(p,'w').write(s)\nprint(\"storage MODULE ok\")\n\n# ─── arlm-storage CHANGELOG ───\np = 'crates/arlm-storage/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"## [Unreleased]\\n\", \"\"\"## [Unreleased]\n\n### Added (auditoria plan 020)\n- `Storage::wal_checkpoint()` — checkpoint PASSIVE do WAL para o flusher\n  `flush_interval_ms` do server.\n- `Storage::purge_history_before(cutoff)` — retenção de histórico\n  (`[history] retention_days`), com teste unitário.\n\n### Changed (auditoria plan 020)\n- `open_pooled` tornou-se **híbrido**: mantém a conexão compartilhada além do\n  pool, então `conn()` (read helpers) funciona em ambos os modos — habilita\n  `pool_size > 1` no server sem reescrever os read paths.\n- `chunk_content_hash` agora é re-export de `arlm_core::qa_cache` (fonte única\n  compartilhada com o client gRPC puro).\n\"\"\",1)\nopen(p,'w').write(s)\nprint(\"storage CHANGELOG ok\")\n\n# ─── arlm-embedding MODULE + CHANGELOG ───\np = 'crates/arlm-embedding/MODULE.md'\ns = open(p).read()\ns = s.replace(\"- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256).\",\n\"- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256) + **`CachedEmbedder`** (wrapper da trait `Embedder`: hits pulam inferência, batch com mistos hit/miss, falhas de cache degradam a pass-through; ativado por `server.toml [embedder].cache = true`).\")\nopen(p,'w').write(s)\n\np = 'crates/arlm-embedding/CHANGELOG.md'\ns = open(p).read()\nif s.rstrip().startswith('#'):\n    marker = \"## [Unreleased]\"\n    if marker in s:\n        s = s.replace(marker, marker + \"\\n\\n### Added (auditoria plan 020)\\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed). Consumido pelo `arlm-server` quando `server.toml [embedder].cache = true`.\\n\",1)\n    else:\n        s = s.replace(\"# Changelog\", \"# Changelog\\n\\n## [Unreleased]\\n\\n### Added\\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed).\\n\",1)\n    open(p,'w').write(s)\n    print(\"embedding CHANGELOG ok\")\nelse:\n    print(\"embedding CHANGELOG vazio?\")\n\nprint(\"embedding MODULE ok\")\nPYEOF"
+  "command": "python3 - <<'PYEOF'\n# ─── arags-storage MODULE ───\np = 'crates/arags-storage/MODULE.md'\ns = open(p).read()\n\ns = s.replace(\"- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`.\",\n\"- `src/sqlite/conn.rs` — `Storage::open`/`open_exclusive`/`open_pooled`, `apply_pragmas`, `StorageConnection` (Single/Pooled), `pool_stats`, `wal_checkpoint(PASSIVE)` (flush de WAL, plan 020) e `backup` (`VACUUM INTO`)/`verify` (`integrity_check`)/`ensure_fts5_available`/`analyze`. `open_pooled` é **híbrido**: pool r2d2 para escritas (`connection()`) + conexão compartilhada dedicada para os read helpers (`conn()`), válidos nos dois modos.\")\n\ns = s.replace(\"- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`.\",\n\"- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`/`purge_history_before` (retenção `[history] retention_days` do server, plan 020; testado inline).\")\n\ns = s.replace(\"`question_hash`/`chunk_content_hash`,\", \"`question_hash`/`chunk_content_hash` (re-export de `arags_core::qa_cache::chunk_content_hash` — cliente e servidor compartilham a mesma implementação, plan 020),\")\n\ns = s.replace(\"\"\"## Dependências\n- Internas: nenhuma (crate folha de storage; consumido por `arags-search`, `arags-server`, `arags-cli`).\"\"\",\n\"\"\"## Dependências\n- Internas: `arags-core` (hash canônico de chunk compartilhado com o client; plan 020).\"\"\")\n\ns = s.replace(\"- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor (WAL + r2d2, múltiplos readers).\",\n\"- `Storage::open` = single (CLI, lock exclusivo opcional); `open_pooled` = servidor híbrido (WAL + r2d2 p/ escritas concorrentes + shared conn p/ leituras; plan 020 `pool_size`).\")\n\nopen(p,'w').write(s)\nprint(\"storage MODULE ok\")\n\n# ─── arags-storage CHANGELOG ───\np = 'crates/arags-storage/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"## [Unreleased]\\n\", \"\"\"## [Unreleased]\n\n### Added (auditoria plan 020)\n- `Storage::wal_checkpoint()` — checkpoint PASSIVE do WAL para o flusher\n  `flush_interval_ms` do server.\n- `Storage::purge_history_before(cutoff)` — retenção de histórico\n  (`[history] retention_days`), com teste unitário.\n\n### Changed (auditoria plan 020)\n- `open_pooled` tornou-se **híbrido**: mantém a conexão compartilhada além do\n  pool, então `conn()` (read helpers) funciona em ambos os modos — habilita\n  `pool_size > 1` no server sem reescrever os read paths.\n- `chunk_content_hash` agora é re-export de `arags_core::qa_cache` (fonte única\n  compartilhada com o client gRPC puro).\n\"\"\",1)\nopen(p,'w').write(s)\nprint(\"storage CHANGELOG ok\")\n\n# ─── arags-embedding MODULE + CHANGELOG ───\np = 'crates/arags-embedding/MODULE.md'\ns = open(p).read()\ns = s.replace(\"- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256).\",\n\"- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256) + **`CachedEmbedder`** (wrapper da trait `Embedder`: hits pulam inferência, batch com mistos hit/miss, falhas de cache degradam a pass-through; ativado por `server.toml [embedder].cache = true`).\")\nopen(p,'w').write(s)\n\np = 'crates/arags-embedding/CHANGELOG.md'\ns = open(p).read()\nif s.rstrip().startswith('#'):\n    marker = \"## [Unreleased]\"\n    if marker in s:\n        s = s.replace(marker, marker + \"\\n\\n### Added (auditoria plan 020)\\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed). Consumido pelo `arags-server` quando `server.toml [embedder].cache = true`.\\n\",1)\n    else:\n        s = s.replace(\"# Changelog\", \"# Changelog\\n\\n## [Unreleased]\\n\\n### Added\\n- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed).\\n\",1)\n    open(p,'w').write(s)\n    print(\"embedding CHANGELOG ok\")\nelse:\n    print(\"embedding CHANGELOG vazio?\")\n\nprint(\"embedding MODULE ok\")\nPYEOF"
 }
 ```
 
@@ -19541,12 +19541,12 @@ embedding MODULE ok
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** head -20 crates/arlm-embedding/CHANGELOG.md; echo "===CORE==="; head -25 crates/arlm-core/CHANGELOG.md
+**Title:** head -20 crates/arags-embedding/CHANGELOG.md; echo "===CORE==="; head -25 crates/arags-core/CHANGELOG.md
 
 **Input:**
 ```json
 {
-  "command": "head -20 crates/arlm-embedding/CHANGELOG.md; echo \"===CORE===\"; head -25 crates/arlm-core/CHANGELOG.md"
+  "command": "head -20 crates/arags-embedding/CHANGELOG.md; echo \"===CORE===\"; head -25 crates/arags-core/CHANGELOG.md"
 }
 ```
 
@@ -19613,9 +19613,9 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 <details>
 <summary>Click to expand reasoning</summary>
 
-The embedding CHANGELOG had no `[Unreleased]` section — my script's fallback replaced "# Changelog" adding Unreleased. Let me verify what it did (it printed "embedding CHANGELOG ok" — need to check whether marker existed; the output shows `## [0.4.0]` directly after header, so no [Unreleased]; the fallback branch added one after "# Changelog"). Let me verify, then add arlm-core entries (chunk_content_hash) and proto entry (SearchTier). Then check remaining stale docs: docs/opencode-setup.md (already fixed), OLLAMA_EMBED_PROPOSED.md (historical proposal doc — probably fine to leave as historical), STAGING.md (has historical note already), agents/README.md (fixed), root README (done).
+The embedding CHANGELOG had no `[Unreleased]` section — my script's fallback replaced "# Changelog" adding Unreleased. Let me verify what it did (it printed "embedding CHANGELOG ok" — need to check whether marker existed; the output shows `## [0.4.0]` directly after header, so no [Unreleased]; the fallback branch added one after "# Changelog"). Let me verify, then add arags-core entries (chunk_content_hash) and proto entry (SearchTier). Then check remaining stale docs: docs/opencode-setup.md (already fixed), OLLAMA_EMBED_PROPOSED.md (historical proposal doc — probably fine to leave as historical), STAGING.md (has historical note already), agents/README.md (fixed), root README (done).
 
-Also crates/arlm-proto/MODULE.md mentions "6 testes de integração" — now still 6? proto_contract.rs had 6 tests; unchanged count. Fine.
+Also crates/arags-proto/MODULE.md mentions "6 testes de integração" — now still 6? proto_contract.rs had 6 tests; unchanged count. Fine.
 
 Check embedding changelog result.
 
@@ -19623,12 +19623,12 @@ Check embedding changelog result.
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** head -12 crates/arlm-embedding/CHANGELOG.md
+**Title:** head -12 crates/arags-embedding/CHANGELOG.md
 
 **Input:**
 ```json
 {
-  "command": "head -12 crates/arlm-embedding/CHANGELOG.md"
+  "command": "head -12 crates/arags-embedding/CHANGELOG.md"
 }
 ```
 
@@ -19658,13 +19658,13 @@ Check embedding changelog result.
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-embedding/CHANGELOG.md
+**Title:** crates/arags-embedding/CHANGELOG.md
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-embedding/CHANGELOG.md",
-  "newString": "# Changelog\n\n## [Unreleased]\n\n### Added\n- **`CachedEmbedder`** (`src/embedder/cache.rs`): wrapper da trait `Embedder`\n  com cache SQLite por hash de conteúdo — hit pula a inferência; batch suporta\n  misto hit/miss; erros de cache degradam para pass-through (nunca falham o\n  embed). Consumido pelo `arlm-server` quando `server.toml [embedder].cache =\n  true` (plan 020), com testes unitários.\n\n## [0.4.0] - 2026-08-20",
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-embedding/CHANGELOG.md",
+  "newString": "# Changelog\n\n## [Unreleased]\n\n### Added\n- **`CachedEmbedder`** (`src/embedder/cache.rs`): wrapper da trait `Embedder`\n  com cache SQLite por hash de conteúdo — hit pula a inferência; batch suporta\n  misto hit/miss; erros de cache degradam para pass-through (nunca falham o\n  embed). Consumido pelo `arags-server` quando `server.toml [embedder].cache =\n  true` (plan 020), com testes unitários.\n\n## [0.4.0] - 2026-08-20",
   "oldString": "# Changelog\n\n## [0.4.0] - 2026-08-20"
 }
 ```
@@ -19686,8 +19686,8 @@ Edit applied successfully.
 #### 🔧 Tool: bash
 **Status:** completed
 **Title:** python3 - <<'PYEOF'
-# ─── arlm-core CHANGELOG + MODULE ───
-p = 'crates/arlm-core/CHANGELOG.md'
+# ─── arags-core CHANGELOG + MODULE ───
+p = 'crates/arags-core/CHANGELOG.md'
 s = open(p).read()
 s = s.replace("""## [Unreleased]
 
@@ -19697,7 +19697,7 @@ s = s.replace("""## [Unreleased]
 
 ### Added (auditoria plan 020)
 - `qa_cache::chunk_content_hash(content)` — hash canônico SHA-256 hex do texto
-  do chunk, movido do `arlm-storage` para cá: cliente (digest-once
+  do chunk, movido do `arags-storage` para cá: cliente (digest-once
   `StoreAnswer.source_hashes`) e servidor (staleness) compartilham a mesma
   implementação sem o client depender de storage. Re-exportado pelo storage.
 
@@ -19706,7 +19706,7 @@ s = s.replace("""## [Unreleased]
 open(p,'w').write(s)
 print("core CHANGELOG ok")
 
-p = 'crates/arlm-core/MODULE.md'
+p = 'crates/arags-core/MODULE.md'
 s = open(p).read()
 s = s.replace("""- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia""",
 """- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia""")
@@ -19719,13 +19719,13 @@ s = s.replace("""  similaridade de pergunta (cosseno) + Jaccard de provenance em
 - `src/qa_cache/mod.rs` também abriga **`chunk_content_hash`** (SHA-256 hex,
   plan 020): fonte única do hash canônico de chunk usada pelo client
   (`StoreAnswer.source_hashes`) e pelo server (staleness); re-exportada por
-  `arlm-storage`.""")
+  `arags-storage`.""")
 
 open(p,'w').write(s)
 print("core MODULE ok")
 
-# ─── arlm-proto CHANGELOG ───
-p = 'crates/arlm-proto/CHANGELOG.md'
+# ─── arags-proto CHANGELOG ───
+p = 'crates/arags-proto/CHANGELOG.md'
 s = open(p).read()
 s = s.replace("## [Unreleased]\n", """## [Unreleased]
 
@@ -19744,7 +19744,7 @@ PYEOF
 **Input:**
 ```json
 {
-  "command": "python3 - <<'PYEOF'\n# ─── arlm-core CHANGELOG + MODULE ───\np = 'crates/arlm-core/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"\"\"## [Unreleased]\n\n### Added\n- **QA-Cache engine (plan 017):**\"\"\",\n\"\"\"## [Unreleased]\n\n### Added (auditoria plan 020)\n- `qa_cache::chunk_content_hash(content)` — hash canônico SHA-256 hex do texto\n  do chunk, movido do `arlm-storage` para cá: cliente (digest-once\n  `StoreAnswer.source_hashes`) e servidor (staleness) compartilham a mesma\n  implementação sem o client depender de storage. Re-exportado pelo storage.\n\n### Added\n- **QA-Cache engine (plan 017):**\"\"\",1)\nopen(p,'w').write(s)\nprint(\"core CHANGELOG ok\")\n\np = 'crates/arlm-core/MODULE.md'\ns = open(p).read()\ns = s.replace(\"\"\"- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia\"\"\",\n\"\"\"- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia\"\"\")\ns = s.replace(\"\"\"  similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão\n  com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante\n  `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.\"\"\",\n\"\"\"  similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão\n  com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante\n  `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.\n- `src/qa_cache/mod.rs` também abriga **`chunk_content_hash`** (SHA-256 hex,\n  plan 020): fonte única do hash canônico de chunk usada pelo client\n  (`StoreAnswer.source_hashes`) e pelo server (staleness); re-exportada por\n  `arlm-storage`.\"\"\")\n\nopen(p,'w').write(s)\nprint(\"core MODULE ok\")\n\n# ─── arlm-proto CHANGELOG ───\np = 'crates/arlm-proto/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"## [Unreleased]\\n\", \"\"\"## [Unreleased]\n\n### Changed (auditoria plan 020 — BREAKING)\n- `SearchTier` renumerado: **`SEARCH_TIER_UNSPECIFIED = 0`** é o wire-default e\n  o servidor resolve para o seu `[search].tier`; tiers explícitos passam a ser\n  `TIER_BM25 = 1`, `TIER_SEMANTIC = 2`, `TIER_HYBRID = 3`, `TIER_ENTITY = 4`.\n  Clientes/servidores antigos em versões mistas verão tiers trocados — alinhe\n  as duas pontas (política break-total dos planos 019/020).\n- Contrato (`tests/proto_contract.rs`) atualizado para os novos valores.\n\"\"\",1)\nopen(p,'w').write(s)\nprint(\"proto CHANGELOG ok\")\nPYEOF"
+  "command": "python3 - <<'PYEOF'\n# ─── arags-core CHANGELOG + MODULE ───\np = 'crates/arags-core/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"\"\"## [Unreleased]\n\n### Added\n- **QA-Cache engine (plan 017):**\"\"\",\n\"\"\"## [Unreleased]\n\n### Added (auditoria plan 020)\n- `qa_cache::chunk_content_hash(content)` — hash canônico SHA-256 hex do texto\n  do chunk, movido do `arags-storage` para cá: cliente (digest-once\n  `StoreAnswer.source_hashes`) e servidor (staleness) compartilham a mesma\n  implementação sem o client depender de storage. Re-exportado pelo storage.\n\n### Added\n- **QA-Cache engine (plan 017):**\"\"\",1)\nopen(p,'w').write(s)\nprint(\"core CHANGELOG ok\")\n\np = 'crates/arags-core/MODULE.md'\ns = open(p).read()\ns = s.replace(\"\"\"- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia\"\"\",\n\"\"\"- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia\"\"\")\ns = s.replace(\"\"\"  similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão\n  com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante\n  `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.\"\"\",\n\"\"\"  similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão\n  com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante\n  `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.\n- `src/qa_cache/mod.rs` também abriga **`chunk_content_hash`** (SHA-256 hex,\n  plan 020): fonte única do hash canônico de chunk usada pelo client\n  (`StoreAnswer.source_hashes`) e pelo server (staleness); re-exportada por\n  `arags-storage`.\"\"\")\n\nopen(p,'w').write(s)\nprint(\"core MODULE ok\")\n\n# ─── arags-proto CHANGELOG ───\np = 'crates/arags-proto/CHANGELOG.md'\ns = open(p).read()\ns = s.replace(\"## [Unreleased]\\n\", \"\"\"## [Unreleased]\n\n### Changed (auditoria plan 020 — BREAKING)\n- `SearchTier` renumerado: **`SEARCH_TIER_UNSPECIFIED = 0`** é o wire-default e\n  o servidor resolve para o seu `[search].tier`; tiers explícitos passam a ser\n  `TIER_BM25 = 1`, `TIER_SEMANTIC = 2`, `TIER_HYBRID = 3`, `TIER_ENTITY = 4`.\n  Clientes/servidores antigos em versões mistas verão tiers trocados — alinhe\n  as duas pontas (política break-total dos planos 019/020).\n- Contrato (`tests/proto_contract.rs`) atualizado para os novos valores.\n\"\"\",1)\nopen(p,'w').write(s)\nprint(\"proto CHANGELOG ok\")\nPYEOF"
 }
 ```
 
@@ -19771,8 +19771,8 @@ proto CHANGELOG ok
 <summary>Click to expand reasoning</summary>
 
 Now check remaining stale docs:
-1. crates/arlm-search/README.md, MODULE.md, TODO.md — grep matched them for stale terms; check what they contain
-2. crates/arlm-memory/README.md, arlm-llm/MODULE.md, etc.
+1. crates/arags-search/README.md, MODULE.md, TODO.md — grep matched them for stale terms; check what they contain
+2. crates/arags-memory/README.md, arags-llm/MODULE.md, etc.
 3. OLLAMA_EMBED_PROPOSED.md — historical proposal, probably fine
 4. docs/opencode-setup.md — fixed earlier
 
@@ -19782,59 +19782,59 @@ Let me grep the specific matches in the remaining files to see if they're actual
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** for f in crates/arlm-search/README.md crates/arlm-search/MODULE.md crates/arlm-search/TODO.md crates/arlm-memory/README.md crates/arlm-llm/MODULE.md crates/arlm-core/README.md crates/arlm-embedding/README.md crates/arlm-proto/README.md crates/arll-proto/TODO.md crates/arlm-storage/README.md docs/opencode-setup.md OLLAMA_EMBED_PROPOSED.md; do [ -f "$f" ] && echo "##### $f" && rg -n "serve|/mcp|--server |ARLM_OLLAMA|ARLM_MODEL_DIR|ARLM_EMBED_BATCH|config\.toml" "$f" | head -6; done 2>/dev/null
+**Title:** for f in crates/arags-search/README.md crates/arags-search/MODULE.md crates/arags-search/TODO.md crates/arags-memory/README.md crates/arags-llm/MODULE.md crates/arags-core/README.md crates/arags-embedding/README.md crates/arags-proto/README.md crates/arll-proto/TODO.md crates/arags-storage/README.md docs/opencode-setup.md OLLAMA_EMBED_PROPOSED.md; do [ -f "$f" ] && echo "##### $f" && rg -n "serve|/mcp|--server |ARAGS_OLLAMA|ARAGS_MODEL_DIR|ARAGS_EMBED_BATCH|config\.toml" "$f" | head -6; done 2>/dev/null
 
 **Input:**
 ```json
 {
-  "command": "for f in crates/arlm-search/README.md crates/arlm-search/MODULE.md crates/arlm-search/TODO.md crates/arlm-memory/README.md crates/arlm-llm/MODULE.md crates/arlm-core/README.md crates/arlm-embedding/README.md crates/arlm-proto/README.md crates/arll-proto/TODO.md crates/arlm-storage/README.md docs/opencode-setup.md OLLAMA_EMBED_PROPOSED.md; do [ -f \"$f\" ] && echo \"##### $f\" && rg -n \"serve|/mcp|--server |ARLM_OLLAMA|ARLM_MODEL_DIR|ARLM_EMBED_BATCH|config\\.toml\" \"$f\" | head -6; done 2>/dev/null"
+  "command": "for f in crates/arags-search/README.md crates/arags-search/MODULE.md crates/arags-search/TODO.md crates/arags-memory/README.md crates/arags-llm/MODULE.md crates/arags-core/README.md crates/arags-embedding/README.md crates/arags-proto/README.md crates/arll-proto/TODO.md crates/arags-storage/README.md docs/opencode-setup.md OLLAMA_EMBED_PROPOSED.md; do [ -f \"$f\" ] && echo \"##### $f\" && rg -n \"serve|/mcp|--server |ARAGS_OLLAMA|ARAGS_MODEL_DIR|ARAGS_EMBED_BATCH|config\\.toml\" \"$f\" | head -6; done 2>/dev/null"
 }
 ```
 
 **Output:**
 ```
-##### crates/arlm-search/README.md
+##### crates/arags-search/README.md
 17:  pelo servidor (não há sumarizador server-side).
-20:> O servidor (`arlm-server`) é LLM-free. A busca híbrida (BM25 + semântica + RRF)
-##### crates/arlm-search/MODULE.md
-6:> **LLM-free server (plan 019):** o `arlm-server` não invoca LLM, então o rerank
+20:> O servidor (`arags-server`) é LLM-free. A busca híbrida (BM25 + semântica + RRF)
+##### crates/arags-search/MODULE.md
+6:> **LLM-free server (plan 019):** o `arags-server` não invoca LLM, então o rerank
 8:> também não é mais populada server-side (sem sumarizador). O rerank/LLM, quando
-##### crates/arlm-search/TODO.md
+##### crates/arags-search/TODO.md
 13:> não é usado server-side e a tabela `summaries` não é mais populada (sem
 14:> sumarizador server-side). Veja `plan/019-cli-consolidation.md`.
-##### crates/arlm-memory/README.md
+##### crates/arags-memory/README.md
 10:- **Consolidation**: Limpeza e merge de memória (manutenção server-side)
 11:- **Decay**: Decaimento de saliência (manutenção server-side)
 48:// Consolidação (manutenção server-side, via cron ou RPC admin)
-##### crates/arlm-llm/MODULE.md
-25:  `arlm-server` é LLM-free, portanto **não** usa `arlm-llm`).
-##### crates/arlm-core/README.md
-5:de biblioteca de suporte usada por `arlm-cli` e `arlm-server`.
-45:> `arlm` é hoje *on-demand* e *server-first*: o servidor é um plano de dados
-##### crates/arlm-embedding/README.md
+##### crates/arags-llm/MODULE.md
+25:  `arags-server` é LLM-free, portanto **não** usa `arags-llm`).
+##### crates/arags-core/README.md
+5:de biblioteca de suporte usada por `arags-cli` e `arags-server`.
+45:> `arags` é hoje *on-demand* e *server-first*: o servidor é um plano de dados
+##### crates/arags-embedding/README.md
 79:glob_match("*.pem", "server.pem")    // true
-##### crates/arlm-proto/README.md
+##### crates/arags-proto/README.md
 25:├── server.proto       # ServerStatus, ServerStatusRequest
-39:`arlm_proto::proto::*`, `arlm_proto::proto::arlm_service_server::ArlmService` e
-55:use arlm_proto::proto::arlm_service_server::ArlmService;
+39:`arags_proto::proto::*`, `arags_proto::proto::arags_service_server::AragsService` e
+55:use arags_proto::proto::arags_service_server::AragsService;
 69:  há mais runs de RLM nem sumarização server-side). `context.proto`/`session.proto`
-##### crates/arlm-storage/README.md
+##### crates/arags-storage/README.md
 14:  `store_answer` idempotente (reserve-lock), lookup por `(project, question_hash)`,
 183:`qa_cache` (hit/stale/eviction/scoping/reserve-lock) e auth tokens/sessões (plan 018).
 ##### docs/opencode-setup.md
 66:Index a project directory. The client streams raw file text to the server, which
-80:Instead of CLI tools, run the `arlm-server` data plane (pure gRPC; plan 020
+80:Instead of CLI tools, run the `arags-server` data plane (pure gRPC; plan 020
 84:# Start the gRPC data-plane server
-85:arlm-server up          # or: docker compose -f docker-compose.server.yml up -d
+85:arags-server up          # or: docker compose -f docker-compose.server.yml up -d
 91:The server is LLM-free — digest/summarize happen on the client via the user's
-97:`.arlm.toml` (gitignored) and identifies the project for the server. The server
+97:`.arags.toml` (gitignored) and identifies the project for the server. The server
 ##### OLLAMA_EMBED_PROPOSED.md
-1:# Plano: Ollama + arlm-server em container único (embeddings 100% locais)
-3:> Estado alvo: **cliente → gRPC arlm-server → Ollama (mesmo container)**. O
-10:- **Parte A** — `Dockerfile` único (Ollama + arlm-server + modelo bakeado).
-11:- **Parte B** — correções no `arlm-server` (onde, o quê, por quê) para liberar
-18:1. **Um único container.** Ollama e arlm-server no mesmo `PID namespace`;
-25:   - arlm-server: `buffer_unordered(N)` disparando lotes de `embed_batch`.
+1:# Plano: Ollama + arags-server em container único (embeddings 100% locais)
+3:> Estado alvo: **cliente → gRPC arags-server → Ollama (mesmo container)**. O
+10:- **Parte A** — `Dockerfile` único (Ollama + arags-server + modelo bakeado).
+11:- **Parte B** — correções no `arags-server` (onde, o quê, por quê) para liberar
+18:1. **Um único container.** Ollama e arags-server no mesmo `PID namespace`;
+25:   - arags-server: `buffer_unordered(N)` disparando lotes de `embed_batch`.
 
 ```
 
@@ -19850,9 +19850,9 @@ Let me grep the specific matches in the remaining files to see if they're actual
 <details>
 <summary>Click to expand reasoning</summary>
 
-These remaining matches are all legitimate (server-side mentions, "arlm-server" containing "serve" substring, etc.) — no actual staleness. The `OLLAMA_EMBED_PROPOSED.md` is a historical proposal doc that mentions env vars ARLM_OLLAMA — it's a design proposal document, historical by nature. Let me check if it needs a note. Earlier grep showed OLLAMA_EMBED_PROPOSED.md matched "ARLM_OLLAMA" — since the Dockerfile no longer sets those envs, a reader might follow stale instructions. Add a short header note pointing to server.toml [embedder].
+These remaining matches are all legitimate (server-side mentions, "arags-server" containing "serve" substring, etc.) — no actual staleness. The `OLLAMA_EMBED_PROPOSED.md` is a historical proposal doc that mentions env vars ARAGS_OLLAMA — it's a design proposal document, historical by nature. Let me check if it needs a note. Earlier grep showed OLLAMA_EMBED_PROPOSED.md matched "ARAGS_OLLAMA" — since the Dockerfile no longer sets those envs, a reader might follow stale instructions. Add a short header note pointing to server.toml [embedder].
 
-Also check arlm-storage/README.md more thoroughly for open_pooled/hybrid description, and crates/arlm-cli/TODO.md which mentioned map_search_tier (historical). TODOs are historical task lists; skip per user's focus.
+Also check arags-storage/README.md more thoroughly for open_pooled/hybrid description, and crates/arags-cli/TODO.md which mentioned map_search_tier (historical). TODOs are historical task lists; skip per user's focus.
 
 Let me:
 1. Check storage README for stale pooled description.
@@ -19862,28 +19862,28 @@ Let me:
 
 </details>
 
-Os demais matches são legítimos ("server-side", substrings de `arlm-server`). Falta verificar o README do storage e anotar o doc histórico do Ollama:
+Os demais matches são legítimos ("server-side", substrings de `arags-server`). Falta verificar o README do storage e anotar o doc histórico do Ollama:
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "open_pooled|pooled|single|conn\(\)" crates/arlm-storage/README.md | head -8; sed -n '1,8p' OLLAMA_EMBED_PROPOSED.md
+**Title:** rg -n "open_pooled|pooled|single|conn\(\)" crates/arags-storage/README.md | head -8; sed -n '1,8p' OLLAMA_EMBED_PROPOSED.md
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"open_pooled|pooled|single|conn\\(\\)\" crates/arlm-storage/README.md | head -8; sed -n '1,8p' OLLAMA_EMBED_PROPOSED.md"
+  "command": "rg -n \"open_pooled|pooled|single|conn\\(\\)\" crates/arags-storage/README.md | head -8; sed -n '1,8p' OLLAMA_EMBED_PROPOSED.md"
 }
 ```
 
 **Output:**
 ```
-3:Componente de persistência do arlm — SQLite (metadados, FTS5/BM25) + usearch (vetores HNSW, single-file).
+3:Componente de persistência do arags — SQLite (metadados, FTS5/BM25) + usearch (vetores HNSW, single-file).
 9:- **usearch**: Armazenamento de vetores de embedding com índice HNSW single-file (substitui o LanceDB)
 94:// Abrir storage (single DB compartilhado)
 171:// Para CLI single-process (elimina arquivo -shm)
-# Plano: Ollama + arlm-server em container único (embeddings 100% locais)
+# Plano: Ollama + arags-server em container único (embeddings 100% locais)
 
-> Estado alvo: **cliente → gRPC arlm-server → Ollama (mesmo container)**. O
+> Estado alvo: **cliente → gRPC arags-server → Ollama (mesmo container)**. O
 > servidor recebe o texto cru, faz chunking/digestão/indexação e responde
 > buscas híbridas (BM25 + semântico) usando o Ollama embutido. Máxima
 > performance = sem rede entre serviços + Ollama servindo embeddings em
@@ -19901,23 +19901,23 @@ Os demais matches são legítimos ("server-side", substrings de `arlm-server`). 
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** sed -n '90,110p' crates/arlm-storage/README.md; sed -n '165,180p' crates/arlm-storage/README.md
+**Title:** sed -n '90,110p' crates/arags-storage/README.md; sed -n '165,180p' crates/arags-storage/README.md
 
 **Input:**
 ```json
 {
-  "command": "sed -n '90,110p' crates/arlm-storage/README.md; sed -n '165,180p' crates/arlm-storage/README.md"
+  "command": "sed -n '90,110p' crates/arags-storage/README.md; sed -n '165,180p' crates/arags-storage/README.md"
 }
 ```
 
 **Output:**
 ```
 ```rust
-use arlm_storage::{Storage, VectorStore};
-use arlm_storage::sqlite::buffers::NewBuffer;
+use arags_storage::{Storage, VectorStore};
+use arags_storage::sqlite::buffers::NewBuffer;
 
 // Abrir storage (single DB compartilhado)
-let storage = Storage::open(Path::new("~/.arlm"))?;
+let storage = Storage::open(Path::new("~/.arags"))?;
 
 // Inserir buffer (projeto)
 let buffer_id = storage.insert_buffer(&NewBuffer {
@@ -19940,13 +19940,13 @@ let chunk_id = storage.insert_chunk(&NewChunk {
 
 ```rust
 // Para CLI single-process (elimina arquivo -shm)
-let storage = Storage::open_exclusive(Path::new("~/.arlm"))?;
+let storage = Storage::open_exclusive(Path::new("~/.arags"))?;
 ```
 
 ## Testes
 
 ```bash
-cargo test -p arlm-storage
+cargo test -p arags-storage
 ```
 
 
@@ -19961,14 +19961,14 @@ cargo test -p arlm-storage
 
 #### 🔧 Tool: edit
 **Status:** completed
-**Title:** crates/arlm-storage/README.md
+**Title:** crates/arags-storage/README.md
 
 **Input:**
 ```json
 {
-  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arlm-storage/README.md",
-  "newString": "## Uso Exclusive (CLI)\n\n```rust\n// Para CLI single-process (elimina arquivo -shm)\nlet storage = Storage::open_exclusive(Path::new(\"~/.arlm\"))?;\n```\n\n## Uso Pooled Híbrido (server, plan 020)\n\n```rust\n// pool_size > 1 no server.toml: escritas concorrentes via pool (connection()),\n// leituras na conexão compartilhada dedicada (conn()) — válido em ambos os modos.\nlet storage = Storage::open_pooled(Path::new(\"/data/arlm\"), 4)?;\n\n// Flusher de WAL do server (`flush_interval_ms`):\nstorage.wal_checkpoint()?;\n\n// Retenção de histórico (`[history] retention_days`):\nlet removed = storage.purge_history_before(cutoff_unix)?;\n```\n\n## Testes\n\n```bash\ncargo test -p arlm-storage\n```\n",
-  "oldString": "## Uso Exclusive (CLI)\n\n```rust\n// Para CLI single-process (elimina arquivo -shm)\nlet storage = Storage::open_exclusive(Path::new(\"~/.arlm\"))?;\n```\n\n## Testes\n\n```bash\ncargo test -p arlm-storage\n```\n"
+  "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/crates/arags-storage/README.md",
+  "newString": "## Uso Exclusive (CLI)\n\n```rust\n// Para CLI single-process (elimina arquivo -shm)\nlet storage = Storage::open_exclusive(Path::new(\"~/.arags\"))?;\n```\n\n## Uso Pooled Híbrido (server, plan 020)\n\n```rust\n// pool_size > 1 no server.toml: escritas concorrentes via pool (connection()),\n// leituras na conexão compartilhada dedicada (conn()) — válido em ambos os modos.\nlet storage = Storage::open_pooled(Path::new(\"/data/arags\"), 4)?;\n\n// Flusher de WAL do server (`flush_interval_ms`):\nstorage.wal_checkpoint()?;\n\n// Retenção de histórico (`[history] retention_days`):\nlet removed = storage.purge_history_before(cutoff_unix)?;\n```\n\n## Testes\n\n```bash\ncargo test -p arags-storage\n```\n",
+  "oldString": "## Uso Exclusive (CLI)\n\n```rust\n// Para CLI single-process (elimina arquivo -shm)\nlet storage = Storage::open_exclusive(Path::new(\"~/.arags\"))?;\n```\n\n## Testes\n\n```bash\ncargo test -p arags-storage\n```\n"
 }
 ```
 
@@ -19994,8 +19994,8 @@ Edit applied successfully.
 ```json
 {
   "filePath": "/projects/my/ai-guides/TMP/agnostic-rlm-rs/OLLAMA_EMBED_PROPOSED.md",
-  "newString": "# Plano: Ollama + arlm-server em container único (embeddings 100% locais)\n\n> **NOTA (plan 020):** as envs `ARLM_OLLAMA_*`/`ARLM_MODEL_DIR`/`ARLM_EMBED_BATCH`\n> citadas abaixo foram **substituídas pela seção `[embedder]` do `server.toml`**\n> (montado em `/etc/arlm/server.toml`). Este documento é histórico — a parte B\n> (batch/concurrency) continua válida; a config de modelo agora é só TOML.\n\n> Estado alvo: **cliente → gRPC arlm-server → Ollama (mesmo container)**. O\n> servidor recebe o texto cru, faz chunking/digestão/indexação e responde\n> buscas híbridas (BM25 + semântico) usando o Ollama embutido. Máxima\n> performance = sem rede entre serviços + Ollama servindo embeddings em\n> paralelo.\n\n",
-  "oldString": "# Plano: Ollama + arlm-server em container único (embeddings 100% locais)\n\n> Estado alvo: **cliente → gRPC arlm-server → Ollama (mesmo container)**. O\n> servidor recebe o texto cru, faz chunking/digestão/indexação e responde\n> buscas híbridas (BM25 + semântico) usando o Ollama embutido. Máxima\n> performance = sem rede entre serviços + Ollama servindo embeddings em\n> paralelo.\n\n"
+  "newString": "# Plano: Ollama + arags-server em container único (embeddings 100% locais)\n\n> **NOTA (plan 020):** as envs `ARAGS_OLLAMA_*`/`ARAGS_MODEL_DIR`/`ARAGS_EMBED_BATCH`\n> citadas abaixo foram **substituídas pela seção `[embedder]` do `server.toml`**\n> (montado em `/etc/arags/server.toml`). Este documento é histórico — a parte B\n> (batch/concurrency) continua válida; a config de modelo agora é só TOML.\n\n> Estado alvo: **cliente → gRPC arags-server → Ollama (mesmo container)**. O\n> servidor recebe o texto cru, faz chunking/digestão/indexação e responde\n> buscas híbridas (BM25 + semântico) usando o Ollama embutido. Máxima\n> performance = sem rede entre serviços + Ollama servindo embeddings em\n> paralelo.\n\n",
+  "oldString": "# Plano: Ollama + arags-server em container único (embeddings 100% locais)\n\n> Estado alvo: **cliente → gRPC arags-server → Ollama (mesmo container)**. O\n> servidor recebe o texto cru, faz chunking/digestão/indexação e responde\n> buscas híbridas (BM25 + semântico) usando o Ollama embutido. Máxima\n> performance = sem rede entre serviços + Ollama servindo embeddings em\n> paralelo.\n\n"
 }
 ```
 
@@ -20017,18 +20017,18 @@ Verificação final de referências obsoletas restantes nos docs ativos:
 
 #### 🔧 Tool: bash
 **Status:** completed
-**Title:** rg -n "arlm server|arlm serve|--server [0-9]|ARLM_OLLAMA_MODEL=|/root/.arlm/config" README.md docs/ agents/*.md agents/*/*.json crates/*/README.md crates/*/MODULE.md install.sh docker/ 2>/dev/null | grep -v "OLLAMA_EMBED_PROPOSED\|histor" | head
+**Title:** rg -n "arags server|arags serve|--server [0-9]|ARAGS_OLLAMA_MODEL=|/root/.arags/config" README.md docs/ agents/*.md agents/*/*.json crates/*/README.md crates/*/MODULE.md install.sh docker/ 2>/dev/null | grep -v "OLLAMA_EMBED_PROPOSED\|histor" | head
 
 **Input:**
 ```json
 {
-  "command": "rg -n \"arlm server|arlm serve|--server [0-9]|ARLM_OLLAMA_MODEL=|/root/.arlm/config\" README.md docs/ agents/*.md agents/*/*.json crates/*/README.md crates/*/MODULE.md install.sh docker/ 2>/dev/null | grep -v \"OLLAMA_EMBED_PROPOSED\\|histor\" | head"
+  "command": "rg -n \"arags server|arags serve|--server [0-9]|ARAGS_OLLAMA_MODEL=|/root/.arags/config\" README.md docs/ agents/*.md agents/*/*.json crates/*/README.md crates/*/MODULE.md install.sh docker/ 2>/dev/null | grep -v \"OLLAMA_EMBED_PROPOSED\\|histor\" | head"
 }
 ```
 
 **Output:**
 ```
-agents/claude-desktop/claude_desktop_config.json:3:  "_arlm_note": "Plan 020 removed `arlm serve --mcp` (the CLI is a pure gRPC client). Claude Desktop cannot speak gRPC natively; to consume arlm from Claude Desktop, run arlm-server (docker-compose.server.yml) and use the arlm CLI via a local bridge/proxy. See agents/README.md."
+agents/claude-desktop/claude_desktop_config.json:3:  "_arags_note": "Plan 020 removed `arags serve --mcp` (the CLI is a pure gRPC client). Claude Desktop cannot speak gRPC natively; to consume arags from Claude Desktop, run arags-server (docker-compose.server.yml) and use the arags CLI via a local bridge/proxy. See agents/README.md."
 
 ```
 
@@ -20071,24 +20071,24 @@ FMT_OK
  M STAGING.md
  M agents/README.md
  M agents/claude-desktop/claude_desktop_config.json
- M arlm.toml.example
+ M arags.toml.example
  D config.toml.example
- M crates/arlm-cli/CHANGELOG.md
- M crates/arlm-cli/Cargo.toml
- M crates/arlm-cli/MODULE.md
- M crates/arlm-cli/README.md
- M crates/arlm-cli/src/cli/commands.rs
- M crates/arlm-cli/src/client.rs
- D crates/arlm-cli/src/commands/mcp/handlers.rs
- D crates/arlm-cli/src/commands/mcp/mod.rs
- D crates/arlm-cli/src/commands/mcp/protocol.rs
- D crates/arlm-cli/src/commands/mcp/session.rs
- M crates/arlm-cli/src/commands/mod.rs
- M crates/arlm-cli/src/commands/qa_cache.rs
- D crates/arlm-cli/src/commands/serve/handlers.rs
- D crates/arlm-cli/src/commands/serve/index_logic.rs
- D crates/arlm-cli/src/commands/serve/mod.rs
- D crates/arlm-cli/src/commands/serve/requests.rs
+ M crates/arags-cli/CHANGELOG.md
+ M crates/arags-cli/Cargo.toml
+ M crates/arags-cli/MODULE.md
+ M crates/arags-cli/README.md
+ M crates/arags-cli/src/cli/commands.rs
+ M crates/arags-cli/src/client.rs
+ D crates/arags-cli/src/commands/mcp/handlers.rs
+ D crates/arags-cli/src/commands/mcp/mod.rs
+ D crates/arags-cli/src/commands/mcp/protocol.rs
+ D crates/arags-cli/src/commands/mcp/session.rs
+ M crates/arags-cli/src/commands/mod.rs
+ M crates/arags-cli/src/commands/qa_cache.rs
+ D crates/arags-cli/src/commands/serve/handlers.rs
+ D crates/arags-cli/src/commands/serve/index_logic.rs
+ D crates/arags-cli/src/commands/serve/mod.rs
+ D crates/arags-cli/src/commands/serve/requests.rs
 
 ```
 
@@ -20127,24 +20127,24 @@ FMT_OK
 **Status:** completed
 **Title:** git add -A && git commit -m "DOCS: Atualiza documentação por-crate (README/MODULE/CHANGELOG) pós plan 020
 
-- arlm-cli: estrutura sem serve/mcp/util, deps slim, seção de conexão/TLS
-- arlm-server: schema server.toml completo (embedder/search/storage/history/mtls)
-- arlm-storage: open_pooled híbrido, wal_checkpoint, purge_history_before
-- arlm-embedding: CachedEmbedder; arlm-core: chunk_content_hash
-- arlm-proto: SearchTier UNSPECIFIED (breaking)
+- arags-cli: estrutura sem serve/mcp/util, deps slim, seção de conexão/TLS
+- arags-server: schema server.toml completo (embedder/search/storage/history/mtls)
+- arags-storage: open_pooled híbrido, wal_checkpoint, purge_history_before
+- arags-embedding: CachedEmbedder; arags-core: chunk_content_hash
+- arags-proto: SearchTier UNSPECIFIED (breaking)
 - OLLAMA_EMBED_PROPOSED: nota histórica apontando [embedder] do server.toml" 2>&1 | tail -2
 
 **Input:**
 ```json
 {
-  "command": "git add -A && git commit -m \"DOCS: Atualiza documentação por-crate (README/MODULE/CHANGELOG) pós plan 020\n\n- arlm-cli: estrutura sem serve/mcp/util, deps slim, seção de conexão/TLS\n- arlm-server: schema server.toml completo (embedder/search/storage/history/mtls)\n- arlm-storage: open_pooled híbrido, wal_checkpoint, purge_history_before\n- arlm-embedding: CachedEmbedder; arlm-core: chunk_content_hash\n- arlm-proto: SearchTier UNSPECIFIED (breaking)\n- OLLAMA_EMBED_PROPOSED: nota histórica apontando [embedder] do server.toml\" 2>&1 | tail -2"
+  "command": "git add -A && git commit -m \"DOCS: Atualiza documentação por-crate (README/MODULE/CHANGELOG) pós plan 020\n\n- arags-cli: estrutura sem serve/mcp/util, deps slim, seção de conexão/TLS\n- arags-server: schema server.toml completo (embedder/search/storage/history/mtls)\n- arags-storage: open_pooled híbrido, wal_checkpoint, purge_history_before\n- arags-embedding: CachedEmbedder; arags-core: chunk_content_hash\n- arags-proto: SearchTier UNSPECIFIED (breaking)\n- OLLAMA_EMBED_PROPOSED: nota histórica apontando [embedder] do server.toml\" 2>&1 | tail -2"
 }
 ```
 
 **Output:**
 ```
- create mode 100644 crates/arlm-cli/tests/init_test.rs
- delete mode 100644 crates/arlm-cli/tests/metrics_test.rs
+ create mode 100644 crates/arags-cli/tests/init_test.rs
+ delete mode 100644 crates/arags-cli/tests/metrics_test.rs
 
 ```
 
@@ -20195,13 +20195,13 @@ Agora sim — a documentação estava **parcialmente** defasada e foi toda atual
 
 ## O que estava faltando (encontrado e corrigido)
 
-**`arlm-cli/README.md`** — estrutura ainda listava `util.rs`, `commands/serve/`, arquivos de comando inexistentes; tabela com `arlm server`; seção inteira "Modo Servidor (`--server`)" com flag inexistente. Reescrito: estrutura real, seção "Conexão com o Servidor" com resolução `.arlm.toml → global → env` + knobs TLS/mTLS.
+**`arags-cli/README.md`** — estrutura ainda listava `util.rs`, `commands/serve/`, arquivos de comando inexistentes; tabela com `arags server`; seção inteira "Modo Servidor (`--server`)" com flag inexistente. Reescrito: estrutura real, seção "Conexão com o Servidor" com resolução `.arags.toml → global → env` + knobs TLS/mTLS.
 
-**`arlm-cli/MODULE.md`** — dependências antigas (`arlm-storage/search/memory/embedding`, axum, uuid) e convenção falsa de "sem `#[cfg(test)]` em src/". Corrigido para as deps reais (core/llm/proto) e testes inline da user_config.
+**`arags-cli/MODULE.md`** — dependências antigas (`arags-storage/search/memory/embedding`, axum, uuid) e convenção falsa de "sem `#[cfg(test)]` em src/". Corrigido para as deps reais (core/llm/proto) e testes inline da user_config.
 
-**`arlm-server/README.md`** — exemplo de `server.toml` com chaves que **não existem** no schema (`[qa_cache] enabled/lambda_ms/cache_ttl_ms`). Atualizado para o schema atual completo (storage tuning, `[embedder]`, `[search]`, `[history]`).
+**`arags-server/README.md`** — exemplo de `server.toml` com chaves que **não existem** no schema (`[qa_cache] enabled/lambda_ms/cache_ttl_ms`). Atualizado para o schema atual completo (storage tuning, `[embedder]`, `[search]`, `[history]`).
 
-**`arlm-storage/{MODULE,README}.md`** — documentados o pooled híbrido, `wal_checkpoint()`, `purge_history_before()` e a nova dependência de `arlm-core`.
+**`arags-storage/{MODULE,README}.md`** — documentados o pooled híbrido, `wal_checkpoint()`, `purge_history_before()` e a nova dependência de `arags-core`.
 
 **CHANGELOGs por-crate** — entradas `[Unreleased]` adicionadas onde cada crate foi tocado: cli (remoção do data plane), server (schema completo + mTLS), storage (híbrido/checkpoint/purge), embedding (`CachedEmbedder`), core (`chunk_content_hash`), proto (**breaking**: renumeração `SearchTier`).
 

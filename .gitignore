@@ -24,8 +24,8 @@ protoc-25.1-linux-x86_64.zip
 # Local build / scratch
 .tmp_build/
 
-# arlm runtime data
-.arlm/
+# arags runtime data
+.arags/
 data/
 *.db
 *.db-shm

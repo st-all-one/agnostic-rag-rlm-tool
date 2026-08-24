@@ -103,13 +103,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "arlm-cli"
+name = "arags-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arlm-core",
- "arlm-llm",
- "arlm-proto",
+ "arags-core",
+ "arags-llm",
+ "arags-proto",
  "chrono",
  "clap",
  "console",
@@ -129,7 +129,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "arlm-core"
+name = "arags-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -149,7 +149,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "arlm-embedding"
+name = "arags-embedding"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -175,7 +175,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "arlm-llm"
+name = "arags-llm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -192,14 +192,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "arlm-memory"
+name = "arags-memory"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arlm-core",
- "arlm-embedding",
- "arlm-search",
- "arlm-storage",
+ "arags-core",
+ "arags-embedding",
+ "arags-search",
+ "arags-storage",
  "chrono",
  "crossbeam-channel",
  "hex",
@@ -218,7 +218,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "arlm-proto"
+name = "arags-proto"
 version = "0.1.0"
 dependencies = [
  "http",
@@ -230,11 +230,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "arlm-search"
+name = "arags-search"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arlm-storage",
+ "arags-storage",
  "parking_lot",
  "rusqlite",
  "serde",
@@ -245,16 +245,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "arlm-server"
+name = "arags-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arlm-core",
- "arlm-embedding",
- "arlm-memory",
- "arlm-proto",
- "arlm-search",
- "arlm-storage",
+ "arags-core",
+ "arags-embedding",
+ "arags-memory",
+ "arags-proto",
+ "arags-search",
+ "arags-storage",
  "chrono",
  "clap",
  "futures",
@@ -279,11 +279,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "arlm-storage"
+name = "arags-storage"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arlm-core",
+ "arags-core",
  "chrono",
  "criterion",
  "getrandom 0.2.17",

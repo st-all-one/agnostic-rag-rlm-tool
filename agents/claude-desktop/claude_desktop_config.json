@@ -1,4 +1,4 @@
 {
   "mcpServers": {},
-  "_arlm_note": "Plan 020 removed `arlm serve --mcp` (the CLI is a pure gRPC client). Claude Desktop cannot speak gRPC natively; to consume arlm from Claude Desktop, run arlm-server (docker-compose.server.yml) and use the arlm CLI via a local bridge/proxy. See agents/README.md."
+  "_arags_note": "Plan 020 removed `arags serve --mcp` (the CLI is a pure gRPC client). Claude Desktop cannot speak gRPC natively; to consume arags from Claude Desktop, run arags-server (docker-compose.server.yml) and use the arags CLI via a local bridge/proxy. See agents/README.md."
 }

@@ -1,0 +1,24 @@
+syntax = "proto3";
+package arags.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ── Project Management ──
+
+message CreateProjectRequest {
+  string name = 1;
+  string root_path = 2;
+}
+
+message ProjectInfo {
+  string id = 1;
+  string name = 2;
+  string root_path = 3;
+  int64 chunk_count = 4;
+  int64 file_count = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message ListProjectsResponse {
+  repeated ProjectInfo projects = 1;
+}

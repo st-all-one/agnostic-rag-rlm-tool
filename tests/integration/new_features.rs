@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use arlm_core::{
+    use arags_core::{
         PersistentSolver, StateInspector, RootCompactor,
         types::{StartRunInput, RlmBackend},
     };

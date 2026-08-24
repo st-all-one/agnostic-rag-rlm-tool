@@ -2,7 +2,7 @@
 
 ## Visão Geral
 
-O `arlm` é otimizado para três cenários:
+O `arags` é otimizado para três cenários:
 1. **Ingestão:** Processar milhares de arquivos o mais rápido possível
 2. **Busca:** Retornar resultados em <100ms
 3. **RLM:** Executar recursão com latência mínima entre nós
@@ -29,7 +29,7 @@ use rayon::prelude::*;
 pub fn configure_rayon() {
     rayon::ThreadPoolBuilder::new()
         .num_threads(num_cpus::get_physical())  // Cores físicos, não lógicos
-        .thread_name(|idx| format!("arlm-worker-{}", idx))
+        .thread_name(|idx| format!("arags-worker-{}", idx))
         .build_global()
         .unwrap();
 }
@@ -445,17 +445,17 @@ cargo build --release
 # Perf profiling
 cargo install perf
 cargo build --release
-perf record -g target/release/arlm index ./meu-projeto
+perf record -g target/release/arags index ./meu-projeto
 perf report
 
 # Flamegraph
 cargo install flamegraph
 cargo build --release
-flamegraph -- target/release/arlm index ./meu-projeto
+flamegraph -- target/release/arags index ./meu-projeto
 
 # Criterion benchmarks
-cargo bench --package arlm-embedding
-cargo bench --package arlm-search
+cargo bench --package arags-embedding
+cargo bench --package arags-search
 ```
 
 ## Resultados Esperados

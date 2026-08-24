@@ -68,6 +68,6 @@ jobs:
         with:
           name: binaries
           path: |
-            target/release/arlm
-            target/release/arlm-server
+            target/release/arags
+            target/release/arags-server
           retention-days: 1

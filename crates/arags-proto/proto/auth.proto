@@ -1,0 +1,20 @@
+syntax = "proto3";
+package arags.v1;
+
+// ── Auth (plan 018) ──
+
+// Client presents its refresh token; server mints a short-lived session token.
+message AuthRefreshRequest {
+  string refresh_token = 1;
+}
+
+message AuthRefreshResponse {
+  // Opaque session token (UUIDv7); present this as `Authorization: Bearer`.
+  string session_token = 1;
+  // Session expiry, epoch milliseconds (UTC).
+  int64 expires_at = 2;
+  // Resolved role: "admin" | "non_admin".
+  string role = 3;
+  // Owning username (for audit).
+  string username = 4;
+}

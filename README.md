@@ -1,6 +1,6 @@
-# arlm — Agnostic RLM
+# arags — Agnostic RAG Server
 
-On-demand, agent-agnostic RLM para processamento de
+RAG on-demand e agnóstico a agentes para processamento de
 codebases. Indexa arquivos, armazena embeddings e realiza busca híbrida (BM25 +
 semântica), QA-Cache e memória sobre um **plano de dados server-first** via gRPC.
 O cliente usa o **LLM local do usuário** apenas para *digest* (`query -qa`) e
@@ -10,36 +10,36 @@ O cliente usa o **LLM local do usuário** apenas para *digest* (`query -qa`) e
 
 ## Filosofia
 
-- **On-demand, não-recursivo:** não há loop RLM recursivo nem orquestração de
-  planner/solver/synthesizer. O `arlm` indexa e responde consultas sob demanda.
-- **Servidor = plano de dados puro:** `arlm-server` faz indexação (chunking +
+- **On-demand, não-recursivo:** não há loop recursivo de agente nem orquestração de
+  planner/solver/synthesizer. O `arags` indexa e responde consultas sob demanda.
+- **Servidor = plano de dados puro:** `arags-server` faz indexação (chunking +
   embeddings no servidor), busca híbrida, QA-Cache, memória e histórico — tudo
   via gRPC. **Sem LLM no servidor.**
-- **Cliente = cliente gRPC puro:** `arlm-cli` só usa o LLM do usuário
-  (`arlm-llm`) para *digest* de QA (`query -qa`) e para *summarize* no
+- **Cliente = cliente gRPC puro:** `arags-cli` só usa o LLM do usuário
+  (`arags-llm`) para *digest* de QA (`query -qa`) e para *summarize* no
   `persist`. Nenhuma outra operação depende de LLM.
 
 ## Arquitetura (server-first)
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│              arlm-server  (long-running)                │
+│              arags-server  (long-running)                │
 │  SQLite (FTS5/BM25) + LanceDB (vetorial) + embeddings  │
-│  expõe API gRPC (tonic + prost, via arlm-proto)        │
+│  expõe API gRPC (tonic + prost, via arags-proto)        │
 │  sem LLM — plano de dados puro                          │
 └───────────────────────────┬──────────────────────────┘
                             │ gRPC (protobuf, TLS opcional)
 ┌───────────────────────────┴──────────────────────────┐
-│  arlm-cli  (thin gRPC client)                           │
+│  arags-cli  (thin gRPC client)                           │
 │  init / index / search / query / memory /              │
 │  persist / history / server                            │
 │  usa LLM local do usuário só em query -qa / persist    │
 └───────────────────────────────────────────────────────┘
 ```
 
-- **9 crates**: `arlm-cli`, `arlm-core`, `arlm-storage`, `arlm-search`,
-  `arlm-embedding`, `arlm-memory`, `arlm-llm`, `arlm-proto`, `arlm-server`.
-- Conexão tipada por `arlm-proto` (trait `ArlmService`, RPCs sobre gRPC).
+- **9 crates**: `arags-cli`, `arags-core`, `arags-storage`, `arags-search`,
+  `arags-embedding`, `arags-memory`, `arags-llm`, `arags-proto`, `arags-server`.
+- Conexão tipada por `arags-proto` (trait `AragsService`, RPCs sobre gRPC).
 - **QA-Cache (plan 017):** o servidor faz embedding + SQLite + LanceDB e devolve
   respostas digeridas; a síntese LLM (digest) roda no **cliente** (LLM do
   usuário) com `--cache-id` para lookup determinístico 1:1 e `cache_id` estável
@@ -48,55 +48,55 @@ O cliente usa o **LLM local do usuário** apenas para *digest* (`query -qa`) e
   `Admin`/`NonAdmin`; RPCs mutantes exigem `Bearer` válido.
 - **Sem LLM no servidor** para qualquer operação (index/search/query/memory/
   history). O LLM é usado **apenas no cliente**, para `query -qa` (digest) e
-  `persist` (summarize), via `arlm-llm`.
+  `persist` (summarize), via `arags-llm`.
 - Manutenção (consolidate/decay) do servidor é feita por **cron + RPC admin**
-  `TriggerMaintenance` (e `arlm-server admin consolidate`), não por comandos de
+  `TriggerMaintenance` (e `arags-server admin consolidate`), não por comandos de
   CLI do usuário.
 
 ## Instalação
 
 ```bash
 # Binários (server + client)
-cargo build --release            # → ./target/release/arlm e ./target/release/arlm-server
+cargo build --release            # → ./target/release/arags e ./target/release/arags-server
 
 # Ou via script de instalação
-./install.sh                     # instala arlm e cria ~/.arlm/arlm.toml
+./install.sh                     # instala arags e cria ~/.arags/arags.toml
 ```
 
 ### Requisitos
 
 - Rust 1.85+ (edition 2024)
-- `protoc` (protobuf-compiler) para gRPC/`arlm-proto`
+- `protoc` (protobuf-compiler) para gRPC/`arags-proto`
 - `protobuf-devel` para includes do protobuf
 
 ## Uso Rápido
 
 ```bash
-# Inicializar o projeto (cria <proj>/.arlm.toml gitignored + indexa)
-arlm init ./meu-projeto
-arlm init ./meu-projeto --no-index     # só cria o .arlm.toml
+# Inicializar o projeto (cria <proj>/.arags.toml gitignored + indexa)
+arags init ./meu-projeto
+arags init ./meu-projeto --no-index     # só cria o .arags.toml
 
 # Indexar (o cliente faz stream do texto bruto; o servidor chunk+embed)
-arlm index ./meu-projeto
+arags index ./meu-projeto
 
 # Buscar no projeto (híbrida BM25 + semântica, server-side)
-arlm search "auth middleware"
+arags search "auth middleware"
 
 # Pergunta on-demand; -qa digere via LLM local do usuário; emite cache_id
-arlm query "como funciona o login?" -qa
-arlm query --cache-id <id>             # lookup determinístico 1:1
+arags query "como funciona o login?" -qa
+arags query --cache-id <id>             # lookup determinístico 1:1
 
 # Persistir uma resposta como wiki page (usa LLM local do usuário)
-arlm persist <response_id>
+arags persist <response_id>
 
 # Histórico de consultas do usuário (escopado por refresh token)
-arlm history --limit 20
+arags history --limit 20
 
 # Memória (admin): listar / obter / invalidar / manutenção
-arlm memory list
-arlm memory get <cache_id>
-arlm memory invalidate <cache_id>
-arlm memory cleanup
+arags memory list
+arags memory get <cache_id>
+arags memory invalidate <cache_id>
+arags memory cleanup
 ```
 
 ## Modo Servidor (gRPC)
@@ -105,41 +105,41 @@ O modelo recomendado é separar servidor e cliente:
 
 ```bash
 # 1) Inicia o servidor (long-running) — dono do estado
-arlm-server up                                     # escuta conforme server.toml
+arags-server up                                     # escuta conforme server.toml
 docker compose -f docker-compose.server.yml up -d   # ou via Docker
 
 # 2) O cliente CLI conecta por gRPC (endereço via user config)
-arlm index ./meu-projeto
-arlm search "auth middleware"
-arlm query "como funciona o login?" -qa
+arags index ./meu-projeto
+arags search "auth middleware"
+arags query "como funciona o login?" -qa
 ```
 
-O endereço do servidor é resolvido por `.arlm.toml` local (`[server].addr`,
-override por projeto) → `~/.arlm/arlm.toml` (`[server].addr`) → env
-`ARLM_SERVER_ADDR` → `127.0.0.1:50051`. O client é um **puro gRPC client**
-(sem modo offline); quem quiser "offline" sobe o próprio `arlm-server`.
+O endereço do servidor é resolvido por `.arags.toml` local (`[server].addr`,
+override por projeto) → `~/.arags/arags.toml` (`[server].addr`) → env
+`ARAGS_SERVER_ADDR` → `127.0.0.1:50051`. O client é um **puro gRPC client**
+(sem modo offline); quem quiser "offline" sobe o próprio `arags-server`.
 
 ## Comandos CLI
 
 | Comando | Descrição |
 |---------|-----------|
-| `arlm init [--index] [--no-index]` | Scaffold de `<proj>/.arlm.toml` (gitignored) + index |
-| `arlm index <dir>` | Faz stream do texto bruto; servidor chunk+embed |
-| `arlm search <query>` | Busca híbrida BM25 + semântica (server-side) |
-| `arlm query <question>` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
-| `arlm memory list\|get\|invalidate\|cleanup` | Memória (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
-| `arlm persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
-| `arlm history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |
-| `arlm-server up\|status\|admin ...` | Binário do servidor (data plane gRPC; `admin create-refresh`, etc.) |
+| `arags init [--index] [--no-index]` | Scaffold de `<proj>/.arags.toml` (gitignored) + index |
+| `arags index <dir>` | Faz stream do texto bruto; servidor chunk+embed |
+| `arags search <query>` | Busca híbrida BM25 + semântica (server-side) |
+| `arags query <question>` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
+| `arags memory list\|get\|invalidate\|cleanup` | Memória (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
+| `arags persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
+| `arags history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |
+| `arags-server up\|status\|admin ...` | Binário do servidor (data plane gRPC; `admin create-refresh`, etc.) |
 
 **Removidos (plan 019):** `run`, `context`, `session`, `status`, `cost`,
 `cancel`, `checkpoints`, `restore-page`, `wiki`, `consolidate` (CLI), `decay`
 (CLI) e `entities` (CLI). A manutenção server-side (consolidate/decay) é feita
-por cron + RPC admin `TriggerMaintenance` (e `arlm-server admin consolidate`).
+por cron + RPC admin `TriggerMaintenance` (e `arags-server admin consolidate`).
 
 ## Flags Principais
 
-### `arlm index`
+### `arags index`
 
 | Flag | Descrição | Default |
 |------|-----------|---------|
@@ -148,7 +148,7 @@ por cron + RPC admin `TriggerMaintenance` (e `arlm-server admin consolidate`).
 > O chunking e os embeddings ocorrem **no servidor**. O cliente apenas faz
 > stream do texto bruto dos arquivos (client-streaming gRPC `IndexProject`).
 
-### `arlm search`
+### `arags search`
 
 | Flag | Descrição | Default |
 |------|-----------|---------|
@@ -156,7 +156,7 @@ por cron + RPC admin `TriggerMaintenance` (e `arlm-server admin consolidate`).
 | `--file-pattern <pat>` | Filtro por nome de arquivo | — |
 | `--min-score <f>` | Score mínimo | — |
 
-### `arlm query`
+### `arags query`
 
 | Flag | Descrição | Default |
 |------|-----------|---------|
@@ -168,17 +168,17 @@ por cron + RPC admin `TriggerMaintenance` (e `arlm-server admin consolidate`).
 Todos os comandos suportam 4 formatos:
 
 ```bash
-arlm search "query" --format json      # JSON estruturado
-arlm search "query" --format tree      # Tabela colorida (default)
-arlm search "query" --format markdown  # Markdown formatado
-arlm search "query" --format prompt    # Prompt para LLM
+arags search "query" --format json      # JSON estruturado
+arags search "query" --format tree      # Tabela colorida (default)
+arags search "query" --format markdown  # Markdown formatado
+arags search "query" --format prompt    # Prompt para LLM
 ```
 
 ## Arquitetura de Dados
 
 ### Server-side (compartilhado)
 
-O `arlm-server` é dono do estado. Por padrão (container) os dados vivem em
+O `arags-server` é dono do estado. Por padrão (container) os dados vivem em
 `/data` (configurável via `server.toml` `data_dir`):
 
 ```
@@ -202,14 +202,14 @@ Cada projeto é um `buffer` na tabela `buffers` com UUIDv7 único. Isolamento po
 > O servidor é **LLM-free também no grafo de dependências** (pós-limpeza
 > 019/020): sem tier `llm_rerank`, sem camada de summaries e sem compilar
 > qualquer crate de LLM. Digest/rerank por LLM vivem só no cliente
-> (`query -qa`/`persist`, via `arlm-llm`).
+> (`query -qa`/`persist`, via `arags-llm`).
 
 ## Configuração
 
 ### `server.toml` (HOST — arquivo de config do servidor)
 
-Montado no container (ex.: `./server.toml:/etc/arlm/server.toml`). Lido de
-`ARLM_SERVER_CONFIG` ou, por padrão, `/etc/arlm/server.toml`. É um **arquivo de
+Montado no container (ex.: `./server.toml:/etc/arags/server.toml`). Lido de
+`ARAGS_SERVER_CONFIG` ou, por padrão, `/etc/arags/server.toml`. É um **arquivo de
 host** e possui **toda** a configuração do plano de dados — **não** há seção
 `[llm]` (o servidor é LLM-free):
 
@@ -217,9 +217,9 @@ host** e possui **toda** a configuração do plano de dados — **não** há se�
 listen_addr = "0.0.0.0:50051"
 data_dir = "/data"
 
-# tls_cert = "/etc/arlm/tls/server.crt"
-# tls_key  = "/etc/arlm/tls/server.key"
-# mtls_ca  = "/etc/arlm/tls/ca.crt"   # exige client cert (mTLS)
+# tls_cert = "/etc/arags/tls/server.crt"
+# tls_key  = "/etc/arags/tls/server.key"
+# mtls_ca  = "/etc/arags/tls/ca.crt"   # exige client cert (mTLS)
 
 pool_size = 4            # pool de escrita SQLite (1 = single-mode)
 flush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)
@@ -249,27 +249,27 @@ decay_score_floor = 0.05
 retention_days = 90                   # purge no ticker de manutenção; 0 = mantém
 ```
 
-Env overrides: `ARLM_SERVER_ADDR` (listen) e `ARLM_DATA_DIR`; o caminho do
-arquivo vem de `ARLM_SERVER_CONFIG`.
+Env overrides: `ARAGS_SERVER_ADDR` (listen) e `ARAGS_DATA_DIR`; o caminho do
+arquivo vem de `ARAGS_SERVER_CONFIG`.
 
 ### Config do usuário (2 escopos)
 
-O cliente (`arlm-cli`) lê configuração do usuário em **2 escopos**, com merge
+O cliente (`arags-cli`) lê configuração do usuário em **2 escopos**, com merge
 granular campo a campo (local > global):
 
-- **Global** `~/.arlm/arlm.toml`: `[auth]` (só global: `username` +
+- **Global** `~/.arags/arags.toml`: `[auth]` (só global: `username` +
   `refresh_token`), `[llm]` (IA do usuário), `[server]` (`addr`, `tls_ca`,
   `tls_cert`/`tls_key` para mTLS no cliente).
-- **Local** `.arlm.toml` (no projeto): sobrescreve campos do global + `[project]`.
+- **Local** `.arags.toml` (no projeto): sobrescreve campos do global + `[project]`.
 
 `[auth]` é **somente global** e é ignorado se presente no arquivo local.
-Arquivos legados `~/.arlm/config.toml` / `.arlm/config.toml` **não** são lidos.
+Arquivos legados `~/.arags/config.toml` / `.arags/config.toml` **não** são lidos.
 
 ```toml
-# ~/.arlm/arlm.toml (global)
+# ~/.arags/arags.toml (global)
 [auth]
 username = "alice"
-refresh_token = "..."      # gerado por `arlm-server admin create-refresh`; só-global
+refresh_token = "..."      # gerado por `arags-server admin create-refresh`; só-global
 
 [llm]
 [[llm.backends]]
@@ -283,7 +283,7 @@ addr = "127.0.0.1:50051"
 ```
 
 ```toml
-# .arlm.toml (local, no projeto)
+# .arags.toml (local, no projeto)
 [project]
 name = "meu-projeto"
 
@@ -293,23 +293,23 @@ addr = "10.0.0.5:50051"    # sobrescreve o global
 
 ## Docker (server-first)
 
-A imagem canônica é o `arlm-server` (gRPC):
+A imagem canônica é o `arags-server` (gRPC):
 
 ```bash
 # Build da imagem do servidor
-docker build -t arlm-server:latest -f Dockerfile.server .
+docker build -t arags-server:latest -f Dockerfile.server .
 
 # Subir o servidor (porta 50051, volume de dados persistido, server.toml montado)
 docker compose -f docker-compose.server.yml up -d
 
 # CLI (no host) conecta por gRPC
-arlm index /workspace
-arlm search "query"
+arags index /workspace
+arags search "query"
 ```
 
-O `docker-compose.server.yml` monta o volume `arlm-server-data` em `/data`
+O `docker-compose.server.yml` monta o volume `arags-server-data` em `/data`
 (configure `data_dir=/data` no `server.toml`) e monta o `server.toml` em
-`/etc/arlm/server.toml`. O healthcheck usa `arlm-server status`.
+`/etc/arags/server.toml`. O healthcheck usa `arags-server status`.
 
 > **Indexação em Docker (client-streaming):** o servidor **não** lê o filesystem
 > do cliente. A CLI descobre e lê os arquivos localmente e faz *stream* dos bytes
@@ -318,7 +318,7 @@ O `docker-compose.server.yml` monta o volume `arlm-server-data` em `/data`
 > local:
 >
 > ```bash
-> arlm index /caminho/do/projeto
+> arags index /caminho/do/projeto
 > ```
 >
 > Por padrão, caminhos sensíveis/ignorados (`.env`, `.vscode`, `.github`,

@@ -1,13 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-# arlm installer script
-# Installs the arlm CLI and optionally the Docker server
+# arags installer script
+# Installs the arags CLI and optionally the Docker server
 
-ARLM_VERSION="${ARLM_VERSION:-latest}"
+ARAGS_VERSION="${ARAGS_VERSION:-latest}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
-DATA_DIR="${DATA_DIR:-$HOME/.arlm}"
-DOCKER_IMAGE="arlm/arlm-server"
+DATA_DIR="${DATA_DIR:-$HOME/.arags}"
+DOCKER_IMAGE="arags/arags-server"
 
 # Colors
 RED='\033[0;31m'
@@ -102,27 +102,27 @@ install_cli() {
 
     # Determine download URL
     local base_url="https://github.com/st-all-one/agnostic-rlm-rs/releases"
-    if [ "$ARLM_VERSION" = "latest" ]; then
+    if [ "$ARAGS_VERSION" = "latest" ]; then
         base_url="${base_url}/latest/download"
     else
-        base_url="${base_url}/download/${ARLM_VERSION}"
+        base_url="${base_url}/download/${ARAGS_VERSION}"
     fi
 
-    local binary_name="arlm"
+    local binary_name="arags"
     if [[ "$platform" == *"windows"* ]]; then
-        binary_name="arlm.exe"
+        binary_name="arags.exe"
     fi
 
-    local download_url="${base_url}/arlm-${platform}"
+    local download_url="${base_url}/arags-${platform}"
     if [[ "$platform" == *"windows"* ]]; then
-        download_url="${base_url}/arlm-windows-amd64.exe"
+        download_url="${base_url}/arags-windows-amd64.exe"
     fi
 
-    info "Downloading arlm CLI from: $download_url"
-    download "$download_url" "${INSTALL_DIR}/arlm"
-    chmod +x "${INSTALL_DIR}/arlm"
+    info "Downloading arags CLI from: $download_url"
+    download "$download_url" "${INSTALL_DIR}/arags"
+    chmod +x "${INSTALL_DIR}/arags"
 
-    success "arlm CLI installed to ${INSTALL_DIR}/arlm"
+    success "arags CLI installed to ${INSTALL_DIR}/arags"
 
     # Check if install dir is in PATH
     if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
@@ -136,22 +136,22 @@ install_cli() {
     # Create config directory
     mkdir -p "$DATA_DIR"
 
-    # Guarantee a valid global user config at $DATA_DIR/arlm.toml (plan 020)
-    local config_file="${DATA_DIR}/arlm.toml"
+    # Guarantee a valid global user config at $DATA_DIR/arags.toml (plan 020)
+    local config_file="${DATA_DIR}/arags.toml"
     if [ ! -f "$config_file" ]; then
         info "Creating default config at ${config_file}"
 
         local example_src=""
-        if [ -f "arlm.toml.example" ]; then
-            example_src="arlm.toml.example"
-        elif [ -f "${0%/*}/arlm.toml.example" ]; then
-            example_src="${0%/*}/arlm.toml.example"
+        if [ -f "arags.toml.example" ]; then
+            example_src="arags.toml.example"
+        elif [ -f "${0%/*}/arags.toml.example" ]; then
+            example_src="${0%/*}/arags.toml.example"
         fi
 
         if [ -n "$example_src" ]; then
             cp "$example_src" "$config_file"
         else
-            local example_url="https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/arlm.toml.example"
+            local example_url="https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/arags.toml.example"
             download "$example_url" "$config_file" || true
         fi
 
@@ -159,11 +159,11 @@ install_cli() {
         # but valid default so the file always exists.
         if ! grep -Fq '[llm]' "$config_file" 2>/dev/null; then
             cat > "$config_file" << 'EOF'
-# arlm default user config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/arlm.toml.example
+# arags default user config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/arags.toml.example
 
 [auth]
 # username = "dev1"
-# refresh_token = "<gerado por `arlm-server admin create-refresh`>"
+# refresh_token = "<gerado por `arags-server admin create-refresh`>"
 
 [llm]
 [[llm.backends]]
@@ -191,23 +191,23 @@ install_server_docker() {
         return
     fi
 
-    info "Pulling arlm-server Docker image..."
+    info "Pulling arags-server Docker image..."
     docker pull "${DOCKER_IMAGE}:latest"
 
     success "Docker image pulled: ${DOCKER_IMAGE}:latest"
 
     # Create data volume
-    docker volume create arlm-data 2>/dev/null || true
+    docker volume create arags-data 2>/dev/null || true
 
-    success "Docker volume created: arlm-data"
+    success "Docker volume created: arags-data"
 
     echo ""
     info "To start the server:"
     echo ""
     echo "  docker run -d \\"
-    echo "    --name arlm-server \\"
+    echo "    --name arags-server \\"
     echo "    -p 50051:50051 \\"
-    echo "    -v arlm-data:/data \\"
+    echo "    -v arags-data:/data \\"
     echo "    ${DOCKER_IMAGE}:latest"
     echo ""
     info "Or use docker-compose:"
@@ -226,25 +226,25 @@ create_docker_compose() {
 version: '3.8'
 
 services:
-  arlm-server:
-    image: arlm/arlm-server:latest
-    container_name: arlm-server
+  arags-server:
+    image: arags/arags-server:latest
+    container_name: arags-server
     ports:
       - "50051:50051"
     volumes:
-      - arlm-data:/data
+      - arags-data:/data
     environment:
-      - RUST_LOG=info,arlm_server=debug
+      - RUST_LOG=info,arags_server=debug
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "arlm-server", "status"]
+      test: ["CMD", "arags-server", "status"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
 
 volumes:
-  arlm-data:
+  arags-data:
     driver: local
 EOF
 
@@ -253,7 +253,7 @@ EOF
 
 # Print usage
 usage() {
-    echo "arlm installer"
+    echo "arags installer"
     echo ""
     echo "Usage: install.sh [OPTIONS]"
     echo ""
@@ -292,7 +292,7 @@ main() {
                 shift
                 ;;
             --version)
-                ARLM_VERSION="$2"
+                ARAGS_VERSION="$2"
                 shift 2
                 ;;
             --help)
@@ -307,8 +307,8 @@ main() {
 
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║                    arlm installer                         ║"
-    echo "║         Agnostic RLM - Recursive Language Model           ║"
+    echo "║                    arags installer                         ║"
+    echo "║              Agnostic RAG Server (ARAGS)                  ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
 
@@ -330,9 +330,9 @@ main() {
     success "Installation complete!"
     echo ""
     echo "Quick start:"
-    echo "  arlm --help                    # Show CLI help"
-    echo "  arlm-server up                 # Start server (if Docker installed)"
-    echo "  arlm index .                   # Index current directory"
+    echo "  arags --help                    # Show CLI help"
+    echo "  arags-server up                 # Start server (if Docker installed)"
+    echo "  arags index .                   # Index current directory"
     echo ""
 }
 

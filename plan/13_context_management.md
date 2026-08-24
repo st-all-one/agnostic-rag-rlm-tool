@@ -2,7 +2,7 @@
 
 ## Visão Geral
 
-Este plano cobre como o arlm gerencia **janelas de contexto limitadas**, aprende com **trajectórias**, e suporta **sessões multi-turn**. É a ponte entre o engine recursivo (05) e o sistema de memória (04).
+Este plano cobre como o arags gerencia **janelas de contexto limitadas**, aprende com **trajectórias**, e suporta **sessões multi-turn**. É a ponte entre o engine recursivo (05) e o sistema de memória (04).
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -31,7 +31,7 @@ Este plano cobre como o arlm gerencia **janelas de contexto limitadas**, aprende
 ### MODEL_CONTEXT_LIMITS
 
 ```rust
-// crates/arlm-llm/src/limits.rs
+// crates/arags-llm/src/limits.rs
 pub const DEFAULT_CONTEXT_LIMIT: usize = 128_000;  // tokens
 pub const CHARS_PER_TOKEN_ESTIMATE: usize = 4;
 
@@ -83,7 +83,7 @@ pub fn get_context_limit(model: &str) -> usize {
 ### Token Counter
 
 ```rust
-// crates/arlm-llm/src/token_counter.rs
+// crates/arags-llm/src/token_counter.rs
 pub struct TokenCounter {
     // tiktoken-rs se disponível; senão estimativa
     encoder: Option<TiktokenBpe>,
@@ -140,7 +140,7 @@ impl Default for CompactionPolicy {
 ### Compaction Dinâmica no Synthesizer
 
 ```rust
-// crates/arlm-core/src/synthesizer.rs
+// crates/arags-core/src/synthesizer.rs
 async fn build_children_block(
     children: &[RlmNode],
     model: &str,
@@ -261,7 +261,7 @@ fn iterative_compact(block: &str, model: &str, budget_tokens: usize, llm: &dyn L
 ### Configuração CLI
 
 ```bash
-arlm run "tarefa" \
+arags run "tarefa" \
   --compaction-threshold 0.85 \
   --keep-recent 3 \
   --no-compaction          # desabilita
@@ -375,7 +375,7 @@ CREATE INDEX idx_trajectories_result_hash ON trajectories(result_hash);
 
 ### Como vira Memória
 
-O `arlm-memory` usa trajectórias para três coisas:
+O `arags-memory` usa trajectórias para três coisas:
 
 ```rust
 impl MemoryEngine {
@@ -426,7 +426,7 @@ Inspirado no `SupportsPersistence` protocol do RLM: contextos e históricos **ve
 ### Session Store
 
 ```rust
-// crates/arlm-memory/src/session.rs
+// crates/arags-memory/src/session.rs
 pub struct SessionStore {
     storage: Arc<Storage>,
 }
@@ -526,24 +526,24 @@ fn build_session_prompt(session: &Session, model: &str) -> String {
 
 ```bash
 # Criar sessão
-arlm session create "Análise do auth module" --project ./meu-app
+arags session create "Análise do auth module" --project ./meu-app
 # → session: s_abc123
 
 # Adicionar contexto
-arlm session add-context s_abc123 --file src/auth/login.rs
+arags session add-context s_abc123 --file src/auth/login.rs
 # → context_0
 
 # Rodar RLM dentro da sessão
-arlm run "explique a lógica de token validation" \
+arags run "explique a lógica de token validation" \
   --session s_abc123 \
   --project ./meu-app
 # → prompt inclui: "You have 1 context available (context_0)"
 
 # Retomar sessão depois
-arlm session resume s_abc123
+arags session resume s_abc123
 
 # Listar sessões
-arlm session list --project ./meu-app
+arags session list --project ./meu-app
 ```
 
 ## 5. Prompt Engineering (Lições do Guia)
@@ -589,7 +589,7 @@ As an RLM orchestrator:\n\
 
 ## Resumo de Integração
 
-| Conceito do Guia RLM | Onde entra no arlm |
+| Conceito do Guia RLM | Onde entra no arags |
 |---------------------|--------------------|
 | `get_context_limit(model)` | `MODEL_CONTEXT_LIMITS` → `limits.rs` |
 | `count_tokens()` | `TokenCounter` (tiktoken-rs + fallback) |

@@ -1,9 +1,9 @@
-# arlm-server config (plan 020) — HOST file mounted into the container at
-# /etc/arlm/server.toml (override the path with ARLM_SERVER_CONFIG).
+# arags-server config (plan 020) — HOST file mounted into the container at
+# /etc/arags/server.toml (override the path with ARAGS_SERVER_CONFIG).
 # Server-only data plane: serving + storage + processing. No [llm] section.
 
-listen_addr = "0.0.0.0:50051"          # (env ARLM_SERVER_ADDR overrides)
-data_dir = "/data/arlm"                # (env ARLM_DATA_DIR overrides)
+listen_addr = "0.0.0.0:50051"          # (env ARAGS_SERVER_ADDR overrides)
+data_dir = "/data/arags"                # (env ARAGS_DATA_DIR overrides)
 
 pool_size = 4
 flush_interval_ms = 100

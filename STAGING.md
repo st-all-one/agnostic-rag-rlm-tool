@@ -1,13 +1,13 @@
-# STAGING.md — RLM 100% Local (Ollama + arlm-server)
+# STAGING.md — RLM 100% Local (Ollama + arags-server)
 
 Status de aprendizados, modelo ideal por uso e o que falta verificar.
 Última atualização: 2026-08-21.
 
-> **ATUALIZAÇÃO (planos 019/020):** o `arlm-server` tornou-se um **plano de dados
+> **ATUALIZAÇÃO (planos 019/020):** o `arags-server` tornou-se um **plano de dados
 > puro, sem LLM** (removido o `summarizer` server-side). O servidor faz apenas
 > indexação (chunk+embed), busca híbrida, QA-Cache, memória e histórico. A
-> sumarização/digest agora ocorre **no cliente** (`arlm-cli`) usando o **LLM
-> local do usuário** (`arlm-llm`) em `query -qa` (digest) e `persist` (summarize,
+> sumarização/digest agora ocorre **no cliente** (`arags-cli`) usando o **LLM
+> local do usuário** (`arags-llm`) em `query -qa` (digest) e `persist` (summarize,
 > escreve `wiki/*.md`). As seções abaixo sobre o *summarizer* server-side são
 > históricas e referem-se ao estado pré-refator. Os aprendizados de **embedding**
 > (Ollama local, all-minilm/qwen3-embedding) continuam válidos para o servidor.
@@ -16,8 +16,8 @@ Status de aprendizados, modelo ideal por uso e o que falta verificar.
 
 ## 1. Objetivo
 
-Deixar a busca semântica do `arlm` **100% local** em laptop, sem APIs externas:
-embeddings via **Ollama** no servidor (`arlm-server`, container Docker único).
+Deixar a busca semântica do `arags` **100% local** em laptop, sem APIs externas:
+embeddings via **Ollama** no servidor (`arags-server`, container Docker único).
 A sumarização/digest é feita pelo **LLM local do usuário no cliente** (`query -qa`
 / `persist`), não no servidor.
 
@@ -25,14 +25,14 @@ A sumarização/digest é feita pelo **LLM local do usuário no cliente** (`quer
 
 ## 2. Estado do projeto — FEITO
 
-- **Servidor (`arlm-server`) — correções B1–B4** (clippy/fmt limpos):
+- **Servidor (`arags-server`) — correções B1–B4** (clippy/fmt limpos):
   - B1: embedding paralelo em lotes na Phase 2 (`grpc/index.rs`), com `buffer_unordered` + `spawn_blocking`.
   - B2: dimensões dinâmicas via `state.embedder.dimensions()` (não mais `const 1024`).
   - B3: embed da query em `spawn_blocking` (`grpc/search.rs`).
-  - B4: envs `ARLM_EMBED_BATCH` (64) / `ARLM_INDEX_CONCURRENCY` (4).
+  - B4: envs `ARAGS_EMBED_BATCH` (64) / `ARAGS_INDEX_CONCURRENCY` (4).
 - **Docker** (`Dockerfile`, `docker/Modelfile`, `docker/server.toml`, `docker/entrypoint.sh`):
   - Imagem **5.11 GB**, `all-minilm` bakeado, base `rust:1.97.1-slim` → `ollama/ollama`.
-  - Container `arlm-prod` sobe Ollama + arlm-server; mapeia **50052→50051** (não mapeia 11434 p/ não conflitar com Ollama do host).
+  - Container `arags-prod` sobe Ollama + arags-server; mapeia **50052→50051** (não mapeia 11434 p/ não conflitar com Ollama do host).
   - `docker build --network=host` (sandbox de build sem rede); apt precisa de `libprotobuf-dev` + `protobuf-compiler`.
 - **End-to-end validado**: `sucesu` indexado = **1194 arquivos / 4481 chunks em 104s**, pico ~10 cores / ~870 MB; queries BM25+semântica relevantes (login/permissão/middleware → controllers corretos).
 - Issues `sd` (B1–B4 + Docker + feature) **fechadas**.
@@ -55,7 +55,7 @@ A sumarização/digest é feita pelo **LLM local do usuário no cliente** (`quer
    `_Exemplos`, `vendor`. **Ação:** aplicar ignores e reindexar.
 6. **Embedding**: `all-minilm` (384-dim) atual; `qwen3-embedding:0.6b` (1024-dim) é candidato
    não validado em retrieval. Detalhe: prefixo do server default é `"search_document: "`
-   (correto p/ nomic, **errado p/ all-minilm** — o Dockerfile já seta `ARLM_OLLAMA_PREFIX=` vazio).
+   (correto p/ nomic, **errado p/ all-minilm** — o Dockerfile já seta `ARAGS_OLLAMA_PREFIX=` vazio).
 7. **Agente consumidor** (tabela Cline/Continue/Aider/etc.) ainda não integrado a nenhum.
 
 ---
@@ -114,11 +114,11 @@ via `/api/chat` do Ollama, `temperature=0.3`, `num_predict=1024`. Harness em
 - **Default do container:** trocar `qwen2.5-coder:7b` (não baixado) por modelo local
   verificado e **bakeá-lo** na imagem.
 
-### 6.3 Agente consumidor (usa o output do arlm)
+### 6.3 Agente consumidor (usa o output do arags)
 - **Tier 1 (local + self-hosted):** `Continue.dev`, `Tabby`, `Aider` (terminal — encaixa no CLI).
 - **Tier 2 (local, sem self-host):** `Cline`, `Roo Code`, `Kilo Code`, `Goose`, `Zed` (via ACP).
 - **Excluídos p/ 100% local:** `Cursor` (sem modelo local), `Codeium Enterprise`/`Pieces` (nuvem).
-- **Ação:** escolher 1 e integrar o consumo dos summaries/contexto do arlm.
+- **Ação:** escolher 1 e integrar o consumo dos summaries/contexto do arags.
 
 ---
 
@@ -137,7 +137,7 @@ via `/api/chat` do Ollama, `temperature=0.3`, `num_predict=1024`. Harness em
       se qwen3-embedding, ajustar Dockerfile + env + prefixo.
 - [ ] **Aplicar ignores** (`Seeds`, `storage/logs`, `REFERENCE`, `_Exemplos`, `vendor`) + reindexar;
       reavaliar relevância em NL.
-- [ ] **Validar container sob carga**: Ollama + arlm-server, VRAM, persistência (volume `/data/arlm`).
+- [ ] **Validar container sob carga**: Ollama + arags-server, VRAM, persistência (volume `/data/arags`).
 - [ ] **Testes**: `cargo test --workspace`, `cargo clippy --workspace -- -D warnings`, `cargo fmt -- --check`;
       cobrir `parse_summary_response` e dimensões dinâmicas.
 
@@ -155,5 +155,5 @@ curl -s -X POST http://127.0.0.1:11434/api/embeddings -H 'Content-Type: applicat
 curl -s -X POST http://127.0.0.1:11434/api/chat -H 'Content-Type: application/json' \
   -d '{"model":"<modelo>","messages":[{"role":"user","content":"resuma..."}],"options":{"num_predict":1024},"think":false,"stream":false}'
 # container
-docker run -d --name arlm-prod -p 50052:50051 -v arlm-data:/data arlm-ollama
+docker run -d --name arags-prod -p 50052:50051 -v arags-data:/data arags-ollama
 ```

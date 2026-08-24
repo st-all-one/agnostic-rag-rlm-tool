@@ -4,11 +4,11 @@
 
 Os planos 017 (QA-Cache, digestão no client) e 018 (auth por refresh token) estabeleceram a
 filosofia **on-demand, agent-agnostic, sem LLM no servidor**. O projeto acumulou, porém, um
-"legado RLM recursivo" — o orquestrador (`arlm-core/src/engine/*`, `planner`, `solver`,
-`synthesizer`, `repl`), o `arlm run`, o servidor de RLM (`grpc/runs`), o `summarizer` hierárquico
+"legado RLM recursivo" — o orquestrador (`arags-core/src/engine/*`, `planner`, `solver`,
+`synthesizer`, `repl`), o `arags run`, o servidor de RLM (`grpc/runs`), o `summarizer` hierárquico
 e a config `[llm]` do server — que não faz mais sentido:
 
-- `arlm run` dispara um loop recursivo `planner → solver → synthesizer` que **não existe mais** na
+- `arags run` dispara um loop recursivo `planner → solver → synthesizer` que **não existe mais** na
   arquitetura sob demanda. A filosofia agora é "processamento sob demanda via `-qa`".
 - O `summarizer` (server-side LLM) duplica o LLM que o agente consumidor já possui e contradiz o
   plano 017 ("servidor sem LLM").
@@ -20,7 +20,7 @@ e a config `[llm]` do server — que não faz mais sentido:
 Paralelamente, a superfície de CLI cresceu desordenada. Este plano **consolida a CLI** em um
 conjunto enxuto e coerente (init/index/search/query/memory/persist/history), **remove o legado
 RLM** de ponta a ponta (core → server → proto → cli → storage), e **repensa** os comandos
-`persist` e `history` e a gestão de memória (`cache`+`decay`+`entities` → `arlm memory` admin).
+`persist` e `history` e a gestão de memória (`cache`+`decay`+`entities` → `arags memory` admin).
 
 Este plano **não implementa o 017/018** (já feitos); ele **age em cima deles**: remove o que
 ficou obsoleto e unifica a superfície.
@@ -29,16 +29,16 @@ ficou obsoleto e unifica a superfície.
 
 ## Goals
 
-- **Remover por completo** o legado RLM: engine (`arlm-core`), `arlm run` (CLI), `grpc/runs`
+- **Remover por completo** o legado RLM: engine (`arags-core`), `arags run` (CLI), `grpc/runs`
   (server), `summarizer`, config `[llm]` do server, RPCs `Run`/`Summarize`, e as tabelas
   `runs`/`run_model_usage`/`trajectories`/`sessions`(multi-turn)/`session_*`/`checkpoints`.
 - **CLI enxuta e coerente** com on-demand: `init`, `index`, `search`, `query`, `memory` (admin),
   `persist` (rework), `history` (por usuário).
-- **Unificar** `cache`+`decay`+`entities` em `arlm memory` (admin, role do plan 018).
+- **Unificar** `cache`+`decay`+`entities` em `arags memory` (admin, role do plan 018).
 - **Repensar `persist`**: exibir `response_id`, gerar `wiki/yyyymmddhhmm_title.md` estruturado
   usando resumo via IA real (modelo do usuário, `--qa`).
 - **`history` por usuário**, atrelado ao refresh token (server-side, escopado por `username`).
-- **Novo `arlm init`**: prepara o repo (config local + `arlm index`).
+- **Novo `arags init`**: prepara o repo (config local + `arags index`).
 - Servidor **sem LLM** e sem manutenção manual de memória no client: `consolidate`/`decay` viram
   **manutenção server-side** (cron + RPC admin).
 
@@ -56,27 +56,27 @@ ficou obsoleto e unifica a superfície.
 
 | Comando | Finalidade | Estado |
 |---|---|---|
-| `arlm init [--index]` | prepara repo (config `.arlm/` + roda `index`) | **NOVO** |
-| `arlm index` | ingestão (chunking + embed + store) | mantido |
-| `arlm search` | busca híbrida (BM25+vetor+entity), sem LLM | mantido |
-| `arlm query` | on-demand QA: `-qa` digest no client; `--cache-id` lookup determinístico | mantido (refinado) |
-| `arlm memory` (admin) | unifica `cache`+`decay`+`entities`: `list`/`get`/`invalidate`/`cleanup` | **NOVO** (subs. cache/decay/entities) |
-| `arlm persist <response_id>` | de `response_id` → `wiki/yyyymmddhhmm_title.md` estruturado | **REWORK** |
-| `arlm history [--limit]` | histórico de queries do usuário (server, por refresh token) | **REWORK** (por-usuário) |
-| `arlm run` | — | **REMOVIDO** |
-| `arlm context` | — | **REMOVIDO** (redundante c/ `query` sem `--llm`) |
-| `arlm session` | — | **REMOVIDO** (justificado abaixo) |
-| `arlm status` | — | **REMOVIDO** |
-| `arlm cost` | — | **REMOVIDO** |
-| `arlm cancel` | — | **REMOVIDO** |
-| `arlm checkpoints` | — | **REMOVIDO** |
-| `arlm restore-page` | — | **REMOVIDO** |
-| `arlm wiki` | — | **REMOVIDO** (cmd; dir `wiki/` mantido p/ `persist`) |
-| `arlm consolidate` (CLI) | — | **REMOVIDO do CLI** → manutenção server-side |
-| `arlm decay` (CLI) | — | **REMOVIDO do CLI** → `memory cleanup` |
+| `arags init [--index]` | prepara repo (config `.arags/` + roda `index`) | **NOVO** |
+| `arags index` | ingestão (chunking + embed + store) | mantido |
+| `arags search` | busca híbrida (BM25+vetor+entity), sem LLM | mantido |
+| `arags query` | on-demand QA: `-qa` digest no client; `--cache-id` lookup determinístico | mantido (refinado) |
+| `arags memory` (admin) | unifica `cache`+`decay`+`entities`: `list`/`get`/`invalidate`/`cleanup` | **NOVO** (subs. cache/decay/entities) |
+| `arags persist <response_id>` | de `response_id` → `wiki/yyyymmddhhmm_title.md` estruturado | **REWORK** |
+| `arags history [--limit]` | histórico de queries do usuário (server, por refresh token) | **REWORK** (por-usuário) |
+| `arags run` | — | **REMOVIDO** |
+| `arags context` | — | **REMOVIDO** (redundante c/ `query` sem `--llm`) |
+| `arags session` | — | **REMOVIDO** (justificado abaixo) |
+| `arags status` | — | **REMOVIDO** |
+| `arags cost` | — | **REMOVIDO** |
+| `arags cancel` | — | **REMOVIDO** |
+| `arags checkpoints` | — | **REMOVIDO** |
+| `arags restore-page` | — | **REMOVIDO** |
+| `arags wiki` | — | **REMOVIDO** (cmd; dir `wiki/` mantido p/ `persist`) |
+| `arags consolidate` (CLI) | — | **REMOVIDO do CLI** → manutenção server-side |
+| `arags decay` (CLI) | — | **REMOVIDO do CLI** → `memory cleanup` |
 
-**`arlm server`** (gRPC/MCP) mantém os mesmos endpoints de negócio (index/search/query/context/
-memory/history) e **perde** o endpoint `/run`. O `arlm-server admin` (CLI interno do container)
+**`arags server`** (gRPC/MCP) mantém os mesmos endpoints de negócio (index/search/query/context/
+memory/history) e **perde** o endpoint `/run`. O `arags-server admin` (CLI interno do container)
 ganha `consolidate`.
 
 ---
@@ -84,15 +84,15 @@ ganha `consolidate`.
 ## Architecture Overview
 
 ```
- CLIENT (arlm-cli)                              SERVER (arlm-server, sem LLM)
+ CLIENT (arags-cli)                              SERVER (arags-server, sem LLM)
  ┌────────────────────────────┐                ┌──────────────────────────────────────┐
- │ init   → scaffold .arlm/ + index            │ gRPC business:                        │
+ │ init   → scaffold .arags/ + index            │ gRPC business:                        │
  │ index  → ingestão local → gRPC IndexProject │   IndexProject, Search, QueryWithCache │
  │ search → gRPC Search                        │   StoreAnswer, GetAnswerById          │
- │ query  → -qa digest no client (arlm-llm)    │   InvalidateCache (admin)             │
+ │ query  → -qa digest no client (arags-llm)    │   InvalidateCache (admin)             │
  │         --cache-id lookup 1:1               │   ListMemory / GetCache (admin)       │
  │ memory (admin) → List/Get/Invalidate/Cleanup│   TriggerMaintenance (admin)          │
- │ persist <id> → resumo via arlm-llm →        │   GetHistory {user} (por usuário)     │
+ │ persist <id> → resumo via arags-llm →        │   GetHistory {user} (por usuário)     │
  │   wiki/yyyymmddhhmm_title.md                │                                        │
  │ history → GetHistory(user)                  │ Maintenance (interno, sem gRPC):       │
  │                                            │   consolidate() + decay() a cada tick │
@@ -104,7 +104,7 @@ ganha `consolidate`.
 
 ## A. Remoção do legado RLM (core → server → proto → cli → storage)
 
-### A.1 `arlm-core` (remover módulos engine)
+### A.1 `arags-core` (remover módulos engine)
 Remover arquivos: `engine/`, `planner.rs`, `solver.rs`, `synthesizer.rs`, `repl.rs`,
 `budget.rs`, `cache.rs`, `tools.rs`, `router.rs`, `sampling.rs`, `guardrails.rs`,
 `compaction.rs`, `docker.rs`, `jsonl_logger.rs`, `token_counter.rs`, `concurrency.rs`,
@@ -116,28 +116,28 @@ Ajustes:
 - `src/types/mod.rs`: remover `pub use crate::tools::{...}` (linha 21) e podar `enums.rs`
   (`RlmBackend`, `RunOutput`, `CompactionPolicy`…), `input.rs` (`StartRunInput`),
   `node.rs` (`RlmNode`) — manter apenas tipos usados por `qa_cache`/`memory` sobreviventes.
-- `src/memory/mod.rs`: manter a trait `MemoryProvider` (consumida por `arlm-memory`).
+- `src/memory/mod.rs`: manter a trait `MemoryProvider` (consumida por `arags-memory`).
 
-**Acoplamento crítico (`arlm-memory`):** `crates/arlm-memory/src/engine/memory_api.rs`
-importa `arlm_core::types::{RlmNode, RlmRunResult, StartRunInput}`. Esses tipos somem →
+**Acoplamento crítico (`arags-memory`):** `crates/arags-memory/src/engine/memory_api.rs`
+importa `arags_core::types::{RlmNode, RlmRunResult, StartRunInput}`. Esses tipos somem →
 `memory_api.rs` fica órfão. Resolução: remover `memory_api.rs` e os módulos de memory **atrelados
 a run** (`trajectory/`, `checkpoint/`, `session.rs`, `transfer.rs` se dependente de run).
-Manter em `arlm-memory`: `HistoryManager` (repurpose), `ConsolidationEngine`, `decay`,
+Manter em `arags-memory`: `HistoryManager` (repurpose), `ConsolidationEngine`, `decay`,
 `PersistEngine`/`persist/`, `knowledge/`, `project.rs`, `watch.rs`, e o re-export
-`pub use arlm_core::memory::MemoryProvider`. A `MemoryProvider` trait em si é independente do
+`pub use arags_core::memory::MemoryProvider`. A `MemoryProvider` trait em si é independente do
 engine e deve permanecer.
 
-### A.2 `arlm-server`
+### A.2 `arags-server`
 - Remover `src/grpc/runs/` + `pub mod runs;` + RPCs `Run`/`StreamRun`/`GetRun`/`CancelRun`/
   `StreamRunEvents`/`GetRunStatus` (em `grpc/mod.rs`).
 - Remover `src/grpc/summarize.rs` + `pub mod summarize;` + RPCs `Summarize*`/`StreamSummarize*`.
 - Remover `src/summarizer/` (módulo inteiro).
 - Remover `[llm]` (`config.rs` `LlmConfig`), `build_llm` (`lifecycle.rs`), campo `AppState.llm`,
-  e a dependência `arlm-llm` do `arlm-server` (salvo se reutilizada em outro ponto — não há).
+  e a dependência `arags-llm` do `arags-server` (salvo se reutilizada em outro ponto — não há).
 - Manter `GetServerStatus` (health/ops) mas remover as RPCs `Status`/`Cost`/`Cancel`/`Checkpoints`
   atreladas a run; elas somem junto com `runs`.
 
-### A.3 `arlm-proto`
+### A.3 `arags-proto`
 - `proto/service.proto`: remover `rpc Run`, `rpc StreamRun`, `rpc GetRun`, `rpc CancelRun`,
   `rpc StreamRunEvents`, `rpc GetRunStatus`, `rpc Summarize*`, `rpc StreamSummarize*`.
 - Remover mensagens órfãs: `RunRequest`, `RunOptions`, `RunResponse`, `RunStatus`,
@@ -146,7 +146,7 @@ engine e deve permanecer.
 - Manter `RunEvent`? Não — só servia ao stream de run. Remover.
 - Regenerar via `build.rs`.
 
-### A.4 `arlm-cli`
+### A.4 `arags-cli`
 - Remover `src/commands/run/` (dir inteiro) e a variante `Commands::Run` (`cli/commands.rs`).
 - **`dispatch/local.rs` é removido por inteiro** (modo offline eliminado no plan 020 D3): o
   client vira **puro gRPC**. Sobra só `dispatch/server.rs`, cujo braço `Run` (e `Status { run_id }`
@@ -159,7 +159,7 @@ engine e deve permanecer.
   `entities.rs` (CLI), e os módulos `output/live_tree/`.
 - `commands/mod.rs`: remover registros dos comandos acima.
 
-### A.5 `arlm-storage` (tabelas mortas)
+### A.5 `arags-storage` (tabelas mortas)
 As tabelas `runs`, `run_model_usage`, `trajectories`, `sessions` (multi-turn, migration 006 —
 **distinta** de `auth_sessions` do plan 018), `session_contexts`, `session_history`,
 `checkpoints` deixam de ser escritas. **Migrations são imutáveis** → não apagar; parar de usar e
@@ -169,10 +169,10 @@ e `history` (repurpose) permanecem.
 
 ---
 
-## B. Novo `arlm init`
+## B. Novo `arags init`
 
-- Cria `<project>/.arlm.toml` (idempotente; se existir, funde/avisa). Ver nomenclatura em
-  plan 020 (`~/.arlm/arlm.toml` global, `.arlm.toml` local, `server.toml` do server):
+- Cria `<project>/.arags.toml` (idempotente; se existir, funde/avisa). Ver nomenclatura em
+  plan 020 (`~/.arags/arags.toml` global, `.arags.toml` local, `server.toml` do server):
   ```toml
   [project]
   name = "<dir ou git remote>"
@@ -180,15 +180,15 @@ e `history` (repurpose) permanecem.
   [server]
   addr = "http://127.0.0.1:50051"                        # default; sobrescreve global
   ```
-- Por padrão executa `arlm index .` ao final (flag `--no-index` p/ pular).
-- Lê o global `~/.arlm/arlm.toml` (auth + LLM do plan 018/020) para validar identidade, mas não o
+- Por padrão executa `arags index .` ao final (flag `--no-index` p/ pular).
+- Lê o global `~/.arags/arags.toml` (auth + LLM do plan 018/020) para validar identidade, mas não o
   copia (credencial fica no client).
 - Semente ignore patterns de `.gitignore` presente; respeita o mesmo `ignore_patterns`/
   `force_include` do `index`.
 
 ---
 
-## C. `arlm memory` (admin) — unifica cache + decay + entities
+## C. `arags memory` (admin) — unifica cache + decay + entities
 
 Subcomando **admin-gated** (role `admin` do plan 018). Cliente manda `Authorization: Bearer`
 (session); o interceptor exige `role=admin` (reuso do `require_admin`).
@@ -196,35 +196,35 @@ Subcomando **admin-gated** (role `admin` do plan 018). Cliente manda `Authorizat
 | Subcomando | RPC (server) | Ação |
 |---|---|---|
 | `list [--project P] [--limit N] [--include-entities]` | `ListMemory` | visualiza entradas `qa_cache` + stats + (opcional) entidades dos chunks |
-| `get <cache_id>` | `GetCache` | busca resposta por id (admin/debug; usuário comum usa `arlm query --cache-id`) |
+| `get <cache_id>` | `GetCache` | busca resposta por id (admin/debug; usuário comum usa `arags query --cache-id`) |
 | `invalidate [--cache-id C] [--project P] [--radius R] [--delete] [--reason S]` | `InvalidateCache` (plan 017/018) | marca `stale` (soft) ou `--delete` (hard); `--radius` invalida vizinhos; sem `--cache-id` purga `result_cache` legado do `--project` |
 | `cleanup [--dry-run] [--project P]` | `TriggerMaintenance` | limpeza forçada de memória: **decay** (chunks com score < 0.1) + **consolidate** (dedupe + low-confidence) no server |
 
-O `arlm query --cache-id <id>` (consumer/anti-drift do plan 017) **permanece** sob `query`, não
+O `arags query --cache-id <id>` (consumer/anti-drift do plan 017) **permanece** sob `query`, não
 sob `memory` — é o caminho determinístico do usuário final.
 
 ### C.1 Manutenção server-side (consolidate + decay)
-- Novo módulo `arlm-server/src/maintenance.rs`: `consolidate(project)` usa
-  `arlm_memory::ConsolidationEngine`; `decay(project)` usa `arlm_search::decay::DecayConfig`
-  (já existe) sobre `arlm_storage`. Ambos retornam um `MaintenanceReport`
+- Novo módulo `arags-server/src/maintenance.rs`: `consolidate(project)` usa
+  `arags_memory::ConsolidationEngine`; `decay(project)` usa `arags_search::decay::DecayConfig`
+  (já existe) sobre `arags_storage`. Ambos retornam um `MaintenanceReport`
   (`duplicate_chunks_removed`, `low_confidence_patterns_removed`, `decayed_chunks`, `kept`).
 - **Admin RPC** `TriggerMaintenance { project, dry_run }` → `MaintenanceReport`.
-- **CLI interno** `arlm-server admin consolidate [--dry-run] [--project P]` (abre `Storage`
+- **CLI interno** `arags-server admin consolidate [--dry-run] [--project P]` (abre `Storage`
   direto, sem gRPC — igual ao `admin create-refresh`).
-- **Cron**: `arlm-server` config ganha `[maintenance] interval_secs` (default ex.: 3600; `0` =
+- **Cron**: `arags-server` config ganha `[maintenance] interval_secs` (default ex.: 3600; `0` =
   desliga). Na `lifecycle`, um `tokio::spawn` dispara `consolidate+decay` a cada tick (e também
   logo após `index`, para manter a memória fresca).
 
 ---
 
-## D. `arlm persist` (rework)
+## D. `arags persist` (rework)
 
-- Uso: `arlm persist <response_id> [--title T]`. `<response_id>` é o `cache_id` emitido por
-  `arlm query -qa` (plan 017 já emite `cache_id` em todos os formatos).
+- Uso: `arags persist <response_id> [--title T]`. `<response_id>` é o `cache_id` emitido por
+  `arags query -qa` (plan 017 já emite `cache_id` em todos os formatos).
 - Fluxo:
   1. Exibe o `response_id` ao usuário.
   2. `GetAnswerById(response_id)` → `answer_text` + `source_chunk_ids` + arquivos (provenance).
-  3. Executa resumo **via IA real do usuário** (`arlm-llm` + `~/.arlm/arlm.toml`, igual ao `query -qa`)
+  3. Executa resumo **via IA real do usuário** (`arags-llm` + `~/.arags/arags.toml`, igual ao `query -qa`)
      com prompt de sumarização fixo + os artefatos (trechos fonte), produzindo um documento.
   4. Escreve `wiki/<yyyymmddhhmm>_<slug(title)>.md` (pasta `wiki/` relativa ao projeto; sem git).
 - **Estrutura fixa** do documento:
@@ -251,14 +251,14 @@ sob `memory` — é o caminho determinístico do usuário final.
 
 ---
 
-## E. `arlm history` (por usuário, atrelado ao refresh token)
+## E. `arags history` (por usuário, atrelado ao refresh token)
 
 - Atual `HistoryManager` (cliente, lê SQLite local) → **server-side**: o server registra cada
   query em `history` com a coluna `user` (do `AuthContext` do plan 018). Migration adiciona
   `user TEXT` a `history`.
 - RPC `GetHistory { user, limit }`: usuário vê **só suas** queries; `admin` vê todas (ou filtra
   por `user`). Sem sessão → `UNAUTHENTICATED`.
-- `arlm history [--limit N]` (default 20) chama `GetHistory` com o `username` do token; remove a
+- `arags history [--limit N]` (default 20) chama `GetHistory` com o `username` do token; remove a
   seção "runs" (morta).
 - Respeita o princípio "histórico útil a nível do próprio usuário, atrelado ao refresh token".
 
@@ -270,8 +270,8 @@ sob `memory` — é o caminho determinístico do usuário final.
   turnos de um **run RLM de longa duração**. Com on-demand `-qa` não há sessão multi-turno a
   rastrear; o `history` por usuário já cobre o que o usuário precisa. Removem-se comando, RPCs e
   tabelas `sessions`/`session_contexts`/`session_history`.
-- **`context`**: `arlm context <task>` monta janela de contexto (busca híbrida) sem LLM — é
-  **redundante** com `arlm query` quando nenhum `--llm` está configurado (query já devolve o
+- **`context`**: `arags context <task>` monta janela de contexto (busca híbrida) sem LLM — é
+  **redundante** com `arags query` quando nenhum `--llm` está configurado (query já devolve o
   contexto). Consolidar em `query`.
 - **`status`/`cost`/`cancel`/`checkpoints`**: 100% atrelados a `runs`/`trajectories` (tabelas
   mortas). Sem o engine, não têm objeto.
@@ -304,23 +304,23 @@ Novas RPCs: `ListMemory`, `GetCache`, `TriggerMaintenance`, `GetHistory`. Removi
 
 | Componente | Crate | Arquivo(s) |
 |---|---|---|
-| Remoção engine | `arlm-core` | `src/{engine,planner,solver,synthesizer,repl,budget,cache,tools,router,sampling,guardrails,compaction,docker,jsonl_logger,token_counter,concurrency,events}.rs`, `src/lib.rs`, `src/types/{mod,enums,input,node}.rs` |
-| Podar `arlm-memory` run-bound | `arlm-memory` | remover `engine/memory_api.rs`, `trajectory/`, `checkpoint/`, `session.rs`, `transfer.rs` (se run-bound); manter `HistoryManager`, `ConsolidationEngine`, `decay`, `PersistEngine`, `knowledge`, `project`, `watch` |
-| Remover runs/summarize/`[llm]` | `arlm-server` | `grpc/{mod,runs,summarize}.rs`, `summarizer/`, `config.rs`, `lifecycle.rs`, `state.rs` |
-| Manutenção server-side | `arlm-server` | `src/maintenance.rs` (novo) + `admin consolidate` em `cli/admin.rs` + ticker em `lifecycle.rs` |
-| RPCs memory/history/maintenance | `arlm-proto`+`arlm-server` | `proto/service.proto`, `grpc/{query_cache,memory,history}.rs` (novos/ajustados) |
-| `arlm init` | `arlm-cli` | `src/commands/init.rs` (novo) + `cli/commands.rs` |
-| `arlm memory` | `arlm-cli` | `src/commands/memory.rs` (novo, subs. cache/decay/entities) |
-| `arlm persist` rework | `arlm-cli` | `src/commands/persist.rs` (rewrite) |
-| `arlm history` por usuário | `arlm-cli`+`arlm-server` | `src/commands/history.rs` (rewrite) + `grpc/history.rs` + `HistoryManager` server-side |
-| Remoções CLI | `arlm-cli` | deletar `run/`, `session`, `status`, `cost`, `cancel`, `checkpoints`, `restore_page`, `wiki`, `context`, `consolidate`, `decay`, `entities`; `dispatch/{local,server}.rs`; `commands/serve/{run_logic,handlers,requests}`, `output/live_tree` |
-| Migrations | `arlm-storage` | migration `history.user`; parar writes das tabelas mortas |
+| Remoção engine | `arags-core` | `src/{engine,planner,solver,synthesizer,repl,budget,cache,tools,router,sampling,guardrails,compaction,docker,jsonl_logger,token_counter,concurrency,events}.rs`, `src/lib.rs`, `src/types/{mod,enums,input,node}.rs` |
+| Podar `arags-memory` run-bound | `arags-memory` | remover `engine/memory_api.rs`, `trajectory/`, `checkpoint/`, `session.rs`, `transfer.rs` (se run-bound); manter `HistoryManager`, `ConsolidationEngine`, `decay`, `PersistEngine`, `knowledge`, `project`, `watch` |
+| Remover runs/summarize/`[llm]` | `arags-server` | `grpc/{mod,runs,summarize}.rs`, `summarizer/`, `config.rs`, `lifecycle.rs`, `state.rs` |
+| Manutenção server-side | `arags-server` | `src/maintenance.rs` (novo) + `admin consolidate` em `cli/admin.rs` + ticker em `lifecycle.rs` |
+| RPCs memory/history/maintenance | `arags-proto`+`arags-server` | `proto/service.proto`, `grpc/{query_cache,memory,history}.rs` (novos/ajustados) |
+| `arags init` | `arags-cli` | `src/commands/init.rs` (novo) + `cli/commands.rs` |
+| `arags memory` | `arags-cli` | `src/commands/memory.rs` (novo, subs. cache/decay/entities) |
+| `arags persist` rework | `arags-cli` | `src/commands/persist.rs` (rewrite) |
+| `arags history` por usuário | `arags-cli`+`arags-server` | `src/commands/history.rs` (rewrite) + `grpc/history.rs` + `HistoryManager` server-side |
+| Remoções CLI | `arags-cli` | deletar `run/`, `session`, `status`, `cost`, `cancel`, `checkpoints`, `restore_page`, `wiki`, `context`, `consolidate`, `decay`, `entities`; `dispatch/{local,server}.rs`; `commands/serve/{run_logic,handlers,requests}`, `output/live_tree` |
+| Migrations | `arags-storage` | migration `history.user`; parar writes das tabelas mortas |
 
 ---
 
 ## Implementation Steps (milestones)
 
-1. **Core**: remover módulos engine + podar `types`/`lib.rs`; ajustar `arlm-memory` (remover
+1. **Core**: remover módulos engine + podar `types`/`lib.rs`; ajustar `arags-memory` (remover
    run-bound, manter trait `MemoryProvider`).
 2. **Proto**: remover RPCs `Run*`/`Summarize*` + mensagens órfãs; adicionar `ListMemory`,
    `GetCache`, `TriggerMaintenance`, `GetHistory`; regenerar.
@@ -356,7 +356,7 @@ Novas RPCs: `ListMemory`, `GetCache`, `TriggerMaintenance`, `GetHistory`. Removi
 - `test_init_seeds_ignore_from_gitignore`.
 - `test_query_emits_cache_id` (plan 017) + `test_query_cache_id_lookup_1to1` (já existe).
 - `test_proto_no_run_or_summarize_messages`.
-- `test_arlm_memory_replaces_cache_decay_entities` (CLI mapping).
+- `test_arags_memory_replaces_cache_decay_entities` (CLI mapping).
 - Bench: latência de `TriggerMaintenance` em projeto grande; tamanho do binário (sem engine).
 
 ---
@@ -365,14 +365,14 @@ Novas RPCs: `ListMemory`, `GetCache`, `TriggerMaintenance`, `GetHistory`. Removi
 
 | Risco | Mitigação |
 |---|---|
-| `arlm-memory` acoplado a tipos do engine (`RlmNode`/`RlmRunResult`/`StartRunInput`) | remover `memory_api.rs` + módulos run-bound; a trait `MemoryProvider` é independente e fica |
+| `arags-memory` acoplado a tipos do engine (`RlmNode`/`RlmRunResult`/`StartRunInput`) | remover `memory_api.rs` + módulos run-bound; a trait `MemoryProvider` é independente e fica |
 | Tabelas mortas (`runs`, etc.) não dropadas por migrations imutáveis | parar de escrever agora; migration de drop em follow-up documentada; nenhum código as referencia |
 | `history` local → server-side quebra clientes antigos | migration adiciona `user` (nullable p/ retroativo); server preenche a partir do token |
 | `memory cleanup` (decay) agressivo apaga chunks úteis | `DecayConfig` score < 0.1 default + `--dry-run` reporta antes de apagar |
 | Consolidate periódico compete com `index` | lifecycle serializa (um por vez) ou usa o mesmo lock de buffer |
-| `persist` depende de LLM do usuário configurado | igual ao `query -qa`; sem config, erro claro "configure [llm] em ~/.arlm/arlm.toml" |
+| `persist` depende de LLM do usuário configurado | igual ao `query -qa`; sem config, erro claro "configure [llm] em ~/.arags/arags.toml" |
 | Perda de `session` põe em risco continuity de agentes | `history` por usuário cobre rastreabilidade; não há multi-turno no modelo on-demand |
-| Binário/cliente quebra por reexport de `arlm_core::types` | `cargo check --workspace` após poda de `types`; manter só o que sobrevive |
+| Binário/cliente quebra por reexport de `arags_core::types` | `cargo check --workspace` após poda de `types`; manter só o que sobrevive |
 
 ---
 
@@ -392,10 +392,10 @@ Novas RPCs: `ListMemory`, `GetCache`, `TriggerMaintenance`, `GetHistory`. Removi
 - O **plan 020** é o complemento de config desta refatoração. Ele define:
   - `server.toml` (**só** data plane: listen/tls, data_dir/pool, `[embedder]` chunk/embed,
     `[search]`, `[qa_cache]`, `[maintenance]`) — sem `[llm]`.
-  - User 2-escopos: global `~/.arlm/arlm.toml` (auth + llm user + server.addr) e local
-    `.arlm.toml` (overrides por projeto, gitignored, gerado por `arlm init`), com **merge
+  - User 2-escopos: global `~/.arags/arags.toml` (auth + llm user + server.addr) e local
+    `.arags.toml` (overrides por projeto, gitignored, gerado por `arags init`), com **merge
     granular** local→global.
-  - As referências a `~/.arlm/config.toml`/`.arlm/config.toml` neste plano 019 estão **supersedidas**
+  - As referências a `~/.arags/config.toml`/`.arags/config.toml` neste plano 019 estão **supersedidas**
     pela nomenclatura do 020.
-- `arlm init` (seção B) e `arlm memory`/`persist` (C/D) consomem `user_config` do 020.
+- `arags init` (seção B) e `arags memory`/`persist` (C/D) consomem `user_config` do 020.
 - `[maintenance]` (C.1) é configurado no `server.toml` do 020.

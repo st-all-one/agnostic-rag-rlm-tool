@@ -2,7 +2,7 @@
 
 ## Visão Geral
 
-Este plano cobre o sistema de **controle financeiro e operacional** do arlm, inspirado nas lições do guia RLM: propagação de limites para child RLMs, cost tracking por modelo, modelo diferente por depth, sampling args por tipo de nó, retry logic e partial answers.
+Este plano cobre o sistema de **controle financeiro e operacional** do arags, inspirado nas lições do guia RLM: propagação de limites para child RLMs, cost tracking por modelo, modelo diferente por depth, sampling args por tipo de nó, retry logic e partial answers.
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
@@ -214,7 +214,7 @@ impl LlmUsage {
 ### Pricing Table
 
 ```rust
-// crates/arlm-llm/src/pricing.rs
+// crates/arags-llm/src/pricing.rs
 pub struct PricingEntry {
     pub model_key: &'static str,   // substring match, ex: "gpt-4o"
     pub input_per_mtok: f64,       // USD por 1M input tokens
@@ -315,7 +315,7 @@ impl DepthRouter {
 
 ```bash
 # Configuração por depth via config TOML
-# ~/.arlm/config.toml
+# ~/.arags/config.toml
 [models.depth0]           # Planner/orquestrador (root)
 backend = "openai"
 model = "gpt-5"
@@ -332,7 +332,7 @@ model = "llama3:8b"
 temperature = 0.5
 
 # CLI flag equivalente
-arlm run "tarefa" --model "openai/gpt-5@0.3" --sub-model "openai/gpt-4o-mini@0.7"
+arags run "tarefa" --model "openai/gpt-5@0.3" --sub-model "openai/gpt-4o-mini@0.7"
 ```
 
 ### Aplicação no Engine
@@ -663,7 +663,7 @@ GROUP BY agent;
 
 ```bash
 # Output JSON agora inclui custo detalhado:
-arlm run "tarefa" --project ./x --format json
+arags run "tarefa" --project ./x --format json
 
 {
   "run_id": "abc123",
@@ -684,7 +684,7 @@ arlm run "tarefa" --project ./x --format json
 }
 
 # Comando de relatório de custo por agente:
-arlm cost --project ./x --by agent --since 30d
+arags cost --project ./x --by agent --since 30d
 # AGENT    RUNS  COST    TOKENS    AVG_MS
 # opencode 128   3.42    8.2M      12400
 # pi       45    1.18    2.1M      9800
@@ -718,7 +718,7 @@ Decomposition multiplies cost — only decompose when it clearly helps."#,
 
 ## Resumo de Integração
 
-| Conceito do Guia RLM | Onde entra no arlm |
+| Conceito do Guia RLM | Onde entra no arags |
 |---------------------|--------------------|
 | `max_budget` (USD) | `RunBudget.cost` → `CostGuard` |
 | `max_tokens` | `RunBudget.tokens` → `TokenGuard` |

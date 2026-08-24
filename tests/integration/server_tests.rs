@@ -1,18 +1,18 @@
 use std::time::Duration;
 
-use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
-use arlm_proto::proto::*;
+use arags_proto::proto::arags_service_client::AragsServiceClient;
+use arags_proto::proto::*;
 use tonic::transport::Channel;
 
 /// Test helper to create a client connected to the server.
-async fn create_test_client(addr: &str) -> ArlmServiceClient<Channel> {
+async fn create_test_client(addr: &str) -> AragsServiceClient<Channel> {
     let channel = Channel::from_shared(format!("http://{addr}"))
         .expect("valid address")
         .connect()
         .await
         .expect("failed to connect");
 
-    ArlmServiceClient::new(channel)
+    AragsServiceClient::new(channel)
 }
 
 #[tokio::test]

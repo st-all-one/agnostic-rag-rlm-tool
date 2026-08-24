@@ -1,25 +1,8 @@
 {
   "tools": [
     {
-      "name": "rlm_context",
-      "description": "Busca contexto relevante do projeto usando RLM. Use para entender código, encontrar bugs, ou obter histórico de análises anteriores.",
-      "parameters": {
-        "task": {
-          "type": "string",
-          "description": "Tarefa, pergunta ou descrição do que precisa de contexto"
-        },
-        "format": {
-          "type": "string",
-          "enum": ["prompt", "json", "markdown"],
-          "default": "prompt",
-          "description": "Formato do output"
-        }
-      },
-      "command": "arlm context \"{{task}}\" --project {{cwd}} --format {{format}}"
-    },
-    {
-      "name": "rlm_search",
-      "description": "Busca rápida no código do projeto. Retorna trechos relevantes com scores.",
+      "name": "arags_search",
+      "description": "Busca híbrida (BM25 + semântica) no código do projeto via RAG server. Retorna trechos relevantes com scores.",
       "parameters": {
         "query": {
           "type": "string",
@@ -27,27 +10,33 @@
         },
         "top_k": {
           "type": "integer",
-          "default": 5,
+          "default": 10,
           "description": "Número de resultados"
         }
       },
-      "command": "arlm search \"{{query}}\" --project {{cwd}} --top-k {{top_k}} --format json"
+      "command": "arags search \"{{query}}\" --project {{cwd}} --top-k {{top_k}} --format jsonl"
     },
     {
-      "name": "rlm_run",
-      "description": "Executa análise RLM recursiva. Use para tarefas complexas que precisam de decomposição.",
+      "name": "arags_context",
+      "description": "Recupera contexto relevante do projeto (formato prompt para LLM) via busca híbrida no RAG server.",
       "parameters": {
         "task": {
           "type": "string",
-          "description": "Tarefa complexa para analisar recursivamente"
-        },
-        "depth": {
-          "type": "integer",
-          "default": 3,
-          "description": "Profundidade máxima de recursão"
+          "description": "Tarefa, pergunta ou descrição do que precisa de contexto"
         }
       },
-      "command": "arlm run \"{{task}}\" --project {{cwd}} --depth {{depth}} --format tree"
+      "command": "arags search \"{{task}}\" --project {{cwd}} --format text"
+    },
+    {
+      "name": "arags_query",
+      "description": "Pergunta analítica ao projeto: digest QA via o LLM local do usuário, com cache semântico server-side.",
+      "parameters": {
+        "question": {
+          "type": "string",
+          "description": "Pergunta a analisar"
+        }
+      },
+      "command": "arags query \"{{question}}\" --qa"
     }
   ]
 }

@@ -2,7 +2,7 @@
 
 ## Visão Geral
 
-O `arlm` suporta dois modos Docker:
+O `arags` suporta dois modos Docker:
 1. **Standalone:** CLI binário em imagem minimalista
 2. **Stack completa:** CLI + servidor HTTP + dependências (Para agentes remotos)
 
@@ -27,10 +27,10 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 
 # Compilação com otimizações máximas
-RUN cargo build --release --bin arlm
+RUN cargo build --release --bin arags
 
 # Strip de símbolos (reduz tamanho do binário)
-RUN strip target/release/arlm
+RUN strip target/release/arags
 
 # ═══════════════════════════════════════════════════════════════
 # Stage 2: Runtime (imagem minimalista)
@@ -43,18 +43,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Usuário não-root
-RUN useradd -m -s /bin/bash arlm
-USER arlm
-WORKDIR /home/arlm
+RUN useradd -m -s /bin/bash arags
+USER arags
+WORKDIR /home/arags
 
 # Copia binário
-COPY --from=builder /app/target/release/arlm /usr/local/bin/arlm
+COPY --from=builder /app/target/release/arags /usr/local/bin/arags
 
 # Diretórios de dados
-RUN mkdir -p /home/arlm/.arlm/projects
+RUN mkdir -p /home/arags/.arags/projects
 
 # Entrypoint
-ENTRYPOINT ["arlm"]
+ENTRYPOINT ["arags"]
 CMD ["--help"]
 ```
 
@@ -94,7 +94,7 @@ FROM runtime
 COPY --from=model /models /models
 
 # Variável de ambiente para modelo
-ENV ARLM_MODEL_PATH=/models/bge-m3
+ENV ARAGS_MODEL_PATH=/models/bge-m3
 ```
 
 ## Docker Compose (Stack Completa)
@@ -104,39 +104,39 @@ version: '3.8'
 
 services:
   # Servidor HTTP principal
-  arlm-server:
+  arags-server:
     build:
       context: .
       dockerfile: docker/Dockerfile
     ports:
       - "8080:8080"
     volumes:
-      - arlm-data:/home/arlm/.arlm
+      - arags-data:/home/arags/.arags
       - projects:/projects:ro
     environment:
       - RUST_LOG=info
-      - ARLM_HOST=0.0.0.0
-      - ARLM_PORT=8080
-      - ARLM_MODEL_PATH=/models/bge-m3
+      - ARAGS_HOST=0.0.0.0
+      - ARAGS_PORT=8080
+      - ARAGS_MODEL_PATH=/models/bge-m3
     deploy:
       resources:
         limits:
           memory: 2G
           cpus: '4'
     healthcheck:
-      test: ["CMD", "arlm", "status"]
+      test: ["CMD", "arags", "status"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   # Worker de embedding (escala horizontal)
-  arlm-embedder:
+  arags-embedder:
     build:
       context: .
       dockerfile: docker/Dockerfile
     command: ["serve", "--port", "8081", "--embedder-only"]
     volumes:
-      - arlm-data:/home/arlm/.arlm
+      - arags-data:/home/arags/.arags
       - projects:/projects:ro
     environment:
       - RUST_LOG=info
@@ -148,7 +148,7 @@ services:
           cpus: '2'
 
   # Monitor (opcional)
-  arlm-monitor:
+  arags-monitor:
     image: prom/prometheus:latest
     ports:
       - "9090:9090"
@@ -156,7 +156,7 @@ services:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
 
 volumes:
-  arlm-data:
+  arags-data:
   projects:
 ```
 
@@ -164,27 +164,27 @@ volumes:
 
 ```bash
 # Configuração do servidor
-ARLM_HOST=0.0.0.0              # Host para bind
-ARLM_PORT=8080                 # Porta do servidor
-ARLM_WORKERS=4                 # Número de workers
+ARAGS_HOST=0.0.0.0              # Host para bind
+ARAGS_PORT=8080                 # Porta do servidor
+ARAGS_WORKERS=4                 # Número de workers
 
 # Configuração de modelo
-ARLM_MODEL_PATH=/models/bge-m3 # Path do modelo BGE-M3
-ARLM_EMBEDDING_DIMS=1024       # Dimensões do embedding
-ARLM_EMBEDDING_BATCH=64        # Batch size para embedding
+ARAGS_MODEL_PATH=/models/bge-m3 # Path do modelo BGE-M3
+ARAGS_EMBEDDING_DIMS=1024       # Dimensões do embedding
+ARAGS_EMBEDDING_BATCH=64        # Batch size para embedding
 
 # Configuração SQLite
-ARLM_SQLITE_CACHE_MB=64        # Cache SQLite em MB
-ARLM_SQLITE_MMAP_MB=256        # Memory mapped I/O em MB
+ARAGS_SQLITE_CACHE_MB=64        # Cache SQLite em MB
+ARAGS_SQLITE_MMAP_MB=256        # Memory mapped I/O em MB
 
 # Configuração LLM
-ARLM_LLM_BACKEND=openai        # Backend LLM padrão
-ARLM_LLM_MODEL=gpt-4           # Modelo LLM padrão
-ARLM_LLM_TIMEOUT_MS=60000      # Timeout para chamadas LLM
+ARAGS_LLM_BACKEND=openai        # Backend LLM padrão
+ARAGS_LLM_MODEL=gpt-4           # Modelo LLM padrão
+ARAGS_LLM_TIMEOUT_MS=60000      # Timeout para chamadas LLM
 
 # Logging
 RUST_LOG=info                  # Nível de log
-ARLM_LOG_FORMAT=json           # Formato do log
+ARAGS_LOG_FORMAT=json           # Formato do log
 ```
 
 ## Otimizações de Build
@@ -211,16 +211,16 @@ opt-level = 3
 
 # Build com cache
 docker build \
-  --cache-from arlm:latest \
+  --cache-from arags:latest \
   --target runtime \
-  -t arlm:$(git rev-parse --short HEAD) \
-  -t arlm:latest \
+  -t arags:$(git rev-parse --short HEAD) \
+  -t arags:latest \
   -f docker/Dockerfile \
   .
 
 # Push para registry
-docker push arlm:$(git rev-parse --short HEAD)
-docker push arlm:latest
+docker push arags:$(git rev-parse --short HEAD)
+docker push arags:latest
 ```
 
 ### Build com docker-slim
@@ -228,10 +228,10 @@ docker push arlm:latest
 ```bash
 # Reduz imagem de 80MB para ~45MB
 docker-slim build \
-  --include-path /usr/local/bin/arlm \
+  --include-path /usr/local/bin/arags \
   --include-path /etc/ssl \
-  --http-probe-cmd "/usr/local/bin/arlm status" \
-  arlm:latest
+  --http-probe-cmd "/usr/local/bin/arags status" \
+  arags:latest
 ```
 
 ## Volume Mounts
@@ -240,8 +240,8 @@ docker-slim build \
 
 ```bash
 docker run -v /home/user/projetos:/projects:ro \
-           -v /home/user/.arlm:/home/arlm/.arlm \
-           arlm:latest context "tarefa" --project /projects/meu-app
+           -v /home/user/.arags:/home/arags/.arags \
+           arags:latest context "tarefa" --project /projects/meu-app
 ```
 
 ### Para uso com agentes remotos:
@@ -249,12 +249,12 @@ docker run -v /home/user/projetos:/projects:ro \
 ```bash
 # Servidor roda com volumes de todos os projetos
 docker run -v /data/projects:/projects:ro \
-           -v /data/arlm:/home/arlm/.arlm \
+           -v /data/arags:/home/arags/.arags \
            -p 8080:8080 \
-           arlm:latest serve --port 8080
+           arags:latest serve --port 8080
 
 # Agentes remotos chamam via HTTP
-curl -X POST http://arlm-server:8080/context \
+curl -X POST http://arags-server:8080/context \
   -d '{"task": "analise", "project": "meu-app"}'
 ```
 
@@ -293,20 +293,20 @@ use prometheus::{Encoder, IntCounter, Histogram, HistogramOpts, Registry};
 
 lazy_static! {
     static ref REQUESTS_TOTAL: IntCounter = IntCounter::new(
-        "arlm_requests_total", "Total de requests"
+        "arags_requests_total", "Total de requests"
     ).unwrap();
 
     static ref REQUEST_DURATION: Histogram = Histogram::with_opts(
-        HistogramOpts::new("arlm_request_duration_seconds", "Duração dos requests")
+        HistogramOpts::new("arags_request_duration_seconds", "Duração dos requests")
             .buckets(vec![0.01, 0.05, 0.1, 0.5, 1.0, 5.0])
     ).unwrap();
 
     static ref CHUNKS_INDEXED: IntCounter = IntCounter::new(
-        "arlm_chunks_indexed_total", "Total de chunks indexados"
+        "arags_chunks_indexed_total", "Total de chunks indexados"
     ).unwrap();
 
     static ref SEARCH_RESULTS: Histogram = Histogram::with_opts(
-        HistogramOpts::new("arlm_search_results", "Número de resultados de busca")
+        HistogramOpts::new("arags_search_results", "Número de resultados de busca")
     ).unwrap();
 }
 ```
@@ -316,8 +316,8 @@ lazy_static! {
 ### non-root user
 
 ```dockerfile
-RUN useradd -m -s /bin/bash arlm
-USER arlm
+RUN useradd -m -s /bin/bash arags
+USER arags
 ```
 
 ### Read-only filesystem
@@ -325,24 +325,24 @@ USER arlm
 ```bash
 docker run --read-only \
   --tmpfs /tmp:rw,noexec,nosuid \
-  -v /data/arlm:/home/arlm/.arlm:rw \
-  arlm:latest serve
+  -v /data/arags:/home/arags/.arags:rw \
+  arags:latest serve
 ```
 
 ### Network isolation
 
 ```yaml
 services:
-  arlm-server:
+  arags-server:
     networks:
-      - arlm-internal
+      - arags-internal
     # Não expõe portas externamente
 
-  arlm-proxy:
+  arags-proxy:
     image: nginx:alpine
     ports:
       - "8080:8080"
     networks:
-      - arlm-internal
+      - arags-internal
       - public
 ```

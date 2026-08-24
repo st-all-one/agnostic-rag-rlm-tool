@@ -2,11 +2,11 @@
 
 ## Visão Geral
 
-O `arlm-embedding` é responsável por transformar arquivos brutos em chunks indexáveis com embeddings densos. É o pipeline de ingestão onde performance é crítica.
+O `arags-embedding` é responsável por transformar arquivos brutos em chunks indexáveis com embeddings densos. É o pipeline de ingestão onde performance é crítica.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                arlm-embedding pipeline                        │
+│                arags-embedding pipeline                        │
 │                                                              │
 │  arquivo.txt ──► memmap ──► chunker ──► embedder ──► storage │
 │                  (zero-    (Rayon      (candle      (SQLite  │

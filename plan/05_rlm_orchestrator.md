@@ -1,17 +1,17 @@
 # RLM Orchestrator — Engine Recursivo
 
 > **⚠️ Modo LLM (opt-in via `--llm`):** O engine RLM recursivo é o único
-> componente do arlm que requer LLM. Ele é ativado apenas com a flag `--llm`.
+> componente do arags que requer LLM. Ele é ativado apenas com a flag `--llm`.
 > Todas as outras operações (search, context, persist, decay) são
 > determinísticas e não precisam de LLM.
 
 ## Visão Geral
 
-O `arlm-core` é o engine RLM recursivo que implementa o padrão Planner → Solver → Synthesizer. Diferente do Python original que usa REPL, este é um **orquestrador puro** que delega execução ao agente host.
+O `arags-core` é o engine RLM recursivo que implementa o padrão Planner → Solver → Synthesizer. Diferente do Python original que usa REPL, este é um **orquestrador puro** que delega execução ao agente host.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    arlm-core                                  │
+│                    arags-core                                  │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐    │
 │  │                   run_rlm_engine()                    │    │
@@ -676,7 +676,7 @@ pub enum Action {
 
 ## Integração com Memória
 
-O RLM orchestrator se integra com o `arlm-memory` de três formas:
+O RLM orchestrator se integra com o `arags-memory` de três formas:
 
 1. **Context injection:** Antes de cada chamada LLM (planner/solver/synthesizer), o engine busca contexto relevante na memória e injeta no prompt.
 

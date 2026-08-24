@@ -1,15 +1,15 @@
-# OPencode Tool Integration — arlm
+# OPencode Tool Integration — arags
 
-## What is arlm?
+## What is arags?
 
-`arlm` is an agent-agnostic CLI that indexes codebases and provides hybrid search (BM25 + semantic) to give LLM agents relevant project context. It stores embeddings in LanceDB and metadata in SQLite, enabling sub-100ms searches across large codebases.
+`arags` is an agent-agnostic CLI that indexes codebases and provides hybrid search (BM25 + semantic) to give LLM agents relevant project context. It stores embeddings in LanceDB and metadata in SQLite, enabling sub-100ms searches across large codebases.
 
-These tool definitions let OPencode invoke arlm as native tools, giving it direct access to the project's knowledge base.
+These tool definitions let OPencode invoke arags as native tools, giving it direct access to the project's knowledge base.
 
 ## Prerequisites
 
-1. `arlm` must be installed and on your PATH
-2. Your project must be indexed: `arlm index .`
+1. `arags` must be installed and on your PATH
+2. Your project must be indexed: `arags index .`
 
 ## Setup
 
@@ -32,9 +32,9 @@ Or merge with an existing `~/.opencode/tools.json` by adding the `tools` array e
 Search the knowledge base with hybrid BM25+semantic search.
 
 ```bash
-arlm search "authentication middleware" --format json
-arlm search "database schema" --top-k 5 --file-pattern "src/db"
-arlm search "error handling" --min-score 0.5 --format json
+arags search "authentication middleware" --format json
+arags search "database schema" --top-k 5 --file-pattern "src/db"
+arags search "error handling" --min-score 0.5 --format json
 ```
 
 | Parameter | Required | Default | Description |
@@ -51,8 +51,8 @@ On-demand question answering. With `-qa` the client digests the result via the
 deterministic 1:1 lookup without calling the LLM.
 
 ```bash
-arlm query "how does login work?" -qa
-arlm query --cache-id <id>
+arags query "how does login work?" -qa
+arags query --cache-id <id>
 ```
 
 | Parameter | Required | Default | Description |
@@ -64,11 +64,11 @@ arlm query --cache-id <id>
 ### rlm_index
 
 Index a project directory. The client streams raw file text to the server, which
-does chunking + embeddings. Run `arlm init` first to scaffold `.arlm.toml`.
+does chunking + embeddings. Run `arags init` first to scaffold `.arags.toml`.
 
 ```bash
-arlm init ./my-app
-arlm index ./my-app
+arags init ./my-app
+arags index ./my-app
 ```
 
 | Parameter | Required | Default | Description |
@@ -77,15 +77,15 @@ arlm index ./my-app
 
 ## Alternative: gRPC Server
 
-Instead of CLI tools, run the `arlm-server` data plane (pure gRPC; plan 020
+Instead of CLI tools, run the `arags-server` data plane (pure gRPC; plan 020
 removed the client-side HTTP/MCP offline mode):
 
 ```bash
 # Start the gRPC data-plane server
-arlm-server up          # or: docker compose -f docker-compose.server.yml up -d
+arags-server up          # or: docker compose -f docker-compose.server.yml up -d
 
-# The CLI connects over gRPC (addr via .arlm.toml / ~/.arlm/arlm.toml / env)
-arlm search "..."
+# The CLI connects over gRPC (addr via .arags.toml / ~/.arags/arags.toml / env)
+arags search "..."
 ```
 
 The server is LLM-free — digest/summarize happen on the client via the user's
@@ -93,7 +93,7 @@ local LLM (`query -qa`, `persist`).
 
 ## Project Isolation
 
-Each project is initialized with `arlm init`, which scaffolds a local
-`.arlm.toml` (gitignored) and identifies the project for the server. The server
+Each project is initialized with `arags init`, which scaffolds a local
+`.arags.toml` (gitignored) and identifies the project for the server. The server
 stores data per-project (isolated by `buffer_id`). Multiple agents (OPencode,
 Cursor, Pi, Aider) can share the same indexed project.
