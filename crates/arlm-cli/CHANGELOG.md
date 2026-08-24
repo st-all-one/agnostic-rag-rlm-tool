@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- `arlm init` não carimba mais `[server] addr = "127.0.0.1"` hardcoded no
+  `.arlm.toml` local (agnostic-rlm-rs-152a) — o addr do `~/.arlm/arlm.toml`
+  global passa a valer; default continua `127.0.0.1:50051` quando nada é
+  configurado.
+
 > **Nota (planos 019/020):** o CLI passou por uma consolidação. Foram **removidos**
 > os subcomandos `run`, `context`, `session`, `status`, `cost`, `cancel`,
 > `checkpoints`, `restore-page`, `wiki`, `consolidate`, `decay` e `entities`, e o

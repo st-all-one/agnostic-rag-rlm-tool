@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed — agnostic-rlm-rs-d14e
+- `reqwest` com `default-features = false` + `rustls-tls`: o CLI compila
+  estático em musl/Alpine **sem OpenSSL** (validado em container).
+
+
 > **Nota (plan 020):** a configuração do usuário passou a ser o arquivo
 > `~/.arlm/arlm.toml` (global) + `.arlm.toml` (local, 2 escopos, com `[llm]`). O
 > legado `~/.arlm/config.toml` não é mais lido. O `arlm-llm` é usado **apenas
