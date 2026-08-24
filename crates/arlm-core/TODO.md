@@ -1,14 +1,16 @@
 # TODO — arlm-core
 
-> Engine RLM recursivo: planner → solver → synthesizer.
-> Contém o loop principal, guardrails, budget, eventos, cache, e tipos de domínio.
+> **OBSOLETO (pós planos 017–020):** este TODO descreve o engine RLM recursivo
+> (planner → solver → synthesizer), que **foi removido** do crate. O `arlm-core`
+> agora contém apenas tipos de domínio, resolução de plano do QA-Cache e o trait
+> `MemoryProvider`. Veja `plan/019-cli-consolidation.md`. Os itens abaixo estão
+> arquivados como histórico.
 
 ## Status Atual
 
-O engine RLM funciona em modo local (CLI). Todos os 10 gaps (#1–#10) estão **Concluído**
-— veja as notas individuais abaixo. Integração com memória/busca é feita via traits
-`MemoryProvider`/`CodeSearch` definidos em `arlm-core`, com backend concreto injetado por
-outras crates (comportamento no-op/honesto quando `None`).
+O engine RLM foi **removido** (sistema agora *on-demand*, *server-first*, LLM-free
+no servidor). Os itens de TODO históricos (#1–#10) referem-se ao engine pré-refator
+e não se aplicam mais.
 
 ---
 

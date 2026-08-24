@@ -26,7 +26,7 @@ pub async fn run() -> Result<()> {
 
     let config = ServerConfig::load().context("failed to load server config")?;
 
-    info!(addr = %config.listen_addr, backend = %config.llm.backend, model = %config.llm.model, "starting arlm-server");
+    info!(addr = %config.listen_addr, "starting arlm-server");
 
     // Single-mode storage: `arlm-storage`'s read paths (`get_chunk`,
     // `get_summary`, `search_summaries`, …) currently assume a single
@@ -35,8 +35,6 @@ pub async fn run() -> Result<()> {
     // (used by indexing) valid. Concurrent handlers serialize on the shared
     // connection mutex, which is acceptable for a local dev server.
     let storage = Storage::open(&config.data_dir).context("failed to open storage")?;
-
-    let llm = AppState::build_llm(&config).context("failed to configure LLM backend")?;
 
     let vector_store = match VectorStore::open_with_dims(
         &config.data_dir,
@@ -62,7 +60,7 @@ pub async fn run() -> Result<()> {
         }
     };
 
-    run_server(config, storage, llm, vector_store, question_vector_store).await
+    run_server(config, storage, vector_store, question_vector_store).await
 }
 
 /// Run the gRPC server with graceful shutdown.
@@ -73,19 +71,40 @@ pub async fn run() -> Result<()> {
 pub async fn run_server(
     config: ServerConfig,
     storage: Storage,
-    llm: Arc<dyn arlm_llm::LlmBackend + Send + Sync>,
     vector_store: Option<Arc<VectorStore>>,
     question_vector_store: Option<Arc<QuestionVectorStore>>,
 ) -> Result<()> {
     let state = AppState::new(
         storage.clone(),
         config.clone(),
-        llm,
         vector_store,
         question_vector_store,
     )?;
 
     let grpc_service = ArlmServiceServer::new(ArlmGrpcService::new(state));
+
+    // Periodic memory maintenance (plan 019, C.1). Runs in the background on a
+    // fixed interval; `interval_secs == 0` disables it. The loop is tied to the
+    // server process lifetime — when the runtime shuts down the spawned task is
+    // dropped alongside it.
+    if config.maintenance.interval_secs > 0 {
+        let maint_storage = storage.clone();
+        let interval = config.maintenance.interval_secs;
+        let floor = config.maintenance.decay_score_floor;
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
+                if let Err(e) =
+                    crate::maintenance::run_maintenance("", &maint_storage, floor, false).await
+                {
+                    tracing::warn!(error = %e, "maintenance tick failed");
+                } else {
+                    tracing::info!("maintenance tick completed");
+                }
+            }
+        });
+    }
+
     let addr = config
         .listen_addr
         .parse()

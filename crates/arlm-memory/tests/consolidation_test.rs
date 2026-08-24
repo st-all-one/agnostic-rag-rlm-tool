@@ -55,6 +55,7 @@ fn test_remove_duplicates() {
     let opts = ConsolidateOptions {
         deduplicate: true,
         min_pattern_confidence: 0.0,
+        dry_run: false,
     };
 
     let result = engine.consolidate(buffer_id, &opts).unwrap();
@@ -79,6 +80,7 @@ fn test_remove_low_confidence_patterns() {
     let opts = ConsolidateOptions {
         deduplicate: false,
         min_pattern_confidence: 0.5,
+        dry_run: false,
     };
 
     let result = engine.consolidate(buffer_id, &opts).unwrap();

@@ -85,6 +85,36 @@ pub fn insert_fts_row(storage: &Storage, chunk_id: i64, content: &str) -> Result
     .context("failed to index chunk in FTS")
 }
 
+/// Return the distinct `file_path`s for the given chunk ids (provenance
+/// expansion for `GetCache`).
+///
+/// # Errors
+///
+/// Returns an error if the query fails.
+pub fn chunk_file_paths(storage: &Storage, ids: &[i64]) -> Result<Vec<String>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "SELECT DISTINCT file_path FROM chunks WHERE id IN ({})",
+        placeholders.join(", ")
+    );
+    let conn = storage
+        .connection()
+        .context("failed to acquire connection")?;
+    conn.execute(|conn| {
+        let mut stmt = conn
+            .prepare(&sql)
+            .context("failed to prepare chunk_file_paths query")?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(ids.iter()), |row| row.get(0))?
+            .filter_map(std::result::Result::ok)
+            .collect();
+        Ok(rows)
+    })
+}
+
 /// Store extracted entities for a chunk.
 ///
 /// # Errors

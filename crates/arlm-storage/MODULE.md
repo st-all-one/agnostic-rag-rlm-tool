@@ -1,7 +1,12 @@
 # arlm-storage
 
 ## O que faz
-Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único DB compartilhado isolado por `buffer_id`, mais um vector store embutido (`usearch`, HNSW single-file, L2). Suporta modo single (CLI) e pooled (servidor). CRUD para buffers, chunks, tasks, findings, history, patterns, runs/trajectories, entities, cache e summaries; backup/verify; e busca semântica por embedding.
+Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único DB compartilhado isolado por `buffer_id`, mais um vector store embutido (`usearch`, HNSW single-file, L2). Suporta modo single (CLI) e pooled (servidor). CRUD para buffers, chunks, tasks, findings, history, patterns, entities, cache e summaries; backup/verify; e busca semântica por embedding.
+
+> **Removido (plan 019):** as tabelas/código de `runs` (RLM runs), `trajectories`
+> e `sessions` **foram removidos** do crate — o servidor é LLM-free e não há mais
+> runs de RLM nem sessões multi-turn. A tabela `summaries` permanece no schema
+> (legacy), mas não é mais populada server-side.
 
 ## Estrutura
 - `src/lib.rs` — API pública (`pub use sqlite::Storage`, `pub use lance::{VectorStore, SearchResult, VectorEntry}`), `#![allow(...)]` de lint no nível do crate (pedantic style pré-existente + `cfg(test)`).
@@ -15,9 +20,10 @@ Camada de persistência do `arlm`: SQLite (metadados + FTS5/BM25) com um único 
 - `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`.
 - `src/sqlite/patterns.rs` — `Pattern`, `insert_pattern`/`get_patterns`.
 - `src/sqlite/tasks.rs` — `Task`, `insert_task`/`get_pending_tasks`/`update_task_status`/`complete_task`.
-- `src/sqlite/runs.rs` — `StoredRun`/`ModelUsage`/`NodeCall`/`StoredTrajectory`, `insert_run` (transação com node tree + agregação de custo)/`get_run`/`cancel_run`/`list_runs`/`get_run_model_usage`/`total_cost`/`run_cost`/`insert_trajectory`/`get_trajectories_by_task_hash`; re-exporta `FlatNode`.
-- `src/sqlite/nodes.rs` — `FlatNode` (árvore de nós de run, serializável), `flatten`.
-- `src/sqlite/summaries.rs` — `Summary`, `insert_summary`/`get_summaries`/`get_project_summary`/`get_summary_by_source_hash` (summaries hierárquicos).
+- `src/sqlite/summaries.rs` — `Summary`, `insert_summary`/`get_summaries`/`get_project_summary`/`get_summary_by_source_hash` (summaries hierárquicos — **legacy**, não populado server-side desde o plan 019).
+
+> **Removido (plan 019):** `src/sqlite/runs.rs` e `src/sqlite/nodes.rs` (runs de
+> RLM e trajectories) **foram excluídos** do crate. O servidor é LLM-free.
 - `src/sqlite/tokens.rs` — **Auth (plan 018):** `AuthTokenRow`/`NewToken`, `create_token`/`revoke_token_by_id`/`revoke_token_by_username`/`revoke_all_tokens`/`list_tokens`, `create_session`/`validate_session` (refresh-token rotation + sessões de curta duração, roles `Admin`/`NonAdmin`; plaintext do refresh nunca é persistido).
 - `src/sqlite/qa_cache.rs` — **QA-Cache (plan 017):** `QaCacheRow`/`StoreAnswerInput`/`StoredAnswer`, `question_hash`/`chunk_content_hash`, `store_answer` (idempotente/reserve-lock), `get_cached_answer`/`get_qa_by_id`/`get_qa_by_cache_id`/`get_qa_by_rowid`, `mark_qa_stale`/`delete_qa`/`touch_qa`, `mark_stale_by_hashes`, `evict_qa`/`evict_all_qa`/`count_qa`/`all_qa_ids`, `list_qa_hashes_for_buffer`, `invalidate_stale_cache_for_buffer`.
 - `src/sqlite/chunks.rs` — `Chunk`/`NewChunk`, `insert_chunk`/...; **adicionei** `get_chunks_with_content` e `chunk_hashes_for_buffer` (usados pela staleness hook do QA-Cache).
@@ -49,8 +55,8 @@ CARGO_BUILD_JOBS=4 cargo clippy -p arlm-storage --all-targets -- -D warnings
 - `run_migrations` roda `ANALYZE` ao final para planner stats.
 
 ## Rules
-- Mantenha a API pública estável para consumidores (`Storage`, `VectorStore`, `SearchResult`, `VectorEntry`); não quebrar `arlm_storage::lance::vectors::*` nem `arlm_storage::sqlite::runs::FlatNode`.
+- Mantenha a API pública estável para consumidores (`Storage`, `VectorStore`, `SearchResult`, `VectorEntry`).
 - Todo acesso a vetores é por `buffer_id` (filtro no `filtered_search`); o mapa `vectors.meta` deve ser sempre salvo junto com `vectors.usearch`.
 - Novas tabelas entram como migration versionada + `run_migrations`; novos CRUD ficam em módulo dedicado em `src/sqlite/`.
-- `insert_run` é a única escrita transacional do crate (node tree + `run_model_usage` numa `unchecked_transaction`).
+- `insert_chunk`/`insert_chunk_content`/`delete_chunks_for_file` são escritas transacionais por arquivo (chunk + FTS + entities + vectors).
 - Backup = `Storage::backup(dest)` (`VACUUM INTO`, destino não pode existir); verificação = `Storage::verify()` (`PRAGMA integrity_check`).

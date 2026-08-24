@@ -9,6 +9,10 @@ integrado na fusão. **Busca dual-layer em summaries implementada** (gap #1/#2):
 `HybridSearch` consulta a tabela `summaries` (FTS5 `summaries_fts`) e marca
 `is_summary` nos resultados.
 
+> **OBSOLETO (pós plano 019):** o servidor é LLM-free; o rerank por LLM (Tier 3)
+> não é usado server-side e a tabela `summaries` não é mais populada (sem
+> sumarizador server-side). Veja `plan/019-cli-consolidation.md`.
+
 ---
 
 ## Gaps — Resolvidos nesta refatoração

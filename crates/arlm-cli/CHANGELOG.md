@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+> **Nota (planos 019/020):** o CLI passou por uma consolidação. Foram **removidos**
+> os subcomandos `run`, `context`, `session`, `status`, `cost`, `cancel`,
+> `checkpoints`, `restore-page`, `wiki`, `consolidate`, `decay` e `entities`, e o
+> modo local — o `arlm-cli` é agora um **cliente gRPC puro**. O servidor
+> (`arlm-server`) é um **plano de dados LLM-free**; o LLM do usuário é usado
+> apenas em `query -qa` (digest) e `persist` (summarize). A config passou a ser
+> 2-escopos (`~/.arlm/arlm.toml` global + `.arlm.toml` local; `[auth]` só-global);
+> `config.toml` legado não é lido. Veja `plan/019-cli-consolidation.md` e
+> `plan/020-config-consolidation.md`.
+
 ### Added
 - **QA-Cache client (plan 017):** `commands/qa_cache.rs` com `run_ask` (usa
   `QueryWithCache`; em HIT devolve a resposta sem chamar LLM; em MISS sintetiza

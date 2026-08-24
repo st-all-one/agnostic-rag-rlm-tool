@@ -18,7 +18,6 @@ arlm-storage.workspace = true
 arlm-search.workspace = true
 arlm-memory.workspace = true
 arlm-llm.workspace = true
-arlm-embedding.workspace = true
 arlm-proto.workspace = true
 clap.workspace = true
 indicatif.workspace = true

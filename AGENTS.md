@@ -2,16 +2,19 @@
 
 ## Project Overview
 
-`arlm` is a Rust CLI tool implementing RLM (Recursive Language Model) for processing massive codebases. It indexes files, stores embeddings, and performs hybrid search (BM25 + semantic) to provide context for LLM-based agents. The CLI is agent-agnostic — any AI agent (OPencode, Cursor, Pi, Aider) can consume its output.
+`arlm` is a Rust CLI tool implementing an on-demand, agent-agnostic RLM for processing massive codebases. It indexes files, stores embeddings, and performs hybrid search (BM25 + semantic) to provide context for LLM-based agents. The CLI is agent-agnostic — any AI agent (OPencode, Cursor, Pi, Aider) can consume its output.
 
-**Architecture:** 7-crate Cargo workspace with unidirectional data flow:
+**Philosophy:** on-demand, agent-agnostic, server-side processing. There is **no recursive RLM loop** and **no server LLM**. The server (`arlm-server`) is a pure data plane (index/search/query/memory/history) reached over gRPC; the client (`arlm-cli`) is a pure gRPC client that only uses the **user's local LLM** (`arlm-llm`) for digest (`query -qa`) and summarize (`persist`).
+
+**Architecture:** 9-crate Cargo workspace, server-first:
 ```
-arlm-cli → arlm-core → arlm-llm, arlm-search, arlm-memory
-                           ↓
-arlm-search → arlm-storage (SQLite + LanceDB), arlm-embedding
-                           ↓
-arlm-storage → rusqlite (FTS5/BM25), lancedb (HNSW vectors)
-arlm-embedding → candle (BGE-M3), memmap2, rayon
+arlm-cli  ──gRPC──▶  arlm-server (data plane, LLM-free)
+   │                        │
+   │ uses user LLM          ├─ arlm-storage (SQLite FTS5/BM25 + LanceDB HNSW)
+   │ (query -qa, persist)   ├─ arlm-search (hybrid BM25 + semantic + RRF)
+   │                        ├─ arlm-embedding (chunking + candle BGE-M3)
+   │                        └─ arlm-memory (memory, history, maintenance)
+   └─ arlm-core, arlm-llm, arlm-proto
 ```
 
 **Tech Stack:**
@@ -51,19 +54,19 @@ tests/
 └── integration/     # Cross-crate integration tests
 
 benches/
-└── *.rs             # Criterion benchmarks (ingestion, search, rlm_loop)
+└── *.rs             # Criterion benchmarks (ingestion, search)
 ```
 
 ### Crate Responsibilities
 | Crate | Role |
 |-------|------|
-| `arlm-cli` | Binary entry point, clap parsing, output formatting |
-| `arlm-core` | RLM engine (planner/solver/synthesizer), guardrails, budget |
+| `arlm-cli` | Binary entry point, clap parsing, output formatting; pure gRPC client |
+| `arlm-core` | Shared types, client config (2-scope user config), dispatch, output formatting; no RLM engine |
 | `arlm-storage` | SQLite (metadata, FTS5) + LanceDB (vectors), dual transactions |
-| `arlm-embedding` | Chunking strategies (code/text/markdown), candle BGE-M3 embeddings |
+| `arlm-embedding` | Chunking strategies (code/text/markdown), candle BGE-M3 embeddings (server-side) |
 | `arlm-search` | Hybrid search (BM25 + semantic + RRF fusion) |
-| `arlm-memory` | Multi-project memory, knowledge base, sessions, trajectories |
-| `arlm-llm` | LLM backend abstraction (OpenAI, Anthropic, Ollama, Gemini) |
+| `arlm-memory` | Multi-project memory, knowledge base, history, server maintenance (consolidate/decay) |
+| `arlm-llm` | LLM backend abstraction (OpenAI, Anthropic, Ollama, Gemini) — used by client only |
 
 ## Testing Strategy
 
@@ -96,7 +99,7 @@ cargo tarpaulin --workspace
 ### Test Organization
 - **Unit tests:** Inline `#[cfg(test)] mod tests` in same file as code
 - **Integration tests:** `tests/integration/` directory, test public API only
-- **Benchmarks:** `benches/` with Criterion (ingestion.rs, search.rs, rlm_loop.rs)
+- **Benchmarks:** `benches/` with Criterion (ingestion.rs, search.rs)
 - **Doc tests:** `/// # Examples` on public functions
 
 ### Test Guidelines
@@ -266,7 +269,7 @@ SQLITE3_FLAGS="-DSQLITE_DIRECT_OVERFLOW_READ -DSQLITE_ENABLE_BATCH_ATOMIC_WRITE 
 
 ## Reference Documents
 
-- `plan/` — 15 detailed implementation plans (01-15)
+- `plan/` — detailed implementation plans (01-20); see `019-cli-consolidation.md` and `020-config-consolidation.md` for the current CLI/config surface
 - `ai-guides/rlm_guide/` — RLM architecture and patterns
 - `ai-guides/rust_guide/` — Rust 2024 best practices
 - `ai-guides/sqlite_guide/` — SQLite optimization, FTS5, WAL

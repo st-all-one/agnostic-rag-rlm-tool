@@ -18,19 +18,18 @@ Definições Protobuf e tipos gerados para a comunicação gRPC do arlm (cliente
 ```
 proto/
 ├── project.proto      # CreateProjectRequest, ProjectInfo, ListProjectsResponse
-├── index.proto        # IndexRequest, IndexResponse
+├── index.proto        # IndexRequest, IndexResponse (client-streaming de texto)
 ├── search.proto       # SearchRequest, SearchTier, SearchResult, SummaryInfo, SearchResponse
-├── context.proto      # ContextRequest, ContextResponse, ContextStats
-├── run.proto          # RunRequest, RunOptions, RunResponse, RunStatus, RunResult, RunStats, RunEvent
-├── session.proto      # CreateSessionRequest, SessionInfo, ListSessionsResponse, SessionTurn, AddSessionTurnRequest
-├── summarize.proto    # SummaryScope, SummaryChunk, Summarize*, SummaryStatus, StaleSummary
-├── server.proto       # ServerStatus, WriteQueueStats, SummarizeStatus
+├── context.proto      # ContextRequest, ContextResponse, ContextStats (legacy)
+├── session.proto      # CreateSessionRequest, SessionInfo, ListSessionsResponse (legacy)
+├── server.proto       # ServerStatus, ServerStatusRequest
 ├── auth.proto         # AuthRefreshRequest/Response (plan 018)
 ├── query_cache.proto  # QueryWithCache/StoreAnswer/GetAnswerById/InvalidateCache (plan 017)
-└── service.proto      # service ArlmService (24 RPCs)
-build.rs               # tonic_build: compila os 11 sub-arquivos + timing/logs
+└── service.proto      # service ArlmService (RPCs atuais, inclui ListMemory/GetCache/
+                       #   TriggerMaintenance/GetHistory definidos inline)
+build.rs               # tonic_build: compila os sub-arquivos + timing/logs
 src/lib.rs             # pub mod proto { include!(arlm.v1.rs) }; pub use proto::*;
-tests/proto_contract.rs# 6 testes de integração validando o contrato gerado
+tests/proto_contract.rs# testes de integração validando o contrato gerado
 ```
 
 ## Versionamento
@@ -64,5 +63,9 @@ CARGO_BUILD_JOBS=4 cargo test -p arlm-proto   # 6 testes de contrato
 
 ## Campos do contrato (notas)
 
-- `RunResult.total_cost` (`run.proto`, campo 5): lido diretamente pelo CLI (`run.total_cost`).
-- `SessionInfo` / `AddSessionTurnRequest`: campos atuais já batem com servidor/cliente (sem mismatch).
+- Os RPCs de memória/histórico/manutenção (`ListMemory`, `GetCache`,
+  `TriggerMaintenance`, `GetHistory`) são definidos em `service.proto`.
+- `run.proto` e `summarize.proto` **foram removidos** (o servidor é LLM-free e não
+  há mais runs de RLM nem sumarização server-side). `context.proto`/`session.proto`
+  permanecem mas estão em desuso (os comandos CLI `context`/`session` foram removidos
+  no plan 019).

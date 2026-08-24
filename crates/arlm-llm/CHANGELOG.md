@@ -1,5 +1,11 @@
 # Changelog
 
+> **Nota (plan 020):** a configuração do usuário passou a ser o arquivo
+> `~/.arlm/arlm.toml` (global) + `.arlm.toml` (local, 2 escopos, com `[llm]`). O
+> legado `~/.arlm/config.toml` não é mais lido. O `arlm-llm` é usado **apenas
+> pelo cliente** (`arlm-cli`) em `query -qa` (digest) e `persist` (summarize); o
+> `arlm-server` é LLM-free.
+
 ## [0.3.0] - 2026-08-20
 
 ### Added

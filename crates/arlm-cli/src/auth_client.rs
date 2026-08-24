@@ -3,7 +3,7 @@
 //! Wraps the generated gRPC client so every call automatically carries a
 //! `Bearer` session token. The session token is obtained once from
 //! `AuthRefresh` and proactively renewed on a background task (the refresh
-//! token lives only in `config.toml`); the CLI user never manages it manually.
+//! token lives only in `~/.arlm/arlm.toml`); the CLI user never manages it manually.
 
 use std::str::FromStr;
 use std::sync::Arc;
@@ -59,7 +59,7 @@ impl Interceptor for BearerInterceptor {
 pub fn connect(
     rt: &Runtime,
     client_config: &ClientConfig,
-    auth: &crate::config::AuthConfig,
+    auth: &crate::user_config::AuthConfig,
 ) -> Result<ArlmClient> {
     let channel = rt
         .block_on(client::connect_channel(client_config))

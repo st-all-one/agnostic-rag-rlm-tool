@@ -41,7 +41,7 @@ use arlm_llm::{get_backend, BackendKind, CompletionRequest, Message, Role};
 let backend = get_backend(&BackendKind::OpenAI, Some("sk-...".into()), None)?;
 ```
 
-### Via configuração (genérico, dirigido por `config.toml`)
+### Via configuração (genérico, dirigido por `arlm.toml`)
 
 ```rust
 use arlm_llm::{get_backend_from_config, BackendConfig, CompletionRequest, Message, Role};
@@ -77,16 +77,16 @@ println!("Custo: ${:.4}", response.usage.cost_usd);
 
 ## Carregando de arquivo
 
-`BackendConfig` é totalmente deserializável de TOML. O arquivo padrão fica em
-`~/.arlm/config.toml` (criado pelo `install.sh` a partir de `config.toml.example`,
-que documenta todos os parâmetros). Carregue com:
+`BackendConfig` é totalmente deserializável de TOML. A configuração do usuário fica
+em `~/.arlm/arlm.toml` (global) e/ou `.arlm.toml` (local do projeto), na seção
+`[llm]` (consulte `plan/020-config-consolidation.md`). Carregue com:
 
 ```rust
 use arlm_llm::LlmConfig;
 use std::path::Path;
 
 let path = Path::new(&format!(
-    "{}/.arlm/config.toml",
+    "{}/.arlm/arlm.toml",
     std::env::var("HOME").unwrap_or_default()
 ));
 let cfg = LlmConfig::from_file(&path).expect("config inválido");

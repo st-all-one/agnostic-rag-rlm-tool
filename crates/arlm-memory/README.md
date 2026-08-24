@@ -6,12 +6,15 @@ Sistema de memória externa multi-projeto para o arlm.
 
 - **Project**: Gerenciamento de projetos
 - **Knowledge**: Base de conhecimento acumulado com ignore patterns
-- **History**: Histórico de consultas
-- **Consolidation**: Limpeza e merge de memória
+- **History**: Histórico de consultas (escopado por usuário)
+- **Consolidation**: Limpeza e merge de memória (manutenção server-side)
+- **Decay**: Decaimento de saliência (manutenção server-side)
 - **Transfer**: Transferência entre projetos
 - **Watch**: Monitoramento de mudanças (inotify)
-- **Session**: Sessões multi-turn
-- **Trajectory**: Reuso de trajectories
+- **Persist**: Escrita de wiki pages (usado pelo cliente em `arlm persist`)
+
+> **Removido (plan 019):** `Session` (sessões multi-turn) e `Trajectory`
+> (reuso de trajectories) — não fazem mais parte do crate.
 
 ## Estrutura
 
@@ -19,19 +22,19 @@ Sistema de memória externa multi-projeto para o arlm.
 src/
 ├── lib.rs              # Re-exports, ScopedTimer
 ├── project.rs          # ProjectManager (CRUD)
-├── knowledge.rs        # KnowledgeEngine (indexing com ignore patterns)
+├── knowledge/          # KnowledgeEngine (indexing com ignore patterns)
 ├── history.rs          # HistoryManager
 ├── consolidation.rs    # MemoryEngine (dedup, cleanup)
+├── decay.rs            # DecayConfig (decaimento de saliência)
 ├── transfer.rs         # TransferEngine (cross-project)
 ├── watch.rs            # WatchMonitor (inotify)
-├── session.rs          # SessionManager (multi-turn)
-└── trajectory.rs       # TrajectoryStore (replay)
+└── persist/            # escrita de wiki pages
 ```
 
 ## Uso
 
 ```rust
-use arlm_memory::{KnowledgeEngine, SessionManager};
+use arlm_memory::{KnowledgeEngine, ConsolidationEngine};
 
 // Indexar diretório com ignore patterns
 let knowledge = KnowledgeEngine::new(storage);
@@ -42,9 +45,10 @@ let opts = IndexOptions {
 };
 let result = knowledge.index_directory("meu-projeto", &dir_path, &opts)?;
 
-// Sessões multi-turn
-let sessions = SessionManager::new(storage);
-let session_id = sessions.create("meu-projeto", "Análise de bug")?;
+// Consolidação (manutenção server-side, via cron ou RPC admin)
+let engine = ConsolidationEngine::new(storage);
+let result = engine.consolidate(buffer_id, &ConsolidateOptions::default())?;
+println!("Removidos: {} duplicatas", result.duplicate_chunks_removed);
 ```
 
 ## Funcionalidades
@@ -89,4 +93,4 @@ println!("Removidos: {} duplicatas", result.duplicate_chunks_removed);
 cargo test -p arlm-memory
 ```
 
-34 testes cobrindo: project management, knowledge, history, consolidation, transfer, sessions, trajectories.
+34 testes cobrindo: project management, knowledge, history, consolidation, decay, transfer.

@@ -5,12 +5,11 @@
 //! query here goes through [`arlm_storage::Storage::connection`], which works
 //! in both single and pooled modes.
 //!
-//! The module is split by domain (projects, sessions, runs, chunks, summaries)
+//! The module is split by domain (projects, sessions, chunks, summaries)
 //! so each file stays small, focused and easy to audit independently.
 
 pub mod chunks;
 pub mod projects;
-pub mod runs;
 pub mod sessions;
 pub mod summaries;
 
@@ -18,7 +17,6 @@ use anyhow::{Context, Result};
 
 pub use chunks::*;
 pub use projects::*;
-pub use runs::*;
 pub use sessions::*;
 pub use summaries::*;
 
@@ -42,25 +40,6 @@ pub struct SessionRow {
     pub title: String,
     pub created_at: Option<i64>,
     pub updated_at: Option<i64>,
-}
-
-/// Run row used by the server handlers.
-#[derive(Debug, Clone)]
-pub struct RunRow {
-    pub id: String,
-    pub project: Option<String>,
-    pub task: String,
-    pub backend: Option<String>,
-    pub model: Option<String>,
-    pub status: String,
-    pub answer: Option<String>,
-    pub started_at: Option<i64>,
-    pub finished_at: Option<i64>,
-    pub duration_ms: Option<i64>,
-    pub total_tokens: i64,
-    pub total_cost: f64,
-    pub nodes_visited: i64,
-    pub max_depth: i64,
 }
 
 /// Run a store operation on the blocking pool.

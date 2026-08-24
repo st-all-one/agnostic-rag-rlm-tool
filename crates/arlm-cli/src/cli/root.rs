@@ -24,60 +24,35 @@ pub enum OutputFormatArg {
 #[derive(Parser, Debug)]
 #[command(
     name = "arlm",
-    about = "Agnostic RLM — Recursive Language Model CLI",
+    about = "Agnostic RLM — on-demand, agent-agnostic RLM CLI (pure gRPC client)",
     version
 )]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 
-    /// Enable verbose output with structured logging
+    /// Enable verbose output with structured logging.
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
-    /// Output format: full_json, path, markdown, text, jsonl
+    /// Output format: full_json, path, markdown, text, jsonl.
     ///
     /// `path` prints the relative file path (human tree for search). `text`
     /// renders the agent-facing prompt context. `jsonl` (default for
-    /// search/context/query) emits a single `{"query":..,"results":[{"file","text"}]}`
+    /// search/query) emits a single `{"query":..,"results":[{"file","text"}]}`
     /// object so an AI can consume only the needed content.
     #[arg(short, long, global = true)]
     pub format: Option<OutputFormatArg>,
 
-    /// Project path
+    /// Project path.
     #[arg(short, long, global = true)]
     pub project: Option<PathBuf>,
 
-    /// Config file path (default: ~/.arlm/config.toml)
-    #[arg(long, global = true)]
-    pub config: Option<PathBuf>,
-
-    /// LLM backend (overrides config)
+    /// LLM backend name (overrides config).
     #[arg(long, global = true)]
     pub backend: Option<String>,
 
-    /// Model name (overrides config)
+    /// Model name (overrides config).
     #[arg(long, global = true)]
     pub model: Option<String>,
-
-    /// Agent name (overrides config)
-    #[arg(long, global = true)]
-    pub agent: Option<String>,
-
-    /// Connect to a running arlm-server instead of running locally
-    #[arg(long, global = true)]
-    pub server: Option<String>,
-}
-
-/// Parse a `--tool` argument in format "name:description" or
-/// "name:param1,param2:description".
-#[must_use]
-pub fn parse_tool_arg(arg: &str) -> Option<arlm_core::CustomTool> {
-    let (name_part, description) = arg.split_once(':')?;
-    let name = name_part.trim().to_string();
-    let description = description.trim().to_string();
-    if name.is_empty() {
-        return None;
-    }
-    Some(arlm_core::CustomTool::function(&name, &description))
 }

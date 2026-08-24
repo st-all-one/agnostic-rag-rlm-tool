@@ -6,18 +6,19 @@ agnóstico de agente: qualquer agente de IA pode consumir sua saída.
 ## Visão Geral
 
 `MemoryEngine` é a façade principal. Ela compõe gerenciadores especializados e
-implementa `arlm_core::memory::MemoryProvider`, permitindo injeção de contexto e
-persistência de trajetórias pelo engine RLM.
+implementa `arlm_core::memory::MemoryProvider`, permitindo injeção de contexto
+pelo servidor (plano de dados).
+
+> **Removido (plan 019):** `SessionManager` (sessões multi-turno) e
+> `TrajectoryEngine` (trajetórias) não fazem mais parte do crate.
 
 ```
 MemoryEngine
 ├── ProjectManager        (#project)      ciclo de vida de projetos
 ├── KnowledgeEngine       (#knowledge)    indexação de arquivos em chunks
-├── SessionManager        (#session)      sessões multi-turno
-├── TrajectoryEngine      (#trajectory)   armazenamento de trajetórias
 ├── PersistEngine         (#persist)      páginas wiki / frontmatter
 ├── TransferEngine        (#transfer)     transferência entre projetos
-├── ConsolidationEngine   (#consolidation) deduplicação / limpeza
+├── ConsolidationEngine   (#consolidation) deduplicação / limpeza (manutenção)
 ├── HistoryManager        (#history)      histórico de queries
 └── WatchMonitor          (#watch)        monitoramento de mudanças
 ```
@@ -26,15 +27,13 @@ MemoryEngine
 
 | Módulo | Arquivo(s) | Responsabilidade |
 |--------|-----------|------------------|
-| `engine` | `engine/mod.rs`, `engine/index.rs`, `engine/search.rs`, `engine/memory_api.rs` | Orquestração: `open`, `index_project`, `search` (FTS5 BM25), `MemoryProvider`. |
+| `engine` | `engine/mod.rs`, `engine/index.rs`, `engine/search.rs` | Orquestração: `open`, `index_project`, `search` (FTS5 BM25). |
 | `project` | `project.rs` | CRUD de projetos (`create`, `list`, `get`, `forget`). |
 | `knowledge` | `knowledge/mod.rs`, `knowledge/helpers.rs` | Descoberta de arquivos, chunking por bytes, hashing, detecção de linguagem. |
-| `session` | `session.rs` | Sessões, contexto versionado, histórico de queries por sessão. |
-| `trajectory` | `trajectory/mod.rs`, `trajectory/store.rs`, `trajectory/serialize.rs` | Árvore de decomposição, replay, similaridade por hash de tarefa. |
 | `persist` | `persist/mod.rs`, `persist/types.rs`, `persist/format.rs`, `persist/engine.rs`, `persist/ops.rs` | Persistência em formato wiki (frontmatter YAML + corpo). |
 | `transfer` | `transfer.rs` | Cópia de chunks entre projetos, com filtro de linguagem e limite. |
-| `consolidation` | `consolidation.rs` | Deduplicação de chunks e remoção de padrões de baixa confiança. |
-| `history` | `history.rs` | Registro e consulta de histórico de queries. |
+| `consolidation` | `consolidation.rs` | Deduplicação de chunks e remoção de padrões de baixa confiança (manutenção). |
+| `history` | `history.rs` | Registro e consulta de histórico de queries (escopado por usuário). |
 | `watch` | `watch.rs` | Monitoramento de sistema de arquivos (via `notify`). |
 | `decay` | `decay.rs` | Saliência/decay (recency + frequency + age), **sem** dependência de `arlm-search`. |
 | `lib` | `lib.rs` | API pública, `ScopedTimer`, re-exports. |

@@ -1,47 +1,43 @@
 # arlm-server
 
 ## O que faz
-Servidor gRPC long-running da plataforma arlm: gerencia projetos (buffers), sessões,
-runs de RLM, indexação (chunking + embeddings + LanceDB) e sumarização hierárquica,
-com streaming de eventos em tempo real para clientes gRPC.
+Servidor gRPC long-running da plataforma arlm: **plano de dados puro, LLM-free**.
+Gerencia projetos (buffers), indexação (chunking + embeddings no servidor +
+LanceDB), busca híbrida, memória/histórico, manutenção (consolidate/decay) e
+QA-Cache — todas operações determinísticas (sem LLM). A digestão/sumarização
+ocorre no cliente (`arlm-cli`) via o LLM do usuário.
 
 ## Estrutura
-- `src/main.rs` — entrypoint; subcomandos `up` (padrão) e `status` (healthcheck gRPC).
+- `src/main.rs` — entrypoint; subcomandos `up` (padrão), `status` (healthcheck gRPC), `admin consolidate`.
 - `src/lib.rs` — API pública do crate (`ServerConfig`, `AppState`, `run()`).
-- `src/config.rs` — `ServerConfig` + `LlmConfig` (TOML, seção `[llm]`).
-- `src/state.rs` — `AppState` (storage, llm, events, vector_store, abort signals de runs).
-- `src/events.rs` — `EventHub` (broadcast por run/summarize + catch-all).
+- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`).
+- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config, maintenance config).
 - `src/store/mod.rs` — camada de dados tipada; re-exporta os submódulos.
   - `store/projects.rs` — CRUD de `buffers` + `buffer_id_for_project`.
-  - `store/sessions.rs` — `sessions` + `session_history`.
-  - `store/runs.rs` — runs + mapeamento de status proto↔DB.
   - `store/chunks.rs` — chunks, texts, FTS5, entities, contadores de buffer.
-  - `store/summaries.rs` — sumários hierárquicos + estatísticas.
+  - `store/history.rs` — histórico de consultas por usuário.
 - `src/grpc/mod.rs` — dispatcher tonic; um `Timer` por handler.
   - `grpc/project.rs` — create/list/get_project.
-  - `grpc/index.rs` — index_project (orquestra ingestão).
-  - `grpc/search.rs` — search + build_context (BM25 FTS5).
-  - `grpc/runs/mod.rs` — start/get/cancel/stream_run (handlers).
-  - `grpc/runs/engine.rs` — spawn do RLM engine + bridge de eventos.
-  - `grpc/session.rs` — create/list/get/add_turn.
-  - `grpc/summarize.rs` — trigger/get_status/stream_summarize_progress.
+  - `grpc/index.rs` — index_project (orquestra ingestão; client-streaming de texto).
+  - `grpc/search.rs` — search (BM25 FTS5 + semântica + RRF).
+  - `grpc/memory.rs` — `ListMemory`/`GetCache`/`InvalidateCache` (admin).
+  - `grpc/history.rs` — histórico de consultas (escopado por refresh token).
   - `grpc/query_cache.rs` — `AuthRefresh` (plan 018) + `QueryWithCache`/
     `StoreAnswer`/`GetAnswerById`/`InvalidateCache` (plan 017); lookup semântico
-    determinístico (embed de pergunta com prefixo `search_query:` no espaço B
-    `question_vector_store`), staleness e invalidação (Stale/Delete + raio).
-  - `grpc/status.rs` — get_server_status + stream_events.
+    determinístico (embed de pergunta no espaço B `question_vector_store`),
+    staleness e invalidação (Stale/Delete + raio).
+  - `grpc/admin.rs` — `TriggerMaintenance` (consolidate/decay sob demanda).
+  - `grpc/status.rs` — get_server_status.
   - `grpc/error.rs` — mapeamento erro→`Status` (`internal`/`not_found`/...).
-- `src/summarizer/mod.rs` — `SummarizeJob`, `SummaryResult`, `compute_hash`, `estimate_tokens`.
-- `src/summarizer/engine.rs` — `Summarizer` (carrega chunks, chama LLM, persiste).
-- `src/summarizer/{cost,progress,strategy,worker}.rs` — custo, progresso, prompt, worker de background.
-- `src/indexing.rs` — chunking determinístico offline (hash, linguagem, classificação).
+- `src/maintenance.rs` — consolidação/decay agendados (cron) + RPC admin.
+- `src/indexing.rs` — chunking determinístico (hash, linguagem, classificação).
 - `src/lifecycle.rs` — `run`/`run_server` (shutdown gracioso, TLS opcional); abre o
-  `QuestionVectorStore` (usearch, espaço B) e repassa para `AppState::new`.
+  `QuestionVectorStore` (espaço B) e repassa para `AppState::new`.
 - `src/auth/mod.rs` — `authenticate(MetadataMap, &Storage) -> Result<AuthContext>` +
   `require_admin(&AuthContext)`; roles `Admin`/`NonAdmin` (plan 018).
 - `src/qa_vectors` — re-export de `arlm_storage::QuestionVectorStore` (espaço B).
 - `src/timing.rs` — `Timer` com drop que emite `elapsed_ms`/`elapsed_us`.
-- `tests/` — `indexing_tests.rs`, `store_tests.rs`, `summarizer_tests.rs` (22 testes).
+- `tests/` — `indexing_tests.rs`, `store_tests.rs`.
 
 ## Dependências
 - Internas: `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-embedding`,
@@ -83,17 +79,18 @@ cargo run -p arlm-server -- status
 ## Migrations
 O schema é gerenciado por `arlm-storage` (ver `migrations/` do workspace):
 - `buffers` — projetos (id, uuid, name, path, total_chunks, total_files, embedding_model, embedding_dims, ...).
-- `sessions` / `session_history` — sessões e turns (coluna `project_name`, não `project`).
-- `runs` — runs RLM (sem coluna `project`; `partial_answer` guarda o resultado).
 - `chunks` / `chunk_texts` / `chunks_fts` (FTS5) / `chunk_entities` / `entities_fts` — indexação.
-- `summaries` — sumários hierárquicos por scope (file/module/project).
+- `qa_cache` / `qa_cache_fts` — QA-Cache (plan 017).
+- `history` — histórico de consultas por usuário.
+- `auth_tokens` / `auth_sessions` — autenticação (plan 018).
 
 ## Rules
-- `index_project` persiste chunks + texts + FTS + entities + vetores (LanceDB) e só
+- `index_project` recebe texto bruto via client-streaming, faz chunking + embeddings
+  no servidor, persiste chunks + texts + FTS + entities + vetores (LanceDB) e só
   então atualiza contadores do buffer.
-- `start_run` persiste o run como `running`, dispara o engine em background e atualiza
-  para `completed`/`failed` ao terminar (nunca bloqueia a resposta gRPC).
-- `build_context`/`search` sanitizam a query FTS5 antes do `MATCH` (somente alfanuméricos/
-  espaços) para evitar injeção.
-- `AppState` é `Clone` (Arc internos); o `write_queue` foi removido — a indexação
-  escreve direto via `store/`.
+- `search` sanitiza a query FTS5 antes do `MATCH` (somente alfanuméricos/espaços)
+  para evitar injeção.
+- `AppState` é `Clone` (Arc internos); a indexação escreve direto via `store/`.
+- O servidor **não** possui LLM: não há `summarizer`, `runs` de RLM nem `sessions`.
+  A manutenção (consolidate/decay) é disparada por cron ou pelo RPC admin
+  `TriggerMaintenance`.

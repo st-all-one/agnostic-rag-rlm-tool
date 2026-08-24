@@ -3,34 +3,14 @@
 //! These tests assert the contract emitted by `build.rs` from the `.proto`
 //! sources: key messages, enums, and field accessors must exist and behave
 //! as the downstream `arlm-server`/`arlm-cli` crates expect.
+//!
+//! NOTE: messages tied to the removed legacy RLM run/summarize pipeline
+//! (`RunResult`, `RunStatus`, `RunStats`, `SummaryScope`, …) are intentionally
+//! absent — they were deleted in plan 019.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use arlm_proto::proto::*;
-
-#[test]
-fn test_run_result_fields_and_cost() {
-    let stats = RunStats {
-        nodes_visited: 7,
-        max_depth_reached: 3,
-        total_tokens: 1_024,
-        total_cost_usd: 0.42,
-        duration_ms: 1_250.0,
-    };
-
-    let run = RunResult {
-        run_id: "run-1".into(),
-        status: RunStatus::StatusCompleted as i32,
-        answer: "done".into(),
-        stats: Some(stats),
-        total_cost: 0.42,
-    };
-
-    assert_eq!(run.run_id, "run-1");
-    assert_eq!(run.status, RunStatus::StatusCompleted as i32);
-    assert_eq!(run.stats.as_ref().unwrap().total_tokens, 1_024);
-    assert!((run.total_cost - 0.42).abs() < f64::EPSILON);
-}
 
 #[test]
 fn test_search_request_with_hybrid_tier() {
@@ -82,15 +62,8 @@ fn test_enum_variants_present() {
     assert_eq!(SearchTier::TierHybrid as i32, 2);
     assert_eq!(SearchTier::TierEntity as i32, 3);
 
-    assert_eq!(RunStatus::StatusPending as i32, 0);
-    assert_eq!(RunStatus::StatusRunning as i32, 1);
-    assert_eq!(RunStatus::StatusCompleted as i32, 2);
-    assert_eq!(RunStatus::StatusFailed as i32, 3);
-    assert_eq!(RunStatus::StatusCancelled as i32, 4);
-
-    assert_eq!(SummaryScope::ScopeFile as i32, 0);
-    assert_eq!(SummaryScope::ScopeModule as i32, 1);
-    assert_eq!(SummaryScope::ScopeProject as i32, 2);
+    assert_eq!(InvalidateMode::Stale as i32, 0);
+    assert_eq!(InvalidateMode::Delete as i32, 1);
 }
 
 #[test]

@@ -10,24 +10,21 @@ use tower_http::trace::TraceLayer;
 use tracing::{info, instrument};
 
 use crate::output;
-use crate::util::{data_dir, project_name};
+use crate::util::project_name;
 
 pub use crate::metrics::ArlmMetrics;
-pub use arlm_core::events::{EventBus, RlmEvent};
 
 pub use self::handlers::{
-    context_handler, events_stream, health, index_handler, mcp_handler, metrics_handler,
-    run_handler, search_handler, status_all, status_by_id,
+    context_handler, health, index_handler, mcp_handler, metrics_handler, search_handler,
+    status_all,
 };
-pub use self::requests::{ContextRequest, IndexRequest, RunRequest, SearchRequest};
+pub use self::requests::{ContextRequest, IndexRequest, SearchRequest};
 pub use self::state::AppState;
-pub use self::status_logic::extract_run_id;
 
 pub mod handlers;
 pub mod index_logic;
 pub mod requests;
 pub mod response;
-pub mod run_logic;
 pub mod search_logic;
 pub mod state;
 pub mod status_logic;
@@ -41,7 +38,7 @@ pub struct ServeConfig<'a> {
     pub mcp: bool,
 }
 
-/// Start the arlm HTTP server.
+/// Start the arlm HTTP server (the local data plane).
 ///
 /// # Errors
 /// Returns an error if the storage backend cannot be opened, the listen
@@ -52,9 +49,10 @@ pub async fn execute(config: ServeConfig<'_>) -> Result<()> {
 
     let pname = project_name(config.project);
 
-    let _storage = arlm_storage::Storage::open(&data_dir()).context("failed to open storage")?;
+    let _storage =
+        arlm_storage::Storage::open(&crate::util::data_dir()).context("failed to open storage")?;
 
-    info!(host = %config.host, port = %config.port, project = %pname, "starting arlm server");
+    info!(host = %config.host, port = config.port, project = %pname, "starting arlm server");
 
     output::info(&format!(
         "Starting arlm server on {}:{}",
@@ -63,14 +61,12 @@ pub async fn execute(config: ServeConfig<'_>) -> Result<()> {
     output::info(&format!("Project: {pname}"));
 
     let metrics = ArlmMetrics::new();
-    let event_bus = EventBus::new();
 
     let state = Arc::new(AppState {
         project: config.project.to_path_buf(),
         project_name: pname,
         verbose: config.verbose,
         metrics,
-        event_bus,
     });
 
     let cors = CorsLayer::new()
@@ -81,12 +77,9 @@ pub async fn execute(config: ServeConfig<'_>) -> Result<()> {
     let mut routes = Router::new()
         .route("/health", get(health))
         .route("/metrics", get(metrics_handler))
-        .route("/events/stream/{run_id}", get(events_stream))
         .route("/status", get(status_all))
-        .route("/status/{id}", get(status_by_id))
         .route("/context", post(context_handler))
         .route("/search", post(search_handler))
-        .route("/run", post(run_handler))
         .route("/index", post(index_handler));
 
     if config.mcp {
@@ -106,12 +99,8 @@ pub async fn execute(config: ServeConfig<'_>) -> Result<()> {
     println!("\nEndpoints:");
     println!("  GET  /health              - Health check");
     println!("  GET  /metrics             - Prometheus metrics");
-    println!("  GET  /events/stream/:run_id - SSE event stream");
     println!("  POST /context             - Build context for a task");
     println!("  POST /search              - Search the project");
-    println!("  POST /run                 - Run RLM recursively");
-    println!("  GET  /status              - All indexed projects");
-    println!("  GET  /status/:id          - Status of a specific run");
     println!("  POST /index               - Index a project directory");
     if config.mcp {
         println!("  POST /mcp                 - MCP (Model Context Protocol) endpoint");

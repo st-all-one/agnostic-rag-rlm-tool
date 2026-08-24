@@ -1,13 +1,18 @@
 # TODO — arlm-cli
 
-> Binary CLI que conecta ao servidor via gRPC ou roda localmente.
-> Flag `--server` alterna entre modo local e modo servidor.
-
-## Status Atual
-
-CLI funciona em modo local (19 subcommands). Modo servidor (`--server`) suporta apenas search, status, session, e run (parcial). Vários comandos não rodam em modo servidor.
+> **OBSOLETO (pós planos 019/020):** este TODO descreve a arquitetura pré-refator.
+> O `arlm-cli` agora é um **cliente gRPC puro** (sem modo local), e os
+> subcomandos `run`, `context`, `session`, `status`, `cost`, `cancel`,
+> `checkpoints`, `restore-page`, `wiki`, `consolidate`, `decay` e `entities`
+> foram **removidos**. O servidor é LLM-free; o LLM do usuário é usado apenas em
+> `query -qa` e `persist`. A config é 2-escopos (`~/.arlm/arlm.toml` global +
+> `.arlm.toml` local). Veja `plan/019-cli-consolidation.md` e
+> `plan/020-config-consolidation.md`. Os itens abaixo estão arquivados como
+> histórico.
 
 ---
+
+
 
 ## Gaps Críticos (P0)
 

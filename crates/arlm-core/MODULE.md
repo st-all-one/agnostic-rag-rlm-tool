@@ -1,33 +1,27 @@
 # arlm-core
 
-## O que faz
-Engine RLM recursivo (planner → solver → synthesizer) que decompõe tarefas em uma árvore de
-nós e sintetiza os resultados. Define traits desacoplados (`CodeSearch`, `MemoryProvider`) para
-injetar backends de busca/memória sem acoplar outros crates.
+> **OBSOLETO (pós planos 017–020):** a seção "Estrutura" abaixo descreve a
+> arquitetura pré-refator, que incluía o engine RLM recursivo (planner → solver →
+> synthesizer). Esse engine **foi removido** do crate. O `arlm-core` agora contém
+> apenas tipos de domínio (`types/`), a resolução de plano do QA-Cache
+> (`qa_cache/`), o trait `MemoryProvider` (`memory.rs`) e logging. O sistema é
+> *on-demand* e *server-first*: o servidor é LLM-free e o cliente usa o LLM do
+> usuário apenas em `query -qa`/`persist`. Veja `plan/019-cli-consolidation.md`.
 
-## Estrutura
+## O que faz
+Biblioteca de suporte do `arlm`: tipos de domínio compartilhados, resolução de
+plano do QA-Cache (plan 017) e o trait `MemoryProvider`. Não possui engine RLM
+recursivo.
+
+## Estrutura atual
 - `src/lib.rs` — API pública (pub mod / pub use).
 - `src/types/{mod,enums,node,input}.rs` — tipos de domínio (`RlmNode`, `StartRunInput`, `CompactionPolicy`, `RlmBackend`, `Action`, `NodeStatus`).
-- `src/engine/mod.rs` — `run_rlm_engine(_with_events)`: entrada do loop, `EventSink`, `save_trajectory` (#3).
-- `src/engine/node.rs` — `run_node_owned`: planner/solve/synthesize, recursão, guardrails.
-- `src/engine/state.rs` — `EngineState`: contadores atômicos lock-free; gatilho de root-compaction.
-- `src/engine/compactor.rs` — `RootCompactor`: fallback + `summarize_with_llm` (#6).
-- `src/tools.rs` — `ToolRegistry`, `ExecutableTool`, ferramentas built-in, trait `CodeSearch` (#1).
-- `src/memory.rs` — trait `MemoryProvider` + `SharedMemory` (#2, #3).
-- `src/planner.rs` — `plan_node` / `parse_planner_decision` (planner via LLM).
-- `src/solver.rs` — `solve_task` / `solve_task_repl` / `PersistentSolver` / `StateInspector` (#2).
-- `src/synthesizer.rs` — `synthesize` / `build_children_block` + `compact_children_if_needed` (#4, #5).
-- `src/router.rs` — `DepthRouter`: seleção de modelo por profundidade.
-- `src/qa_cache.rs` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia
+- `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia
   similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão
   com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante
   `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.
-- `src/budget.rs` — `RunBudget`: custo/tokens/erros/tempo (CAS loop para f64).
-- `src/cache.rs` — `ResultCache`: TTL + LRU + invalidação por dependência (#10).
-- `src/events.rs` — `RlmEvent`, `EventBus` (broadcast), `EventSink` (#7).
-- `src/sampling.rs` — `SamplingArgs` com `seed: Option<u64>` (#8).
-- `src/token_counter.rs` — `TokenCounter`, `get_context_limit`, `estimate` (#9).
-- `src/compaction.rs` — tipo `Compaction` (sumário de busca).
+- `src/memory.rs` — trait `MemoryProvider` + `SharedMemory`.
+- `src/logging.rs` — `ScopedTimer` / `Timer` (timing estruturado).
 - `src/concurrency.rs` — `map_concurrent`: fan-out paralelo limitado.
 - `src/docker.rs` — `DockerExecutor`: execução sandboxed.
 - `src/repl.rs` — `CodeExecutor`, `LlmQueryServer`, `find_code_blocks`, `format_repl_result`.

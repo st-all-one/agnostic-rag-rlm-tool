@@ -44,28 +44,18 @@ cp -r agents/pi/ ~/.pi/extensions/arlm/
 # { "pi": { "extensions": ["~/.pi/extensions/arlm/index.ts"] } }
 ```
 
-## HTTP API (Genérico)
+## Servidor (gRPC/MCP, plano de dados)
 
-Para qualquer agente que suporte HTTP:
+Para qualquer agente que suporte gRPC/MCP (o servidor é LLM-free; não há
+endpoint `/run` nem `/context`):
 
 ```bash
-# Iniciar servidor
-arlm serve --port 8080
+# Iniciar o servidor de plano de dados (gRPC + MCP)
+arlm server
 
-# Buscar contexto
-curl -X POST http://localhost:8080/context \
-  -H "Content-Type: application/json" \
-  -d '{"task": "analise de bug", "project": "meu-app"}'
-
-# Buscar código
-curl -X POST http://localhost:8080/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "validate_token", "top_k": 5}'
-
-# Executar RLM recursivo
-curl -X POST http://localhost:8080/run \
-  -H "Content-Type: application/json" \
-  -d '{"task": "analise vulnerabilidades", "depth": 3}'
+# O cliente CLI conecta por gRPC
+arlm --server 127.0.0.1:50051 search "validate_token" --top-k 5
+arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
 ```
 
 ## Docker
@@ -74,8 +64,9 @@ curl -X POST http://localhost:8080/run \
 # Servidor via Docker
 docker compose up -d
 
-# CLI via Docker
-docker compose run --rm arlm-cli context "bug no login" --project /projects/meu-app
+# CLI via Docker (index/search; context e run foram removidos no plan 019)
+docker compose run --rm arlm-cli search "bug no login"
+docker compose run --rm arlm-cli index /projects/meu-app
 ```
 
 ## Fluxo de Dados
@@ -84,4 +75,5 @@ docker compose run --rm arlm-cli context "bug no login" --project /projects/meu-
 Usuário → Agente → arlm CLI/HTTP → Busca Híbrida → Contexto → Agente resolve
 ```
 
-Todos os agentes compartilham a mesma memória em `~/.arlm/projects/<nome>/`.
+Todos os agentes compartilham o mesmo projeto indexado (isolado por `buffer_id`
+no servidor). A memória/histórico são server-side e escopados por usuário.

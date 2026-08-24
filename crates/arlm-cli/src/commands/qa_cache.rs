@@ -49,8 +49,8 @@ pub fn run_ask(
     }
 
     // MISS: synthesize the answer client-side with the user's LLM.
-    let config = crate::config::Config::load().context("failed to load CLI config")?;
-    let llm = crate::backend::resolve_backend(&config, backend, model)
+    let cfg = crate::user_config::load().context("failed to load user config")?;
+    let llm = crate::backend::resolve_backend(cfg.llm_config(), backend, model)
         .context("failed to build LLM backend for digest")?;
 
     let mut context = String::new();

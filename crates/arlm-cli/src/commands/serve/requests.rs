@@ -24,21 +24,6 @@ pub struct SearchRequest {
     pub agent: Option<String>,
 }
 
-/// Request body for `POST /run`.
-#[derive(Deserialize)]
-pub struct RunRequest {
-    pub task: String,
-    #[serde(default = "default_depth")]
-    pub depth: u32,
-    #[serde(default = "default_max_nodes")]
-    pub max_nodes: u32,
-    pub backend: Option<String>,
-    pub model: Option<String>,
-    /// Agent name for metrics tracking.
-    #[serde(default)]
-    pub agent: Option<String>,
-}
-
 /// Request body for `POST /index`.
 #[derive(Deserialize)]
 pub struct IndexRequest {
@@ -49,14 +34,6 @@ pub struct IndexRequest {
 
 fn default_top_k() -> usize {
     10
-}
-
-fn default_depth() -> u32 {
-    3
-}
-
-fn default_max_nodes() -> u32 {
-    50
 }
 
 fn default_chunk_size() -> usize {

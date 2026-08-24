@@ -1,7 +1,12 @@
 # arlm-search
 
 ## O que faz
-Motor de busca híbrida do `arlm`: BM25 (FTS5), busca por entidades (regex + FTS5), busca semântica (usearch via `arlm-storage`), fusão Reciprocal Rank Fusion (RRF, k=60), decay de saliência opcional, rerank por LLM (Tier 3) e montagem de contexto para LLM com token budget. O `HybridSearch` também faz busca **dual-layer**: além dos `chunks`, consulta a tabela `summaries` (FTS5 `summaries_fts` no `arlm-storage`) e marca `is_summary` nos resultados.
+Motor de busca híbrida do `arlm`: BM25 (FTS5), busca por entidades (regex + FTS5), busca semântica (usearch via `arlm-storage`), fusão Reciprocal Rank Fusion (RRF, k=60), decay de saliência opcional e montagem de contexto para LLM com token budget. O `HybridSearch` também faz busca **dual-layer** (legacy): além dos `chunks`, consulta a tabela `summaries` (FTS5 `summaries_fts`) e marca `is_summary` nos resultados.
+
+> **LLM-free server (plan 019):** o `arlm-server` não invoca LLM, então o rerank
+> por LLM (Tier 3 / `rerank.rs`) **não é usado no servidor**. A tabela `summaries`
+> também não é mais populada server-side (sem sumarizador). O rerank/LLM, quando
+> aplicável, ocorre no cliente (`arlm-cli`) via o LLM do usuário.
 
 ## Estrutura
 - `src/lib.rs` — API pública (re-exports), `#![cfg_attr(test, allow(...))]` de lint no nível do crate (pedantic style pré-existente).

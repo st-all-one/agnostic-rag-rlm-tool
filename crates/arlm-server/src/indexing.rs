@@ -26,8 +26,8 @@ pub struct IndexedChunk {
     pub chunk_type: String,
 }
 
-const DEFAULT_MAX_LINES: usize = 80;
-const DEFAULT_OVERLAP_LINES: usize = 8;
+pub const DEFAULT_MAX_LINES: usize = 80;
+pub const DEFAULT_OVERLAP_LINES: usize = 8;
 
 /// Infer a language hint from a file path extension.
 #[must_use]
@@ -88,13 +88,31 @@ pub fn chunk_lines(content: &str, max_lines: usize, overlap: usize) -> Vec<(i32,
 }
 
 /// Chunk a file's content, returning `IndexedChunk`s with language metadata.
+///
+/// Uses the default chunk size and overlap (see [`index_file_with`] to override).
 #[must_use]
 pub fn index_file(path: &Path, content: &str) -> Vec<IndexedChunk> {
+    index_file_with(path, content, DEFAULT_MAX_LINES, DEFAULT_OVERLAP_LINES)
+}
+
+/// Chunk a file's content with an explicit `max_lines`/`overlap`, returning
+/// `IndexedChunk`s with language metadata.
+///
+/// The server owns chunking (plan 020, D2): the client streams raw file text
+/// and the server fragments it. `max_lines`/`overlap` are derived from the
+/// `[embedder]` config (`max_tokens`/`overlap_tokens` mapped to a line budget).
+#[must_use]
+pub fn index_file_with(
+    path: &Path,
+    content: &str,
+    max_lines: usize,
+    overlap: usize,
+) -> Vec<IndexedChunk> {
     let language = infer_language(path).map(str::to_string);
     let chunk_type = classify(path);
     let file_path = path.to_string_lossy().into_owned();
 
-    chunk_lines(content, DEFAULT_MAX_LINES, DEFAULT_OVERLAP_LINES)
+    chunk_lines(content, max_lines, overlap)
         .into_iter()
         .map(|(line_start, line_end, text)| {
             let hash = hash_text(&text);

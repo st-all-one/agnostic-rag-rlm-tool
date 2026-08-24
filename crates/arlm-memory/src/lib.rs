@@ -13,7 +13,6 @@
         clippy::cast_precision_loss
     )
 )]
-pub mod checkpoint;
 pub mod consolidation;
 pub mod decay;
 pub mod engine;
@@ -21,13 +20,10 @@ pub mod history;
 pub mod knowledge;
 pub mod persist;
 pub mod project;
-pub mod session;
-pub mod trajectory;
 pub mod transfer;
 pub mod watch;
 
 pub use arlm_core::memory::MemoryProvider;
-pub use checkpoint::{CheckpointInfo, CheckpointManager};
 pub use consolidation::{ConsolidateOptions, ConsolidateResult, ConsolidationEngine};
 pub use decay::{DecayConfig, SalienceInput, compute_salience, should_evict};
 pub use engine::{
@@ -40,8 +36,6 @@ pub use persist::{
     SearchPersistOptions, SessionPersistOptions, TrajectoryPersistOptions, WikiScope,
 };
 pub use project::{ProjectInfo, ProjectManager};
-pub use session::{SessionManager, SessionRecord};
-pub use trajectory::{RunTrajectory, TrajectoryEngine};
 pub use transfer::{TransferEngine, TransferOptions};
 pub use watch::{WatchEvent, WatchHandle, WatchMonitor};
 

@@ -27,12 +27,3 @@ async-trait = "0.1"
 [dev-dependencies]
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-criterion.workspace = true
-
-[[bench]]
-name = "rlm_loop"
-harness = false
-
-[[bench]]
-name = "search"
-harness = false

@@ -11,8 +11,15 @@ Busca híbrida (BM25 + semântica) com fusão RRF para o arlm.
 - **QA-Cache similarity (plan 017)**: `qa_cache.rs` — `cosine_similarity` e
   `jaccard_similarity` (checagem secundária anti-falso-positivo: overlap de
   provenance entre a nova query e o cache).
-- **Dual-layer**: O `HybridSearch` também consulta a tabela `summaries` (FTS5 `summaries_fts`) e marca `is_summary` nos resultados
+- **Dual-layer (legacy)**: O `HybridSearch` também consulta a tabela `summaries`
+  (FTS5 `summaries_fts`) e marca `is_summary` nos resultados. *Obs:* o servidor
+  tornou-se LLM-free (plan 019), então a tabela `summaries` não é mais populada
+  pelo servidor (não há sumarizador server-side).
 - **Context**: Montagem de contexto formatado para LLM com token budget
+
+> O servidor (`arlm-server`) é LLM-free. A busca híbrida (BM25 + semântica + RRF)
+> roda inteiramente no servidor; o rerank/LLM só ocorre no cliente (`arlm-cli`) em
+> `query -qa`/`persist`, via o LLM do usuário.
 
 ## Estrutura
 
@@ -41,7 +48,7 @@ src/
 | 0 | `fts` | ~7ms | BM25 puro via FTS5 |
 | 1 | `entity` | ~8ms | BM25 + entity RRF (padrão) |
 | 2 | `vector` | ~21ms | BM25 + entity + vector RRF |
-| 3 | `llm_rerank` | ~200ms | Tier 2 + LLM rerank |
+| 3 | `llm_rerank` | — | Tier 2 + LLM rerank — **não usado no servidor** (LLM-free); rerank, se aplicável, é feito no cliente |
 
 ## Funcionalidades
 

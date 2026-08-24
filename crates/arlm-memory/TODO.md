@@ -1,15 +1,17 @@
 # TODO — arlm-memory
 
-> Memória multi-projetos: projetos, knowledge base, sessões, trajectories, persist.
+> **OBSOLETO (pós plano 019):** este TODO descreve a arquitetura pré-refator.
+> `SessionManager` (sessões multi-turno) e `TrajectoryEngine` (trajetórias) **foram
+> removidos** do crate. O `arlm-memory` agora cobre project/knowledge/persist/
+> transfer/consolidation/history/watch/decay. A manutenção (consolidate/decay) é
+> disparada por cron ou RPC admin no servidor. Veja `plan/019-cli-consolidation.md`.
 
 ## Status Atual
 
 `MemoryEngine` totalmente refatorado em sub-módulos type-driven, com testes extraídos
 para `tests/`, logging estruturado (`tracing`) e `ScopedTimer` nas hot paths, e
 `cargo clippy`/`cargo test` limpos para o crate. Integração com `arlm-core` via
-`MemoryProvider` e sistema de decay implementados. Os gaps #6/#7/#8 têm APIs
-**prontas no engine**; o wiring de CLI/servidor é **fora de escopo** (edição de
-`arlm-cli`/`arlm-server` proibida nesta tarefa).
+`MemoryProvider` e sistema de decay implementados.
 
 ---
 

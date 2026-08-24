@@ -17,6 +17,7 @@ use arlm_storage::Storage;
 use arlm_storage::tokens::{self, NewToken, Role};
 
 use crate::config::ServerConfig;
+use crate::maintenance;
 
 /// Internal token-management CLI.
 #[derive(Parser)]
@@ -55,6 +56,17 @@ pub enum AdminCommand {
         /// Confirm the destructive prune.
         #[arg(long)]
         yes: bool,
+    },
+    /// Run server-side memory maintenance (consolidate + decay) directly
+    /// against the DB, without going through gRPC. Mirrors the `TriggerMaintenance`
+    /// RPC but is reachable only from inside the container.
+    Consolidate {
+        /// Project to maintain (empty = all projects).
+        #[arg(long)]
+        project: Option<String>,
+        /// Compute the report without deleting anything.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -111,6 +123,35 @@ pub fn run() -> Result<()> {
             }
             let n = tokens::revoke_all_tokens(&storage, "cli")?;
             println!("Pruned {n} token(s); all sessions invalidated.");
+        }
+        AdminCommand::Consolidate { project, dry_run } => {
+            let project = project.unwrap_or_default();
+            let scope = if project.is_empty() {
+                "<all>".to_string()
+            } else {
+                project.clone()
+            };
+            let floor = config.maintenance.decay_score_floor;
+            let rt = tokio::runtime::Runtime::new().context("failed to build tokio runtime")?;
+            let report = rt
+                .block_on(maintenance::run_maintenance(
+                    &project, &storage, floor, dry_run,
+                ))
+                .context("maintenance failed")?;
+            println!("Maintenance report (project={scope} dry_run={dry_run}):");
+            println!(
+                "  duplicate_chunks_removed         : {}",
+                report.duplicate_chunks_removed
+            );
+            println!(
+                "  low_confidence_patterns_removed  : {}",
+                report.low_confidence_patterns_removed
+            );
+            println!(
+                "  decayed_chunks                   : {}",
+                report.decayed_chunks
+            );
+            println!("  kept                            : {}", report.kept);
         }
     }
     Ok(())

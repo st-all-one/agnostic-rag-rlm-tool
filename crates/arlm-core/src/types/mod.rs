@@ -1,22 +1,11 @@
-//! Domain types for the RLM engine.
+//! Domain types for `arlm-core`.
 //!
-//! This module is split into cohesive submodules:
-//! - [`enums`] — backend/mode enums, custom tools, compaction policy, run output types
-//! - [`node`] — the [`RlmNode`] decision-tree node and its constructors
-//! - [`input`] — [`StartRunInput`] run configuration
-//!
-//! Tool traits/registry (`ExecutableTool`, `ToolRegistry`, built-in tools) live in
-//! the sibling [`crate::tools`] module and are re-exported here so `types::*` keeps
-//! covering the full public surface.
+//! The recursive-RLM engine types (`RlmNode`, `StartRunInput`, `RlmRunResult`,
+//! `RlmBackend`, `CompactionPolicy`, …) were removed in plan 019. This module
+//! is retained as the home for shared domain types used by the surviving
+//! `qa_cache` and `memory` modules; it is currently empty after the legacy
+//! pruning.
 
 pub mod enums;
 pub mod input;
 pub mod node;
-
-pub use enums::*;
-pub use input::*;
-pub use node::*;
-
-pub use crate::tools::{
-    CodeSearch, ExecutableTool, ListFilesTool, ReadFileTool, SearchCodeTool, ToolRegistry,
-};

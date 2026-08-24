@@ -114,7 +114,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arlm-core",
- "arlm-embedding",
  "arlm-llm",
  "arlm-memory",
  "arlm-proto",
@@ -151,7 +150,6 @@ dependencies = [
  "arlm-llm",
  "async-trait",
  "chrono",
- "criterion",
  "futures",
  "hex",
  "parking_lot",
@@ -270,7 +268,6 @@ dependencies = [
  "anyhow",
  "arlm-core",
  "arlm-embedding",
- "arlm-llm",
  "arlm-memory",
  "arlm-proto",
  "arlm-search",
@@ -304,6 +301,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "criterion",
  "getrandom 0.2.17",
  "hex",
  "parking_lot",

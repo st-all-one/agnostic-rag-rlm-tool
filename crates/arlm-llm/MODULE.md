@@ -21,7 +21,8 @@ backoff, tabela de preços (com `cost_usd` no `UsageSummary`), fallback de model
 - `src/token_counter.rs` — `TokenCounter`, `ModelContextLimits`.
 
 ## Dependências
-- Internas: nenhuma (crate folha de LLM; consumido por `arlm-core`, `arlm-search`, `arlm-server`, `arlm-cli`).
+- Internas: nenhuma (crate folha de LLM; consumido por `arlm-cli` — o servidor
+  `arlm-server` é LLM-free, portanto **não** usa `arlm-llm`).
 - Externas: `reqwest` (HTTP), `serde`/`serde_json` (serialização), `tokio` (async),
   `async-trait`, `thiserror` (erros), `tracing` (logs), `anyhow` (erros de app), `futures`.
 

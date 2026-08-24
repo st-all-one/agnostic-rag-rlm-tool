@@ -10,8 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Integration tests in `tests/proto_contract.rs` validating generated messages,
   enums, field accessors, and the tonic service client/server modules (resolves
   TODO gap #2 — proto validation).
-- `double total_cost = 5` field on `RunResult` (`proto/run.proto`) so the CLI can
-  read `run.total_cost` directly (TODO gap #1.a).
+
+> **Nota (planos 019/020):** `run.proto` e `summarize.proto` foram **removidos**
+> (o servidor é LLM-free; não há runs de RLM nem sumarização server-side). Os RPCs
+> de memória/histórico/manutenção (`ListMemory`, `GetCache`, `TriggerMaintenance`,
+> `GetHistory`) passaram a existir em `service.proto`. `context.proto`/`session.proto`
+> permanecem mas estão em desuso.
 - **Auth (plan 018):** `auth.proto` + `AuthRefresh` RPC (refresh-token rotation +
   short-lived sessions; roles `Admin`/`NonAdmin`).
 - **Query-Answer Cache (plan 017):** `query_cache.proto` + 4 novos RPCs:

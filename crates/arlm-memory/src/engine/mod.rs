@@ -4,30 +4,48 @@
 //! trajectory storage, and persistence into a single coherent API.
 
 pub mod index;
-pub mod memory_api;
 pub mod search;
 
+use std::path::Path;
+
+use anyhow::Result;
 use arlm_storage::Storage;
 
 use crate::knowledge::KnowledgeEngine;
-use crate::persist::PersistEngine;
 use crate::project::ProjectManager;
-use crate::session::SessionManager;
-use crate::trajectory::TrajectoryEngine;
 
 /// Unified orchestrator for the memory subsystem.
 ///
-/// Coordinates project management, knowledge indexing, session tracking,
-/// trajectory storage, and persistence into a single coherent API.
+/// Coordinates project management, knowledge indexing, and persistence into a
+/// single coherent API. (Session/trajectory tracking were removed in plan 019.)
 pub struct MemoryEngine {
     pub(crate) storage: Storage,
     pub(crate) projects: ProjectManager,
     pub(crate) knowledge: KnowledgeEngine,
-    pub(crate) sessions: SessionManager,
-    pub(crate) trajectories: TrajectoryEngine,
-    pub(crate) persist: PersistEngine,
     #[allow(dead_code)]
     pub(crate) project_path: std::path::PathBuf,
+}
+
+impl MemoryEngine {
+    /// Open the shared memory storage engine for the given project path.
+    ///
+    /// The same storage handle backs project management, knowledge indexing,
+    /// FTS5 search, the QA cache and history.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying storage cannot be opened.
+    pub fn open(project_path: &Path) -> Result<Self> {
+        let storage = Storage::open(project_path)?;
+        let projects = ProjectManager::new(storage.clone());
+        let knowledge = KnowledgeEngine::new(storage.clone());
+        Ok(Self {
+            storage,
+            projects,
+            knowledge,
+            project_path: project_path.to_path_buf(),
+        })
+    }
 }
 
 /// Options for indexing a project directory.

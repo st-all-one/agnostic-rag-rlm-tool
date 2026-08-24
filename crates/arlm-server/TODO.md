@@ -1,12 +1,12 @@
 # TODO — arlm-server
 
-> Servidor gRPC que armazena, indexa, sumariza e executa RLM para times.
-> Binário separado (`crates/arlm-server/`), roda em Docker, expõe gRPC (tonic).
->
-> **Status: CONCLUÍDO** — todos os gaps abaixo foram implementados e o crate
-> compila (`cargo check`) sem erros/warnings e passa nos 22 testes de integração.
-> O código evoluiu além do que este documento originalmente descrevia: o crate
-> já era muito mais completo que o "shell" citado em "Status Atual".
+> **OBSOLETO (pós planos 019/020):** este TODO descreve a arquitetura pré-refator.
+> O `arlm-server` agora é um **plano de dados puro, LLM-free**: foram removidos o
+> `summarizer`, os `runs` de RLM, as `sessions` e o `events` hub. A
+> digestão/sumarização ocorre no cliente (`arlm-cli`) via o LLM do usuário. A
+> config é o arquivo de host `server.toml` (sem `[llm]`). Veja
+> `plan/019-cli-consolidation.md` e `plan/020-config-consolidation.md`. Os itens
+> abaixo estão arquivados como histórico.
 
 ---
 

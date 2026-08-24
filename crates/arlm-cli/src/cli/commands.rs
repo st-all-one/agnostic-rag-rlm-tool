@@ -4,292 +4,161 @@ use clap::Subcommand;
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Run RLM recursively on a task (requires --llm)
-    Run {
-        /// Task description
-        task: String,
-
-        /// Enable LLM mode (required for run)
+    /// Prepare the repository: create `.arlm.toml` and (by default) index it.
+    Init {
+        /// Run `arlm index` after creating the config (default: true).
         #[arg(long)]
-        llm: bool,
+        index: bool,
 
-        /// LLM backend: openai, anthropic, ollama, gemini
-        #[arg(long)]
-        backend: Option<String>,
-
-        /// Model name
-        #[arg(long)]
-        model: Option<String>,
-
-        /// Maximum recursion depth
-        #[arg(long, default_value_t = 3)]
-        depth: u32,
-
-        /// Maximum number of nodes
-        #[arg(long, default_value_t = 50)]
-        max_nodes: u32,
-
-        /// Concurrency limit
-        #[arg(short = 'j', long, default_value_t = 4)]
-        concurrency: usize,
-
-        /// Maximum budget in USD
-        #[arg(long, default_value_t = 1.0)]
-        max_budget: f64,
-
-        /// Render the RLM recursion tree in real time
-        #[arg(long)]
-        live: bool,
-
-        /// Agent identifier for cost attribution (or set `ARLM_AGENT` env var)
-        #[arg(long, env = "ARLM_AGENT")]
-        agent: Option<String>,
-
-        /// Custom tool available to the solver. Format: "name:description" or "name:param1,param2:description"
-        /// Can be specified multiple times.
-        #[arg(long = "tool", action = clap::ArgAction::Append)]
-        tools: Vec<String>,
-
-        /// Session ID for persistent multi-turn context
-        #[arg(long)]
-        session: Option<String>,
-
-        /// Run in REPL mode: LLM generates code blocks that are executed in a loop
-        #[arg(long)]
-        repl: bool,
-
-        /// Persist the run output as a wiki page
-        #[arg(long)]
-        persist: bool,
+        /// Skip running `arlm index` after creating the config.
+        #[arg(long, conflicts_with = "index")]
+        no_index: bool,
     },
 
-    /// Index a project directory
+    /// Index a project directory (client streams raw file text to the server).
     Index {
-        /// Directory to index
+        /// Directory to index.
         #[arg(default_value = ".")]
         path: PathBuf,
 
-        /// Maximum tokens per chunk
-        #[arg(long, default_value_t = 512)]
-        chunk_size: usize,
-
         /// Ignore patterns (glob). Can be specified multiple times.
-        /// Default: .env, .env.*, *.pem, *.key
         #[arg(long = "ignore", action = clap::ArgAction::Append)]
         ignore_patterns: Vec<String>,
 
-        /// Force-include patterns (glob) that bypass the default ignores
-        /// (.env, .vscode, .github, .gitlab, .zed, vendors, …). Can be
-        /// specified multiple times. Only files matching these are sent when
-        /// they would otherwise be skipped.
+        /// Force-include patterns (glob) that bypass the default ignores.
+        /// Can be specified multiple times.
         #[arg(long = "force-include", action = clap::ArgAction::Append)]
         force_include: Vec<String>,
-
-        /// Watch for file changes and reindex automatically
-        #[arg(short, long)]
-        watch: bool,
     },
 
-    /// Search project with hybrid BM25 + semantic
+    /// Search project with hybrid BM25 + semantic (server-side).
     Search {
-        /// Search query
+        /// Search query.
         query: String,
 
-        /// Top K results
+        /// Top K results.
         #[arg(long, default_value_t = 10)]
         top_k: usize,
 
-        /// File pattern filter
+        /// File pattern filter.
         #[arg(long)]
         file_pattern: Option<String>,
 
-        /// Minimum score threshold
+        /// Minimum score threshold.
         #[arg(long)]
         min_score: Option<f32>,
 
-        /// Search across all indexed projects
+        /// Search across all indexed projects.
         #[arg(short, long)]
         all: bool,
 
-        /// Search tier: fts, entity, vector, auto (default: auto)
+        /// Search tier: fts, entity, vector, auto (default: auto).
         #[arg(long, default_value = "auto")]
         tier: String,
 
-        /// Maximum tokens in output (0 = unlimited)
+        /// Maximum tokens in output (0 = unlimited).
         #[arg(long, default_value_t = 8000)]
         max_tokens: u32,
-
-        /// Persist the search output as a wiki page
-        #[arg(long)]
-        persist: bool,
     },
 
-    /// Query with RLM analysis
+    /// Query with on-demand QA: `-qa` digests via the user's LLM; `--cache-id`
+    /// does a deterministic 1:1 lookup.
     Query {
-        /// Question to analyze
+        /// Question to analyze.
         question: String,
 
-        /// LLM backend
+        /// LLM backend name (overrides config).
         #[arg(long)]
         backend: Option<String>,
 
-        /// Model name
+        /// Model name (overrides config).
         #[arg(long)]
         model: Option<String>,
-
-        /// Use RLM engine for recursive analysis
-        #[arg(long)]
-        llm: bool,
 
         /// Direct lookup of a previously served answer by stable cache id
         /// (plan 017, anti-drift; no re-digest, no re-index).
         #[arg(long)]
         cache_id: Option<String>,
 
-        /// Use the semantic query-answer cache (QueryWithCache + client digest-once).
+        /// Use the semantic query-answer cache (QueryWithCache + client
+        /// digest-once via the user's LLM).
         #[arg(long)]
         qa: bool,
     },
 
-    /// Semantic query-answer cache management (plan 017)
-    Cache {
+    /// Memory administration (admin-gated on the server): list / get / invalidate /
+    /// cleanup cached query-answer memory.
+    Memory {
         #[command(subcommand)]
-        cmd: CacheCmd,
+        cmd: MemoryCmd,
     },
 
-    /// Build context for an agent task
-    Context {
-        /// Task description
-        task: String,
-
-        /// Top K results
-        #[arg(long, default_value_t = 10)]
-        top_k: usize,
-
-        /// Search across all indexed projects
-        #[arg(short, long)]
-        all: bool,
-
-        /// Search tier: fts, entity, vector, auto (default: auto)
-        #[arg(long, default_value = "auto")]
-        tier: String,
-
-        /// Maximum tokens in output (0 = unlimited)
-        #[arg(long, default_value_t = 8000)]
-        max_tokens: u32,
-
-        /// Persist the context output as a wiki page
-        #[arg(long)]
-        persist: bool,
-    },
-
-    /// Show project and run status
-    Status {
-        /// Specific run ID to check
-        run_id: Option<String>,
-    },
-
-    /// Show query history
-    History {
-        /// Limit results
-        #[arg(long, default_value_t = 20)]
-        limit: usize,
-    },
-
-    /// Show cost summary
-    Cost {
-        /// Show costs for a specific run
-        run_id: Option<String>,
-
-        /// Filter by agent name
-        #[arg(long)]
-        agent: Option<String>,
-    },
-
-    /// Manage sessions
-    Session {
-        #[command(subcommand)]
-        action: SessionAction,
-    },
-
-    /// Consolidate memory (dedup, cleanup)
-    Consolidate,
-
-    /// Run salience decay on indexed chunks
-    Decay {
-        /// Dry run — show what would be decayed without modifying
-        #[arg(long)]
-        dry_run: bool,
-    },
-
-    /// Cancel a running RLM run
-    Cancel {
-        /// Run ID to cancel
-        run_id: String,
-    },
-
-    /// List checkpoints for runs
-    Checkpoints {
-        /// Specific run ID to check
-        run_id: Option<String>,
-    },
-
-    /// Restore a persisted wiki page
-    RestorePage {
-        /// Page name to restore
-        page_name: String,
-    },
-
-    /// Manage wiki with git integration
-    Wiki {
-        /// Action: init, commit, log
-        action: String,
-    },
-
-    /// Search for entities in indexed code
-    Entities {
-        /// Entity query
-        query: String,
-    },
-
-    /// Persist search/analysis results as wiki pages
+    /// Persist a served answer as a structured wiki page using the user's LLM.
     Persist {
-        /// Title for the wiki page
+        /// The `cache_id` (response id) emitted by `arlm query -qa`.
+        response_id: String,
+
+        /// Optional title for the wiki page (defaults to a slug of the answer).
         #[arg(long)]
         title: Option<String>,
-
-        /// Query that produced this result
-        #[arg(long)]
-        query: Option<String>,
     },
 
-    /// Start HTTP API server
+    /// Show the current user's query history (server-scoped by refresh token).
+    History {
+        /// Limit results.
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+
+        /// View another user's history (admin only; server enforces scope).
+        #[arg(long)]
+        user: Option<String>,
+    },
+
+    /// Start the local HTTP/MCP server (data plane).
     Serve {
-        /// Port to listen on
+        /// Port to listen on.
         #[arg(long, default_value_t = 8080)]
         port: u16,
 
-        /// Host to bind to
+        /// Host to bind to.
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
 
-        /// Enable MCP (Model Context Protocol) server on /mcp endpoint
+        /// Enable MCP (Model Context Protocol) server on /mcp endpoint.
         #[arg(long)]
         mcp: bool,
     },
 }
 
-/// Subcommands of `arlm cache` (plan 017).
+/// Subcommands of `arlm memory` (plan 019).
 #[derive(Subcommand, Debug)]
-pub enum CacheCmd {
-    /// Invalidate a cached answer (admin-gated on the server).
+pub enum MemoryCmd {
+    /// List cached query/answer memory for a project.
+    List {
+        /// Project scope.
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Maximum number of entries.
+        #[arg(long, default_value_t = 50)]
+        limit: i64,
+
+        /// Include entity information alongside entries.
+        #[arg(long)]
+        include_entities: bool,
+    },
+    /// Fetch a single cached answer by id (admin/debug).
+    Get {
+        /// Answer id.
+        cache_id: String,
+    },
+    /// Invalidate cached answers (admin).
     Invalidate {
-        /// Target answer id (`qa_cache.cache_id`). When empty, purges the
-        /// legacy `result_cache` for `--project` (admin).
+        /// Target answer id. When empty, purges the legacy result cache.
         #[arg(long)]
         cache_id: Option<String>,
 
-        /// Project whose legacy result_cache to purge (admin).
+        /// Project whose legacy result cache to purge.
         #[arg(long)]
         project: Option<String>,
 
@@ -297,8 +166,7 @@ pub enum CacheCmd {
         #[arg(long)]
         delete: bool,
 
-        /// Also invalidate nearby questions within this cosine radius
-        /// (error-chain invalidation).
+        /// Also invalidate nearby questions within this cosine radius.
         #[arg(long)]
         radius: Option<f32>,
 
@@ -306,30 +174,14 @@ pub enum CacheCmd {
         #[arg(long)]
         reason: Option<String>,
     },
-    /// Direct lookup of a cached answer by stable id.
-    Get {
-        /// Answer id.
+    /// Run (or dry-run) cache cleanup / decay / consolidation.
+    Cleanup {
+        /// Dry run — report what would change without modifying.
         #[arg(long)]
-        cache_id: String,
+        dry_run: bool,
 
         /// Project scope.
         #[arg(long)]
         project: Option<String>,
     },
-}
-
-#[derive(Subcommand, Debug)]
-pub enum SessionAction {
-    /// Create a new session
-    Create {
-        /// Session title
-        title: String,
-    },
-    /// Resume an existing session
-    Resume {
-        /// Session ID
-        session_id: String,
-    },
-    /// List all sessions
-    List,
 }

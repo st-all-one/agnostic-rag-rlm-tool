@@ -20,7 +20,7 @@ use arlm_search::{
     Bm25Search, EntitySearch, HybridSearch, SearchOptions, SearchTier as HybridTier,
     SemanticSearch, build_search_results,
 };
-use tonic::{Response, Status};
+use tonic::{Request, Response, Status};
 
 use crate::grpc::error::{internal, invalid_arg, not_found};
 use crate::state::AppState;
@@ -69,7 +69,7 @@ pub(crate) async fn hybrid_search(
         .vector_store
         .as_ref()
         .map(|v| SemanticSearch::new(v.clone()));
-    let hybrid = HybridSearch::new(bm25, entity, semantic).with_llm_backend(state.llm.clone());
+    let hybrid = HybridSearch::new(bm25, entity, semantic);
 
     // The embedder's HTTP client (ureq) is synchronous and would block the
     // async worker, so run it on a blocking task. Falls back to BM25-only when
@@ -191,11 +191,14 @@ fn render_context(candidates: &[SearchResult], max_tokens: u32) -> (String, u32)
 /// Returns an error if storage access fails or the query is invalid.
 pub(crate) async fn handle_search(
     state: &AppState,
-    req: SearchRequest,
+    request: Request<SearchRequest>,
 ) -> Result<Response<SearchResponse>, Status> {
     let start = Instant::now();
-    let project = req.project;
-    let query = req.query;
+    let ctx = crate::auth::authenticate(request.metadata(), &state.storage)?;
+    let req = request.into_inner();
+    let project = req.project.clone();
+    let query = req.query.clone();
+    crate::grpc::memory::record_query_history(state, &ctx, &project, "search", &query).await;
 
     if query.trim().is_empty() {
         return Err(invalid_arg("search query is required"));

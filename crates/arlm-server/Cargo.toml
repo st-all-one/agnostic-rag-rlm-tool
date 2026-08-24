@@ -19,7 +19,6 @@ arlm-storage.workspace = true
 arlm-search.workspace = true
 arlm-embedding.workspace = true
 arlm-memory.workspace = true
-arlm-llm.workspace = true
 arlm-proto.workspace = true
 rusqlite.workspace = true
 clap.workspace = true

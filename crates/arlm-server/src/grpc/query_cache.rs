@@ -83,8 +83,10 @@ pub async fn handle_query_with_cache(
     request: Request<QueryWithCacheRequest>,
 ) -> Result<Response<QueryWithCacheResponse>, Status> {
     let _timer = crate::timing::Timer::new("handler.query_with_cache");
-    crate::auth::authenticate(request.metadata(), &state.storage)?;
+    let ctx = crate::auth::authenticate(request.metadata(), &state.storage)?;
     let req = request.into_inner();
+    crate::grpc::memory::record_query_history(state, &ctx, &req.project, "query", &req.question)
+        .await;
 
     let project = req.project;
     if project.trim().is_empty() {
@@ -206,8 +208,10 @@ pub async fn handle_store_answer(
     request: Request<StoreAnswerRequest>,
 ) -> Result<Response<StoreAnswerResponse>, Status> {
     let _timer = crate::timing::Timer::new("handler.store_answer");
-    crate::auth::authenticate(request.metadata(), &state.storage)?;
+    let ctx = crate::auth::authenticate(request.metadata(), &state.storage)?;
     let req = request.into_inner();
+    crate::grpc::memory::record_query_history(state, &ctx, &req.project, "store", &req.question)
+        .await;
 
     let project = req.project;
     if project.trim().is_empty() {
@@ -535,14 +539,7 @@ mod tests {
     }
 
     fn authed_state(storage: &Storage) -> AppState {
-        AppState::new(
-            storage.clone(),
-            ServerConfig::default(),
-            AppState::build_llm(&ServerConfig::default()).expect("build llm"),
-            None,
-            None,
-        )
-        .expect("app state")
+        AppState::new(storage.clone(), ServerConfig::default(), None, None).expect("app state")
     }
 
     #[tokio::test]
@@ -685,7 +682,7 @@ mod tests {
         let (session, _, _, _) =
             arlm_storage::tokens::create_session(&storage, &refresh).expect("create session");
         let state = authed_state(&storage);
-        let mut auth = bearer(&session);
+        let auth = bearer(&session);
 
         // Store a digested answer.
         let mut store = Request::new(StoreAnswerRequest {

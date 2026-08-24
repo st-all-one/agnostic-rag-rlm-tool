@@ -7,6 +7,15 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+> **Nota (planos 019/020):** o servidor tornou-se um **plano de dados puro,
+> LLM-free**. Foram **removidos** o `summarizer` (server-side), os `runs` de RLM,
+> as `sessions` e o `events` hub. A digestão/sumarização agora ocorre no cliente
+> (`arlm-cli`) via o LLM do usuário. A config passou a ser o arquivo de host
+> `server.toml` (lido de `ARLM_SERVER_CONFIG` ou `/etc/arlm/server.toml`), **sem**
+> seção `[llm]`. A manutenção (consolidate/decay) é feita por cron + RPC admin
+> `TriggerMaintenance`. Veja `plan/019-cli-consolidation.md` e
+> `plan/020-config-consolidation.md`.
+
 ### Adicionado
 - Subcomando `status` no binário (`arlm-server status`) que consulta a saúde do
   servidor via gRPC `GetServerStatus` — usado pelo `HEALTHCHECK` do

@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -14,86 +13,15 @@ pub struct ClientConfig {
 }
 
 impl ClientConfig {
-    /// Load client configuration from default locations.
-    ///
-    /// Resolution order:
-    /// 1. .arlm/config.toml (local) — `server.addr`
-    /// 2. ~/.arlm/config.toml (global) — `server.addr`
-    /// 3. `ARLM_SERVER_ADDR` env var
-    /// 4. Fallback: 127.0.0.1:50051
+    /// Load the client configuration from the merged user config (global
+    /// `~/.arlm/arlm.toml` + local `.arlm.toml`) and the `ARLM_SERVER_ADDR`
+    /// env var override.
     #[must_use]
     pub fn load() -> Self {
-        if let Some(addr) = read_server_addr_from_config() {
-            return Self { addr };
-        }
-
-        // Try env var
-        if let Ok(addr) = std::env::var("ARLM_SERVER_ADDR") {
-            return Self { addr };
-        }
-
-        // Fallback
-        Self {
-            addr: "127.0.0.1:50051".to_string(),
-        }
+        let addr = crate::user_config::load()
+            .map_or_else(|_| "127.0.0.1:50051".to_string(), |c| c.server_addr());
+        Self { addr }
     }
-}
-
-/// Read the `[server] addr` value from the local/global config files.
-#[must_use]
-fn read_server_addr_from_config() -> Option<String> {
-    // Try local config
-    if let Ok(cwd) = std::env::current_dir() {
-        let local_config = cwd.join(".arlm/config.toml");
-        if let Some(addr) = read_addr_from_file(&local_config) {
-            return Some(addr);
-        }
-    }
-
-    // Try global config
-    if let Some(home) = dirs() {
-        let global_config = home.join(".arlm/config.toml");
-        if let Some(addr) = read_addr_from_file(&global_config) {
-            return Some(addr);
-        }
-    }
-
-    None
-}
-
-/// Parse only the `server.addr` field out of a config TOML file.
-#[must_use]
-fn read_addr_from_file(path: &std::path::Path) -> Option<String> {
-    if !path.exists() {
-        return None;
-    }
-    let contents = std::fs::read_to_string(path).ok()?;
-    let config: crate::config::Config = toml::from_str(&contents).ok()?;
-    config.server.addr
-}
-
-/// Resolve a server address only when it is *explicitly* configured
-/// (via `.arlm/config.toml` or the `ARLM_SERVER_ADDR` env var).
-///
-/// Returns `None` when falling back to the built-in default, so callers can
-/// distinguish "user wants remote mode" from "no server configured". The
-/// `--server` CLI flag, when present, takes precedence over this value.
-#[must_use]
-pub fn explicit_addr() -> Option<String> {
-    if let Some(addr) = read_server_addr_from_config() {
-        return Some(addr);
-    }
-    if let Ok(addr) = std::env::var("ARLM_SERVER_ADDR") {
-        return Some(addr);
-    }
-    None
-}
-
-fn dirs() -> Option<PathBuf> {
-    std::env::var("HOME")
-        .ok()
-        .map(PathBuf::from)
-        .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
 }
 
 /// Validate that `addr` is a `host:port` pair.

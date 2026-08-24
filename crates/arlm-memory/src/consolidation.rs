@@ -11,6 +11,8 @@ pub struct ConsolidateOptions {
     pub deduplicate: bool,
     /// Remove patterns with confidence below this threshold.
     pub min_pattern_confidence: f64,
+    /// When true, only count what *would* be removed; perform no deletes.
+    pub dry_run: bool,
 }
 
 impl Default for ConsolidateOptions {
@@ -18,6 +20,7 @@ impl Default for ConsolidateOptions {
         Self {
             deduplicate: true,
             min_pattern_confidence: 0.3,
+            dry_run: false,
         }
     }
 }
@@ -61,14 +64,19 @@ impl ConsolidationEngine {
         };
 
         if options.deduplicate {
-            result.duplicate_chunks_removed = self.remove_duplicate_chunks(buffer_id)?;
+            result.duplicate_chunks_removed =
+                self.remove_duplicate_chunks(buffer_id, options.dry_run)?;
         }
 
-        result.low_confidence_patterns_removed =
-            self.remove_low_confidence_patterns(buffer_id, options.min_pattern_confidence)?;
+        result.low_confidence_patterns_removed = self.remove_low_confidence_patterns(
+            buffer_id,
+            options.min_pattern_confidence,
+            options.dry_run,
+        )?;
 
         tracing::info!(
             buffer_id,
+            dry_run = options.dry_run,
             duplicates_removed = result.duplicate_chunks_removed,
             patterns_removed = result.low_confidence_patterns_removed,
             "consolidation completed"
@@ -77,7 +85,7 @@ impl ConsolidationEngine {
         Ok(result)
     }
 
-    fn remove_duplicate_chunks(&self, buffer_id: i64) -> Result<u64> {
+    fn remove_duplicate_chunks(&self, buffer_id: i64, dry_run: bool) -> Result<u64> {
         let conn = self.storage.conn();
         let conn = conn.lock();
 
@@ -96,30 +104,57 @@ impl ConsolidationEngine {
         let mut removed: u64 = 0;
 
         for hash in &duplicate_hashes {
-            // Keep the first chunk, remove the rest
-            let mut del_stmt = conn
-                .prepare(
-                    "DELETE FROM chunks WHERE id IN (
-                        SELECT id FROM chunks WHERE buffer_id = ?1 AND hash = ?2
-                        ORDER BY id DESC
-                        LIMIT -1 OFFSET 1
-                    )",
-                )
-                .context("failed to prepare delete duplicates")?;
+            if dry_run {
+                // Keep the first chunk, so everything beyond it would be removed.
+                let mut count_stmt = conn
+                    .prepare("SELECT COUNT(*) FROM chunks WHERE buffer_id = ?1 AND hash = ?2")
+                    .context("failed to prepare count duplicates")?;
+                let total: u64 = count_stmt
+                    .query_row(rusqlite::params![buffer_id, hash], |r| r.get(0))
+                    .context("failed to count duplicates")?;
+                removed += total.saturating_sub(1);
+            } else {
+                // Keep the first chunk, remove the rest
+                let mut del_stmt = conn
+                    .prepare(
+                        "DELETE FROM chunks WHERE id IN (
+                            SELECT id FROM chunks WHERE buffer_id = ?1 AND hash = ?2
+                            ORDER BY id DESC
+                            LIMIT -1 OFFSET 1
+                        )",
+                    )
+                    .context("failed to prepare delete duplicates")?;
 
-            let deleted = del_stmt
-                .execute(rusqlite::params![buffer_id, hash])
-                .context("failed to delete duplicates")?;
+                let deleted = del_stmt
+                    .execute(rusqlite::params![buffer_id, hash])
+                    .context("failed to delete duplicates")?;
 
-            removed += u64::try_from(deleted).unwrap_or(0);
+                removed += u64::try_from(deleted).unwrap_or(0);
+            }
         }
 
         Ok(removed)
     }
 
-    fn remove_low_confidence_patterns(&self, buffer_id: i64, min_confidence: f64) -> Result<u64> {
+    fn remove_low_confidence_patterns(
+        &self,
+        buffer_id: i64,
+        min_confidence: f64,
+        dry_run: bool,
+    ) -> Result<u64> {
         let conn = self.storage.conn();
         let conn = conn.lock();
+
+        if dry_run {
+            let count: u64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM patterns WHERE buffer_id = ?1 AND confidence < ?2 AND confidence IS NOT NULL",
+                    rusqlite::params![buffer_id, min_confidence],
+                    |r| r.get(0),
+                )
+                .context("failed to count low confidence patterns")?;
+            return Ok(count);
+        }
 
         let deleted = conn
             .execute(

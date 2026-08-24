@@ -30,6 +30,21 @@ const DEFAULT_EMBED_BATCH: usize = 64;
 /// is unset. Should track Ollama's `OLLAMA_NUM_PARALLEL`.
 const DEFAULT_INDEX_CONCURRENCY: usize = 4;
 
+/// Rough tokens-per-line heuristic used to translate the `[embedder]`
+/// `max_tokens`/`overlap_tokens` token budget into a line-based chunk budget
+/// for the deterministic line chunker.
+const TOKENS_PER_LINE: usize = 10;
+
+/// Map a token budget to a line count, never dropping below one line.
+#[must_use]
+fn tokens_to_lines(tokens: usize) -> usize {
+    if tokens == 0 {
+        crate::indexing::DEFAULT_MAX_LINES
+    } else {
+        (tokens / TOKENS_PER_LINE).max(1)
+    }
+}
+
 /// Decode a streamed file's content, transparently decompressing if the client
 /// sent it zstd-compressed.
 fn decode_content(file: &IndexFile) -> Result<String, Status> {
@@ -69,7 +84,16 @@ pub(crate) async fn handle_index_project(
             }
             Some(index_chunk::Body::File(file)) => {
                 let content = decode_content(&file)?;
-                let chunk_list = indexing::index_file(Path::new(&file.rel_path), &content);
+                // The server owns chunking (plan 020, D2): derive a line budget
+                // from the `[embedder]` token budget so the config is not dead.
+                let max_lines = tokens_to_lines(state.config.embedder.max_tokens);
+                let overlap = tokens_to_lines(state.config.embedder.overlap_tokens);
+                let chunk_list = indexing::index_file_with(
+                    Path::new(&file.rel_path),
+                    &content,
+                    max_lines,
+                    overlap,
+                );
                 distinct_files += 1;
                 chunks.push((file.rel_path.clone(), chunk_list));
             }

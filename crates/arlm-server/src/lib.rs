@@ -3,12 +3,10 @@
 //!
 //! The crate is split into focused, type-driven modules:
 //!
-//! - [`config`]: TOML configuration + LLM backend wiring
+//! - [`config`]: TOML configuration
 //! - [`state`]: shared handler state (`AppState`)
-//! - [`events`]: run/summarize event hub for streaming RPCs
 //! - [`store`]: typed, pool-safe data access
 //! - [`grpc`]: tonic service implementation (one file per RPC group)
-//! - [`summarizer`]: hierarchical summarization engine
 //! - [`timing`]: structured scoped timers for execution monitoring
 
 #![allow(
@@ -45,13 +43,12 @@
 pub mod admin;
 pub mod auth;
 pub mod config;
-pub mod events;
 pub mod grpc;
 pub mod indexing;
 pub mod lifecycle;
+pub mod maintenance;
 pub mod state;
 pub mod store;
-pub mod summarizer;
 pub mod timing;
 
 pub use config::ServerConfig;

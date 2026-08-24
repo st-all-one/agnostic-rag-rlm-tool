@@ -5,9 +5,12 @@
 ## Status Atual
 
 Proto dividido em sub-arquivos sob `proto/` (project, index, search, context,
-run, session, summarize, server, service), compilado por `build.rs` via
+session, server, auth, query_cache, service), compilado por `build.rs` via
 `tonic_build`. `package arlm.v1;` para versionamento. Código gerado validado
 por testes de integração em `tests/proto_contract.rs`.
+
+> **OBSOLETO (pós plano 019):** `run.proto` e `summarize.proto` foram removidos;
+> `context.proto`/`session.proto` estão em desuso. Veja `plan/019-cli-consolidation.md`.
 
 ---
 
