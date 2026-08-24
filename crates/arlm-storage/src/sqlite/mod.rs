@@ -11,5 +11,7 @@ pub mod runs;
 pub mod schema;
 pub mod summaries;
 pub mod tasks;
+pub mod tokens;
 
 pub use conn::Storage;
+pub use tokens::Role;

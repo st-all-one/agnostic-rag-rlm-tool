@@ -15,6 +15,12 @@
 pub fn sanitize_query(query: &str) -> String {
     query
         .chars()
-        .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
+        .map(|c| {
+            if c.is_alphanumeric() || c.is_whitespace() {
+                c
+            } else {
+                ' '
+            }
+        })
         .collect()
 }

@@ -1,15 +1,15 @@
-# Storage Layer — SQLite + LanceDB
+# Storage Layer — SQLite + usearch
 
 ## Visão Geral
 
-O `arlm-storage` gerencia toda persistência: SQLite para metadados/FTS5/estado, LanceDB para vetores. A separação permite que cada sistema seja especialista no que faz melhor.
+O `arlm-storage` gerencia toda persistência: SQLite para metadados/FTS5/estado, usearch para vetores. A separação permite que cada sistema seja especialista no que faz melhor.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                    arlm-storage                           │
 │                                                          │
 │  ┌──────────────────────┐  ┌──────────────────────────┐  │
-│  │      SQLite          │  │       LanceDB            │  │
+│  │      SQLite          │  │       usearch            │  │
 │  │  ┌────────────────┐  │  │  ┌────────────────────┐  │  │
 │  │  │ chunks         │  │  │  │ vectors            │  │  │
 │  │  │ chunk_texts    │  │  │  │ (chunk_id, vector, │  │  │
@@ -407,12 +407,12 @@ cargo build --release
 ⚠️ `SQLITE_THREADSAFE=0` só se o SQLite for acessado por UMA thread (CLI pura).
 No modo `serve`/subagentes, manter serializado (default).
 
-## LanceDB Schema
+## usearch Schema
 
 ### Tabela de Vetores
 
 ```rust
-// Schema do LanceDB
+// Schema do usearch
 let schema = Arc::new(Schema::new(vec![
     Field::new("chunk_id", DataType::UInt64, false),
     Field::new("buffer_id", DataType::UInt64, false),
@@ -447,7 +447,7 @@ table.create_index(
 ```rust
 pub struct Storage {
     sqlite: Arc<Mutex<rusqlite::Connection>>,  // Connection é Send, não Sync → Mutex
-    lance: Arc<lancedb::Connection>,
+    lance: Arc<usearch::Connection>,
     path: PathBuf,
 }
 
@@ -474,8 +474,8 @@ impl Storage {
         // No deploy single-process (CLI), também:
         //   PRAGMA locking_mode=EXCLUSIVE;  (elimina -shm)
 
-        // LanceDB
-        let lance = lancedb::connect(&lance_path.to_string_lossy())
+        // usearch
+        let lance = usearch::connect(&lance_path.to_string_lossy())
             .execute()
             .await?;
 
@@ -486,7 +486,7 @@ impl Storage {
         })
     }
 
-    /// Transação dual (SQLite + LanceDB)
+    /// Transação dual (SQLite + usearch)
     pub fn transaction<F, R>(&self, f: F) -> Result<R>
     where
         F: FnOnce(&Transaction) -> Result<R>,
@@ -553,7 +553,7 @@ impl Storage {
             None,
         )?;
 
-        // LanceDB backup (copia diretório)
+        // usearch backup (copia diretório)
         fs_extra::dir::copy(
             self.path.join("vectors.lance"),
             dest,

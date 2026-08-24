@@ -42,6 +42,8 @@
     clippy::match_same_arms
 )]
 
+pub mod admin;
+pub mod auth;
 pub mod config;
 pub mod events;
 pub mod grpc;

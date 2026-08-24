@@ -350,7 +350,7 @@ curl -s http://localhost:8080/run \
 
 4. arlm executa:
    a. Embedding da query (5ms)
-   b. Busca semântica LanceDB (10ms)
+   b. Busca semântica usearch (10ms)
    c. Busca BM25 SQLite (5ms)
    d. Fusão RRF (1ms)
    e. Recuperação dos textos (5ms)

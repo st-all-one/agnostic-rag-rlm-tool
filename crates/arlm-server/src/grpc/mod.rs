@@ -10,7 +10,9 @@
 //! - [`summarize`]: summarization RPCs
 //! - [`status`]: server status RPCs
 
+pub mod auth;
 pub mod error;
+pub mod query_cache;
 pub mod index;
 pub mod project;
 pub mod runs;
@@ -53,19 +55,22 @@ impl ArlmService for ArlmGrpcService {
         request: Request<CreateProjectRequest>,
     ) -> Result<Response<ProjectInfo>, Status> {
         let _timer = crate::timing::Timer::new("handler.create_project");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         project::handle_create_project(&self.state, request.into_inner()).await
     }
 
     async fn list_projects(
         &self,
-        _request: Request<()>,
+        request: Request<()>,
     ) -> Result<Response<ListProjectsResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.list_projects");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         project::handle_list_projects(&self.state).await
     }
 
     async fn get_project(&self, request: Request<String>) -> Result<Response<ProjectInfo>, Status> {
         let _timer = crate::timing::Timer::new("handler.get_project");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         project::handle_get_project(&self.state, request.into_inner()).await
     }
 
@@ -76,6 +81,7 @@ impl ArlmService for ArlmGrpcService {
         request: Request<Streaming<IndexChunk>>,
     ) -> Result<Response<IndexResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.index_project");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         index::handle_index_project(&self.state, request).await
     }
 
@@ -86,6 +92,7 @@ impl ArlmService for ArlmGrpcService {
         request: Request<SearchRequest>,
     ) -> Result<Response<SearchResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.search");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         search::handle_search(&self.state, request.into_inner()).await
     }
 
@@ -94,6 +101,7 @@ impl ArlmService for ArlmGrpcService {
         request: Request<ContextRequest>,
     ) -> Result<Response<ContextResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.build_context");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         search::handle_build_context(&self.state, request.into_inner()).await
     }
 
@@ -104,16 +112,19 @@ impl ArlmService for ArlmGrpcService {
         request: Request<RunRequest>,
     ) -> Result<Response<RunResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.start_run");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         runs::handle_start_run(&self.state, request.into_inner()).await
     }
 
     async fn get_run(&self, request: Request<String>) -> Result<Response<RunResult>, Status> {
         let _timer = crate::timing::Timer::new("handler.get_run");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         runs::handle_get_run(&self.state, request.into_inner()).await
     }
 
     async fn cancel_run(&self, request: Request<String>) -> Result<Response<()>, Status> {
         let _timer = crate::timing::Timer::new("handler.cancel_run");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         runs::handle_cancel_run(&self.state, request.into_inner()).await
     }
 
@@ -124,6 +135,7 @@ impl ArlmService for ArlmGrpcService {
         request: Request<String>,
     ) -> Result<Response<Self::StreamRunStream>, Status> {
         let _timer = crate::timing::Timer::new("handler.stream_run");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         runs::handle_stream_run(&self.state, request.into_inner())
     }
 
@@ -134,6 +146,7 @@ impl ArlmService for ArlmGrpcService {
         request: Request<CreateSessionRequest>,
     ) -> Result<Response<SessionInfo>, Status> {
         let _timer = crate::timing::Timer::new("handler.create_session");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         session::handle_create_session(&self.state, request.into_inner()).await
     }
 
@@ -142,11 +155,13 @@ impl ArlmService for ArlmGrpcService {
         request: Request<String>,
     ) -> Result<Response<ListSessionsResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.list_sessions");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         session::handle_list_sessions(&self.state, request.into_inner()).await
     }
 
     async fn get_session(&self, request: Request<String>) -> Result<Response<SessionInfo>, Status> {
         let _timer = crate::timing::Timer::new("handler.get_session");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         session::handle_get_session(&self.state, request.into_inner()).await
     }
 
@@ -155,6 +170,7 @@ impl ArlmService for ArlmGrpcService {
         request: Request<AddSessionTurnRequest>,
     ) -> Result<Response<SessionTurn>, Status> {
         let _timer = crate::timing::Timer::new("handler.add_session_turn");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         session::handle_add_session_turn(&self.state, request.into_inner()).await
     }
 
@@ -165,6 +181,7 @@ impl ArlmService for ArlmGrpcService {
         request: Request<SummarizeRequest>,
     ) -> Result<Response<SummarizeResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.trigger_summarize");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         summarize::handle_trigger_summarize(&self.state, request.into_inner()).await
     }
 
@@ -173,6 +190,7 @@ impl ArlmService for ArlmGrpcService {
         request: Request<String>,
     ) -> Result<Response<SummaryStatus>, Status> {
         let _timer = crate::timing::Timer::new("handler.get_summary_status");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         summarize::handle_get_summary_status(&self.state, request.into_inner()).await
     }
 
@@ -183,6 +201,7 @@ impl ArlmService for ArlmGrpcService {
         request: Request<String>,
     ) -> Result<Response<Self::StreamSummarizeProgressStream>, Status> {
         let _timer = crate::timing::Timer::new("handler.stream_summarize_progress");
+        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         summarize::handle_stream_summarize_progress(&self.state, request.into_inner())
     }
 
@@ -204,5 +223,23 @@ impl ArlmService for ArlmGrpcService {
     ) -> Result<Response<Self::StreamEventsStream>, Status> {
         let _timer = crate::timing::Timer::new("handler.stream_events");
         status::handle_stream_events(&self.state)
+    }
+
+    // ── Auth (plan 018) ────────────────────────────────────────────────────
+
+    async fn auth_refresh(
+        &self,
+        request: Request<AuthRefreshRequest>,
+    ) -> Result<Response<AuthRefreshResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.auth_refresh");
+        auth::handle_auth_refresh(&self.state, request.into_inner()).await
+    }
+
+    async fn invalidate_cache(
+        &self,
+        request: Request<InvalidateCacheRequest>,
+    ) -> Result<Response<InvalidateCacheResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.invalidate_cache");
+        query_cache::handle_invalidate_cache(&self.state, request).await
     }
 }

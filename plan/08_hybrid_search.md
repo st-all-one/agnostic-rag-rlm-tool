@@ -18,7 +18,7 @@ precisa de embeddings nem de LLM.
 │  query ──┬──► BM25 (SQLite FTS5) ──► results_bm25 ──┐       │
 │          ├──► Entity match (FTS5) ──► results_ent ───┤       │
 │          │                                           ├──► RRF│
-│          └──► Semantic (LanceDB) ──► results_sem ──┘        │
+│          └──► Semantic (usearch) ──► results_sem ──┘        │
 │                                                    │        │
 │                                              fused_results  │
 └──────────────────────────────────────────────────────────────┘
@@ -115,12 +115,12 @@ O `bm25()` do FTS5 retorna scores **negativos** (mais relevante = mais negativo)
 let score = -row.get::<_, f64>(1)?;  // Inverte: -(-5.2) = 5.2
 ```
 
-## Busca Semântica (via LanceDB)
+## Busca Semântica (via usearch)
 
 ### Setup
 
 ```rust
-use lancedb::connection::Connection;
+use usearch::connection::Connection;
 use arrow_array::{RecordBatch, RecordBatchIterator};
 use arrow_schema::{Schema, Field, DataType};
 
@@ -130,7 +130,7 @@ pub struct SemanticSearch {
 
 impl SemanticSearch {
     pub async fn new(path: &Path) -> Result<Self> {
-        let connection = lancedb::connect(&path.to_string_lossy())
+        let connection = usearch::connect(&path.to_string_lossy())
             .execute()
             .await?;
 
@@ -190,7 +190,7 @@ impl SemanticSearch {
 ```rust
 pub struct HybridSearch {
     bm25: Bm25Search,        // FTS5 via SQLite
-    semantic: SemanticSearch, // LanceDB HNSW
+    semantic: SemanticSearch, // usearch HNSW
     rrf_k: f32,              // Parâmetro de fusão (padrão: 60)
 }
 
@@ -213,7 +213,7 @@ impl HybridSearch {
         // 1. Busca BM25 (FTS5 — síncrono, rápido)
         let bm25_results = self.bm25.search(query, buffer_id, top_k * 2)?;
 
-        // 2. Busca semântica (LanceDB — async)
+        // 2. Busca semântica (usearch — async)
         let semantic_results = self.semantic.search(query_vector, buffer_id, top_k * 2).await?;
 
         // 3. Fusão RRF

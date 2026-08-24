@@ -276,6 +276,7 @@ dependencies = [
  "arlm-search",
  "arlm-storage",
  "chrono",
+ "clap",
  "futures",
  "hex",
  "parking_lot",
@@ -303,6 +304,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "getrandom 0.2.17",
+ "hex",
  "parking_lot",
  "r2d2",
  "r2d2_sqlite",

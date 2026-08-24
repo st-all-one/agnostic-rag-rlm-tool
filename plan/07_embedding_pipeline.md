@@ -502,7 +502,7 @@ impl IngestionPipeline {
                 let compressed = compress_text(chunk.content.as_ref());
                 tx.insert_chunk_text(chunk_id, &compressed)?;
 
-                // Insere embedding no LanceDB
+                // Insere embedding no usearch
                 tx.insert_vector(chunk_id, options.buffer_id, embedding)?;
             }
 
@@ -559,6 +559,6 @@ pub fn detect_language(path: &Path) -> Option<String> {
 | Text chunking | ~200 MB/s/core | Mais simples que code |
 | Embedding (batch 64) | ~100 chunks/s | BGE-M3 INT8 no CPU |
 | SQLite insert | ~10k inserts/s | Com WAL + batch |
-| LanceDB insert | ~5k inserts/s | Com flush periódico |
+| usearch insert | ~5k inserts/s | Com flush periódico |
 
 **Tempo total para projeto de 10k arquivos (~100MB):** ~30 segundos

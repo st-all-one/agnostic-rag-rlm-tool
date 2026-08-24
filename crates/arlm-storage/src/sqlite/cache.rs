@@ -60,3 +60,39 @@ impl Storage {
         Ok(rows)
     }
 }
+
+/// Invalidate cached results via the storage connection.
+///
+/// When `project` is `Some`, only that project's entries are removed; when
+/// `None`, the entire `result_cache` is purged. Returns the number of rows
+/// deleted. Intended to be called only by an admin — the gRPC handler
+/// (`arlm_server::grpc::query_cache`) enforces the role gate; surfacing
+/// `invalidated_by` for audit is the caller's responsibility.
+///
+/// # Errors
+///
+/// Returns an error if the delete fails.
+pub fn invalidate_cache(storage: &Storage, project: Option<&str>) -> Result<u64> {
+    let project = project.map(str::to_string);
+    let project_str: &str = match &project {
+        Some(s) => s.as_str(),
+        None => "",
+    };
+    let has_project = project.is_some();
+    let conn = storage.conn();
+    let conn = conn.lock();
+    let sql = if has_project {
+        "DELETE FROM result_cache WHERE project = ?1"
+    } else {
+        "DELETE FROM result_cache"
+    };
+    let params: &[&dyn rusqlite::ToSql] = if has_project {
+        &[&project_str]
+    } else {
+        &[]
+    };
+    let rows = conn
+        .execute(sql, params)
+        .context("failed to invalidate result cache")?;
+    Ok(rows as u64)
+}

@@ -266,7 +266,7 @@ async fn health_check() -> impl IntoResponse {
     // Verifica SQLite
     let sqlite_ok = storage.verify().is_ok();
 
-    // Verifica LanceDB
+    // Verifica usearch
     let lance_ok = lance.ping().is_ok();
 
     // Verifica modelo
@@ -276,7 +276,7 @@ async fn health_check() -> impl IntoResponse {
         Json(json!({
             "status": "healthy",
             "sqlite": "ok",
-            "lancedb": "ok",
+            "usearch": "ok",
             "model": if model_ok { "loaded" } else { "fallback" },
         }))
     } else {

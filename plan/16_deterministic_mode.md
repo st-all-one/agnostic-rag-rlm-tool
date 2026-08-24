@@ -87,7 +87,7 @@ arlm search "validate_token" --project ./x --tier entity
 arlm search "bug de autenticação" --project ./x --tier vector
 ```
 
-- BM25 + entity + LanceDB HNSW vector search
+- BM25 + entity + usearch HNSW vector search
 - Requer embeddings pré-computados (indexação com ou sem --llm)
 - Fusão RRF 3-way
 - Latência: ~21ms
@@ -578,7 +578,7 @@ arlm context "tarefa" --project ./x --llm
    ├── Rayon chunka em paralelo
    ├── Extract entities (regex)
    ├── (opcional) candle BGE-M3 embeds
-   └── SQLite + LanceDB write
+   └── SQLite + usearch write
 
 2. Busca (determinística, padrão)
    arlm search "validate_token" --project ./x

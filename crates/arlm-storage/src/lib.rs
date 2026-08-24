@@ -28,7 +28,10 @@ pub mod lance;
 pub mod sqlite;
 
 pub use lance::{SearchResult, VectorEntry, VectorStore};
+pub use sqlite::Role;
 pub use sqlite::Storage;
+pub use sqlite::cache;
+pub use sqlite::tokens;
 
 #[must_use]
 pub fn version() -> &'static str {

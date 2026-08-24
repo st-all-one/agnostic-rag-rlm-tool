@@ -10,7 +10,7 @@ arlm/
 ├── crates/
 │   ├── arlm-cli/              ← Binário CLI (clap)
 │   ├── arlm-core/             ← Engine RLM (planner/solver/synthesizer)
-│   ├── arlm-storage/          ← SQLite + LanceDB (persistência)
+│   ├── arlm-storage/          ← SQLite + usearch (persistência)
 │   ├── arlm-embedding/        ← Chunking + embedding (candle + BGE-M3)
 │   ├── arlm-search/           ← Busca híbrida (BM25 + semântico + RRF)
 │   ├── arlm-memory/           ← Sistema de memória externa
@@ -59,7 +59,7 @@ clap_complete = "4"
 
 # Storage
 rusqlite = { version = "0.31", features = ["bundled", "vtab"] }
-lancedb = "0.6"
+usearch = "0.6"
 arrow = "52"
 arrow-array = "52"
 
@@ -179,7 +179,7 @@ crates/arlm-core/
 
 ## Crate: arlm-storage
 
-**Responsabilidade:** Persistência SQLite (metadados, FTS5, estado) + LanceDB (vetores).
+**Responsabilidade:** Persistência SQLite (metadados, FTS5, estado) + usearch (vetores).
 
 ```
 crates/arlm-storage/
@@ -204,11 +204,11 @@ crates/arlm-storage/
 │   │   ├── vectors.rs       ← CRUD de vetores
 │   │   ├── index.rs         ← Criação/gerenciamento HNSW
 │   │   └── search.rs        ← Busca por similaridade
-│   └── transaction.rs       ← Transação dual (SQLite + LanceDB)
+│   └── transaction.rs       ← Transação dual (SQLite + usearch)
 └── Cargo.toml
 ```
 
-**Dependências:** `rusqlite`, `lancedb`, `arrow`, `arrow-array`, `sha2`, `anyhow`, `tracing`, `parking_lot`
+**Dependências:** `rusqlite`, `usearch`, `arrow`, `arrow-array`, `sha2`, `anyhow`, `tracing`, `parking_lot`
 
 ## Crate: arlm-embedding
 
@@ -248,14 +248,14 @@ crates/arlm-search/
 ├── src/
 │   ├── lib.rs
 │   ├── bm25.rs              ← Busca BM25 via SQLite FTS5 (no arlm-storage)
-│   ├── semantic.rs          ← Busca semântica via LanceDB
+│   ├── semantic.rs          ← Busca semântica via usearch
 │   ├── hybrid.rs            ← Fusão RRF
 │   ├── context.rs           ← Montagem de contexto para LLM
 │   └── types.rs             ← SearchResult, HybridResult
 └── Cargo.toml
 ```
 
-**Dependências:** `arlm-storage`, `arlm-embedding`, `lancedb`, `serde`, `anyhow`
+**Dependências:** `arlm-storage`, `arlm-embedding`, `usearch`, `serde`, `anyhow`
 
 ## Crate: arlm-memory
 
@@ -329,7 +329,7 @@ arlm-cli          ←─ arlm-core, arlm-storage, arlm-search, arlm-memory, arlm
 | Crate | Dependência | Por quê |
 |-------|------------|---------|
 | arlm-storage | rusqlite (bundled) | SQLite estático, sem dependência do sistema |
-| arlm-storage | lancedb | Vetores + HNSW embedding |
+| arlm-storage | usearch | Vetores + HNSW embedding |
 | arlm-embedding | candle-core | Inferência local, sem Python |
 | arlm-embedding | memmap2 | Zero-copy I/O para arquivos grandes |
 | arlm-embedding | rayon | Paralelismo de dados para chunking |

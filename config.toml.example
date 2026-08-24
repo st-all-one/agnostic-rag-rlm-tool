@@ -95,3 +95,14 @@ family = "openai"
 api_key = "sk-mimo-XXXX_REPLACE_ME"
 base_url = "https://api.openai.com/v1"
 model = "mimo"
+
+# =============================================================================
+# Auth (plan 018) — cliente gRPC
+# =============================================================================
+# O refresh token é gerado pelo admin do server (arlm-server admin create-refresh)
+# e colado aqui. O CLI troca ele por session tokens de 5 min automaticamente.
+# Armazenado em plaintext neste arquivo (protegido por permissão 0600).
+
+[auth]
+username = "dev1"
+# refresh_token = "<token de 256 hex chars gerado pelo admin create-refresh>"

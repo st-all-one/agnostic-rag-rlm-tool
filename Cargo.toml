@@ -39,6 +39,7 @@ tokenizers = "0.21"
 # Async
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
+getrandom = "0.2"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

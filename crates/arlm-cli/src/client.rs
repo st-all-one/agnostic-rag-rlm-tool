@@ -123,6 +123,21 @@ fn validate_addr(addr: &str) -> Result<()> {
 /// Returns an error if the address is invalid or the connection cannot be
 /// established after the retry budget is exhausted.
 pub async fn create_client(config: &ClientConfig) -> Result<ArlmServiceClient<Channel>> {
+    let channel = connect_channel(config).await?;
+    Ok(ArlmServiceClient::new(channel))
+}
+
+/// Establish a raw gRPC `Channel` to the server (no auth layer).
+///
+/// Supports plaintext (`http://` / host:port) and TLS (`https://` with native
+/// root certificates). Connection failures are retried with exponential
+/// backoff (3 attempts).
+///
+/// # Errors
+///
+/// Returns an error if the address is invalid or the connection cannot be
+/// established after the retry budget is exhausted.
+pub async fn connect_channel(config: &ClientConfig) -> Result<Channel> {
     let raw = config.addr.trim();
     let (scheme, hostport) = if let Some(rest) = raw.strip_prefix("https://") {
         ("https", rest)
@@ -157,7 +172,7 @@ pub async fn create_client(config: &ClientConfig) -> Result<ArlmServiceClient<Ch
         match endpoint.connect().await {
             Ok(channel) => {
                 info!(attempt, %raw, "connected to arlm-server");
-                return Ok(ArlmServiceClient::new(channel));
+                return Ok(channel);
             }
             Err(e) => {
                 if attempt >= max_attempts {

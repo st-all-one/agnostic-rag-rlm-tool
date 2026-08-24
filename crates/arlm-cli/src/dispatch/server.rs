@@ -3,17 +3,16 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use tonic::Request;
-use tonic::transport::Channel;
 use tracing::{debug, instrument, warn};
 
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
-use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
 use arlm_proto::proto::index_chunk;
 use arlm_proto::proto::{IndexChunk, IndexFile, IndexInit, IndexResponse};
 
+use crate::auth_client::ArlmClient;
 use crate::cli::{Cli, Commands, SessionAction};
 use crate::client;
 use crate::commands::persist;
@@ -40,7 +39,10 @@ pub fn run_server(
     rt: &Runtime,
 ) -> Result<()> {
     let client_config = client::ClientConfig { addr: server_addr };
-    let mut grpc_client = rt.block_on(client::create_client(&client_config))?;
+    let auth_cfg = crate::config::Config::load()
+        .map(|c| c.auth)
+        .unwrap_or_default();
+    let mut grpc_client = crate::auth_client::connect(rt, &client_config, &auth_cfg)?;
     let project_str = project.to_string_lossy().to_string();
 
     match cli.command {
@@ -471,7 +473,7 @@ pub fn run_server(
 /// Stream one disjoint group of files to the server as a single `IndexProject`
 /// client-stream, returning the files/chunks counts reported by the server.
 async fn stream_index_group(
-    client: &mut ArlmServiceClient<Channel>,
+    client: &mut ArlmClient,
     project: String,
     root: PathBuf,
     files: Vec<PathBuf>,

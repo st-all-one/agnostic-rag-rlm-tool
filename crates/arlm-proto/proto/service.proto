@@ -12,6 +12,8 @@ import "run.proto";
 import "session.proto";
 import "summarize.proto";
 import "server.proto";
+import "auth.proto";
+import "query_cache.proto";
 
 // ── gRPC Service ──
 
@@ -48,4 +50,12 @@ service ArlmService {
   // Server management
   rpc GetServerStatus(google.protobuf.Empty) returns (ServerStatus);
   rpc StreamEvents(google.protobuf.Empty) returns (stream RunEvent);
+
+  // Auth (plan 018): exchange a refresh token for a 5-minute session token.
+  rpc AuthRefresh(AuthRefreshRequest) returns (AuthRefreshResponse);
+
+  // Cache (plan 017, admin-gated by plan 018): purge cached query/result
+  // answers. Requires an authenticated admin session (non-admins get
+  // PERMISSION_DENIED). Empty `project` purges all projects.
+  rpc InvalidateCache(InvalidateCacheRequest) returns (InvalidateCacheResponse);
 }

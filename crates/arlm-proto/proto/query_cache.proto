@@ -1,0 +1,17 @@
+syntax = "proto3";
+package arlm.v1;
+
+// ── Query-Answer Cache (plan 017) ──
+
+// Admin-gated invalidation of cached query/result answers.
+message InvalidateCacheRequest {
+  // Project whose cache to purge. Empty string = purge ALL projects.
+  string project = 1;
+}
+
+message InvalidateCacheResponse {
+  // Number of cache entries removed.
+  int64 invalidated = 1;
+  // Username of the admin who triggered the invalidation (audit).
+  string invalidated_by = 2;
+}

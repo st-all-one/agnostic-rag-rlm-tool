@@ -468,7 +468,7 @@ cargo bench --package arlm-search
 | Memmap + chunking | 8s | 12 MB/s/core |
 | Embedding (batch 64) | 15s | 800 chunks/s |
 | SQLite insert | 3s | 10k inserts/s |
-| LanceDB insert | 2s | 5k inserts/s |
+| usearch insert | 2s | 5k inserts/s |
 | FTS5 update | 1s | 10k inserts/s |
 | **Total** | **~30s** | **~3.3 MB/s** |
 
@@ -477,7 +477,7 @@ cargo bench --package arlm-search
 | Fase | Tempo |
 |------|-------|
 | Query embedding | 5ms |
-| Semantic search (LanceDB) | 10ms |
+| Semantic search (usearch) | 10ms |
 | BM25 search (FTS5) | 5ms |
 | RRF fusion | 1ms |
 | Text recovery | 5ms |

@@ -65,9 +65,9 @@ pub async fn run_server(
     llm: Arc<dyn arlm_llm::LlmBackend + Send + Sync>,
     vector_store: Option<Arc<VectorStore>>,
 ) -> Result<()> {
-    let state = AppState::new(storage, config.clone(), llm, vector_store)?;
+    let state = AppState::new(storage.clone(), config.clone(), llm, vector_store)?;
 
-    let grpc_service = ArlmGrpcService::new(state);
+    let grpc_service = ArlmServiceServer::new(ArlmGrpcService::new(state));
     let addr = config
         .listen_addr
         .parse()
@@ -86,7 +86,7 @@ pub async fn run_server(
     info!(addr = %addr, "arlm-server listening");
 
     builder
-        .add_service(ArlmServiceServer::new(grpc_service))
+        .add_service(grpc_service)
         .serve_with_shutdown(addr, shutdown_signal())
         .await?;
 

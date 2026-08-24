@@ -20,7 +20,7 @@ text
                │                              │
 ┌──────────────▼──────────────┐ ┌─────────────▼──────────────────┐
 │   Persistence & Metadata    │ │   Hybrid Search                │
-│   (SQLite - rusqlite)       │ │   (FTS5 + Entity + LanceDB)   │
+│   (SQLite - rusqlite)       │ │   (FTS5 + Entity + usearch)   │
 │   - Metadados dos chunks    │ │   - BM25 (FTS5)                │
 │   - Estado dos buffers      │ │   - Entity RRF (lexical)       │
 │   - FTS5 (BM25)             │ │   - Vector HNSW (opcional)     │
@@ -74,7 +74,7 @@ SQLite (Papel: Metadados, Estado e BM25)
     PRAGMA cache_size=-65536;         -- 64MB de cache
     PRAGMA temp_store=MEMORY;
 
-LanceDB (Papel: Vetores e Busca Semântica)
+usearch (Papel: Vetores e Busca Semântica)
 
     Esquema Otimizado:
 
@@ -84,7 +84,7 @@ LanceDB (Papel: Vetores e Busca Semântica)
 
     Otimização de Persistência:
 
-        LanceDB já gerencia fragmentos em disco (formato Lance). Forçamos flush apenas no final de grandes lotes (load de arquivos) para evitar fragmentação excessiva.
+        usearch já gerencia fragmentos em disco (formato Lance). Forçamos flush apenas no final de grandes lotes (load de arquivos) para evitar fragmentação excessiva.
 
 3. Pipeline de Ingestão (load) - Onde a Mágica Acontece
 
@@ -108,15 +108,15 @@ O fluxo para carregar um arquivo de 1GB é onde a performance é crítica:
 
         A inferência em lote no CPU moderno (AVX-512) é 3x a 5x mais rápida que inferência sequencial.
 
-    Inserção Transacional com Dupla Escrita (SQLite + LanceDB):
+    Inserção Transacional com Dupla Escrita (SQLite + usearch):
 
         Iniciamos uma transação SQLite.
 
         Inserimos os metadados e textos em chunks e chunk_texts. Obtemos os ids gerados.
 
-        Ao mesmo tempo, inserimos os vetores no LanceDB (que também suporta transações via table.add()).
+        Ao mesmo tempo, inserimos os vetores no usearch (que também suporta transações via table.add()).
 
-        Fazemos um commit no SQLite e um flush no LanceDB. Se um falhar, usamos um savepoint para rollback total (embora LanceDB não tenha rollback transacional, usamos uma flag de estado 'pending' no SQLite que é limpa só no sucesso).
+        Fazemos um commit no SQLite e um flush no usearch. Se um falhar, usamos um savepoint para rollback total (embora usearch não tenha rollback transacional, usamos uma flag de estado 'pending' no SQLite que é limpa só no sucesso).
 
     Atualização do Índice FTS5:
 
@@ -126,7 +126,7 @@ O fluxo para carregar um arquivo de 1GB é onde a performance é crítica:
 
 A busca é o ponto mais sensível para a UX da CLI:
 
-    Busca Semântica (LanceDB):
+    Busca Semântica (usearch):
 
         Roda a query pelo mesmo modelo BGE-M3 para gerar o embedding da pergunta.
 
@@ -156,7 +156,7 @@ A busca é o ponto mais sensível para a UX da CLI:
 
     CPU-Bound (Chunking, Embedding): Usamos Rayon com seu work-stealing pool global. O número de threads é igual ao número de cores físicos (num_cpus::get_physical()).
 
-    I/O-Bound (SQLite, LanceDB): Usamos chamadas síncronas (bloqueantes) dentro de threads dedicadas ou simplesmente no contexto atual, pois o SQLite com WAL lida muito bem com concorrência e não queremos o overhead de async (Tokio) em operações curtas.
+    I/O-Bound (SQLite, usearch): Usamos chamadas síncronas (bloqueantes) dentro de threads dedicadas ou simplesmente no contexto atual, pois o SQLite com WAL lida muito bem com concorrência e não queremos o overhead de async (Tokio) em operações curtas.
 
     Pipeline Overlap: Para arquivos gigantes, usamos um canal (std::sync::mpsc) produtor-consumidor. Um thread lê/mappeia, uma pool do Rayon chunk/embed, e o thread principal insere no banco. Isso mantém a CPU e o I/O de disco 100% ocupados.
 
@@ -179,7 +179,7 @@ Dependências estratégicas (minimizando árvore de dependências):
 
     rusqlite com feature bundled (compila o SQLite estático com otimizações -O3).
 
-    lancedb com feature embedded (padrão).
+    usearch com feature embedded (padrão).
 
     candle-core + candle-transformers com feature accelerate (macOS) ou mkl (Linux/Windows) para inferência de CPU turbinada.
 
@@ -191,13 +191,13 @@ Dependências estratégicas (minimizando árvore de dependências):
 
     Os subagentes (subprocessos) rodam rlm-cli chunk get <id> (leitura rápida do SQLite), processam e escrevem o resultado em uma tabela findings.
 
-    O aggregate lê todos os findings do buffer específico e monta um sumário, novamente usando apenas SQLite (sem tocar no LanceDB, pois já não precisa de busca, só de consolidação).
+    O aggregate lê todos os findings do buffer específico e monta um sumário, novamente usando apenas SQLite (sem tocar no usearch, pois já não precisa de busca, só de consolidação).
 
 8. Resumo da Filosofia de Performance
 Componente	Decisão de Design	Motivo
 I/O de Arquivo	memmap2	Zero-copy, delega paginação ao sistema operacional.
 Processamento de CPU	Rayon (paralelismo de dados)	Aproveita 100% dos cores em chunking e embedding.
-Busca Híbrida	SQLite FTS5 (BM25) + LanceDB HNSW (Vetor)	Cada um especialista no seu domínio, unidos por RRF em Rust.
+Busca Híbrida	SQLite FTS5 (BM25) + usearch HNSW (Vetor)	Cada um especialista no seu domínio, unidos por RRF em Rust.
 Estado	SQLite (WAL + mmap)	Transacional, confiável, e extremamente rápido para leituras pontuais.
 Embedding	Candle (BGE-M3 quantizado INT8)	Inferência local sem dependência de Python/APIs externas.
 Concorrência	Síncrono + Canais + Rayon	Overhead zero de async runtime (Tokio) para uma CLI.

@@ -22,7 +22,7 @@ This plan flips the model: the **server is the primary process** (long-running, 
 │            (long-running, always-on)             │
 │                                                  │
 │  ┌──────────┐  ┌──────────┐  ┌───────────────┐ │
-│  │ SQLite   │  │ LanceDB  │  │ Summarization │ │
+│  │ SQLite   │  │ usearch  │  │ Summarization │ │
 │  │ (r2d2    │  │ (vectors)│  │ Engine        │ │
 │  │  pool)   │  │          │  │ (background)  │ │
 │  └────┬─────┘  └────┬─────┘  └───────┬───────┘ │
@@ -395,7 +395,7 @@ arlm-server/src/
 ```rust
 pub struct AppState {
     pub storage: Storage,           // r2d2 pooled, opened once at startup
-    pub vector_store: VectorStore,  // LanceDB, shared async
+    pub vector_store: VectorStore,  // usearch, shared async
     pub event_bus: EventBus,        // Singleton, persists across runs
     pub write_queue: WriteQueue,    // Batched write operations
     pub summarizer: Summarizer,     // Background summarization engine
@@ -1088,7 +1088,7 @@ impl WriteQueue {
 | `rusqlite::Connection` is `!Send` | High | r2d2 handles thread affinity internally |
 | ~70 methods need lock-removal | Medium | Mechanical refactor, each method is small |
 | gRPC learning curve | Medium | tonic is well-documented; start with simple unary RPCs |
-| Protobuf build requires `protoc` | Low | Already installed (lancedb dependency) |
+| Protobuf build requires `protoc` | Low | Already installed (usearch dependency) |
 | Write queue data loss on crash | Low | WAL mode + periodic flush; runs are also persisted at completion |
 | Summary quality varies by LLM | Medium | Confidence scoring; use best model for summarization |
 | Breaking existing tests | Medium | Phased approach; CLI backward compat via `open()` |

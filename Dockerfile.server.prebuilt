@@ -1,8 +1,31 @@
-# Prebuilt image: copies the host-compiled release binary instead of
-# recompiling inside the container (candle/cxx deps make an in-container
-# build very slow). Build the binary first with:
-#   cargo build --release --bin arlm-server
-FROM debian:bookworm-slim
+# Build arlm-server INSIDE the container so the produced binary's glibc and
+# libstdc++ match the runtime base. The previous approach (COPY a host-built
+# target/release/arlm-server) was broken in two ways:
+#   1. .dockerignore excludes target/, so the COPY could not even resolve;
+#   2. a host (glibc 2.43, gcc-14) build produced a binary the
+#      debian:bookworm-slim runtime (glibc 2.36) rejected at startup with
+#      "GLIBC_2.39 / CXXABI_1.3.15 not found".
+# Compiling here sidesteps both.
+
+# ---------- Builder ----------
+# rust:1.97.1-slim is trixie-based (glibc 2.41, gcc-14 -> CXXABI_1.3.15). The
+# runtime base below MUST match (trixie-slim); a bookworm runtime fails at
+# container start with the same symbol errors.
+FROM rust:1.97.1-slim AS builder
+
+WORKDIR /build
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        build-essential pkg-config libssl-dev ca-certificates protobuf-compiler libprotobuf-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN cargo build --release --bin arlm-server
+
+# ---------- Runtime ----------
+FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -11,19 +34,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && groupadd -r arlm && useradd -r -g arlm -m -s /bin/false arlm
 
-COPY target/release/arlm-server /usr/local/bin/arlm-server
+COPY --from=builder /build/target/release/arlm-server /usr/local/bin/arlm-server
 
 RUN mkdir -p /data && chown arlm:arlm /data
 
-USER arlm
+# The server resolves its data dir from $HOME/.arlm (it does NOT read
+# ARLM_DATA_DIR), so point HOME at the persisted volume.
+ENV HOME=/data
+ENV RUST_LOG=info,arlm_server=debug
+ENV ARLM_DATA_DIR=/data
 
 EXPOSE 50051
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD arlm-server status || exit 1
-
-ENV RUST_LOG=info,arlm_server=debug
-ENV ARLM_DATA_DIR=/data
 
 ENTRYPOINT ["arlm-server"]
 CMD ["up"]

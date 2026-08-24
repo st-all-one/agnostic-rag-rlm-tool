@@ -79,7 +79,10 @@ pub async fn execute(config: SearchConfig<'_>) -> Result<()> {
                 Ok(vstore) => {
                     if vstore.dimensions() == embedder.dimensions() {
                         match embedder.embed(config.query) {
-                            Ok(vec) => (Some(arlm_search::SemanticSearch::new(Arc::clone(&vstore))), Some(vec)),
+                            Ok(vec) => (
+                                Some(arlm_search::SemanticSearch::new(Arc::clone(&vstore))),
+                                Some(vec),
+                            ),
                             Err(e) => {
                                 warn!(error = %e, "query embedding failed, semantic tier disabled");
                                 (None, None)

@@ -49,6 +49,7 @@ async fn main() -> Result<()> {
 
     match std::env::args().nth(1).as_deref() {
         Some("status") => arlm_server::lifecycle::status_check().await,
+        Some("admin") => arlm_server::admin::run(),
         _ => arlm_server::run().await,
     }
 }

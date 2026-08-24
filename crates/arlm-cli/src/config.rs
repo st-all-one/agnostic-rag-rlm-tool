@@ -45,6 +45,26 @@ pub struct Config {
     /// Deserializes into [`LlmConfig`]; see `arlm-llm` for the schema.
     #[serde(default)]
     pub llm: LlmConfig,
+
+    /// Auth section (plan 018): identity + refresh token for the gRPC server.
+    #[serde(default)]
+    pub auth: AuthConfig,
+}
+
+/// Auth configuration (plan 018).
+///
+/// The refresh token is a client-side credential minted by the server admin
+/// (`arlm-server admin create-refresh`) and stored here in plaintext
+/// (`0600`). The CLI exchanges it for short-lived session tokens automatically.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AuthConfig {
+    /// Auditing username, mirrored from the created token.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+
+    /// Refresh token (plaintext). Never sent except to `AuthRefresh`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_token: Option<String>,
 }
 
 /// Server configuration.

@@ -45,27 +45,27 @@ pub async fn execute(config: QueryConfig<'_>) -> Result<()> {
         let (semantic, query_vector) = match open_vector_store(buffer.id, embedder.dimensions())
             .await
         {
-                Ok(vstore) => {
-                    if vstore.dimensions() == embedder.dimensions() {
-                        match embedder.embed(config.question) {
-                            Ok(vec) => {
-                                let sem = arlm_search::SemanticSearch::new(Arc::clone(&vstore));
-                                (Some(sem), Some(vec))
-                            }
-                            Err(e) => {
-                                tracing::warn!(error = %e, "query embedding failed, semantic tier disabled");
-                                (None, None)
-                            }
+            Ok(vstore) => {
+                if vstore.dimensions() == embedder.dimensions() {
+                    match embedder.embed(config.question) {
+                        Ok(vec) => {
+                            let sem = arlm_search::SemanticSearch::new(Arc::clone(&vstore));
+                            (Some(sem), Some(vec))
                         }
-                    } else {
-                        tracing::warn!(
-                            store_dims = vstore.dimensions(),
-                            embedder_dims = embedder.dimensions(),
-                            "vector store dimensionality mismatch, semantic tier disabled"
-                        );
-                        (None, None)
+                        Err(e) => {
+                            tracing::warn!(error = %e, "query embedding failed, semantic tier disabled");
+                            (None, None)
+                        }
                     }
+                } else {
+                    tracing::warn!(
+                        store_dims = vstore.dimensions(),
+                        embedder_dims = embedder.dimensions(),
+                        "vector store dimensionality mismatch, semantic tier disabled"
+                    );
+                    (None, None)
                 }
+            }
             Err(e) => {
                 tracing::warn!(error = %e, "vector store unavailable, semantic tier disabled");
                 (None, None)

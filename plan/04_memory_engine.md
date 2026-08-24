@@ -14,7 +14,7 @@ O `arlm-memory` é o sistema de memória persistente que permite múltiplos agen
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘    │
 │       │              │              │              │          │
 │  ┌────▼──────────────▼──────────────▼──────────────▼────┐    │
-│  │              arlm-storage (SQLite + LanceDB)         │    │
+│  │              arlm-storage (SQLite + usearch)         │    │
 │  └──────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -31,7 +31,7 @@ Um projeto é um diretório de código indexado. Cada projeto tem seu próprio k
 ├── projects/
 │   ├── meu-projeto-a/
 │   │   ├── knowledge.db           ← SQLite (metadados, FTS5, estado, custo, trajectórias)
-│   │   ├── vectors.lance/         ← LanceDB (embeddings)
+│   │   ├── vectors.lance/         ← usearch (embeddings)
 │   │   ├── history.jsonl          ← Histórico de consultas
 │   │   └── metadata.json          ← Info do projeto
 │   ├── meu-projeto-b/
@@ -48,7 +48,7 @@ A knowledge base é composta por:
 | Componente | O que armazena | Onde |
 |-----------|---------------|------|
 | **Chunks** | Trechos de código/texto com metadata | SQLite `chunks` + `chunk_texts` |
-| **Embeddings** | Vetores densos para busca semântica | LanceDB `vectors` |
+| **Embeddings** | Vetores densos para busca semântica | usearch `vectors` |
 | **Índice textual** | BM25 para busca por palavras | SQLite FTS5 `chunks_fts` |
 | **Buffer** | Projetos/diretórios indexados | SQLite `buffers` |
 | **Padrões** | Padrões extraídos de análises | SQLite `patterns` |
@@ -78,7 +78,7 @@ Múltiplos agentes podem acessar a mesma knowledge base:
                       │
               ┌───────▼───────┐
               │ SQLite (WAL)  │ ← Concorrência natural
-              │ + LanceDB     │
+              │ + usearch     │
               └───────────────┘
 ```
 
@@ -109,7 +109,7 @@ impl MemoryEngine {
         // 2. Lê cada arquivo com memmap
         // 3. Chunking paralelo via Rayon
         // 4. Embedding em lote via candle
-        // 5. Insere SQLite + LanceDB (transação dual)
+        // 5. Insere SQLite + usearch (transação dual)
         // 6. Atualiza FTS5
     }
 
@@ -125,7 +125,7 @@ impl MemoryEngine {
 
     /// Remove um projeto da memória
     pub fn forget_project(&self, name: &str) -> Result<()> {
-        // Remove SQLite tables + LanceDB data
+        // Remove SQLite tables + usearch data
     }
 }
 ```
@@ -142,7 +142,7 @@ impl MemoryEngine {
         options: SearchOptions,
     ) -> Result<Vec<SearchResult>> {
         // 1. Embedding da query
-        // 2. Busca semântica (LanceDB HNSW)
+        // 2. Busca semântica (usearch HNSW)
         // 3. Busca BM25 (SQLite FTS5)
         // 4. Fusão RRF
         // 5. Retorna top_k resultados
@@ -284,7 +284,7 @@ impl MemoryEngine {
    │
 3. Memory Engine:
    │  a. Embedding da pergunta (candle, ~5ms)
-   │  b. Busca semântica LanceDB (~10ms)
+   │  b. Busca semântica usearch (~10ms)
    │  c. Busca BM25 SQLite (~5ms)
    │  d. Fusão RRF (~1ms)
    │  e. Recuperação dos textos (~5ms)
@@ -396,13 +396,13 @@ arlm session resume s_abc123
 ### Concorrência
 
 - **SQLite WAL:** Múltiplos leitores + 1 escritor
-- **LanceDB:** Reads não bloqueados, writes com lock
-- **Transação dual:** SQLite commit + LanceDB flush com rollback via flag de estado
+- **usearch:** Reads não bloqueados, writes com lock
+- **Transação dual:** SQLite commit + usearch flush com rollback via flag de estado
 
 ### Durabilidade
 
 - **SQLite:** WAL journal em disco, crash-safe
-- **LanceDB:** Fragmentos persistentes em disco
+- **usearch:** Fragmentos persistentes em disco
 - **Backup:** `arlm backup --project ./x --to /backup/`
 
 ### Integridade

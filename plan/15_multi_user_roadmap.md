@@ -14,7 +14,7 @@ O `arlm` foi desenhado para uso **local individual** (1 dev, vários projetos). 
 | Custo tracking | OK (self) | Funcional (por agente) | Médio |
 | Isolamento | N/A | **Inexistente** (sem auth, sem ACL) | Crítico |
 | RLM engine | Perfeito | **Bloqueante** (runs longas no HTTP) | Alto |
-| LanceDB writes | OK | **Não thread-safe** | Crítico |
+| usearch writes | OK | **Não thread-safe** | Crítico |
 
 ## Features Necessárias (por prioridade)
 
@@ -52,9 +52,9 @@ Dev B: POST /index { project: "projeto-y" } → 202 Accepted (job_id)
 → SSE /events/{job_id} → streaming de progresso
 ```
 
-#### 2. LanceDB Write Mutex
+#### 2. usearch Write Mutex
 
-LanceDB embedded não suporta writes concorrentes. Precisa de mutex dedicado.
+usearch embedded não suporta writes concorrentes. Precisa de mutex dedicado.
 
 ```rust
 pub struct LanceWriteGuard {
@@ -70,7 +70,7 @@ impl LanceWriteGuard {
 }
 ```
 
-Alternativa: mover embeddings para tabela SQLite (BLOB f32) e usar LanceDB apenas para reads. Elimina o problema de write concorrente.
+Alternativa: mover embeddings para tabela SQLite (BLOB f32) e usar usearch apenas para reads. Elimina o problema de write concorrente.
 
 #### 3. Autenticação Básica
 
@@ -217,13 +217,13 @@ info!(
 │  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │  │
 │  │  │  Search  │  │  RLM     │  │  Embedding   │  │  │
 │  │  │ (FTS5 +  │  │  Engine  │  │  (Semaphore) │  │  │
-│  │  │ LanceDB) │  │  (async) │  │              │  │  │
+│  │  │ usearch) │  │  (async) │  │              │  │  │
 │  │  └──────────┘  └──────────┘  └──────────────┘  │  │
 │  └──────────────────────────────────────────────────┘  │
 │                         │                              │
 │  ┌──────────────────────▼───────────────────────────┐  │
 │  │              Persistence                          │  │
-│  │  SQLite (WAL) + LanceDB + Embedding Cache        │  │
+│  │  SQLite (WAL) + usearch + Embedding Cache        │  │
 │  └──────────────────────────────────────────────────┘  │
 │                         │                              │
 │  ┌──────────────────────▼───────────────────────────┐  │
@@ -271,7 +271,7 @@ services:
 
 | Fase | Features | Esforço | Impacto |
 |------|----------|---------|---------|
-| **1** | Index queue + LanceDB write mutex | 2-3 dias | Desbloqueia multi-user |
+| **1** | Index queue + usearch write mutex | 2-3 dias | Desbloqueia multi-user |
 | **2** | Auth (API key) + ACL | 1-2 dias | Segurança básica |
 | **3** | Runs assíncronas + SSE | 2-3 dias | UX em server mode |
 | **4** | Rate limiting | 1 dia | Estabilidade |

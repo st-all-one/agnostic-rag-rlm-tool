@@ -8,8 +8,8 @@ use crate::embedding::{build_embedder_from_config, open_vector_store, vector_dir
 use crate::output::{self, Format};
 use crate::util::{data_dir, project_name};
 
-use arlm_storage::VectorEntry;
 use arlm_embedding::embedder::Embedder;
+use arlm_storage::VectorEntry;
 use std::sync::Arc;
 
 /// Number of chunks embedded per Ollama batch request during indexing.

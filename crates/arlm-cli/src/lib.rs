@@ -25,6 +25,7 @@
     clippy::match_same_arms
 )]
 
+pub mod auth_client;
 pub mod backend;
 pub mod cli;
 pub mod client;
