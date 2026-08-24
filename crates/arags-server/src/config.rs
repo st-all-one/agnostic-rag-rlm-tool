@@ -444,6 +444,8 @@ fn default_eviction_interval_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
     use super::*;
     use std::io::Write as _;
 
@@ -516,6 +518,8 @@ mod tests {
 
 #[cfg(test)]
 mod disjoint_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
     use super::*;
     use tempfile::TempDir;
 

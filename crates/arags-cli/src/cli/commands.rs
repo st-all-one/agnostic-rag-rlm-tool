@@ -29,6 +29,18 @@ pub enum Commands {
         /// Can be specified multiple times.
         #[arg(long = "force-include", action = clap::ArgAction::Append)]
         force_include: Vec<String>,
+
+        /// Register this project for background auto-update (like
+        /// `git maintenance`): persists `[watch] enabled = true` in
+        /// `.arags.toml` and starts a detached watcher daemon that re-indexes
+        /// changed files after a 1-minute quiet window.
+        #[arg(long)]
+        register: bool,
+
+        /// Stop the background watcher and remove the registration from
+        /// `.arags.toml`.
+        #[arg(long, conflicts_with = "register")]
+        unregister: bool,
     },
 
     /// Search project with hybrid BM25 + semantic (server-side).
@@ -58,7 +70,14 @@ pub enum Commands {
 
         /// Maximum tokens in output (0 = unlimited).
         #[arg(long, default_value_t = 8000)]
-        max_tokens: u32,
+        max_tokens: usize,
+    },
+
+    /// (hidden) Background watch daemon; spawned by `index --register`.
+    #[command(hide = true)]
+    WatchDaemon {
+        /// Project root to monitor.
+        root: PathBuf,
     },
 
     /// Query with on-demand QA: `-qa` digests via the user's LLM; `--cache-id`

@@ -8,7 +8,10 @@ um `arags-server` remoto via gRPC. É um **cliente gRPC puro**: não há modo lo
 (plan 020 removeu o subcomando `serve`/MCP e o data plane local). Usa o **LLM local do usuário** (`arags-llm`) apenas para *digest*
 (`query -qa`) e *summarize* (`persist`). O servidor é um plano de dados puro
 (LLM-free). Renderiza saídas em 4 formatos (`json`, `tree`, `markdown`, `prompt`)
-com logs estruturados (`tracing`).
+com logs estruturados (`tracing`). Também hospeda o **watch daemon** de
+auto-atualização do índice (`arags index --register`), o único processo de
+longa duração do client — ainda assim, sem estado local além dos marcadores
+dotfile e do registro em `.arags.toml`.
 
 ## Estrutura
 - `src/lib.rs` — API pública (re-exports) + allows de lint (pedantic estilo).
@@ -25,16 +28,31 @@ com logs estruturados (`tracing`).
 - `src/client.rs` — `ClientConfig` + `connect_channel` (retry/backoff, validação
   de endereço, TLS automático em `https://` e mTLS via `[server].tls_ca`/
   `tls_cert`/`tls_key`).
+- `src/gitignore.rs` — parser do subconjunto gitignore usado na descoberta de
+  arquivos (`*`/`?`/`**`, dir-only, âncora `/`, negação `!` com
+  *last-match-wins*, precedência por profundidade para `.gitignore`
+  aninhados). Funções puras, testadas inline.
+- `src/watcher.rs` — auto-atualização estilo `git maintenance`
+  (`arags index --register`): daemon detached (`arags watch-daemon <root>`)
+  via `notify`, **janela de silêncio de 1 min** e flush só dos arquivos
+  alterados (fingerprint mtime+size); registro em `[watch]` no `.arags.toml`;
+  controle por marcadores dotfile (`.arags-watch.pid`/`.arags-watch.stop`),
+  sem sinais nem `unsafe`.
 - `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,
-  `[server]` com knobs TLS, `[project]`); merge granular testado inline;
-  arquivos legados `config.toml` **não** são lidos.
+  `[server]` com knobs TLS, `[project]`, `[watch]` local-only); merge granular
+  testado inline; arquivos legados `config.toml` **não** são lidos;
+  `set_watch_enabled` preserva campos desconhecidos via round-trip
+  `toml::Value`.
 - `src/commands/` — módulos de comando:
   - `qa_cache` (plan 017: `run_ask`/`run_get`/`run_invalidate` orquestrando os
     RPCs `QueryWithCache`/`GetAnswerById`/`InvalidateCache`; a digestão LLM roda
     localmente via `arags-llm`/`user_config` e o `StoreAnswer` é fire-and-forget),
   - `persist` (escreve `wiki/*.md` via LLM do usuário).
   - `index`, `search`, `query`, `memory` (admin), `history` vivem em
-    `dispatch/server.rs` (streaming de arquivos + renderização).
+    `dispatch/server.rs` (streaming de arquivos + renderização). O `index`
+    também abriga `--register`/`--unregister` e o entry point do daemon
+    (`run_watch_daemon`/`flush_changed`), que reutiliza `discover_files` +
+    `stream_index_group`.
 - `src/cli/commands.rs` — `Commands` enum (inclui `Query` estendido com
   `cache_id`/`qa` e o subcomando `Memory`).
 - `src/output/` — `mod` (`Format`), `json`, `tree`, `markdown`, `prompt`.
@@ -46,7 +64,8 @@ com logs estruturados (`tracing`).
   `arags-storage`/`arags-search`/`arags-memory` — o client nunca abre estado local;
   guardado por teste em `tests/init_test.rs`).
 - Externas: `clap` (derive), `tokio`/`tokio-stream` (async/streaming),
-  `tonic` (gRPC), `tracing`/`tracing-subscriber` (logs), `serde`/`serde_json`/
+  `tonic` (gRPC), `notify` (watch daemon do `--register`),
+  `tracing`/`tracing-subscriber` (logs), `serde`/`serde_json`/
   `toml` (config/saída), `anyhow` (erros), `indicatif`/`console` (UI),
   `chrono` (timestamps do wiki), `parking_lot` (sync), `mimalloc` (allocator).
 

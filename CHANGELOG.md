@@ -5,6 +5,40 @@ Este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added — ignore de dotfiles + `.gitignore` e auto-atualização com `index --register` (agnostic-rlm-rs-4442, 740a, fe41)
+
+#### Ignore de arquivos (descoberta de arquivos)
+
+- **Dot-paths ignorados**: todo caminho com qualquer componente iniciando
+  por `.` (`.env`, `.git/`, `.github/workflows/x.yml`, ...) não é mais indexado.
+  `--force-include` continua sobrescrevendo.
+- **Regras de `.gitignore` respeitadas**: raiz e aninhados, com o subconjunto
+  pragmático do git — comentários, dir-only (`logs/`), âncora (`/dist`),
+  globs (`*`, `?`, `**`) e negação `!` (*last-match-wins*; arquivos mais
+  profundos vencem os rasos). Novo módulo: `arags-cli/src/gitignore.rs`.
+
+#### Watch daemon (`git maintenance`-style)
+
+- **Novo flag** `arags index --register`: persiste o rastreamento no
+  `.arags.toml` do projeto (`[watch] enabled = true` + nome do projeto,
+  preservando os demais campos) e sobe um **daemon detached no client**
+  (`arags watch-daemon <root>`).
+- O daemon monitora a árvore via `notify`; cada mudança abre uma **janela de
+  silêncio de 1 minuto**; ao fechá-la, re-envia **apenas os arquivos alterados**
+  (fingerprint mtime+tamanho, respeitando todas as regras de ignore) ao
+  servidor, que faz upsert dos chunks envolvidos.
+- Controle sem sinais: marcadores dotfile `.arags-watch.pid` /
+  `.arags-watch.stop`; `arags index --unregister` pede o stop gracioso e limpa
+  a flag em `.arags.toml`.
+- Novo módulo: `arags-cli/src/watcher.rs`.
+
+### Removed — watch legado migrado (agnostic-rlm-rs-fe41)
+
+- `arags-memory::watch` (`WatchMonitor`/`WatchHandle`/`WatchEvent`, do antigo
+  experimento `--watch`), seus testes e a dependência `notify` do crate foram
+  removidos; a funcionalidade de auto-atualização agora vive no client
+  (`arags-cli/src/watcher.rs`, ver acima).
+
 ### Changed — embedding nativo all-MiniLM-L6-v2 (agnostic-rlm-rs-1194)
 
 O modelo de embeddings virou **parte do projeto**: all-MiniLM-L6-v2 nativo em

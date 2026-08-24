@@ -50,10 +50,10 @@ para `tests/`, logging estruturado (`tracing`) e `ScopedTimer` nas hot paths, e
 - Testes: transferência entre projetos via `MemoryEngine`, filtro de linguagem
   (`rust` vs `markdown`), e falha para source inexistente. 3 testes.
 
-### 6. WatchMonitor não integrado ao CLI — ⚠️ ENGINE PRONTO / CLI FORA DE ESCOPO
-- **Arquivo:** `src/watch.rs` (`WatchMonitor`, `WatchEvent`, `WatchHandle`).
-- **Verificação:** API pública existe e é chamável (`new`, `watch`, `options`).
-- **CLI wiring:** pertence a `arags-cli` (`arags index --watch`) — **follow-up**, fora desta tarefa.
+### 6. WatchMonitor não integrado ao CLI — ✅ MIGRADO
+- O módulo legado (`src/watch.rs`) foi **removido**; o watcher de
+  auto-atualização agora vive no client: `crates/arags-cli/src/watcher.rs`
+  (`arags index --register`, daemon detached com debounce de 1 min).
 
 ### 7. Sem consolidação automática — ⚠️ ENGINE PRONTO / CLI FORA DE ESCOPO
 - **Arquivo:** `src/consolidation.rs` (`ConsolidationEngine::consolidate`).

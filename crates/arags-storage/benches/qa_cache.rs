@@ -4,6 +4,8 @@
 //! versus persisting a freshly digested answer (the "digest novo" write path),
 //! plus staleness-invalidation throughput. Run with `cargo bench -p arags-storage`.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use arags_storage::Storage;
 use arags_storage::qa_cache::{StoreAnswerInput, question_hash};
 use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
@@ -41,7 +43,7 @@ fn bench_cache_hit_latency(c: &mut Criterion) {
                 .get_cached_answer(black_box("p1"), black_box(&qh))
                 .unwrap();
             black_box(row);
-        })
+        });
     });
 }
 
@@ -56,7 +58,7 @@ fn bench_store_digest_cost(c: &mut Criterion) {
                 black_box(stored);
             },
             BatchSize::SmallInput,
-        )
+        );
     });
 }
 
@@ -72,7 +74,7 @@ fn bench_stale_invalidation(c: &mut Criterion) {
                 .mark_stale_by_hashes(black_box(1), black_box(&["h0".to_string()]))
                 .unwrap();
             black_box(n);
-        })
+        });
     });
 }
 

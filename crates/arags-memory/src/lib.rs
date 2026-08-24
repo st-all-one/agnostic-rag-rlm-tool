@@ -21,7 +21,6 @@ pub mod knowledge;
 pub mod persist;
 pub mod project;
 pub mod transfer;
-pub mod watch;
 
 pub use consolidation::{ConsolidateOptions, ConsolidateResult, ConsolidationEngine};
 pub use decay::{DecayConfig, SalienceInput, compute_salience, should_evict};
@@ -36,7 +35,6 @@ pub use persist::{
 };
 pub use project::{ProjectInfo, ProjectManager};
 pub use transfer::{TransferEngine, TransferOptions};
-pub use watch::{WatchEvent, WatchHandle, WatchMonitor};
 
 /// A scoped timer that logs elapsed time when dropped.
 pub struct ScopedTimer {

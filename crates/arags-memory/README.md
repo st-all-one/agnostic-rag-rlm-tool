@@ -27,7 +27,6 @@ src/
 ├── consolidation.rs    # MemoryEngine (dedup, cleanup)
 ├── decay.rs            # DecayConfig (decaimento de saliência)
 ├── transfer.rs         # TransferEngine (cross-project)
-├── watch.rs            # WatchMonitor (inotify)
 └── persist/            # escrita de wiki pages
 ```
 
@@ -65,18 +64,6 @@ let opts = IndexOptions {
     ..Default::default()
 };
 knowledge.index_directory("projeto", &path, &opts)?;
-```
-
-### Watch Mode
-
-```rust
-use arags_memory::watch::{WatchMonitor, WatchOptions};
-
-let handle = WatchMonitor::watch(&path, &WatchOptions::default())?;
-loop {
-    let event = handle.recv()?;
-    println!("Mudança detectada: {:?}", event.paths);
-}
 ```
 
 ### Consolidation

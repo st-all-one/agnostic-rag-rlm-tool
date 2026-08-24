@@ -43,7 +43,8 @@ fn test_enum_variants_present() {
 fn test_service_modules_resolve() {
     // Ensure the generated tonic service plumbing exists for downstream use.
     // `AragsServiceClient` is the concrete client referenced by `arags-cli`.
-    let client_type =
-        std::any::type_name::<arags_service_client::AragsServiceClient<tonic::transport::Channel>>();
+    let client_type = std::any::type_name::<
+        arags_service_client::AragsServiceClient<tonic::transport::Channel>,
+    >();
     assert!(client_type.contains("AragsServiceClient"));
 }

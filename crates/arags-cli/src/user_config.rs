@@ -72,6 +72,20 @@ pub struct ProjectSection {
     pub ignore: Option<Vec<String>>,
 }
 
+/// Watch registration (`[watch]` in the local `.arags.toml`), written by
+/// `arags index --register`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct WatchSection {
+    /// Whether background auto-update watching is enabled.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Project name under which chunks were indexed at registration time
+    /// (keeps daemon re-uploads consistent with manual indexing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+}
+
 /// Global config file shape (`~/.arags/arags.toml`).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct GlobalConfig {
@@ -86,9 +100,10 @@ pub struct GlobalConfig {
 /// is simply absent from this struct — credentials stay global-only.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct LocalConfig {
-    llm: Option<LlmConfig>,
+    pub(crate) llm: Option<LlmConfig>,
     server: Option<ServerSection>,
-    project: Option<ProjectSection>,
+    pub(crate) project: Option<ProjectSection>,
+    pub(crate) watch: Option<WatchSection>,
 }
 
 /// The effective, merged user configuration used by the CLI.
@@ -102,6 +117,8 @@ pub struct EffectiveUserConfig {
     pub server: ServerSection,
     /// Effective project metadata.
     pub project: ProjectSection,
+    /// Watch registration (local-only; never merged from global).
+    pub watch: Option<WatchSection>,
 }
 
 impl EffectiveUserConfig {
@@ -159,6 +176,16 @@ pub fn load_from(global: &std::path::Path, local: &std::path::Path) -> Result<Ef
     Ok(merge(global, local))
 }
 
+/// Parse a local `.arags.toml` at an explicit path (missing file = default).
+/// Used by the watch daemon, which runs detached with an unknown cwd.
+///
+/// # Errors
+///
+/// Returns an error if the file exists but cannot be parsed.
+pub fn load_local_at(local: &std::path::Path) -> Result<LocalConfig> {
+    read_toml_file::<LocalConfig>(local, "local .arags.toml")
+}
+
 /// Merge a parsed global scope with a parsed local scope (plan 020).
 #[must_use]
 pub fn merge(global: GlobalConfig, local: LocalConfig) -> EffectiveUserConfig {
@@ -212,12 +239,46 @@ pub fn merge(global: GlobalConfig, local: LocalConfig) -> EffectiveUserConfig {
             .or_else(|| global_project.as_ref().and_then(|p| p.ignore.clone())),
     };
 
+    // `[watch]` is local-only (registration is per-project).
+    let watch = local.watch;
+
     EffectiveUserConfig {
         auth,
         llm,
         server,
         project,
+        watch,
     }
+}
+
+/// Persist `[watch]` in the local `.arags.toml`, preserving every other
+/// existing field (round-trips through `toml::Value`).
+///
+/// # Errors
+///
+/// Fails on read/parse/write of the local config file.
+pub fn set_watch_enabled(local: &std::path::Path, enabled: bool, project: &str) -> Result<()> {
+    let mut doc: toml::Value = if local.exists() {
+        let raw = std::fs::read_to_string(local)
+            .with_context(|| format!("failed to read {}", local.display()))?;
+        raw.parse()
+            .with_context(|| format!("failed to parse {}", local.display()))?
+    } else {
+        toml::Value::Table(toml::map::Map::new())
+    };
+    let root = doc
+        .as_table_mut()
+        .context("local .arags.toml is not a TOML table")?;
+    let mut watch = toml::map::Map::new();
+    watch.insert("enabled".into(), toml::Value::Boolean(enabled));
+    if enabled {
+        watch.insert("project".into(), toml::Value::String(project.to_string()));
+    }
+    root.insert("watch".into(), toml::Value::Table(watch));
+    let serialized =
+        toml::to_string_pretty(&doc).context("failed to serialize local .arags.toml")?;
+    std::fs::write(local, serialized)
+        .with_context(|| format!("failed to write {}", local.display()))
 }
 
 /// Address precedence: configured `server.addr` first (local already won over
@@ -429,7 +490,10 @@ ignore = ["target/"]
         let cfg = load_from(&g, &l).unwrap();
         assert_eq!(cfg.server_addr(), "http://localhost:50051");
         assert_eq!(cfg.server.tls_ca.as_deref(), Some("/etc/arags/ca.crt"));
-        assert_eq!(cfg.server.tls_cert.as_deref(), Some("/etc/arags/client.crt"));
+        assert_eq!(
+            cfg.server.tls_cert.as_deref(),
+            Some("/etc/arags/client.crt")
+        );
         assert_eq!(cfg.server.tls_key.as_deref(), Some("/etc/arags/client.key"));
     }
 
@@ -495,5 +559,51 @@ retention_days = 90
         assert_eq!(cfg.server.tls_ca, None);
         assert_eq!(cfg.project.name, None);
         assert_eq!(cfg.server_addr(), "127.0.0.1:50051");
+    }
+}
+
+#[cfg(test)]
+mod watch_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+
+    #[test]
+    fn test_set_watch_enabled_roundtrip_preserves_fields() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join(".arags.toml");
+        std::fs::write(
+            &path,
+            "[project]\nname = \"demo\"\nignore = [\"target/\"]\n\n[server]\naddr = \"10.0.0.5:50051\"\n",
+        )
+        .unwrap();
+
+        set_watch_enabled(&path, true, "demo").unwrap();
+        let raw = std::fs::read_to_string(&path).unwrap();
+        assert!(raw.contains("[project]"));
+        assert!(raw.contains("[server]"));
+        assert!(raw.contains("enabled = true"));
+
+        let local = load_local_at(&path).unwrap();
+        assert!(local.watch.as_ref().is_some_and(|w| w.enabled));
+        assert_eq!(local.watch.and_then(|w| w.project).as_deref(), Some("demo"));
+        assert_eq!(
+            local.project.as_ref().and_then(|p| p.name.as_deref()),
+            Some("demo")
+        );
+
+        // Unregister clears the flag but keeps the section and other data.
+        set_watch_enabled(&path, false, "").unwrap();
+        let local = load_local_at(&path).unwrap();
+        assert!(!local.watch.unwrap().enabled);
+    }
+
+    #[test]
+    fn test_set_watch_enabled_creates_missing_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join(".arags.toml");
+        set_watch_enabled(&path, true, "p").unwrap();
+        let local = load_local_at(&path).unwrap();
+        assert!(local.watch.is_some_and(|w| w.enabled));
     }
 }

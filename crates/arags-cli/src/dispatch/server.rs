@@ -66,9 +66,16 @@ pub fn run(
             path,
             ignore_patterns,
             force_include,
+            register,
+            unregister,
         } => {
+            if unregister {
+                return run_unregister(&path);
+            }
+            let absolute = std::fs::canonicalize(&path)
+                .with_context(|| format!("failed to resolve path: {}", path.display()))?;
             let mut client = connect(rt, &cfg)?;
-            run_index(
+            let result = run_index(
                 rt,
                 &mut client,
                 &project,
@@ -76,7 +83,16 @@ pub fn run(
                 &ignore_patterns,
                 &force_include,
                 format,
-            )
+            );
+            if result.is_ok() && register {
+                run_register(&absolute, &project)?;
+            }
+            result
+        }
+        Commands::WatchDaemon { root } => {
+            let absolute = std::fs::canonicalize(&root)
+                .with_context(|| format!("failed to resolve path: {}", root.display()))?;
+            run_watch_daemon(rt, &cfg, &absolute)
         }
         Commands::Search {
             query,
@@ -311,13 +327,15 @@ fn partition_files(files: &[PathBuf], n: usize) -> Vec<Vec<PathBuf>> {
     groups
 }
 
-/// Discover files under `root`, skipping default-ignored and user-ignored
-/// paths unless force-included.
+/// Discover files under `root`, skipping dot-paths, `.gitignore` rules
+/// (root and nested), default-ignored and user-ignored paths unless
+/// force-included.
 fn discover_files(
     root: &Path,
     ignore: &[String],
     force_include: &[String],
 ) -> Result<Vec<PathBuf>> {
+    let gitignore_rules = crate::gitignore::load_gitignores(root);
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -330,8 +348,16 @@ fn discover_files(
             let rel_s = rel.to_string_lossy().to_string();
             let is_dir = path.is_dir();
 
+            // Every path component starting with '.' is hidden (git-style).
+            let has_dot_component = rel_s.split('/').any(|seg| seg.starts_with('.'));
+            if has_dot_component && !matches_any(&rel_s, force_include) {
+                continue;
+            }
+
             let forced = matches_any(&rel_s, force_include);
-            let ignored = is_default_ignored(&rel_s, is_dir) || matches_any(&rel_s, ignore);
+            let ignored = is_default_ignored(&rel_s, is_dir)
+                || matches_any(&rel_s, ignore)
+                || gitignore_decides(&gitignore_rules, &rel_s, is_dir);
 
             if is_dir {
                 if forced || !ignored {
@@ -345,6 +371,18 @@ fn discover_files(
         }
     }
     Ok(out)
+}
+
+/// Apply `.gitignore` semantics over the loaded rule list: the LAST matching
+/// rule wins (so negations re-include), and deeper files were loaded later.
+fn gitignore_decides(rules: &[crate::gitignore::IgnoreRule], rel: &str, is_dir: bool) -> bool {
+    let mut decision = false;
+    for rule in rules {
+        if rule.decides(rel, is_dir) {
+            decision = !rule.negated;
+        }
+    }
+    decision
 }
 
 /// Directories/files ignored by default (sensitive or non-source).
@@ -398,6 +436,202 @@ fn matches_pattern(rel: &str, pat: &str) -> bool {
         return !simple.is_empty() && rel.to_ascii_lowercase().contains(&simple);
     }
     rel == pat || rel.ends_with(&format!("/{pat}")) || rel.contains(&format!("/{pat}/"))
+}
+
+// ─────────────────────────────── Watch ───────────────────────────────
+
+/// Persist the registration and start the detached watcher daemon
+/// (`arags index --register`).
+fn run_register(root: &Path, project_name: &Path) -> Result<()> {
+    if crate::watcher::is_running(root) {
+        println!("Watcher already running for {}", root.display());
+        return Ok(());
+    }
+    crate::user_config::set_watch_enabled(
+        &root.join(".arags.toml"),
+        true,
+        &project_name.to_string_lossy(),
+    )?;
+    crate::watcher::spawn_daemon(root)?;
+    println!(
+        "Registered {} for background auto-update (re-index after 1 min of quiet). Stop with `arags index --unregister`.",
+        root.display()
+    );
+    Ok(())
+}
+
+/// Stop the watcher daemon and clear the registration flag.
+fn run_unregister(path: &Path) -> Result<()> {
+    let absolute = std::fs::canonicalize(path)
+        .with_context(|| format!("failed to resolve path: {}", path.display()))?;
+    if crate::watcher::is_running(&absolute) {
+        crate::watcher::request_stop(&absolute)?;
+        println!("Watcher stop requested for {}", absolute.display());
+    } else {
+        println!("No watcher running for {}", absolute.display());
+    }
+    crate::user_config::set_watch_enabled(&absolute.join(".arags.toml"), false, "")
+}
+
+/// Entry point of the hidden `arags __watch <root>` daemon: watch `root`,
+/// and after each 1-minute quiet window re-stream only the changed files.
+fn run_watch_daemon(rt: &Runtime, cfg: &EffectiveUserConfig, root: &Path) -> Result<()> {
+    let local = crate::user_config::load_local_at(&root.join(".arags.toml")).unwrap_or_default();
+    let project_name = local
+        .watch
+        .and_then(|w| w.project)
+        .unwrap_or_else(|| root.to_string_lossy().to_string());
+    let mut ignore = cfg.ignore_patterns();
+    if let Some(local_ignore) = local.project.and_then(|p| p.ignore) {
+        ignore.extend(local_ignore);
+    }
+    let force_include: Vec<String> = Vec::new();
+    let mut client = connect(rt, cfg)?;
+    let mut known = snapshot_state(root, &ignore, &force_include);
+
+    tracing::info!(
+        root = %root.display(),
+        %project_name,
+        "watch daemon started"
+    );
+
+    let rt_ref = &rt;
+    let client_ref = &mut client;
+    let known_ref = &mut known;
+    crate::watcher::watch_loop(root, &mut |changed: &[PathBuf]| {
+        flush_changed(
+            rt_ref,
+            client_ref,
+            root,
+            &project_name,
+            &ignore,
+            &force_include,
+            known_ref,
+            changed,
+        )
+    })
+}
+
+/// mtime+size fingerprint used to decide whether a file really changed.
+type FileState = (u128, u64);
+
+#[allow(clippy::too_many_arguments)]
+fn flush_changed(
+    rt: &Runtime,
+    client: &mut AragsClient,
+    root: &Path,
+    project_name: &str,
+    ignore: &[String],
+    force_include: &[String],
+    known: &mut std::collections::HashMap<String, FileState>,
+    changed: &[PathBuf],
+) -> Result<()> {
+    use std::collections::HashSet;
+    if changed.is_empty() {
+        return Ok(());
+    }
+
+    // Re-discover so ignore rules apply to new files as well.
+    let current = discover_files(root, ignore, force_include)
+        .map_err(|e| anyhow::anyhow!("file discovery failed: {e}"))?;
+    let mut current_set: HashSet<String> = HashSet::with_capacity(current.len());
+    for path in &current {
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+        current_set.insert(rel);
+    }
+
+    // Changed ∧ still present ∧ still includable; skip unchanged fingerprints.
+    let changed_set: HashSet<String> = changed
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+    let mut to_send: Vec<PathBuf> = Vec::new();
+    for path in &current {
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+        if !changed_set.contains(rel.as_str()) {
+            continue;
+        }
+        let state = file_state(path);
+        if known.get(&rel) == Some(&state) {
+            continue; // e.g. editor touch without content change
+        }
+        to_send.push(path.clone());
+    }
+    if to_send.is_empty() {
+        tracing::debug!(count = changed.len(), "no surviving changes to index");
+        return Ok(());
+    }
+
+    let groups = partition_files(&to_send, 2);
+    for group in groups {
+        let pb = Arc::new(indicatif::ProgressBar::hidden());
+        let (files_idx, chunks_idx) = rt.block_on(stream_index_group(
+            client,
+            project_name.to_string(),
+            root.to_path_buf(),
+            group,
+            pb,
+        ))?;
+        tracing::info!(files = files_idx, chunks = chunks_idx, "re-indexed changes");
+    }
+
+    // Refresh fingerprints for everything we just sent.
+    for path in &to_send {
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+        known.insert(rel, file_state(path));
+    }
+    Ok(())
+}
+
+/// Current `(mtime_nanos, size)` fingerprint of a file (zeroed on failure).
+fn file_state(path: &Path) -> FileState {
+    match std::fs::metadata(path) {
+        Ok(meta) => {
+            let nanos = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| {
+                    u128::from(d.as_secs()) * 1_000_000_000 + u128::from(d.subsec_nanos())
+                });
+            let size = meta.len();
+            (nanos, size)
+        }
+        Err(_) => (0, 0),
+    }
+}
+
+/// Discovery + fingerprints for the whole tree (daemon startup baseline).
+fn snapshot_state(
+    root: &Path,
+    ignore: &[String],
+    force_include: &[String],
+) -> std::collections::HashMap<String, FileState> {
+    let mut map = std::collections::HashMap::new();
+    let Ok(files) = discover_files(root, ignore, force_include) else {
+        return map;
+    };
+    for path in files {
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .to_string();
+        map.insert(rel, file_state(&path));
+    }
+    map
 }
 
 // ─────────────────────────────── Search ───────────────────────────────
@@ -876,4 +1110,61 @@ fn append_gitignore(local_path: &Path) -> Result<()> {
         .with_context(|| format!("failed to open {}", gitignore.display()))?;
     writeln!(f, "{entry}").context("failed to append to .gitignore")?;
     Ok(())
+}
+
+#[cfg(test)]
+mod discovery_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+
+    #[test]
+    fn test_discovery_ignores_dotfiles_and_gitignore_rules() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("main.rs"), "fn main() {}").unwrap();
+        std::fs::create_dir_all(root.join(".hidden")).unwrap();
+        std::fs::write(root.join(".hidden/file.rs"), "x").unwrap();
+        std::fs::write(root.join(".env"), "SECRET=1").unwrap();
+        std::fs::create_dir_all(root.join(".git/objects")).unwrap();
+        std::fs::write(root.join(".git/config"), "[core]").unwrap();
+        std::fs::write(root.join("debug.log"), "noise").unwrap();
+        std::fs::write(root.join("keep.txt"), "real").unwrap();
+        std::fs::write(root.join(".gitignore"), "*.log\n!keep.log\n").unwrap();
+
+        // Nested .gitignore scoped to its directory.
+        std::fs::create_dir_all(root.join("sub/pkg")).unwrap();
+        std::fs::write(root.join("sub/pkg/.gitignore"), "cache/\n").unwrap();
+        std::fs::create_dir_all(root.join("sub/pkg/cache")).unwrap();
+        std::fs::write(root.join("sub/pkg/cache/junk.rs"), "j").unwrap();
+        std::fs::write(root.join("sub/pkg/src.rs"), "s").unwrap();
+
+        let files = discover_files(root, &[], &[]).unwrap();
+        let rels: Vec<String> = files
+            .iter()
+            .map(|p| p.strip_prefix(root).unwrap().to_string_lossy().to_string())
+            .collect();
+
+        assert!(rels.contains(&"main.rs".to_string()));
+        assert!(rels.contains(&"keep.txt".to_string()));
+        assert!(rels.contains(&"sub/pkg/src.rs".to_string()));
+
+        assert!(
+            !rels
+                .iter()
+                .any(|r| r.split('/').any(|seg| seg.starts_with('.'))),
+            "no dot-paths expected, got {rels:?}"
+        );
+        assert!(!rels.contains(&"debug.log".to_string()), "{rels:?}");
+        assert!(!rels.contains(&"sub/pkg/cache/junk.rs".to_string()));
+    }
+
+    #[test]
+    fn test_force_include_overrides_dot_ignore() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join(".special"), "needed").unwrap();
+        let files = discover_files(root, &[], &[".special".to_string()]).unwrap();
+        assert_eq!(files.len(), 1);
+    }
 }

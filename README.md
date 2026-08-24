@@ -124,7 +124,9 @@ override por projeto) → `~/.arags/arags.toml` (`[server].addr`) → env
 | Comando | Descrição |
 |---------|-----------|
 | `arags init [--index] [--no-index]` | Scaffold de `<proj>/.arags.toml` (gitignored) + index |
-| `arags index <dir>` | Faz stream do texto bruto; servidor chunk+embed |
+| `arags index <dir>` | Faz stream do texto bruto; servidor chunk+embed. Dot-paths (`.env`, `.git/`, ...) e regras de `.gitignore` (raiz e aninhados, com `!` de negação) são ignorados |
+| `arags index <dir> --register` | Indexa + registra o projeto para **auto-atualização** (daemon background no client; ver [Auto-atualização](#auto-atualização-watch-daemon)) |
+| `arags index <dir> --unregister` | Para o daemon e remove o registro (`[watch] enabled = false`) |
 | `arags search <query>` | Busca híbrida BM25 + semântica (server-side) |
 | `arags query <question>` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
 | `arags memory list\|get\|invalidate\|cleanup` | Memória (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
@@ -144,9 +146,38 @@ por cron + RPC admin `TriggerMaintenance` (e `arags-server admin consolidate`).
 | Flag | Descrição | Default |
 |------|-----------|---------|
 | `--ignore <pattern>` | Padrões de ignore (glob, múltiplos) | `.env`, `.env.*`, `*.pem`, `*.key` |
+| `--register` | Registra o projeto p/ auto-atualização (daemon background) | off |
+| `--unregister` | Para o daemon e limpa o registro | — |
+
+Regras de ignore aplicadas na descoberta de arquivos:
+
+1. **Dot-paths**: qualquer componente do caminho iniciando por `.` é ignorado
+   (`.git/`, `.env`, `.github/`, ...);
+2. **`.gitignore`**: regras da raiz e de subdiretórios (comentários, dir-only
+   `logs/`, âncora `/dist`, globs `* ? **`, negação `!` com *last-match-wins*);
+3. Padrões default + `--ignore` do `[project]`/CLI.
 
 > O chunking e os embeddings ocorrem **no servidor**. O cliente apenas faz
 > stream do texto bruto dos arquivos (client-streaming gRPC `IndexProject`).
+
+## Auto-atualização (watch daemon)
+
+Similar ao `git maintenance`, um projeto pode ser registrado para se manter
+atualizado sem intervenção:
+
+```bash
+arags index ./meu-projeto --register    # indexa, registra e sobe o daemon
+arags index ./meu-projeto --unregister  # para o daemon e limpa o registro
+```
+
+- O registro vive no `.arags.toml` do projeto: `[watch] enabled = true`.
+- Um **daemon detached** (`arags watch-daemon <root>`) roda no client,
+  monitorando a árvore via inotify/FSEvents.
+- Cada mudança abre uma **janela de silêncio de 1 minuto**; ao fechá-la, só os
+  arquivos alterados são re-enviados ao servidor, que substitui os chunks
+  envolvidos (e invalida respostas de QA-cache que dependiam deles).
+- Controle: marcadores dotfile `.arags-watch.pid` / `.arags-watch.stop`
+  (ignorados pelo indexador pela regra de dot-paths).
 
 ### `arags search`
 

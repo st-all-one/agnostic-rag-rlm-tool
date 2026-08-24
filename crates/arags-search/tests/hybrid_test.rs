@@ -10,9 +10,8 @@
 use arags_search::bm25::Bm25Search;
 use arags_search::decay::DecayConfig;
 use arags_search::hybrid::HybridSearch;
-use arags_search::types::{HybridResult, SearchOptions, SearchTier};
+use arags_search::types::HybridResult;
 use arags_storage::Storage;
-use arags_storage::sqlite::buffers::NewBuffer;
 use std::collections::HashMap;
 use tempfile::TempDir;
 

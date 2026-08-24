@@ -13,7 +13,7 @@ use std::path::Path;
 /// Extract the testable core of `arags init`'s file generation by mirroring
 /// its behavior against a tempdir cwd (the real helpers run on
 /// `std::env::current_dir`, so we exercise the same logic here).
-fn init_files(cwd: &Path, project_name: &str, ignore: Vec<String>) -> String {
+fn init_files(_cwd: &Path, project_name: &str, ignore: Vec<String>) -> String {
     let ignore_field = if ignore.is_empty() {
         String::new()
     } else {

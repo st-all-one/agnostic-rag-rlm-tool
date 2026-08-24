@@ -20,7 +20,6 @@ MemoryEngine
 ├── TransferEngine        (#transfer)     transferência entre projetos
 ├── ConsolidationEngine   (#consolidation) deduplicação / limpeza (manutenção)
 ├── HistoryManager        (#history)      histórico de queries
-└── WatchMonitor          (#watch)        monitoramento de mudanças
 ```
 
 ## Módulos
@@ -34,7 +33,6 @@ MemoryEngine
 | `transfer` | `transfer.rs` | Cópia de chunks entre projetos, com filtro de linguagem e limite. |
 | `consolidation` | `consolidation.rs` | Deduplicação de chunks e remoção de padrões de baixa confiança (manutenção). |
 | `history` | `history.rs` | Registro e consulta de histórico de queries (escopado por usuário). |
-| `watch` | `watch.rs` | Monitoramento de sistema de arquivos (via `notify`). |
 | `decay` | `decay.rs` | Saliência/decay (recency + frequency + age), **sem** dependência de `arags-search`. |
 | `lib` | `lib.rs` | API pública, `ScopedTimer`, re-exports. |
 
@@ -74,7 +72,7 @@ Módulo puro e auto-contido — testável em isolamento (`tests/decay_test.rs`).
 
 ## Fora de Escopo (follow-up de CLI/servidor)
 
-O wiring de `WatchMonitor` (`arags index --watch`), consolidação automática
+O wiring do watcher (agora em `arags-cli`, `arags index --register`), consolidação automática
 (`arags consolidate`) e `HistoryManager` no modo servidor pertencem a `arags-cli` /
 `arags-server` e não foram editados nesta tarefa. As APIs de engine já existem e
 são chamáveis.

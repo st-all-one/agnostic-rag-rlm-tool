@@ -31,8 +31,10 @@ pub mod cli;
 pub mod client;
 pub mod commands;
 pub mod dispatch;
+pub mod gitignore;
 pub mod output;
 pub mod user_config;
+pub mod watcher;
 
 pub use client::{ClientConfig, create_client};
 pub use output::{Format, error, info, success, warn};

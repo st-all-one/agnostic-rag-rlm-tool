@@ -4,6 +4,11 @@
 //! `#[ignore]`d and gated on `ARAGS_MINILM_DIR`. Everything else runs on
 //! synthetic fixtures.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#![allow(clippy::cast_precision_loss, clippy::too_many_lines)]
+#![allow(clippy::vec_init_then_push)]
+
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -26,7 +31,7 @@ fn prng(n: usize, seed: u32) -> Vec<f32> {
 const ONES: fn(usize) -> Vec<f32> = |n| vec![1.0_f32; n];
 const ZEROS: fn(usize) -> Vec<f32> = |n| vec![0.0_f32; n];
 
-/// Write a tiny valid MiniLM checkpoint (hidden 64, 2 layers, 4 heads,
+/// Write a tiny valid `MiniLM` checkpoint (hidden 64, 2 layers, 4 heads,
 /// intermediate 128) plus a matching `config.json`.
 fn toy_checkpoint(dir: &Path) {
     let (hidden, layers, heads, inter) = (64_usize, 2_usize, 4_usize, 128_usize);
@@ -174,7 +179,7 @@ fn test_quantization_parse() {
     assert_eq!(Quantization::parse("int8"), Quantization::Int8);
     assert_eq!(Quantization::parse(" NONE "), Quantization::None);
     assert_eq!(Quantization::default(), Quantization::Int8);
-    assert_eq!(Quantization::Int8.ggml_dtype().is_some(), true);
+    assert!(Quantization::Int8.ggml_dtype().is_some());
     assert_eq!(Quantization::None.ggml_dtype(), None);
 }
 
