@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **`CachedEmbedder`** (`src/embedder/cache.rs`): wrapper da trait `Embedder`
+  com cache SQLite por hash de conteúdo — hit pula a inferência; batch suporta
+  misto hit/miss; erros de cache degradam para pass-through (nunca falham o
+  embed). Consumido pelo `arlm-server` quando `server.toml [embedder].cache =
+  true` (plan 020), com testes unitários.
+
 ## [0.4.0] - 2026-08-20
 
 ### Changed
@@ -48,6 +57,10 @@
 - `test_discover_files_custom_ignore` e `test_glob_match` tests
 
 ## [Unreleased]
+
+### Added (auditoria plan 020)
+- `CachedEmbedder` (`src/embedder/cache.rs`): wrapper da trait `Embedder` com cache SQLite por hash de conteúdo (hit pula inferência; batch suporta misto hit/miss; erros de cache nunca falham o embed). Consumido pelo `arlm-server` quando `server.toml [embedder].cache = true`.
+
 
 ### Changed
 - `OwnedFile` usa `memmap2::Mmap` zero-copy em vez de `read_to_string`

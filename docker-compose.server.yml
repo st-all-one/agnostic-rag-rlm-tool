@@ -5,18 +5,16 @@ services:
       dockerfile: Dockerfile.server
     volumes:
       - arlm-server-data:/data
-      - ./models/bge-m3:/models:ro
+      # server.toml é um arquivo do HOST montado no container (plan 020).
+      - ./docker/server.toml:/etc/arlm/server.toml:ro
+      # Descomente para BGE-M3 local (e ajuste [embedder] no server.toml):
+      # - ./models/bge-m3:/models:ro
     ports:
       - "50051:50051"
     environment:
-      - ARLM_DATA_DIR=/data
-      - ARLM_MODEL_DIR=/models
-      # ServerConfig resolves its data dir from $HOME/.arlm, so point HOME at
-      # the persisted volume to keep SQLite + vectors on the mounted volume.
-      - HOME=/data
-      # Bind 0.0.0.0 so the published port is reachable from the host
-      # (0.0.0.0 still accepts 127.0.0.1, so the in-container healthcheck works).
-      - ARLM_SERVER_ADDR=0.0.0.0:50051
+      - ARLM_DATA_DIR=/data/arlm
+      - ARLM_SERVER_CONFIG=/etc/arlm/server.toml
+      - RUST_LOG=info,arlm_server=debug
     command: ["up"]
 
 volumes:

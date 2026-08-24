@@ -1,5 +1,10 @@
 # Plano: Ollama + arlm-server em container único (embeddings 100% locais)
 
+> **NOTA (plan 020):** as envs `ARLM_OLLAMA_*`/`ARLM_MODEL_DIR`/`ARLM_EMBED_BATCH`
+> citadas abaixo foram **substituídas pela seção `[embedder]` do `server.toml`**
+> (montado em `/etc/arlm/server.toml`). Este documento é histórico — a parte B
+> (batch/concurrency) continua válida; a config de modelo agora é só TOML.
+
 > Estado alvo: **cliente → gRPC arlm-server → Ollama (mesmo container)**. O
 > servidor recebe o texto cru, faz chunking/digestão/indexação e responde
 > buscas híbridas (BM25 + semântico) usando o Ollama embutido. Máxima

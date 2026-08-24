@@ -33,21 +33,21 @@ src/
 │   ├── mod.rs
 │   ├── root.rs            # Cli, OutputFormatArg
 │   └── commands.rs        # enum Commands
-├── dispatch/              # Roteamento de comandos
-│   ├── mod.rs             # branch para o servidor gRPC
-│   └── server.rs          # modo servidor gRPC (formatado por --format)
-├── client.rs              # gRPC client: retry/backoff, TLS, validação
+├── dispatch/              # Roteamento (único ponto que conhece os comandos)
+│   ├── mod.rs             # resolve user_config e delega ao server.rs
+│   └── server.rs          # todos os comandos via gRPC (+ init/index/search helpers)
+├── client.rs              # gRPC client: retry/backoff, TLS/mTLS, validação
+├── auth_client.rs         # AuthRefresh + interceptor Bearer com renovação
+├── backend.rs             # resolve o backend LLM do usuário ([llm.backends])
 ├── user_config.rs         # Config 2-escopos (global ~/.arlm/arlm.toml + local .arlm.toml)
-├── util.rs                # data_dir(), project resolution
-├── commands/              # um módulo por subcomando
+├── commands/              # módulos de comando
 │   ├── mod.rs
-│   ├── index.rs  search.rs  query.rs  qa_cache.rs
-│   ├── memory.rs  persist.rs  history.rs
-│   └── serve/             # arlm server (gRPC/MCP data plane)
+│   ├── persist.rs         # wiki/*.md via LLM do usuário
+│   └── qa_cache.rs        # plan 017: run_ask/run_get/run_invalidate
 └── output/
     ├── mod.rs             # Format enum
-    └── json.rs tree.rs markdown.rs prompt.rs
-tests/                     # testes de integração
+    └── json.rs jsonl.rs tree.rs markdown.rs prompt.rs
+tests/                     # testes de integração (+ init/gitignore/disjunção)
 ```
 
 ## Comandos
@@ -61,7 +61,9 @@ tests/                     # testes de integração
 | `arlm memory list\|get\|invalidate\|cleanup` | Memória (admin, via RPC) |
 | `arlm persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
 | `arlm history [--limit] [--user]` | Histórico de consultas por usuário |
-| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
+
+> **Removido (plan 020):** o subcomando `serve` (HTTP/MCP local) — o CLI é um
+> cliente gRPC puro; quem hospeda o data plane é o binário `arlm-server`.
 
 > **Removidos (plan 019):** `run`, `context`, `session`, `status`, `cost`,
 > `cancel`, `checkpoints`, `restore-page`, `wiki`, `consolidate` (CLI), `decay`
@@ -103,23 +105,29 @@ arlm search "query" --format markdown   # Markdown
 arlm search "query" --format prompt      # Prompt para LLM
 ```
 
-## Modo Servidor (`--server`)
+## Conexão com o Servidor (plan 020)
 
-```bash
-arlm --server 127.0.0.1:50051 search "query"
-arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
+O alvo é resolvido na ordem: `.arlm.toml` local `[server].addr` →
+`~/.arlm/arlm.toml` global `[server].addr` → env `ARLM_SERVER_ADDR` →
+`127.0.0.1:50051`. Não existe flag `--server` (a config vive nos arquivos).
+
+```toml
+[server]
+addr = "https://arlm.corp.internal:50051"
+tls_ca = "/etc/arlm/tls/ca.crt"          # CA customizada (opcional)
+tls_cert = "/etc/arlm/tls/client.crt"    # mTLS: client cert (opcional,
+tls_key = "/etc/arlm/tls/client.key"     # exige também tls_key)
 ```
 
-- O endereço padrão é lido da seção `[server]` do `~/.arlm/arlm.toml` (global) ou
-  `.arlm.toml` (local, campo `addr`), depois da env `ARLM_SERVER_ADDR`.
 - Cliente com **retry/backoff** (3 tentativas), **validação de endereço** e
-  **TLS automático** quando a URL usa `https://`.
+  **TLS automático** em `https://`; `tls_ca`/`tls_cert`/`tls_key` habilitam
+  CA customizada e mTLS mesmo sem scheme.
 
 ## Flags Globais
 
 ```
---format <fmt>          # json|tree|markdown|prompt
---server <addr>         # usa gRPC remoto
+--format <fmt>          # full_json|path|markdown|text|jsonl
+--project <path>, -p    # escopo do projeto
 --verbose, -v           # logs estruturados (tracing)
 ```
 
@@ -134,9 +142,6 @@ arlm search "bug no login" --verbose
 
 # QA com digest via LLM do usuário (emite cache_id)
 arlm query "analise auth" -qa
-
-# Servidor remoto
-arlm --server 127.0.0.1:50051 search "query"
 ```
 
 ## Integração com Agentes
@@ -172,4 +177,6 @@ cargo build --release -p arlm-cli       # Release (otimizado)
 CARGO_BUILD_JOBS=4 cargo test -p arlm-cli
 ```
 
-Testes de integração ficam em `tests/`; não há `#[cfg(test)]` dentro de `src/`.
+Testes de integração ficam em `tests/` (incluindo `init_test.rs`, que valida o
+scaffold do `arlm init` e a ausência de dependências do data plane); testes
+unitários puros vivem em `#[cfg(test)]` inline (ex.: merge da `user_config`).

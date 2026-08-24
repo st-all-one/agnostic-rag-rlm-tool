@@ -13,10 +13,13 @@ message SearchRequest {
 }
 
 enum SearchTier {
-  TIER_BM25 = 0;
-  TIER_SEMANTIC = 1;
-  TIER_HYBRID = 2;
-  TIER_ENTITY = 3;
+  // Wire-default: the server resolves it to its `[search].tier` default
+  // (plan 020). Clients that need a specific tier send it explicitly.
+  SEARCH_TIER_UNSPECIFIED = 0;
+  TIER_BM25 = 1;
+  TIER_SEMANTIC = 2;
+  TIER_HYBRID = 3;
+  TIER_ENTITY = 4;
 }
 
 message SearchResult {

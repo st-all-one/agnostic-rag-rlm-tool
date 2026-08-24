@@ -211,3 +211,80 @@ pub fn increment_buffer_counts(
     })
     .context("failed to increment buffer counts")
 }
+
+/// Insert flattened `(file_path, chunk)` pairs in transactional batches of at
+/// most `max_batch` rows (`server.toml max_batch_size`, plan 020), returning
+/// the persisted `(chunk_id, content)` pairs. One connection is held for the
+/// whole call; each batch commits atomically.
+///
+/// # Errors
+///
+/// Returns an error if a connection cannot be acquired or any insert fails.
+pub fn insert_chunks_batched(
+    storage: &Storage,
+    buffer_id: i64,
+    items: &[(&str, &crate::indexing::IndexedChunk)],
+    max_batch: usize,
+) -> Result<Vec<(i64, String)>> {
+    let conn = storage
+        .connection()
+        .context("failed to acquire connection")?;
+
+    let mut out = Vec::with_capacity(items.len());
+    conn.execute(|conn| {
+        for group in items.chunks(max_batch.max(1)) {
+            let tx = conn
+                .unchecked_transaction()
+                .context("failed to begin batch transaction")?;
+            for (file_path, c) in group {
+                let hash_bytes = hex::decode(&c.hash).unwrap_or_default();
+                tx.execute(
+                    "INSERT INTO chunks (buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count) \
+                     VALUES (?1, ?2, 0, 0, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![
+                        buffer_id,
+                        file_path,
+                        c.line_start,
+                        c.line_end,
+                        hash_bytes,
+                        c.language.as_deref(),
+                        Some(c.chunk_type.as_str()),
+                        Some(0),
+                    ],
+                )
+                .context("failed to insert chunk")?;
+                let chunk_id = tx.last_insert_rowid();
+
+                tx.execute(
+                    "INSERT INTO chunk_texts (chunk_id, content) VALUES (?1, ?2)",
+                    params![chunk_id, c.content],
+                )
+                .context("failed to insert chunk text")?;
+                tx.execute(
+                    "INSERT INTO chunks_fts(rowid, content) VALUES (?1, ?2)",
+                    params![chunk_id, c.content],
+                )
+                .context("failed to index chunk in FTS")?;
+
+                for entity in Storage::extract_entities(&c.content, file_path) {
+                    tx.execute(
+                        "INSERT OR IGNORE INTO chunk_entities (chunk_id, entity) VALUES (?1, ?2)",
+                        params![chunk_id, entity],
+                    )
+                    .context("failed to insert chunk entity")?;
+                    tx.execute(
+                        "INSERT INTO entities_fts (entity) VALUES (?1)",
+                        params![entity],
+                    )
+                    .context("failed to index entity in FTS")?;
+                }
+
+                out.push((chunk_id, c.content.clone()));
+            }
+            tx.commit().context("failed to commit batch")?;
+        }
+        Ok(())
+    })?;
+
+    Ok(out)
+}

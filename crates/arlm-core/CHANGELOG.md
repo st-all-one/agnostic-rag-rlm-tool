@@ -7,6 +7,12 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added (auditoria plan 020)
+- `qa_cache::chunk_content_hash(content)` — hash canônico SHA-256 hex do texto
+  do chunk, movido do `arlm-storage` para cá: cliente (digest-once
+  `StoreAnswer.source_hashes`) e servidor (staleness) compartilham a mesma
+  implementação sem o client depender de storage. Re-exportado pelo storage.
+
 ### Added
 - **QA-Cache engine (plan 017):** `src/qa_cache.rs` com `QaThresholds`
   (configurável), `QaPlan` e `resolve_plan(similarity, jaccard, t)` — mapeia a

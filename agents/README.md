@@ -44,18 +44,18 @@ cp -r agents/pi/ ~/.pi/extensions/arlm/
 # { "pi": { "extensions": ["~/.pi/extensions/arlm/index.ts"] } }
 ```
 
-## Servidor (gRPC/MCP, plano de dados)
+## Servidor (gRPC, plano de dados)
 
-Para qualquer agente que suporte gRPC/MCP (o servidor é LLM-free; não há
-endpoint `/run` nem `/context`):
+O servidor é LLM-free e puro gRPC (não há endpoint `/run`, `/context` nem MCP
+local; plan 020 removeu o modo offline do client):
 
 ```bash
-# Iniciar o servidor de plano de dados (gRPC + MCP)
-arlm server
+# Iniciar o servidor de plano de dados
+arlm-server up          # ou: docker compose -f docker-compose.server.yml up -d
 
-# O cliente CLI conecta por gRPC
-arlm --server 127.0.0.1:50051 search "validate_token" --top-k 5
-arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
+# O cliente CLI conecta por gRPC (addr via .arlm.toml / ~/.arlm/arlm.toml / env)
+arlm search "validate_token" --top-k 5
+arlm query "como funciona o login?" -qa
 ```
 
 ## Docker
@@ -64,7 +64,7 @@ arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
 # Servidor via Docker
 docker compose up -d
 
-# CLI via Docker (index/search; context e run foram removidos no plan 019)
+# CLI via Docker (index/search)
 docker compose run --rm arlm-cli search "bug no login"
 docker compose run --rm arlm-cli index /projects/meu-app
 ```

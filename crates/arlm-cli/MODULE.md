@@ -4,8 +4,8 @@
 CLI *agent-agnostic* do `arlm`: faz o parsing de argumentos (clap), resolve a
 configuração do usuário (**2 escopos**: `~/.arlm/arlm.toml` global +
 `.arlm.toml` local, com merge granular por campo) e roteia cada subcomando para
-um `arlm-server` remoto via gRPC (`--server`). É um **cliente gRPC puro**: não
-há modo local. Usa o **LLM local do usuário** (`arlm-llm`) apenas para *digest*
+um `arlm-server` remoto via gRPC. É um **cliente gRPC puro**: não há modo local
+(plan 020 removeu o subcomando `serve`/MCP e o data plane local). Usa o **LLM local do usuário** (`arlm-llm`) apenas para *digest*
 (`query -qa`) e *summarize* (`persist`). O servidor é um plano de dados puro
 (LLM-free). Renderiza saídas em 4 formatos (`json`, `tree`, `markdown`, `prompt`)
 com logs estruturados (`tracing`).
@@ -18,19 +18,23 @@ com logs estruturados (`tracing`).
 - `src/dispatch/` — `mod` (resolução de config + branch para o servidor),
   `server` (modo gRPC, renderiza respostas conforme `--format`). Não há modo
   local — todo comando vai para o servidor.
-- `src/client.rs` — `ClientConfig` + `create_client` (retry/backoff, validação
-  de endereço, TLS automático).
+- `src/auth_client.rs` — `ArlmClient` autenticado (`AuthRefresh` + interceptor
+  Bearer com renovação em background).
+- `src/backend.rs` — resolve o backend LLM do usuário a partir de
+  `[[llm.backends]]` (usado por `query -qa` e `persist`).
+- `src/client.rs` — `ClientConfig` + `connect_channel` (retry/backoff, validação
+  de endereço, TLS automático em `https://` e mTLS via `[server].tls_ca`/
+  `tls_cert`/`tls_key`).
 - `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,
-  `[server]`, `[project]`); arquivos legados `config.toml` **não** são lidos.
-- `src/util.rs` — `data_dir()`, resolução de projeto.
-- `src/commands/` — um módulo por subcomando:
-  - `serve/` — `arlm server` (gRPC/MCP data plane).
-  - `index`, `search`, `query`, `qa_cache` (plan 017: `run_ask`/`run_get`/
-    `run_invalidate` orquestrando os RPCs `QueryWithCache`/`GetAnswerById`/
-    `InvalidateCache`; a digestão LLM roda localmente via `arlm-llm`/`user_config`
-    e o `StoreAnswer` é fire-and-forget), `memory` (admin: list/get/invalidate/
-    cleanup → ListMemory/GetCache/InvalidateCache/TriggerMaintenance),
-    `persist` (escreve `wiki/*.md` via LLM do usuário), `history`.
+  `[server]` com knobs TLS, `[project]`); merge granular testado inline;
+  arquivos legados `config.toml` **não** são lidos.
+- `src/commands/` — módulos de comando:
+  - `qa_cache` (plan 017: `run_ask`/`run_get`/`run_invalidate` orquestrando os
+    RPCs `QueryWithCache`/`GetAnswerById`/`InvalidateCache`; a digestão LLM roda
+    localmente via `arlm-llm`/`user_config` e o `StoreAnswer` é fire-and-forget),
+  - `persist` (escreve `wiki/*.md` via LLM do usuário).
+  - `index`, `search`, `query`, `memory` (admin), `history` vivem em
+    `dispatch/server.rs` (streaming de arquivos + renderização).
 - `src/cli/commands.rs` — `Commands` enum (inclui `Query` estendido com
   `cache_id`/`qa` e o subcomando `Memory`).
 - `src/output/` — `mod` (`Format`), `json`, `tree`, `markdown`, `prompt`.
@@ -38,12 +42,13 @@ com logs estruturados (`tracing`).
   em `src/`.
 
 ## Dependências
-- Internas: `arlm-core`, `arlm-storage`, `arlm-search`, `arlm-memory`,
-  `arlm-llm`, `arlm-embedding`, `arlm-proto`.
-- Externas: `clap` (derive), `tokio` (async), `tonic`/`prost` (gRPC),
-  `axum`/`tower-http` (HTTP/MCP), `tracing`/`tracing-subscriber` (logs),
-  `serde`/`tomoml` (config), `anyhow` (erros), `indicatif`/`console` (UI),
-  `mimalloc` (allocator), `parking_lot` (sync), `uuid`/`chrono`.
+- Internas: `arlm-core`, `arlm-llm`, `arlm-proto` (plan 020: sem
+  `arlm-storage`/`arlm-search`/`arlm-memory` — o client nunca abre estado local;
+  guardado por teste em `tests/init_test.rs`).
+- Externas: `clap` (derive), `tokio`/`tokio-stream` (async/streaming),
+  `tonic` (gRPC), `tracing`/`tracing-subscriber` (logs), `serde`/`serde_json`/
+  `toml` (config/saída), `anyhow` (erros), `indicatif`/`console` (UI),
+  `chrono` (timestamps do wiki), `parking_lot` (sync), `mimalloc` (allocator).
 
 ## Convenções deste módulo
 - Sem `unwrap`/`expect`/`panic`/`unsafe` em `src/`; use `anyhow` + `?`.
@@ -55,7 +60,8 @@ com logs estruturados (`tracing`).
   é conhecido.
 - `dispatch` é o único ponto que conhece a árvore de comandos; `commands::*`
   expõe `execute(Config)` estável.
-- Testes de API pública ficam em `tests/`; `src/` não contém `#[cfg(test)]`.
+- Testes de API pública ficam em `tests/`; funções puras críticas (merge da
+  config) têm `#[cfg(test)]` inline com tempdirs.
 
 ## Comandos úteis
 ```bash
@@ -69,8 +75,8 @@ cargo fmt -p arlm-cli -- --check
 - N/A — o crate não possui schema próprio (estado em `arlm-storage`/`arlm-memory`).
 
 ## Rules
-- Padrão de produção: `dispatch::dispatch(cli, cfg)` resolve tudo e roteia para
-  o servidor gRPC.
+- Padrão de produção: `dispatch::dispatch(cli, &rt)` carrega a user_config e
+  roteia tudo para o servidor gRPC; nenhum comando abre Storage local.
 - O CLI é um **cliente gRPC puro**: todos os comandos (`init`, `index`,
   `search`, `query`, `memory`, `persist`, `history`, `server`) vão para o
   `arlm-server` (plano de dados, LLM-free).

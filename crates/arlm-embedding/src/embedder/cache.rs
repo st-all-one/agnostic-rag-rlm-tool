@@ -4,7 +4,7 @@ use parking_lot::Mutex;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
-use super::{Embedding, EmbeddingError, EmbeddingResult};
+use super::{Embedder, Embedding, EmbeddingError, EmbeddingResult};
 
 /// SQLite-backed embedding cache.
 ///
@@ -182,4 +182,109 @@ fn bytes_to_embedding(bytes: &[u8], expected_dims: usize) -> EmbeddingResult<Emb
         embedding.push(val);
     }
     Ok(embedding)
+}
+
+/// An [`Embedder`] wrapped with an SQLite-backed content-hash cache.
+///
+/// Cache hits skip model inference entirely; misses are computed by the
+/// inner embedder and stored. Cache I/O failures degrade gracefully to a
+/// plain pass-through (logged, never fatal). Enabled via
+/// `server.toml [embedder] cache = true` (plan 020).
+pub struct CachedEmbedder {
+    inner: Arc<dyn Embedder + Send + Sync>,
+    cache: EmbeddingCache,
+}
+
+impl CachedEmbedder {
+    /// Wrap `inner` with `cache`.
+    #[must_use]
+    pub fn new(inner: Arc<dyn Embedder + Send + Sync>, cache: EmbeddingCache) -> Self {
+        Self { inner, cache }
+    }
+
+    /// The backing cache (for stats/inspection).
+    #[must_use]
+    pub fn cache(&self) -> &EmbeddingCache {
+        &self.cache
+    }
+}
+
+impl Embedder for CachedEmbedder {
+    fn embed(&self, text: &str) -> EmbeddingResult<Embedding> {
+        if let Ok(Some(emb)) = self.cache.get(text) {
+            return Ok(emb);
+        }
+        let emb = self.inner.embed(text)?;
+        if let Err(e) = self.cache.put(text, &emb) {
+            tracing::warn!(error = %e, "embedding cache put failed");
+        }
+        Ok(emb)
+    }
+
+    fn embed_batch(&self, texts: &[&str]) -> EmbeddingResult<Vec<Embedding>> {
+        let mut out: Vec<Embedding> = Vec::with_capacity(texts.len());
+        let mut miss_idx: Vec<usize> = Vec::new();
+        for (i, t) in texts.iter().enumerate() {
+            if let Ok(Some(emb)) = self.cache.get(t) {
+                out.push(emb);
+            } else {
+                out.push(Vec::new());
+                miss_idx.push(i);
+            }
+        }
+        if !miss_idx.is_empty() {
+            let missed: Vec<&str> = miss_idx.iter().map(|&i| texts[i]).collect();
+            let computed = self.inner.embed_batch(&missed)?;
+            for (j, emb) in computed.into_iter().enumerate() {
+                let i = miss_idx[j];
+                if let Err(e) = self.cache.put(texts[i], &emb) {
+                    tracing::warn!(error = %e, "embedding cache put failed");
+                }
+                out[i] = emb;
+            }
+        }
+        Ok(out)
+    }
+
+    fn dimensions(&self) -> usize {
+        self.inner.dimensions()
+    }
+
+    fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+}
+
+#[cfg(test)]
+mod cached_tests {
+    use super::*;
+    use crate::embedder::lightweight::LightweightEmbedder;
+
+    #[test]
+    fn test_cached_embedder_hit_skips_inner_and_reuses() {
+        let cache = EmbeddingCache::in_memory(8).unwrap();
+        let wrapped = Arc::new(LightweightEmbedder::new(8));
+        let emb = CachedEmbedder::new(wrapped.clone(), cache);
+
+        let first = emb.embed("hello world").unwrap();
+        assert_eq!(first.len(), 8);
+        assert!(emb.cache().contains("hello world"));
+        // Second call is served from the cache and must be identical.
+        let second = emb.embed("hello world").unwrap();
+        assert_eq!(first, second);
+        assert_eq!(emb.name(), wrapped.name());
+    }
+
+    #[test]
+    fn test_cached_embedder_batch_mixed_hits() {
+        let cache = EmbeddingCache::in_memory(8).unwrap();
+        let emb = CachedEmbedder::new(Arc::new(LightweightEmbedder::new(8)), cache);
+
+        let warm = emb.embed("a").unwrap();
+        let batch = emb.embed_batch(&["a", "b"]).unwrap();
+        assert_eq!(batch.len(), 2);
+        assert_eq!(batch[0], warm); // hit
+        assert_eq!(batch[1].len(), 8); // computed then stored
+        assert!(emb.cache().contains("b"));
+    }
 }

@@ -75,21 +75,21 @@ arlm index ./my-app
 |-----------|----------|---------|-------------|
 | path | no | . | Directory to index |
 
-## Alternative: MCP Server
+## Alternative: gRPC Server
 
-Instead of CLI tools, you can run arlm as an MCP server (pure data-plane):
+Instead of CLI tools, run the `arlm-server` data plane (pure gRPC; plan 020
+removed the client-side HTTP/MCP offline mode):
 
 ```bash
-# Start the gRPC/MCP data-plane server
-arlm server
+# Start the gRPC data-plane server
+arlm-server up          # or: docker compose -f docker-compose.server.yml up -d
 
-# Or expose MCP from a running arlm-server; configure OPencode to connect to it
+# The CLI connects over gRPC (addr via .arlm.toml / ~/.arlm/arlm.toml / env)
+arlm search "..."
 ```
 
-The MCP server exposes `rlm_search` (and search-backed context) tools via the
-Model Context Protocol. This is better for persistent setups where the server
-stays running. Note: the server is LLM-free — digest/summarize happen on the
-client via the user's local LLM.
+The server is LLM-free — digest/summarize happen on the client via the user's
+local LLM (`query -qa`, `persist`).
 
 ## Project Isolation
 

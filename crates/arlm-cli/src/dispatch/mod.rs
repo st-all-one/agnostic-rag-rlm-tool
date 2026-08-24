@@ -13,7 +13,7 @@ use crate::user_config;
 ///
 /// The CLI is a **pure gRPC client** (plus the user's local LLM for digest /
 /// summarize). Every data command is routed to a remote `arlm-server` over
-/// gRPC; the only local action is `arlm server`, which hosts the data plane.
+/// gRPC; there is no local data plane (plan 020, D3).
 pub fn dispatch(cli: Cli, rt: &Runtime) -> Result<()> {
     let cfg = user_config::load().unwrap_or_default();
 

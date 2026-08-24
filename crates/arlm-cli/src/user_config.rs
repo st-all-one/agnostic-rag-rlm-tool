@@ -38,11 +38,26 @@ pub struct AuthConfig {
 }
 
 /// Server connection section.
+///
+/// TLS fields (plan 020): `tls_ca` trusts a custom CA; `tls_cert`/`tls_key`
+/// present a client certificate (mTLS, matching the server's `mtls_ca`).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ServerSection {
     /// gRPC server address (e.g. `127.0.0.1:50051` or `https://host:443`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub addr: Option<String>,
+
+    /// PEM CA bundle to trust instead of (or alongside) system roots.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_ca: Option<String>,
+
+    /// PEM client certificate for mTLS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_cert: Option<String>,
+
+    /// PEM client private key for mTLS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_key: Option<String>,
 }
 
 /// Project metadata section (local `.arlm.toml`).
@@ -59,7 +74,7 @@ pub struct ProjectSection {
 
 /// Global config file shape (`~/.arlm/arlm.toml`).
 #[derive(Debug, Clone, Default, Deserialize)]
-struct GlobalConfig {
+pub struct GlobalConfig {
     auth: Option<AuthConfig>,
     llm: Option<LlmConfig>,
     server: Option<ServerSection>,
@@ -70,7 +85,7 @@ struct GlobalConfig {
 /// local file is intentionally **ignored** (serde skips unknown fields), so it
 /// is simply absent from this struct — credentials stay global-only.
 #[derive(Debug, Clone, Default, Deserialize)]
-struct LocalConfig {
+pub struct LocalConfig {
     llm: Option<LlmConfig>,
     server: Option<ServerSection>,
     project: Option<ProjectSection>,
@@ -90,17 +105,15 @@ pub struct EffectiveUserConfig {
 }
 
 impl EffectiveUserConfig {
-    /// The server address to connect to: explicit `server.addr` (local over
-    /// global), then the `ARLM_SERVER_ADDR` env var, then a localhost default.
+    /// Resolve the server address: explicit `server.addr` (local over
+    /// global), then the `ARLM_SERVER_ADDR` env override, then a localhost
+    /// default.
     #[must_use]
     pub fn server_addr(&self) -> String {
-        if let Some(addr) = self.server.addr.clone() {
-            return addr;
-        }
-        if let Ok(addr) = std::env::var("ARLM_SERVER_ADDR") {
-            return addr;
-        }
-        "127.0.0.1:50051".to_string()
+        resolve_addr(
+            self.server.addr.as_deref(),
+            std::env::var("ARLM_SERVER_ADDR").ok().as_deref(),
+        )
     }
 
     /// The user's LLM backends, if any are configured.
@@ -131,10 +144,26 @@ impl EffectiveUserConfig {
 ///
 /// Returns an error if either config file exists but cannot be parsed.
 pub fn load() -> Result<EffectiveUserConfig> {
-    let global = read_global()?;
-    let local = read_local()?;
+    load_from(&global_path(), &local_path())
+}
 
-    // `[auth]` is global-only: ignore any local `auth`.
+/// Pure, testable core of [`load`]: merge an explicit global file with an
+/// explicit local file (either may not exist).
+///
+/// # Errors
+///
+/// Returns an error if either file exists but cannot be parsed.
+pub fn load_from(global: &std::path::Path, local: &std::path::Path) -> Result<EffectiveUserConfig> {
+    let global = read_toml_file::<GlobalConfig>(global, "global arlm.toml")?;
+    let local = read_toml_file::<LocalConfig>(local, "local .arlm.toml")?;
+    Ok(merge(global, local))
+}
+
+/// Merge a parsed global scope with a parsed local scope (plan 020).
+#[must_use]
+pub fn merge(global: GlobalConfig, local: LocalConfig) -> EffectiveUserConfig {
+    // `[auth]` is global-only: the local scope cannot even carry it
+    // (`LocalConfig` has no `auth` field), so it always comes from global.
     let auth = global.auth;
 
     // `[llm]`: merge backends list-wise (local over global per backend) when
@@ -148,12 +177,25 @@ pub fn load() -> Result<EffectiveUserConfig> {
         (None, None) => None,
     };
 
-    // `[server]`: merge field-by-field (only `addr` for now).
+    // `[server]`: merge field-by-field (granular; local wins per field).
+    let (local_server, global_server) = (local.server, global.server);
     let server = ServerSection {
-        addr: local
-            .server
-            .and_then(|s| s.addr)
-            .or_else(|| global.server.and_then(|s| s.addr)),
+        addr: local_server
+            .as_ref()
+            .and_then(|s| s.addr.clone())
+            .or_else(|| global_server.as_ref().and_then(|s| s.addr.clone())),
+        tls_ca: local_server
+            .as_ref()
+            .and_then(|s| s.tls_ca.clone())
+            .or_else(|| global_server.as_ref().and_then(|s| s.tls_ca.clone())),
+        tls_cert: local_server
+            .as_ref()
+            .and_then(|s| s.tls_cert.clone())
+            .or_else(|| global_server.as_ref().and_then(|s| s.tls_cert.clone())),
+        tls_key: local_server
+            .as_ref()
+            .and_then(|s| s.tls_key.clone())
+            .or_else(|| global_server.as_ref().and_then(|s| s.tls_key.clone())),
     };
 
     // `[project]`: merge field-by-field.
@@ -170,12 +212,37 @@ pub fn load() -> Result<EffectiveUserConfig> {
             .or_else(|| global_project.as_ref().and_then(|p| p.ignore.clone())),
     };
 
-    Ok(EffectiveUserConfig {
+    EffectiveUserConfig {
         auth,
         llm,
         server,
         project,
-    })
+    }
+}
+
+/// Address precedence: configured `server.addr` first (local already won over
+/// global in [`merge`]), then the `ARLM_SERVER_ADDR` env override, then the
+/// localhost default. Plan 020 keeps the env var working "as if set".
+#[must_use]
+fn resolve_addr(configured: Option<&str>, env: Option<&str>) -> String {
+    const DEFAULT: &str = "127.0.0.1:50051";
+    configured
+        .or(env)
+        .map_or(DEFAULT.to_string(), str::to_string)
+}
+
+/// Read + parse a TOML config file; a missing file is an empty default.
+fn read_toml_file<T: serde::de::DeserializeOwned>(
+    path: &std::path::Path,
+    label: &str,
+) -> Result<T> {
+    if !path.exists() {
+        // `Default` is only derived for the exact config structs.
+        return toml::from_str("").with_context(|| format!("failed to parse empty {label}"));
+    }
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    toml::from_str(&content).with_context(|| format!("failed to parse {label}"))
 }
 
 /// Merge two backend lists: local backends override global backends that share
@@ -218,28 +285,163 @@ fn local_path() -> PathBuf {
         .join(".arlm.toml")
 }
 
-fn read_global() -> Result<GlobalConfig> {
-    let path = global_path();
-    if !path.exists() {
-        return Ok(GlobalConfig::default());
-    }
-    let content = std::fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
-    let cfg: GlobalConfig =
-        toml::from_str(&content).with_context(|| "failed to parse ~/.arlm/arlm.toml")?;
-    Ok(cfg)
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
 
-fn read_local() -> Result<LocalConfig> {
-    let path = local_path();
-    if !path.exists() {
-        return Ok(LocalConfig::default());
+    fn write(path: &std::path::Path, content: &str) {
+        std::fs::write(path, content).expect("test write");
     }
-    let content = std::fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
-    let cfg: LocalConfig =
-        toml::from_str(&content).with_context(|| "failed to parse .arlm.toml")?;
-    Ok(cfg)
+
+    const GLOBAL: &str = r#"
+[auth]
+username = "dev1"
+refresh_token = "tok-123"
+
+[llm]
+[[llm.backends]]
+name = "default"
+family = "openai"
+model = "gpt-4o-mini"
+api_key = "sk-x"
+
+[server]
+addr = "https://arlm.corp.internal:50051"
+
+[project]
+name = "global-name"
+ignore = ["target/"]
+"#;
+
+    #[test]
+    fn test_user_config_merge_local_overrides_global_granular() {
+        let dir = TempDir::new().unwrap();
+        let g = dir.path().join("global.toml");
+        let l = dir.path().join("local.toml");
+        write(&g, GLOBAL);
+        // Only `addr` is overridden; everything else falls back to global.
+        write(
+            &l,
+            "[server]\naddr = \"http://localhost:50051\"\n\n[project]\nignore = [\"dist/\"]\n",
+        );
+
+        let cfg = load_from(&g, &l).unwrap();
+        assert_eq!(cfg.server_addr(), "http://localhost:50051");
+        // Absent locally → falls back to the global value, granularly.
+        assert_eq!(cfg.project.name.as_deref(), Some("global-name"));
+        assert_eq!(cfg.ignore_patterns(), vec!["dist/".to_string()]);
+    }
+
+    #[test]
+    fn test_user_config_nested_merge_recursive() {
+        let dir = TempDir::new().unwrap();
+        let g = dir.path().join("global.toml");
+        let l = dir.path().join("local.toml");
+        write(
+            &g,
+            "[llm]\n[[llm.backends]]\nname = \"default\"\nfamily = \"openai\"\nmodel = \"gpt-4o-mini\"\n\n[[llm.backends]]\nname = \"spare\"\nfamily = \"ollama\"\nbase_url = \"http://localhost:11434\"\n",
+        );
+        // Local redefines only the `default` backend (by name); `spare` from
+        // global survives the merge.
+        write(
+            &l,
+            "[llm]\n[[llm.backends]]\nname = \"default\"\nfamily = \"ollama\"\nmodel = \"qwen2.5-coder:7b\"\n",
+        );
+
+        let cfg = load_from(&g, &l).unwrap();
+        let llm = cfg.llm_config().unwrap();
+        assert_eq!(llm.backends.len(), 2);
+        assert_eq!(llm.backends[0].family.to_string().to_lowercase(), "ollama");
+        assert_eq!(llm.backends[0].model.as_deref(), Some("qwen2.5-coder:7b"));
+        assert_eq!(llm.backends[1].name.as_deref(), Some("spare"));
+    }
+
+    #[test]
+    fn test_auth_only_global() {
+        let dir = TempDir::new().unwrap();
+        let g = dir.path().join("global.toml");
+        let l = dir.path().join("local.toml");
+        write(&g, GLOBAL);
+        // A local `[auth]` must be ignored entirely (no credentials in repo).
+        write(
+            &l,
+            "[auth]\nusername = \"evil\"\nrefresh_token = \"stolen\"\n",
+        );
+
+        let cfg = load_from(&g, &l).unwrap();
+        let auth = cfg.auth().unwrap();
+        assert_eq!(auth.username.as_deref(), Some("dev1"));
+        assert_eq!(auth.refresh_token.as_deref(), Some("tok-123"));
+    }
+
+    #[test]
+    fn test_legacy_config_toml_ignored() {
+        let dir = TempDir::new().unwrap();
+        // Legacy-named files are present but MUST NOT be read (plan 020 D4):
+        // `load_from` is only ever pointed at arlm.toml / .arlm.toml.
+        let legacy = dir.path().join("config.toml");
+        write(
+            &legacy,
+            "[auth]\nusername = \"old\"\nrefresh_token = \"legacy\"\n\n[server]\naddr = \"legacy:1\"\n",
+        );
+        // Pointing at the *new* names (which do not exist) yields defaults —
+        // the legacy file content never leaks into the effective config.
+        let cfg = load_from(
+            &dir.path().join("arlm.toml"),
+            &dir.path().join(".arlm.toml"),
+        )
+        .unwrap();
+        assert!(cfg.server.addr.is_none());
+        assert!(cfg.auth.is_none());
+    }
+
+    #[test]
+    fn test_client_uses_merged_server_addr_and_env_override() {
+        // Pure precedence: config > env > default.
+        assert_eq!(resolve_addr(Some("cfg:1"), None), "cfg:1");
+        assert_eq!(resolve_addr(None, Some("env:2")), "env:2");
+        assert_eq!(resolve_addr(Some("cfg:1"), Some("env:2")), "cfg:1");
+        assert_eq!(resolve_addr(None, None), "127.0.0.1:50051");
+    }
+
+    #[test]
+    fn test_missing_files_default() {
+        let dir = TempDir::new().unwrap();
+        let cfg = load_from(&dir.path().join("none.toml"), &dir.path().join("none.toml")).unwrap();
+        assert!(cfg.auth.is_none());
+        assert!(cfg.llm.is_none());
+        assert_eq!(cfg.project.name, None);
+    }
+
+    #[test]
+    fn test_server_tls_fields_merge_granularly() {
+        let dir = TempDir::new().unwrap();
+        let g = dir.path().join("global.toml");
+        let l = dir.path().join("local.toml");
+        write(
+            &g,
+            "[server]\naddr = \"https://a:1\"\ntls_ca = \"/etc/arlm/ca.crt\"\ntls_cert = \"/etc/arlm/client.crt\"\ntls_key = \"/etc/arlm/client.key\"\n",
+        );
+        // Local overrides only `addr`; TLS knobs fall back to global.
+        write(&l, "[server]\naddr = \"http://localhost:50051\"\n");
+
+        let cfg = load_from(&g, &l).unwrap();
+        assert_eq!(cfg.server_addr(), "http://localhost:50051");
+        assert_eq!(cfg.server.tls_ca.as_deref(), Some("/etc/arlm/ca.crt"));
+        assert_eq!(cfg.server.tls_cert.as_deref(), Some("/etc/arlm/client.crt"));
+        assert_eq!(cfg.server.tls_key.as_deref(), Some("/etc/arlm/client.key"));
+    }
+
+    #[test]
+    fn test_malformed_local_file_is_error() {
+        let dir = TempDir::new().unwrap();
+        let g = dir.path().join("global.toml");
+        let l = dir.path().join("local.toml");
+        write(&g, GLOBAL);
+        write(&l, "not [ valid toml ===");
+        assert!(load_from(&g, &l).is_err());
+    }
 }
 
 fn home_dir() -> PathBuf {
@@ -248,4 +450,50 @@ fn home_dir() -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("."))
+}
+
+#[cfg(test)]
+mod disjoint_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    /// Plan 020: `server.toml` (data plane) and the user config are disjoint
+    /// files. A `server.toml`-shaped file parsed as **user** config must not
+    /// leak any of its data-plane values into the effective user config.
+    #[test]
+    fn test_user_config_ignores_server_toml_semantics() {
+        let dir = TempDir::new().unwrap();
+        // Full server.toml shape (plan 020 schema).
+        let server_toml = r#"
+listen_addr = "0.0.0.0:50051"
+data_dir = "/var/lib/arlm"
+pool_size = 4
+flush_interval_ms = 100
+max_batch_size = 50
+
+[embedder]
+max_tokens = 512
+overlap_tokens = 64
+
+[search]
+tier = "hybrid"
+
+[history]
+retention_days = 90
+"#;
+        let path = dir.path().join("server.toml");
+        std::fs::write(&path, server_toml).unwrap();
+
+        let cfg = load_from(&path, &dir.path().join(".arlm.toml")).unwrap();
+        // None of the data-plane keys map onto user config sections.
+        assert!(cfg.auth.is_none());
+        assert!(cfg.llm.is_none());
+        assert!(
+            cfg.server.addr.is_none(),
+            "listen_addr must NOT become [server].addr"
+        );
+        assert_eq!(cfg.server.tls_ca, None);
+        assert_eq!(cfg.project.name, None);
+        assert_eq!(cfg.server_addr(), "127.0.0.1:50051");
+    }
 }

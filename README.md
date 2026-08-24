@@ -97,9 +97,6 @@ arlm memory list
 arlm memory get <cache_id>
 arlm memory invalidate <cache_id>
 arlm memory cleanup
-
-# Subir o servidor gRPC/MCP (plano de dados, sem /run)
-arlm server
 ```
 
 ## Modo Servidor (gRPC)
@@ -108,18 +105,19 @@ O modelo recomendado é separar servidor e cliente:
 
 ```bash
 # 1) Inicia o servidor (long-running) — dono do estado
-arlm server                                        # escuta conforme server.toml
+arlm-server up                                     # escuta conforme server.toml
 docker compose -f docker-compose.server.yml up -d   # ou via Docker
 
-# 2) O cliente CLI conecta por gRPC
-arlm --server 127.0.0.1:50051 index ./meu-projeto
-arlm --server 127.0.0.1:50051 search "auth middleware"
-arlm --server 127.0.0.1:50051 query "como funciona o login?" -qa
+# 2) O cliente CLI conecta por gRPC (endereço via user config)
+arlm index ./meu-projeto
+arlm search "auth middleware"
+arlm query "como funciona o login?" -qa
 ```
 
-Sem `--server`, o CLI opera localmente sobre `~/.arlm`. O endereço do servidor
-também é resolvido por `~/.arlm/arlm.toml` (`[server].addr`) ou
-`ARLM_SERVER_ADDR`.
+O endereço do servidor é resolvido por `.arlm.toml` local (`[server].addr`,
+override por projeto) → `~/.arlm/arlm.toml` (`[server].addr`) → env
+`ARLM_SERVER_ADDR` → `127.0.0.1:50051`. O client é um **puro gRPC client**
+(sem modo offline); quem quiser "offline" sobe o próprio `arlm-server`.
 
 ## Comandos CLI
 
@@ -132,7 +130,7 @@ também é resolvido por `~/.arlm/arlm.toml` (`[server].addr`) ou
 | `arlm memory list\|get\|invalidate\|cleanup` | Memória (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
 | `arlm persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
 | `arlm history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |
-| `arlm server` | Hospeda o servidor gRPC/MCP (plano de dados, sem `/run`) |
+| `arlm-server up\|status\|admin ...` | Binário do servidor (data plane gRPC; `admin create-refresh`, etc.) |
 
 **Removidos (plan 019):** `run`, `context`, `session`, `status`, `cost`,
 `cancel`, `checkpoints`, `restore-page`, `wiki`, `consolidate` (CLI), `decay`
@@ -219,18 +217,42 @@ data_dir = "/data"
 
 # tls_cert = "/etc/arlm/tls/server.crt"
 # tls_key  = "/etc/arlm/tls/server.key"
+# mtls_ca  = "/etc/arlm/tls/ca.crt"   # exige client cert (mTLS)
+
+pool_size = 4            # pool de escrita SQLite (1 = single-mode)
+flush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)
+max_batch_size = 50      # linhas por transação de indexação
 
 [embedder]
-max_tokens = 512        # tamanho máximo de chunk (tokens)
-overlap_tokens = 64     # sobreposição entre chunks
+model = "ollama"                      # bge-m3 | ollama | lightweight
+# model_dir = "/models/bge-m3"        # p/ bge-m3 (model.safetensors)
+ollama_url = "http://127.0.0.1:11434"
+ollama_model = "all-minilm"
+ollama_prefix = ""                    # "search_document: " p/ família nomic
+dims = 384
+batch_size = 64                       # chunks por request de embedding
+max_tokens = 512                      # tamanho máximo de chunk (tokens)
+overlap_tokens = 64                   # sobreposição entre chunks
+cache = true                          # cache SQLite de embeddings
+
+[search]
+tier = "hybrid"                       # default p/ SEARCH_TIER_UNSPECIFIED
+top_k = 10                            # quando o request omite max_results
+max_tokens = 8000                     # budget do contexto
 
 [qa_cache]
 # parâmetros de cache semântico (anti-drift por hash de chunk)
 
 [maintenance]
-interval_secs = 3600
+interval_secs = 3600                  # 0 = desliga o ticker
 decay_score_floor = 0.05
+
+[history]
+retention_days = 90                   # purge no ticker de manutenção; 0 = mantém
 ```
+
+Env overrides: `ARLM_SERVER_ADDR` (listen) e `ARLM_DATA_DIR`; o caminho do
+arquivo vem de `ARLM_SERVER_CONFIG`.
 
 ### Config do usuário (2 escopos)
 
@@ -238,7 +260,8 @@ O cliente (`arlm-cli`) lê configuração do usuário em **2 escopos**, com merg
 granular campo a campo (local > global):
 
 - **Global** `~/.arlm/arlm.toml`: `[auth]` (só global: `username` +
-  `refresh_token`), `[llm]` (IA do usuário), `[server] addr`.
+  `refresh_token`), `[llm]` (IA do usuário), `[server]` (`addr`, `tls_ca`,
+  `tls_cert`/`tls_key` para mTLS no cliente).
 - **Local** `.arlm.toml` (no projeto): sobrescreve campos do global + `[project]`.
 
 `[auth]` é **somente global** e é ignorado se presente no arquivo local.
@@ -248,10 +271,13 @@ Arquivos legados `~/.arlm/config.toml` / `.arlm/config.toml` **não** são lidos
 # ~/.arlm/arlm.toml (global)
 [auth]
 username = "alice"
-refresh_token = "..."      # obtido no login; só-global
+refresh_token = "..."      # gerado por `arlm-server admin create-refresh`; só-global
 
 [llm]
-backend = "ollama"
+[[llm.backends]]
+name = "default"
+family = "ollama"
+base_url = "http://localhost:11434"
 model = "llama3.2"
 
 [server]
@@ -279,8 +305,8 @@ docker build -t arlm-server:latest -f Dockerfile.server .
 docker compose -f docker-compose.server.yml up -d
 
 # CLI (no host) conecta por gRPC
-arlm --server 127.0.0.1:50051 index /workspace
-arlm --server 127.0.0.1:50051 search "query"
+arlm index /workspace
+arlm search "query"
 ```
 
 O `docker-compose.server.yml` monta o volume `arlm-server-data` em `/data`
@@ -294,7 +320,7 @@ O `docker-compose.server.yml` monta o volume `arlm-server-data` em `/data`
 > local:
 >
 > ```bash
-> arlm --server 127.0.0.1:50051 index /caminho/do/projeto
+> arlm index /caminho/do/projeto
 > ```
 >
 > Por padrão, caminhos sensíveis/ignorados (`.env`, `.vscode`, `.github`,

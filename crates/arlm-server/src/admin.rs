@@ -101,7 +101,7 @@ pub fn run() -> Result<()> {
             println!("Username : {username}");
             println!("Role     : {role}");
             println!();
-            println!("Refresh token (paste into client ~/.arlm/config.toml [auth].refresh_token):");
+            println!("Refresh token (paste into client ~/.arlm/arlm.toml [auth].refresh_token):");
             println!("{plaintext}");
             eprintln!("WARNING: this token grants access for 1 year. Store it securely (0600).");
         }

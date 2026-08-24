@@ -2,14 +2,26 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
-use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
+use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};
 use tracing::{info, warn};
 
-/// Client configuration.
-#[derive(Debug, Clone)]
+use crate::user_config::EffectiveUserConfig;
+
+/// Client connection configuration (plan 020).
+///
+/// TLS fields come from `[server]` in the merged user config: `tls_ca`
+/// trusts a custom CA; `tls_cert`/`tls_key` present a client certificate
+/// for mTLS servers configured with `mtls_ca`.
+#[derive(Debug, Clone, Default)]
 pub struct ClientConfig {
     /// Server address (e.g., "127.0.0.1:50051" or "https://host:443").
     pub addr: String,
+    /// Optional PEM CA bundle to trust.
+    pub tls_ca: Option<String>,
+    /// Optional PEM client certificate (requires `tls_key`).
+    pub tls_cert: Option<String>,
+    /// Optional PEM client private key (requires `tls_cert`).
+    pub tls_key: Option<String>,
 }
 
 impl ClientConfig {
@@ -18,10 +30,26 @@ impl ClientConfig {
     /// env var override.
     #[must_use]
     pub fn load() -> Self {
-        let addr = crate::user_config::load()
-            .map_or_else(|_| "127.0.0.1:50051".to_string(), |c| c.server_addr());
-        Self { addr }
+        let cfg = crate::user_config::load().ok();
+        let addr = cfg.as_ref().map_or_else(
+            || "127.0.0.1:50051".to_string(),
+            EffectiveUserConfig::server_addr,
+        );
+        let server = cfg.map(|c| c.server);
+        Self {
+            addr,
+            tls_ca: server.as_ref().and_then(|s| s.tls_ca.clone()),
+            tls_cert: server.as_ref().and_then(|s| s.tls_cert.clone()),
+            tls_key: server.as_ref().and_then(|s| s.tls_key.clone()),
+        }
     }
+}
+
+/// Whether any TLS knob is configured (forces the TLS transport even for a
+/// bare `host:port` address, e.g. internal mTLS endpoints without scheme).
+#[must_use]
+fn has_tls_config(config: &ClientConfig) -> bool {
+    config.tls_ca.is_some() || config.tls_cert.is_some() || config.tls_key.is_some()
 }
 
 /// Validate that `addr` is a `host:port` pair.
@@ -86,8 +114,23 @@ pub async fn connect_channel(config: &ClientConfig) -> Result<Channel> {
     let endpoint =
         Channel::from_shared(uri.clone()).with_context(|| format!("invalid server URI: {uri}"))?;
 
-    let endpoint: Endpoint = if scheme == "https" {
-        let tls = ClientTlsConfig::new().with_native_roots();
+    let endpoint: Endpoint = if scheme == "https" || has_tls_config(config) {
+        let mut tls = ClientTlsConfig::new();
+        if let Some(ca) = &config.tls_ca {
+            // tonic 0.13 parses lazily; a bad PEM surfaces at handshake.
+            tls = tls.ca_certificate(Certificate::from_pem(ca.as_bytes()));
+        } else {
+            tls = tls.with_native_roots();
+        }
+        if let (Some(cert), Some(key)) = (&config.tls_cert, &config.tls_key) {
+            let identity = Identity::from_pem(cert.as_bytes(), key.as_bytes());
+            info!("mTLS enabled: presenting client certificate");
+            tls = tls.identity(identity);
+        } else if config.tls_cert.is_some() || config.tls_key.is_some() {
+            warn!(
+                "[server] mTLS requires BOTH tls_cert and tls_key; continuing without client cert"
+            );
+        }
         endpoint.tls_config(tls)?
     } else {
         endpoint

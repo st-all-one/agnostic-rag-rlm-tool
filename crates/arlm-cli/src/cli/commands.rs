@@ -113,21 +113,6 @@ pub enum Commands {
         #[arg(long)]
         user: Option<String>,
     },
-
-    /// Start the local HTTP/MCP server (data plane).
-    Serve {
-        /// Port to listen on.
-        #[arg(long, default_value_t = 8080)]
-        port: u16,
-
-        /// Host to bind to.
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
-
-        /// Enable MCP (Model Context Protocol) server on /mcp endpoint.
-        #[arg(long)]
-        mcp: bool,
-    },
 }
 
 /// Subcommands of `arlm memory` (plan 019).

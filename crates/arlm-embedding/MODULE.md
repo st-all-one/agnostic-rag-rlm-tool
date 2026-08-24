@@ -21,7 +21,7 @@ Pipeline de chunking e geração de embeddings para o `arlm`: divide arquivos em
 - `src/embedder/lightweight.rs` — `LightweightEmbedder` (SHA-256→xorshift→f32, sem pesos).
 - `src/embedder/config.rs` — `EmbeddingConfig`, `EmbeddingModel`, `Quantization`, `build_embedder`.
 - `src/embedder/fallback.rs` — `FallbackEmbedder` (hash-based).
-- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256).
+- `src/embedder/cache.rs` — `EmbeddingCache` em SQLite (chave SHA-256) + **`CachedEmbedder`** (wrapper da trait `Embedder`: hits pulam inferência, batch com mistos hit/miss, falhas de cache degradam a pass-through; ativado por `server.toml [embedder].cache = true`).
 - `src/embedder/batch.rs` — inferência em lote.
 - `src/pipeline.rs` — `IngestionPipeline` (file→chunks→embeddings), `IngestOptions`, `ChunkedText`, `from_config`.
 - `src/pipeline/files.rs` — `discover_files`, `glob_match`, `is_text_file`, `compress_text`, `compute_hash`.

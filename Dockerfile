@@ -24,9 +24,10 @@ RUN apt-get update \
 # Binario do servidor.
 COPY --from=builder /build/target/release/arlm-server /usr/local/bin/arlm-server
 
-# Config do servidor (data_dir + listen_addr). O servidor NAO le ARLM_DATA_DIR;
-# o data_dir vem deste TOML (~/.arlm/config.toml).
-COPY docker/server.toml /root/.arlm/config.toml
+# Config do servidor (plan 020): server.toml e um arquivo do HOST montado no
+# container; esta copia so serve como fallback para `docker run` sem mount.
+# Override de caminho: ARLM_SERVER_CONFIG (default /etc/arlm/server.toml).
+COPY docker/server.toml /etc/arlm/server.toml
 
 COPY docker/Modelfile /opt/arlm/Modelfile
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -39,16 +40,11 @@ ENV OLLAMA_NUM_THREADS=0
 ENV OLLAMA_KEEP_ALIVE=-1
 ENV OLLAMA_BATCH_SIZE=64
 
-# ---- arlm-server (embedding Ollama; prefix VAZIO = correto p/ all-minilm) ----
-# "search_document: " e um prefixo do nomic-embed-text; all-minilm nao o usa,
-# entao deixamos vazio para nao degradar a qualidade dos vetores.
-ENV ARLM_OLLAMA_MODEL=all-minilm
-ENV ARLM_OLLAMA_URL=http://127.0.0.1:11434
-ENV ARLM_OLLAMA_DIMS=384
-ENV ARLM_OLLAMA_PREFIX=
-# Paralelismo do lado do servidor (casar com OLLAMA_NUM_PARALLEL).
+# ---- arlm-server (embedding via server.toml [embedder]; plan 020) ----
+# O modelo/url/dims/prefixo vem de /etc/arlm/server.toml [embedder] — sem
+# envs ARLM_OLLAMA_*. Paralelismo continua env-tunable (casar com
+# OLLAMA_NUM_PARALLEL).
 ENV ARLM_INDEX_CONCURRENCY=4
-ENV ARLM_EMBED_BATCH=64
 
 # Bake do modelo na imagem (precisa de rede no build). Se falhar, o entrypoint
 # faz o pull em runtime.

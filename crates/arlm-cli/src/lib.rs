@@ -31,11 +31,8 @@ pub mod cli;
 pub mod client;
 pub mod commands;
 pub mod dispatch;
-pub mod metrics;
 pub mod output;
 pub mod user_config;
-pub mod util;
 
 pub use client::{ClientConfig, create_client};
-pub use metrics::ArlmMetrics;
 pub use output::{Format, error, info, success, warn};

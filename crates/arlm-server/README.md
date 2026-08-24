@@ -55,28 +55,57 @@ de host e possui **toda** a configuração do plano de dados — **não** há se
 `[llm]` (o servidor é LLM-free). Exemplo:
 
 ```toml
-listen_addr = "127.0.0.1:50051"
-data_dir    = "/data"
-# tls_cert / tls_key     # opcionais → habilita TLS
+listen_addr = "127.0.0.1:50051"   # env ARLM_SERVER_ADDR sobrescreve
+data_dir = "/data/arlm"           # env ARLM_DATA_DIR sobrescreve
+
+# tls_cert = "/etc/arlm/tls/server.crt"   # opcional → habilita TLS
+# tls_key  = "/etc/arlm/tls/server.key"
+# mtls_ca  = "/etc/arlm/tls/ca.crt"       # exige client cert (mTLS)
+
+pool_size = 4            # pool de escrita SQLite (1 = single-mode)
+flush_interval_ms = 100  # checkpoint PASSIVE do WAL (0 = desliga)
+max_batch_size = 50      # linhas por transação de indexação
 
 [embedder]
-max_tokens = 512          # tamanho máximo de chunk (tokens)
-overlap_tokens = 64       # sobreposição entre chunks
+model = "ollama"                      # bge-m3 | ollama | lightweight
+# model_dir = "/models/bge-m3"        # p/ bge-m3 (model.safetensors)
+ollama_url = "http://127.0.0.1:11434"
+ollama_model = "all-minilm"
+ollama_prefix = ""                    # "search_document: " p/ família nomic
+dims = 384
+batch_size = 64                       # chunks por request de embedding
+max_tokens = 512                      # tamanho máximo de chunk (tokens)
+overlap_tokens = 64                   # sobreposição entre chunks
+cache = true                          # cache SQLite de embeddings
+
+[search]
+tier = "hybrid"                       # default p/ SEARCH_TIER_UNSPECIFIED
+top_k = 10                            # quando o request omite max_results
+max_tokens = 8000                     # budget do contexto
 
 [qa_cache]
-enabled = true
 novel_k = 20              # chunks digeridos numa pergunta nova (client)
 provenance_k = 5          # chunks de provenance devolvidos com a resposta
-sim_high = 0.90           # acima disso → reaproveita + re-digest leve
-sim_floor = 0.40          # abaixo disso → trata como nova (digest completo)
+sim_high = 0.90           # acima disso → hit de alta confiança
+sim_floor = 0.40          # abaixo disso → nova pergunta (digest completo)
+tier_steps = [0.90, 0.80, 0.70, 0.60, 0.50]
+jaccard_min = 0.5
+question_vector_dims = 1024
 max_entries_per_project = 1000
-lambda_ms = 86400000      # decaimento do score LRU ponderado
-cache_ttl_ms = 0          # 0 = sem TTL
+eviction_lambda_ms = 604800000
+eviction_interval_ms = 60000
 
 [maintenance]
-interval_secs = 3600
+interval_secs = 3600                  # 0 = desliga o ticker
 decay_score_floor = 0.05
+
+[history]
+retention_days = 90                   # purge no ticker; 0 = mantém
 ```
+
+> Os knobs de embedding vivem **apenas** aqui — as envs `ARLM_OLLAMA_*`,
+> `ARLM_MODEL_DIR` e `ARLM_EMBED_BATCH` foram substituídas pelo `[embedder]`
+> do `server.toml` (plan 020).
 
 > **Auth (plan 018):** os RPCs mutantes (`InvalidateCache`, e qualquer RPC que
 > escreva estado) exigem um `Authorization: Bearer <session>` válido; operações
@@ -102,7 +131,8 @@ servidor.
   dispara um worker de eviction LRU em background; `grpc/index.rs` marca entradas
   `stale` por hash de chunk no pós-reindex.
 - **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)
-  e RPC admin `TriggerMaintenance`.
+  + purge de histórico (`[history] retention_days`) e RPC admin
+  `TriggerMaintenance`.
 - **`state`**: `AppState` compartilhado (storage, embedder, vector store,
   question_vector_store, qa_config, maintenance config).
 - **`timing`**: `Timer` que emite `elapsed_ms`/`elapsed_us` estruturados via `tracing`.

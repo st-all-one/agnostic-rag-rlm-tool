@@ -1,6 +1,33 @@
-data_dir = "/data/arlm"
-listen_addr = "0.0.0.0:50051"
+# arlm-server config (plan 020) — HOST file mounted into the container at
+# /etc/arlm/server.toml (override the path with ARLM_SERVER_CONFIG).
+# Server-only data plane: serving + storage + processing. No [llm] section.
 
-[llm]
-backend = "ollama"
-model = "qwen2.5-coder:7b"
+listen_addr = "0.0.0.0:50051"          # (env ARLM_SERVER_ADDR overrides)
+data_dir = "/data/arlm"                # (env ARLM_DATA_DIR overrides)
+
+pool_size = 4
+flush_interval_ms = 100
+max_batch_size = 50
+
+[embedder]
+model = "ollama"
+ollama_url = "http://127.0.0.1:11434"
+ollama_model = "all-minilm"
+ollama_prefix = ""                     # all-minilm does NOT use nomic prefixes
+dims = 384
+batch_size = 64
+max_tokens = 512
+overlap_tokens = 64
+cache = true
+
+[search]
+tier = "hybrid"
+top_k = 10
+max_tokens = 8000
+
+[maintenance]
+interval_secs = 3600
+decay_score_floor = 0.1
+
+[history]
+retention_days = 90

@@ -136,37 +136,44 @@ install_cli() {
     # Create config directory
     mkdir -p "$DATA_DIR"
 
-    # Guarantee a valid config.toml exists at $DATA_DIR/config.toml
-    local config_file="${DATA_DIR}/config.toml"
+    # Guarantee a valid global user config at $DATA_DIR/arlm.toml (plan 020)
+    local config_file="${DATA_DIR}/arlm.toml"
     if [ ! -f "$config_file" ]; then
         info "Creating default config at ${config_file}"
 
         local example_src=""
-        if [ -f "config.toml.example" ]; then
-            example_src="config.toml.example"
-        elif [ -f "${0%/*}/config.toml.example" ]; then
-            example_src="${0%/*}/config.toml.example"
+        if [ -f "arlm.toml.example" ]; then
+            example_src="arlm.toml.example"
+        elif [ -f "${0%/*}/arlm.toml.example" ]; then
+            example_src="${0%/*}/arlm.toml.example"
         fi
 
         if [ -n "$example_src" ]; then
             cp "$example_src" "$config_file"
         else
-            local example_url="https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/config.toml.example"
+            local example_url="https://raw.githubusercontent.com/st-all-one/agnostic-rlm-rs/main/arlm.toml.example"
             download "$example_url" "$config_file" || true
         fi
 
         # If the copy/download did not yield a valid config, write a minimal
         # but valid default so the file always exists.
-        if ! grep -Fq '[[backends]]' "$config_file" 2>/dev/null; then
+        if ! grep -Fq '[llm]' "$config_file" 2>/dev/null; then
             cat > "$config_file" << 'EOF'
-# arlm default config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/config.toml.example
-[[backends]]
-name = "ollama"
+# arlm default user config — see https://github.com/st-all-one/agnostic-rlm-rs/blob/main/arlm.toml.example
+
+[auth]
+# username = "dev1"
+# refresh_token = "<gerado por `arlm-server admin create-refresh`>"
+
+[llm]
+[[llm.backends]]
+name = "default"
 family = "ollama"
 base_url = "http://localhost:11434"
-model = "llama3"
-completions_path = "api/chat"
-auth = "none"
+model = "llama3.2"
+
+[server]
+addr = "127.0.0.1:50051"
 EOF
         fi
 

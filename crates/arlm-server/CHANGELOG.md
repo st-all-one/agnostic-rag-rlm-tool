@@ -7,6 +7,27 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added (auditoria plan 020)
+- **Schema completo do `server.toml`:** `[embedder]` com
+  `model`/`model_dir`/`ollama_url`/`ollama_model`/`ollama_prefix`/`dims`/
+  `batch_size`/`quantization`/`cache`; `[search]` (`tier`/`top_k`/`max_tokens`);
+  storage tuning (`pool_size`, `flush_interval_ms`, `max_batch_size`);
+  `mtls_ca` (mTLS via `client_ca_root`) e `[history] retention_days`.
+- **Embedder pela config:** `state::load_embedder(&EmbedderConfig)` substitui as
+  envs `ARLM_MODEL_DIR`/`ARLM_OLLAMA_*`; `CachedEmbedder` ativado por
+  `[embedder].cache` (cache SQLite por hash, degrada sem falhar).
+- **Storage híbrido:** `pool_size > 1` abre `open_pooled` (escritas no pool +
+  conexão compartilhada p/ leituras); flusher de WAL checkpoint PASSIVE;
+  indexação grava em transações de `max_batch_size` linhas
+  (`store::insert_chunks_batched`).
+- **Purge de histórico** pelo ticker de manutenção (`[history] retention_days`,
+  default 90; 0 = mantém).
+
+### Changed (auditoria plan 020)
+- Proto `SearchTier` renumerado: `SEARCH_TIER_UNSPECIFIED = 0` (tiers 1–4);
+  requests sem tier resolvem para `[search].tier` do `server.toml`.
+- `admin create-refresh` aponta para `~/.arlm/arlm.toml [auth]`.
+
 > **Nota (planos 019/020):** o servidor tornou-se um **plano de dados puro,
 > LLM-free**. Foram **removidos** o `summarizer` (server-side), os `runs` de RLM,
 > as `sessions` e o `events` hub. A digestão/sumarização agora ocorre no cliente

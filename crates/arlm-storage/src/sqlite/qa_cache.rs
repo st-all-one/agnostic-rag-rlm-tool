@@ -115,12 +115,12 @@ pub fn question_hash(question: &str) -> String {
 /// Canonical content hash for a chunk (sha256 hex). Clients must use this exact
 /// function when computing `source_hashes` so the server's staleness hook can
 /// compare against stored chunk hashes.
+///
+/// Re-exported from [`arlm_core::qa_cache::chunk_content_hash`] so client and
+/// server share one implementation (plan 020: CLI has no storage dependency).
 #[must_use]
 pub fn chunk_content_hash(content: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(content.as_bytes());
-    hex::encode(hasher.finalize())
+    arlm_core::qa_cache::chunk_content_hash(content)
 }
 
 /// Parse a JSON array column into a `Vec<String>`.

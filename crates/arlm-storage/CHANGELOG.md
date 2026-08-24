@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added (auditoria plan 020)
+- `Storage::wal_checkpoint()` — checkpoint PASSIVE do WAL para o flusher
+  `flush_interval_ms` do server.
+- `Storage::purge_history_before(cutoff)` — retenção de histórico
+  (`[history] retention_days`), com teste unitário.
+
+### Changed (auditoria plan 020)
+- `open_pooled` tornou-se **híbrido**: mantém a conexão compartilhada além do
+  pool, então `conn()` (read helpers) funciona em ambos os modos — habilita
+  `pool_size > 1` no server sem reescrever os read paths.
+- `chunk_content_hash` agora é re-export de `arlm_core::qa_cache` (fonte única
+  compartilhada com o client gRPC puro).
+
 ### Added
 - **QA-Cache (plan 017):** `src/sqlite/qa_cache.rs` — tabela `qa_cache` + FTS5
   `qa_cache_fts` (triggers de sync), com `store_answer` idempotente (reserve-lock

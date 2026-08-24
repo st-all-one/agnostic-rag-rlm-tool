@@ -9,6 +9,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+arlm-core.workspace = true
 rusqlite.workspace = true
 usearch.workspace = true
 r2d2.workspace = true

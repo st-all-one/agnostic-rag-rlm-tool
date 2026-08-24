@@ -208,17 +208,28 @@ pub(crate) async fn handle_search(
         .await?
         .ok_or_else(|| not_found("project not found"))?;
 
+    // Serving defaults from `server.toml [search]` (plan 020): an omitted
+    // limit falls back to the configured `top_k`.
     let max_results = if req.max_results > 0 {
         req.max_results as usize
     } else {
-        10
+        state.config.search.top_k
     };
 
-    let tier = match SearchTier::try_from(req.tier).unwrap_or(SearchTier::TierBm25) {
-        SearchTier::TierBm25 => HybridTier::Fts,
-        SearchTier::TierEntity => HybridTier::Entity,
-        SearchTier::TierSemantic => HybridTier::Vector,
-        SearchTier::TierHybrid => HybridTier::LlmRerank,
+    // Tier resolution (plan 020): `UNSPECIFIED`/unknown values resolve to the
+    // `[search].tier` serving default from `server.toml`; explicit values are
+    // honored as sent.
+    let tier = match SearchTier::try_from(req.tier) {
+        Ok(SearchTier::TierBm25) => HybridTier::Fts,
+        Ok(SearchTier::TierEntity) => HybridTier::Entity,
+        Ok(SearchTier::TierSemantic) => HybridTier::Vector,
+        Ok(SearchTier::TierHybrid) => HybridTier::LlmRerank,
+        _ => match state.config.search.tier.to_ascii_lowercase().as_str() {
+            "fts" | "bm25" => HybridTier::Fts,
+            "entity" => HybridTier::Entity,
+            "vector" | "semantic" => HybridTier::Vector,
+            _ => HybridTier::LlmRerank,
+        },
     };
 
     let fts_query = sanitize_fts(&query);
@@ -256,8 +267,10 @@ pub(crate) async fn handle_build_context(
         .await?
         .ok_or_else(|| not_found("project not found"))?;
 
+    // Serving defaults from `server.toml [search]` (plan 020): an omitted
+    // budget falls back to the configured `max_tokens`.
     let max_tokens: u32 = if req.max_tokens == 0 {
-        8_000
+        state.config.search.max_tokens
     } else {
         req.max_tokens as u32
     };

@@ -10,16 +10,28 @@ ocorre no cliente (`arlm-cli`) via o LLM do usuário.
 ## Estrutura
 - `src/main.rs` — entrypoint; subcomandos `up` (padrão), `status` (healthcheck gRPC), `admin consolidate`.
 - `src/lib.rs` — API pública do crate (`ServerConfig`, `AppState`, `run()`).
-- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`).
-- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config, maintenance config).
+- `src/config.rs` — `ServerConfig` (TOML host `server.toml`; **sem** `[llm]`):
+  listen/TLS/`mtls_ca`, storage (`pool_size`, `flush_interval_ms`,
+  `max_batch_size`), `[embedder]` (model/model_dir/ollama_*/dims/batch_size/
+  max_tokens/overlap_tokens/cache), `[search]` (tier/top_k/max_tokens),
+  `[qa_cache]`, `[maintenance]`, `[history] retention_days`. Load de
+  `ARLM_SERVER_CONFIG` (default `/etc/arlm/server.toml`) + overrides
+  `ARLM_SERVER_ADDR`/`ARLM_DATA_DIR`.
+- `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config,
+  maintenance config); `load_embedder(&EmbedderConfig)` constrói o embedder da
+  config (bge-m3/ollama/lightweight) e `wrap_with_cache` habilita o
+  `CachedEmbedder` quando `[embedder].cache = true`.
 - `src/store/mod.rs` — camada de dados tipada; re-exporta os submódulos.
   - `store/projects.rs` — CRUD de `buffers` + `buffer_id_for_project`.
   - `store/chunks.rs` — chunks, texts, FTS5, entities, contadores de buffer.
   - `store/history.rs` — histórico de consultas por usuário.
 - `src/grpc/mod.rs` — dispatcher tonic; um `Timer` por handler.
   - `grpc/project.rs` — create/list/get_project.
-  - `grpc/index.rs` — index_project (orquestra ingestão; client-streaming de texto).
-  - `grpc/search.rs` — search (BM25 FTS5 + semântica + RRF).
+  - `grpc/index.rs` — index_project (client-streaming de texto; server chunka
+    com `[embedder].max_tokens` e persiste em transações de `max_batch_size`;
+    embed em lotes de `[embedder].batch_size`).
+  - `grpc/search.rs` — search/context (BM25 FTS5 + semântica + RRF; defaults de
+    `[search]` aplicados a tier não informado, top_k e budget de contexto).
   - `grpc/memory.rs` — `ListMemory`/`GetCache`/`InvalidateCache` (admin).
   - `grpc/history.rs` — histórico de consultas (escopado por refresh token).
   - `grpc/query_cache.rs` — `AuthRefresh` (plan 018) + `QueryWithCache`/
@@ -31,8 +43,12 @@ ocorre no cliente (`arlm-cli`) via o LLM do usuário.
   - `grpc/error.rs` — mapeamento erro→`Status` (`internal`/`not_found`/...).
 - `src/maintenance.rs` — consolidação/decay agendados (cron) + RPC admin.
 - `src/indexing.rs` — chunking determinístico (hash, linguagem, classificação).
-- `src/lifecycle.rs` — `run`/`run_server` (shutdown gracioso, TLS opcional); abre o
-  `QuestionVectorStore` (espaço B) e repassa para `AppState::new`.
+- `src/lifecycle.rs` — `run`/`run_server`: shutdown gracioso, TLS + mTLS
+  (`client_ca_root`), storage pooled híbrido (`pool_size > 1` →
+  `Storage::open_pooled`), flusher de WAL (`flush_interval_ms` →
+  `wal_checkpoint(PASSIVE)`) e ticker de manutenção com purge de histórico
+  (`retention_days`). Abre os vector stores (espaço A/B) e repassa para
+  `AppState::new`.
 - `src/auth/mod.rs` — `authenticate(MetadataMap, &Storage) -> Result<AuthContext>` +
   `require_admin(&AuthContext)`; roles `Admin`/`NonAdmin` (plan 018).
 - `src/qa_vectors` — re-export de `arlm_storage::QuestionVectorStore` (espaço B).

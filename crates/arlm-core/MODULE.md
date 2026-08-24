@@ -20,6 +20,10 @@ recursivo.
   similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão
   com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante
   `provenance_k ≤ digest_k ≤ novel_k`; coberto por testes unitários.
+- `src/qa_cache/mod.rs` também abriga **`chunk_content_hash`** (SHA-256 hex,
+  plan 020): fonte única do hash canônico de chunk usada pelo client
+  (`StoreAnswer.source_hashes`) e pelo server (staleness); re-exportada por
+  `arlm-storage`.
 - `src/memory.rs` — trait `MemoryProvider` + `SharedMemory`.
 - `src/logging.rs` — `ScopedTimer` / `Timer` (timing estruturado).
 - `src/concurrency.rs` — `map_concurrent`: fan-out paralelo limitado.

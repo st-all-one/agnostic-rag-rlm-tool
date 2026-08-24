@@ -128,6 +128,20 @@ pub fn resolve_plan(similarity: f32, jaccard: f32, t: &QaThresholds) -> QaPlan {
     }
 }
 
+/// Deterministic content hash for a chunk's text (SHA-256, hex-encoded).
+///
+/// Shared by the client (digest-once `StoreAnswer.source_hashes`) and the
+/// server (staleness invalidation when indexed chunks change), so both sides
+/// compute identical hashes without a storage dependency (plan 020: the CLI
+/// is a pure gRPC client and never opens local storage).
+#[must_use]
+pub fn chunk_content_hash(content: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,5 +193,15 @@ mod tests {
                 assert!(p.digest_k <= t.novel_k);
             }
         }
+    }
+
+    #[test]
+    fn content_hash_is_deterministic_sha256_hex() {
+        let a = chunk_content_hash("hello world");
+        let b = chunk_content_hash("hello world");
+        assert_eq!(a, b);
+        assert_eq!(a.len(), 64);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, chunk_content_hash("hello world!"));
     }
 }

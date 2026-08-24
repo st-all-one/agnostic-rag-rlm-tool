@@ -1,12 +1,4 @@
 {
-  "mcpServers": {
-    "arlm": {
-      "command": "arlm",
-      "args": ["serve", "--mcp", "--port", "8080"],
-      "env": {
-        "ARLM_PROJECT": ".",
-        "RUST_LOG": "info"
-      }
-    }
-  }
+  "mcpServers": {},
+  "_arlm_note": "Plan 020 removed `arlm serve --mcp` (the CLI is a pure gRPC client). Claude Desktop cannot speak gRPC natively; to consume arlm from Claude Desktop, run arlm-server (docker-compose.server.yml) and use the arlm CLI via a local bridge/proxy. See agents/README.md."
 }

@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed (auditoria plan 020 — BREAKING)
+- `SearchTier` renumerado: **`SEARCH_TIER_UNSPECIFIED = 0`** é o wire-default e
+  o servidor resolve para o seu `[search].tier`; tiers explícitos passam a ser
+  `TIER_BM25 = 1`, `TIER_SEMANTIC = 2`, `TIER_HYBRID = 3`, `TIER_ENTITY = 4`.
+  Clientes/servidores antigos em versões mistas verão tiers trocados — alinhe
+  as duas pontas (política break-total dos planos 019/020).
+- Contrato (`tests/proto_contract.rs`) atualizado para os novos valores.
+
 ### Added
 - Integration tests in `tests/proto_contract.rs` validating generated messages,
   enums, field accessors, and the tonic service client/server modules (resolves

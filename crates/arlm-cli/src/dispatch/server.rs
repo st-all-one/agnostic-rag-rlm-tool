@@ -29,19 +29,25 @@ use crate::user_config::EffectiveUserConfig;
 fn connect(rt: &Runtime, cfg: &EffectiveUserConfig) -> Result<ArlmClient> {
     let client_config = ClientConfig {
         addr: cfg.server_addr(),
+        tls_ca: cfg.server.tls_ca.clone(),
+        tls_cert: cfg.server.tls_cert.clone(),
+        tls_key: cfg.server.tls_key.clone(),
     };
     let auth = cfg.auth().cloned().unwrap_or_default();
     crate::auth_client::connect(rt, &client_config, &auth)
 }
 
-/// Map a textual tier (`fts`/`entity`/`vector`/`auto`) onto the proto enum.
+/// Map a textual tier (`fts`/`entity`/`vector`/`hybrid`/`auto`) onto the proto
+/// enum. `auto` (and anything unknown) sends `UNSPECIFIED` so the server
+/// applies its `[search].tier` default (plan 020).
 fn map_search_tier(tier: &str) -> arlm_proto::proto::SearchTier {
     debug!(tier, "resolving search tier");
     match tier {
-        "fts" => arlm_proto::proto::SearchTier::TierBm25,
+        "fts" | "bm25" => arlm_proto::proto::SearchTier::TierBm25,
         "entity" => arlm_proto::proto::SearchTier::TierEntity,
-        "vector" => arlm_proto::proto::SearchTier::TierSemantic,
-        _ => arlm_proto::proto::SearchTier::TierHybrid,
+        "vector" | "semantic" => arlm_proto::proto::SearchTier::TierSemantic,
+        "hybrid" => arlm_proto::proto::SearchTier::TierHybrid,
+        _ => arlm_proto::proto::SearchTier::Unspecified,
     }
 }
 
@@ -55,15 +61,6 @@ pub fn run(
     rt: &Runtime,
 ) -> Result<()> {
     match cli.command {
-        Commands::Serve { port, host, mcp } => rt.block_on(crate::commands::serve::execute(
-            crate::commands::serve::ServeConfig {
-                port,
-                host: &host,
-                project: &project,
-                verbose: cli.verbose,
-                mcp,
-            },
-        )),
         Commands::Init { no_index, .. } => run_init(rt, &cfg, &project, format, !no_index),
         Commands::Index {
             path,

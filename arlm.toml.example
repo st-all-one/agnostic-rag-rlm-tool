@@ -114,3 +114,6 @@ username = "dev1"
 
 [server]
 addr = "127.0.0.1:50051"
+# tls_ca = "/etc/arlm/tls/ca.crt"      # CA customizada (além das system roots)
+# tls_cert = "/etc/arlm/tls/client.crt" # mTLS: exige também tls_key
+# tls_key = "/etc/arlm/tls/client.key"

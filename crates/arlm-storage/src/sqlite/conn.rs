@@ -82,10 +82,17 @@ impl Storage {
             .build(manager)
             .context("failed to create connection pool")?;
 
+        // Hybrid mode: the pool serves `connection()` (concurrent writers),
+        // while a dedicated shared connection keeps `conn()`-based read
+        // helpers valid (they serialize on its mutex). WAL allows concurrent
+        // readers alongside pool writers.
+        let shared = Connection::open(&db_path).context("failed to open shared read connection")?;
+        Self::apply_pragmas(&shared, false)?;
+
         tracing::info!(path = %db_path.display(), max_size, "SQLite storage opened (pooled)");
 
         Ok(Self {
-            sqlite: None,
+            sqlite: Some(Arc::new(Mutex::new(shared))),
             pool: Some(pool),
             path: path.to_path_buf(),
             mode: StorageMode::Pooled,
@@ -144,18 +151,38 @@ impl Storage {
         Ok(())
     }
 
-    /// Get a reference to the underlying `SQLite` connection (single mode only).
+    /// Get a reference to the underlying shared `SQLite` connection.
+    ///
+    /// Available in **both** modes: single mode holds the only connection;
+    /// pooled (hybrid) mode keeps a dedicated shared read connection so the
+    /// `conn()`-based read helpers remain valid.
     ///
     /// # Panics
     ///
-    /// Panics if called in pooled mode.
+    /// Panics if storage was constructed without a shared connection, which
+    /// cannot happen through the public constructors.
     #[must_use]
     #[allow(clippy::expect_used)]
     pub fn conn(&self) -> Arc<Mutex<Connection>> {
         self.sqlite
             .as_ref()
-            .expect("conn() called in pooled mode; use connection() instead")
+            .expect("storage has no shared connection")
             .clone()
+    }
+
+    /// Run a passive WAL checkpoint (best-effort background "flush",
+    /// plan 020 `flush_interval_ms`). No-op when the WAL is empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pragma execution fails.
+    pub fn wal_checkpoint(&self) -> Result<()> {
+        let conn = self.conn();
+        let guard = conn.lock();
+        guard
+            .execute_batch("PRAGMA wal_checkpoint(PASSIVE);")
+            .context("failed to run WAL checkpoint")?;
+        Ok(())
     }
 
     /// Get a connection handle that works for both single and pooled modes.

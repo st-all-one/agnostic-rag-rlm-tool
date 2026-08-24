@@ -22,10 +22,6 @@ use crate::indexing;
 use crate::state::AppState;
 use crate::store;
 
-/// Default number of chunks per embedding request when `ARLM_EMBED_BATCH` is
-/// unset. Matches the Ollama server's internal `OLLAMA_BATCH_SIZE`.
-const DEFAULT_EMBED_BATCH: usize = 64;
-
 /// Default number of concurrent embedding batches when `ARLM_INDEX_CONCURRENCY`
 /// is unset. Should track Ollama's `OLLAMA_NUM_PARALLEL`.
 const DEFAULT_INDEX_CONCURRENCY: usize = 4;
@@ -108,51 +104,31 @@ pub(crate) async fn handle_index_project(
 
     let total_chunks: usize = chunks.iter().map(|(_, cs)| cs.len()).sum();
 
-    // Phase 1: persist chunks + texts + FTS + entities.
+    // Phase 1: persist chunks + texts + FTS + entities in transactional
+    // batches of `max_batch_size` (plan 020).
     let storage = state.storage.clone();
+    let max_batch = state.config.max_batch_size.max(1);
     let persisted: Vec<(i64, String)> = store::blocking(move || {
-        let mut persisted = Vec::with_capacity(total_chunks);
-        for (_, file_chunks) in &chunks {
-            for c in file_chunks {
-                let hash_bytes = hex::decode(&c.hash).unwrap_or_default();
-                let lang = c.language.as_deref();
-                let chunk_type = Some(c.chunk_type.as_str());
-                let chunk_id = store::insert_chunk(
-                    &storage,
-                    buffer_id,
-                    &c.file_path,
-                    c.line_start,
-                    c.line_end,
-                    &hash_bytes,
-                    lang,
-                    chunk_type,
-                    Some(0),
-                )?;
-                store::insert_chunk_text(&storage, chunk_id, &c.content)?;
-                store::insert_fts_row(&storage, chunk_id, &c.content)?;
-                let entities = arlm_storage::Storage::extract_entities(&c.content, &c.file_path);
-                store::insert_entities(&storage, chunk_id, &entities)?;
-                persisted.push((chunk_id, c.content.clone()));
-            }
-        }
-        Ok(persisted)
+        let flat: Vec<(&str, &indexing::IndexedChunk)> = chunks
+            .iter()
+            .flat_map(|(file, cs)| cs.iter().map(move |c| (file.as_str(), c)))
+            .collect();
+        store::insert_chunks_batched(&storage, buffer_id, &flat, max_batch)
     })
     .await
     .map_err(internal)?;
 
     // Phase 2: persist vectors to LanceDB when available.
     if let Some(vector_store) = &state.vector_store {
-        // Embedding batches and concurrency are tunable via env so the Docker
-        // image can be dialed to match Ollama's OLLAMA_NUM_PARALLEL without a
-        // rebuild (see OLLAMA_EMBED_PROPOSED.md).
-        let embed_batch = std::env::var("ARLM_EMBED_BATCH")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .unwrap_or(DEFAULT_EMBED_BATCH);
+        // Batch size comes from `server.toml [embedder].batch_size` (plan 020);
+        // concurrency stays env-tunable so Docker images can be dialed to match
+        // OLLAMA_NUM_PARALLEL without a rebuild (see OLLAMA_EMBED_PROPOSED.md).
+        let embed_batch = state.config.embedder.batch_size.max(1);
         let concurrency = std::env::var("ARLM_INDEX_CONCURRENCY")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
-            .unwrap_or(DEFAULT_INDEX_CONCURRENCY);
+            .unwrap_or(DEFAULT_INDEX_CONCURRENCY)
+            .max(1);
 
         let embedder = state.embedder.clone();
         let buffer_id_u = u64::try_from(buffer_id).unwrap_or(u64::MAX);

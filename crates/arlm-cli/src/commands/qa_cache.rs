@@ -88,7 +88,7 @@ pub fn run_ask(
     let source_hashes: Vec<String> = resp
         .candidates
         .iter()
-        .map(|c| arlm_storage::qa_cache::chunk_content_hash(&c.text))
+        .map(|c| arlm_core::qa_cache::chunk_content_hash(&c.text))
         .collect();
 
     let store_req = StoreAnswerRequest {

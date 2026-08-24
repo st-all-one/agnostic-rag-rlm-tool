@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use arlm_proto::proto::arlm_service_client::ArlmServiceClient;
 use arlm_proto::proto::arlm_service_server::ArlmServiceServer;
 use arlm_storage::{QuestionVectorStore, Storage, VectorStore};
-use tonic::transport::{Identity, Server, ServerTlsConfig};
+use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
 use tracing::{info, warn};
 
 use crate::config::ServerConfig;
@@ -28,17 +28,20 @@ pub async fn run() -> Result<()> {
 
     info!(addr = %config.listen_addr, "starting arlm-server");
 
-    // Single-mode storage: `arlm-storage`'s read paths (`get_chunk`,
-    // `get_summary`, `search_summaries`, …) currently assume a single
-    // connection via `Storage::conn()`. Opening single-mode keeps both the
-    // `conn()`-based read helpers and the `connection()`-based pooled writes
-    // (used by indexing) valid. Concurrent handlers serialize on the shared
-    // connection mutex, which is acceptable for a local dev server.
-    let storage = Storage::open(&config.data_dir).context("failed to open storage")?;
+    // Hybrid pooled mode (plan 020 `pool_size`): the writer pool serves
+    // `connection()`-based writes while a dedicated shared connection keeps
+    // the `conn()`-based read helpers valid. `pool_size == 1` degrades to
+    // single-connection mode.
+    let storage = if config.pool_size > 1 {
+        Storage::open_pooled(&config.data_dir, config.pool_size)
+            .context("failed to open pooled storage")?
+    } else {
+        Storage::open(&config.data_dir).context("failed to open storage")?
+    };
 
     let vector_store = match VectorStore::open_with_dims(
         &config.data_dir,
-        crate::state::embedder_dimension(),
+        crate::state::embedder_dimension(&config.embedder),
     )
     .await
     {
@@ -51,7 +54,7 @@ pub async fn run() -> Result<()> {
 
     let question_vector_store = match arlm_storage::QuestionVectorStore::open(
         &config.data_dir,
-        crate::state::embedder_dimension(),
+        crate::state::embedder_dimension(&config.embedder),
     ) {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {
@@ -91,6 +94,8 @@ pub async fn run_server(
         let maint_storage = storage.clone();
         let interval = config.maintenance.interval_secs;
         let floor = config.maintenance.decay_score_floor;
+        // `[history] retention_days` (plan 020): 0 keeps history forever.
+        let retention_days = config.history.retention_days;
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
@@ -100,6 +105,31 @@ pub async fn run_server(
                     tracing::warn!(error = %e, "maintenance tick failed");
                 } else {
                     tracing::info!("maintenance tick completed");
+                }
+                if retention_days > 0 {
+                    let cutoff =
+                        chrono::Utc::now().timestamp() - i64::from(retention_days) * 86_400;
+                    match maint_storage.purge_history_before(cutoff) {
+                        Ok(0) => {}
+                        Ok(n) => tracing::info!(purged = n, "history retention purge"),
+                        Err(e) => tracing::warn!(error = %e, "history purge failed"),
+                    }
+                }
+            }
+        });
+    }
+
+    // Background WAL flush (plan 020 `flush_interval_ms`): a passive
+    // checkpoint folds the write-ahead log back into the database on a fixed
+    // cadence. `flush_interval_ms == 0` disables it.
+    if config.flush_interval_ms > 0 {
+        let flush_storage = storage.clone();
+        let flush_interval = std::time::Duration::from_millis(config.flush_interval_ms);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(flush_interval).await;
+                if let Err(e) = flush_storage.wal_checkpoint() {
+                    tracing::warn!(error = %e, "WAL flush tick failed");
                 }
             }
         });
@@ -114,7 +144,14 @@ pub async fn run_server(
 
     if let (Some(cert), Some(key)) = (config.tls_cert(), config.tls_key()) {
         let identity = Identity::from_pem(&load_file(&cert)?, &load_file(&key)?);
-        builder = builder.tls_config(ServerTlsConfig::new().identity(identity))?;
+        let mut tls = ServerTlsConfig::new().identity(identity);
+        // mTLS (plan 020): when `mtls_ca` is set, clients must present a
+        // certificate signed by this CA.
+        if let Some(ca) = config.mtls_ca() {
+            tls = tls.client_ca_root(Certificate::from_pem(&load_file(&ca)?));
+            info!(ca = %ca.display(), "gRPC server requires client certificates (mTLS)");
+        }
+        builder = builder.tls_config(tls)?;
         info!(cert = %cert.display(), "gRPC server TLS enabled");
     } else {
         info!("gRPC server running without TLS (dev mode)");

@@ -172,6 +172,20 @@ Schema versionado com 16 migrações:
 let storage = Storage::open_exclusive(Path::new("~/.arlm"))?;
 ```
 
+## Uso Pooled Híbrido (server, plan 020)
+
+```rust
+// pool_size > 1 no server.toml: escritas concorrentes via pool (connection()),
+// leituras na conexão compartilhada dedicada (conn()) — válido em ambos os modos.
+let storage = Storage::open_pooled(Path::new("/data/arlm"), 4)?;
+
+// Flusher de WAL do server (`flush_interval_ms`):
+storage.wal_checkpoint()?;
+
+// Retenção de histórico (`[history] retention_days`):
+let removed = storage.purge_history_before(cutoff_unix)?;
+```
+
 ## Testes
 
 ```bash

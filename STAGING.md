@@ -3,13 +3,23 @@
 Status de aprendizados, modelo ideal por uso e o que falta verificar.
 Última atualização: 2026-08-21.
 
+> **ATUALIZAÇÃO (planos 019/020):** o `arlm-server` tornou-se um **plano de dados
+> puro, sem LLM** (removido o `summarizer` server-side). O servidor faz apenas
+> indexação (chunk+embed), busca híbrida, QA-Cache, memória e histórico. A
+> sumarização/digest agora ocorre **no cliente** (`arlm-cli`) usando o **LLM
+> local do usuário** (`arlm-llm`) em `query -qa` (digest) e `persist` (summarize,
+> escreve `wiki/*.md`). As seções abaixo sobre o *summarizer* server-side são
+> históricas e referem-se ao estado pré-refator. Os aprendizados de **embedding**
+> (Ollama local, all-minilm/qwen3-embedding) continuam válidos para o servidor.
+
 ---
 
 ## 1. Objetivo
 
-Deixar a busca semântica + sumarização do `arlm` **100% local** em laptop, sem APIs
-externas: embeddings e LLM de sumarização via **Ollama**, servidor `arlm-server` em
-**container Docker** único (Ollama + arlm-server).
+Deixar a busca semântica do `arlm` **100% local** em laptop, sem APIs externas:
+embeddings via **Ollama** no servidor (`arlm-server`, container Docker único).
+A sumarização/digest é feita pelo **LLM local do usuário no cliente** (`query -qa`
+/ `persist`), não no servidor.
 
 ---
 
@@ -66,7 +76,7 @@ via `/api/chat` do Ollama, `temperature=0.3`, `num_predict=1024`. Harness em
 | `granite3.1-moe:1b` | 1B (MoE) | 23s | não | ❌ **completou código** em vez de resumir | ❌ reprovado p/ summary |
 | `smollm2:360m` | 360M | não medido | n/a | n/a | ⏳ baixado |
 | `qwen2.5:0.5b` | 0.5B | não medido | n/a | n/a | ⏳ baixado |
-| `llama3.2:1b` | 1B | não medido | n/a | n/a | ⏳ baixado |
+| `llama3.2:1b-instruct-q8_0` | 1B (q8_0) | 14.74s (cold) | não | **Bom**, estruturado, segue instrução | ✅ candidato (q8_0) |
 | `gemma2:2b` | 2B | não medido | n/a | n/a | ⏳ baixado |
 | `qwen2.5-coder:1.5b` | 1.5B | não medido | n/a | n/a | ⏳ baixado |
 | `phi3.5:mini` | 3.8B | não medido | n/a | n/a | ⏳ tag corrigido (`phi3.5:mini`) |

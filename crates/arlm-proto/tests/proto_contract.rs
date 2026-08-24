@@ -57,10 +57,13 @@ fn test_add_session_turn_request_fields() {
 
 #[test]
 fn test_enum_variants_present() {
-    assert_eq!(SearchTier::TierBm25 as i32, 0);
-    assert_eq!(SearchTier::TierSemantic as i32, 1);
-    assert_eq!(SearchTier::TierHybrid as i32, 2);
-    assert_eq!(SearchTier::TierEntity as i32, 3);
+    // Plan 020: `UNSPECIFIED = 0` is the wire default so the server can apply
+    // its `[search].tier` default; explicit tiers start at 1.
+    assert_eq!(SearchTier::Unspecified as i32, 0);
+    assert_eq!(SearchTier::TierBm25 as i32, 1);
+    assert_eq!(SearchTier::TierSemantic as i32, 2);
+    assert_eq!(SearchTier::TierHybrid as i32, 3);
+    assert_eq!(SearchTier::TierEntity as i32, 4);
 
     assert_eq!(InvalidateMode::Stale as i32, 0);
     assert_eq!(InvalidateMode::Delete as i32, 1);

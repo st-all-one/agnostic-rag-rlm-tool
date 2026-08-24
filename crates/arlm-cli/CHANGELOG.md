@@ -12,6 +12,22 @@
 > `config.toml` legado não é lido. Veja `plan/019-cli-consolidation.md` e
 > `plan/020-config-consolidation.md`.
 
+### Changed / Removed (auditoria plan 020)
+- **Removido o subcomando `serve`** (HTTP/MCP local) e todo o resto do data
+  plane local: `commands/serve/`, `commands/mcp/`, `metrics.rs` e `util::data_dir`
+  — o CLI é um **cliente gRPC puro** e não depende mais de `arlm-storage`,
+  `arlm-search`, `arlm-memory`, `axum` nem `tower-http`.
+- **mTLS no cliente:** `[server] tls_ca`/`tls_cert`/`tls_key` na user config
+  (merge granular global→local) alimentam `ClientConfig` (`client.rs`).
+- Endereço resolvido apenas por `.arlm.toml` → `~/.arlm/arlm.toml` → env
+  `ARLM_SERVER_ADDR` (a flag inexistente `--server` saiu da documentação).
+
+### Added (auditoria plan 020)
+- Testes inline da `user_config`: merge granular/recursivo, `[auth]` só-global,
+  legados ignorados, precedência de endereço, campos TLS.
+- `tests/init_test.rs`: scaffold do `arlm init` (`.arlm.toml` gitignored,
+  sem credenciais locais) e guarda contra dependências de data plane.
+
 ### Added
 - **QA-Cache client (plan 017):** `commands/qa_cache.rs` com `run_ask` (usa
   `QueryWithCache`; em HIT devolve a resposta sem chamar LLM; em MISS sintetiza

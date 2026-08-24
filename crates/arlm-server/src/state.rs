@@ -7,7 +7,7 @@ use arlm_storage::QuestionVectorStore;
 use arlm_storage::Storage;
 use arlm_storage::VectorStore;
 
-use crate::config::{QaCacheConfig, ServerConfig};
+use crate::config::{EmbedderModel, QaCacheConfig, ServerConfig};
 
 /// Shared state across gRPC handlers.
 #[derive(Clone)]
@@ -19,115 +19,146 @@ pub struct AppState {
     /// Question-vector index (plan 017) for semantic cache lookup, in its own
     /// cosine space, separate from the chunk vector store.
     pub question_vector_store: Option<Arc<QuestionVectorStore>>,
-    /// Embedder used for chunk (index) and query (search) embeddings.
-    /// Real BGE-M3 when `ARLM_MODEL_DIR` points at a directory containing
-    /// `model.safetensors` + `tokenizer.json`; otherwise a hash fallback that
-    /// keeps the pipeline running without semantic search.
+    /// Embedder used for chunk (index) and query (search) embeddings. Built
+    /// from `server.toml [embedder]` (plan 020): real BGE-M3 when
+    /// `[embedder] model = "bge-m3"` and `model_dir` contains weights;
+    /// Ollama when `model = "ollama"`; otherwise a hash fallback that keeps
+    /// the pipeline running without semantic search.
     pub embedder: Arc<dyn Embedder + Send + Sync>,
     /// Semantic query-answer cache tunables (plan 017).
     pub qa_config: QaCacheConfig,
     started_at: std::time::Instant,
 }
 
-/// Build the embedder: Ollama when configured, else BGE-M3 (quantized) when
-/// weights are available, else a hash fallback.
-fn load_embedder() -> Arc<dyn Embedder + Send + Sync> {
-    const DIMS: usize = 1024;
+/// Build the embedder from the `[embedder]` section of `server.toml`
+/// (plan 020): Ollama when `model = "ollama"`, BGE-M3 (quantized) when
+/// `model = "bge-m3"` and weights are available, else a hash fallback.
+fn load_embedder(cfg: &crate::config::EmbedderConfig) -> Arc<dyn Embedder + Send + Sync> {
+    use arlm_embedding::embedder::config::{
+        EmbeddingConfig, EmbeddingModel as CfgModel, Quantization,
+    };
 
-    // Ollama backend (laptop-friendly): enabled via ARLM_OLLAMA_MODEL.
-    if let Ok(model) = std::env::var("ARLM_OLLAMA_MODEL") {
-        let url = std::env::var("ARLM_OLLAMA_URL")
-            .unwrap_or_else(|_| "http://localhost:11434".to_string());
-        let dims = std::env::var("ARLM_OLLAMA_DIMS")
-            .ok()
-            .and_then(|d| d.parse::<usize>().ok())
-            .unwrap_or(768);
-        let prefix =
-            std::env::var("ARLM_OLLAMA_PREFIX").unwrap_or_else(|_| "search_document: ".to_string());
-        let cfg = arlm_embedding::embedder::config::EmbeddingConfig {
-            model: arlm_embedding::embedder::config::EmbeddingModel::Ollama,
-            quantization: arlm_embedding::embedder::config::Quantization::None,
-            matryoshka_dims: None,
-            model_dir: None,
-            dims,
-            ollama_url: Some(url.clone()),
-            ollama_model: Some(model.clone()),
-            ollama_prefix: Some(prefix),
-        };
-        match arlm_embedding::embedder::config::build_embedder(&cfg) {
-            Ok(embedder) => {
-                tracing::info!(model = "ollama", ollama_model = %model, "loaded Ollama embedder");
-                return embedder;
-            }
-            Err(err) => {
-                tracing::warn!(error = %err, "Ollama embedder failed; falling back");
-            }
-        }
-    }
-
-    match std::env::var("ARLM_MODEL_DIR").ok().map(PathBuf::from) {
-        Some(dir) if dir.join("model.safetensors").exists() => {
-            // Quantize to INT8 at load time: runs real BGE-M3 semantics via
-            // `QMatMul` at ~3-4x less CPU/RAM than FP32 (set ARLM_MODEL_QUANT
-            // to override). FP32 ("none") is far too slow for CPU indexing.
-            let quant = match std::env::var("ARLM_MODEL_QUANT").as_deref() {
-                Ok("none") => arlm_embedding::embedder::config::Quantization::None,
-                Ok("int4") => arlm_embedding::embedder::config::Quantization::Int4,
-                _ => arlm_embedding::embedder::config::Quantization::Int8,
+    let dims = cfg.dims;
+    match cfg.resolved_model() {
+        EmbedderModel::Ollama => {
+            let url = cfg
+                .ollama_url
+                .clone()
+                .unwrap_or_else(|| "http://localhost:11434".to_string());
+            let model = cfg
+                .ollama_model
+                .clone()
+                .unwrap_or_else(|| "nomic-embed-text-v2-moe".to_string());
+            let prefix = Some(
+                cfg.ollama_prefix
+                    .clone()
+                    .unwrap_or_else(|| "search_document: ".to_string()),
+            );
+            let emb_cfg = EmbeddingConfig {
+                model: CfgModel::Ollama,
+                quantization: Quantization::None,
+                matryoshka_dims: None,
+                model_dir: None,
+                dims,
+                ollama_url: Some(url.clone()),
+                ollama_model: Some(model.clone()),
+                ollama_prefix: prefix,
             };
-            let cfg = arlm_embedding::embedder::config::EmbeddingConfig {
-                model: arlm_embedding::embedder::config::EmbeddingModel::BgeM3,
-                quantization: quant,
-                matryoshka_dims: Some(DIMS),
-                model_dir: Some(dir.clone()),
-                dims: DIMS,
-                ollama_url: None,
-                ollama_model: None,
-                ollama_prefix: None,
-            };
-            match bge_m3::BgeM3Embedder::new_with_config(&dir, &cfg) {
+            match arlm_embedding::embedder::config::build_embedder(&emb_cfg) {
                 Ok(embedder) => {
-                    tracing::info!(
-                        model_dir = %dir.display(),
-                        quantization = ?quant,
-                        "loaded BGE-M3 embedder"
-                    );
-                    Arc::new(embedder)
+                    tracing::info!(model = "ollama", ollama_model = %model, %url, "loaded Ollama embedder");
+                    return embedder;
                 }
                 Err(err) => {
-                    tracing::warn!(
-                        error = %err,
-                        "BGE-M3 load failed, falling back to hash embedder"
-                    );
-                    Arc::new(fallback::FallbackEmbedder::new(DIMS))
+                    tracing::warn!(error = %err, "Ollama embedder failed; falling back");
                 }
             }
         }
-        Some(dir) => {
-            tracing::warn!(
-                model_dir = %dir.display(),
-                "ARLM_MODEL_DIR set but model.safetensors missing; using hash embedder"
-            );
-            Arc::new(fallback::FallbackEmbedder::new(DIMS))
+        EmbedderModel::BgeM3 => {
+            if let Some(dir) = cfg.model_dir.clone().map(PathBuf::from) {
+                if dir.join("model.safetensors").exists() {
+                    // Quantize to INT8 at load time: runs real BGE-M3 semantics
+                    // via `QMatMul` at ~3-4x less CPU/RAM than FP32.
+                    let quant = cfg.resolved_quantization();
+                    let emb_cfg = EmbeddingConfig {
+                        model: CfgModel::BgeM3,
+                        quantization: quant,
+                        matryoshka_dims: Some(dims),
+                        model_dir: Some(dir.clone()),
+                        dims,
+                        ollama_url: None,
+                        ollama_model: None,
+                        ollama_prefix: None,
+                    };
+                    match bge_m3::BgeM3Embedder::new_with_config(&dir, &emb_cfg) {
+                        Ok(embedder) => {
+                            tracing::info!(
+                                model_dir = %dir.display(),
+                                quantization = ?quant,
+                                "loaded BGE-M3 embedder"
+                            );
+                            return Arc::new(embedder);
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                error = %err,
+                                "BGE-M3 load failed, falling back to hash embedder"
+                            );
+                        }
+                    }
+                } else {
+                    tracing::warn!(
+                        model_dir = %dir.display(),
+                        "model.safetensors missing in [embedder].model_dir; using hash embedder"
+                    );
+                }
+            } else {
+                tracing::warn!(
+                    "[embedder] model = \"bge-m3\" without model_dir; using hash embedder"
+                );
+            }
         }
-        None => {
-            tracing::info!("ARLM_MODEL_DIR not set; using fallback hash embedder");
-            Arc::new(fallback::FallbackEmbedder::new(DIMS))
+        EmbedderModel::Lightweight => {
+            tracing::info!("[embedder] model = \"lightweight\"; using hash embedder");
         }
     }
+
+    Arc::new(fallback::FallbackEmbedder::new(dims))
 }
 
-/// Dimensionality of the embedder [`load_embedder`] will build, used to size
-/// the server's global vector store so stored and query vectors are comparable.
+/// Dimensionality of the embedder built for `cfg`, used to size the server's
+/// global vector stores so stored and query vectors are comparable.
 #[must_use]
-pub fn embedder_dimension() -> usize {
-    if std::env::var("ARLM_OLLAMA_MODEL").is_ok() {
-        std::env::var("ARLM_OLLAMA_DIMS")
-            .ok()
-            .and_then(|d| d.parse::<usize>().ok())
-            .unwrap_or(768)
-    } else {
-        1024
+pub fn embedder_dimension(cfg: &crate::config::EmbedderConfig) -> usize {
+    cfg.dims
+}
+
+/// Wrap the embedder with the SQLite content-hash cache when
+/// `server.toml [embedder] cache = true` (plan 020). Cache failures degrade
+/// to the uncached embedder so indexing never stops because of the cache.
+fn wrap_with_cache(
+    embedder: Arc<dyn Embedder + Send + Sync>,
+    config: &ServerConfig,
+) -> Arc<dyn Embedder + Send + Sync> {
+    if !config.embedder.cache {
+        tracing::info!("[embedder] cache = false; running without embedding cache");
+        return embedder;
+    }
+    let db_path = config.data_dir.join("embedding-cache.db");
+    match arlm_embedding::embedder::cache::EmbeddingCache::open(
+        &db_path.to_string_lossy(),
+        config.embedder.dims,
+    ) {
+        Ok(cache) => {
+            tracing::info!(db = %db_path.display(), dims = config.embedder.dims, "embedding cache enabled");
+            Arc::new(arlm_embedding::embedder::cache::CachedEmbedder::new(
+                embedder, cache,
+            ))
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "embedding cache open failed; running uncached");
+            embedder
+        }
     }
 }
 
@@ -147,7 +178,8 @@ impl AppState {
         vector_store: Option<Arc<VectorStore>>,
         question_vector_store: Option<Arc<QuestionVectorStore>>,
     ) -> Result<Self> {
-        let embedder = load_embedder();
+        let embedder = load_embedder(&config.embedder);
+        let embedder = wrap_with_cache(embedder, &config);
         let qa_config = config.qa_cache.clone();
 
         let state = Self {
