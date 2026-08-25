@@ -26,10 +26,12 @@
 pub mod fts;
 pub mod lance;
 pub mod qa_vectors;
+pub mod rlm_vectors;
 pub mod sqlite;
 
 pub use lance::{SearchResult, VectorEntry, VectorStore};
 pub use qa_vectors::QuestionVectorStore;
+pub use rlm_vectors::{RlmNeighbor, RlmVectorStore};
 pub use sqlite::Role;
 pub use sqlite::Storage;
 pub use sqlite::cache;

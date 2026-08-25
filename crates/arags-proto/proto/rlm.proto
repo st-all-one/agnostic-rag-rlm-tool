@@ -1,0 +1,104 @@
+// RLM (Recursive Language Model) summaries — distributed volunteer processing.
+//
+// Volunteers claim jobs from the server queue with a client-configurable lease
+// (default 500s), synthesize a summary with their local LLM, and submit it
+// through CompleteRlmJob. Submissions pass a quality gate (`review_status`);
+// admin-volunteers are auto-approved. Attribution (username + model) is
+// recorded on every node.
+syntax = "proto3";
+package arags.v1;
+
+message ClaimRlmJobRequest {
+  // Requested lease duration in ms; 0 resolves to the server default (500s).
+  int64 lease_ms = 1;
+  // Only claim jobs at or below this level (volunteer quota); 0 = any level.
+  int32 max_level = 2;
+}
+
+message ClaimRlmJobResponse {
+  bool available = 1;
+  int64 job_id = 2;
+  string job_key = 3;
+  string project = 4;
+  // Hierarchy level: 1=file, 2=theme, 3=project.
+  int32 level = 5;
+  // File path (L1), theme name (L2) or project name (L3).
+  string subject = 6;
+  // JSON payload with input refs: chunk_ids (numeric rowids), node_ids,
+  // texts and source_hashes needed to synthesize the summary.
+  string payload = 7;
+  // Echo back unchanged in CompleteRlmJob; mismatch rejects stale results.
+  int64 generation = 8;
+  // Lease actually granted (ms).
+  int64 lease_ms = 9;
+}
+
+message CompleteRlmJobRequest {
+  int64 job_id = 1;
+  int64 generation = 2;
+  string summary_text = 3;
+  // Model that synthesized the summary (attribution metadata).
+  string model = 4;
+  // Prompt template version used (server-defined templates).
+  string template_version = 5;
+  int64 token_count = 6;
+}
+
+message CompleteRlmJobResponse {
+  bool accepted = 1;
+  string reason = 2;
+  // Stable summary id (UUIDv7) when accepted.
+  string node_id = 3;
+  // Whether the node was auto-approved (submitter is an admin).
+  bool auto_approved = 4;
+}
+
+// Worker polls this to detect cancellation of its claimed job (source data
+// changed while processing): status/generation differ from the claim.
+message GetRlmJobStatusRequest {
+  int64 job_id = 1;
+}
+
+message RlmJobStatus {
+  int64 job_id = 1;
+  string status = 2;
+  int64 generation = 3;
+}
+
+// Quality gate (admin only): approve/reject a pending summary. Rejection
+// re-enqueues the job with elevated priority for reprocessing.
+message ReviewRlmNodeRequest {
+  string node_id = 1;
+  bool approved = 2;
+  string reason = 3;
+}
+
+message ReviewRlmNodeResponse {
+  bool applied = 1;
+}
+
+message ListRlmNodesRequest {
+  string project = 1;
+  // 0 = all levels.
+  int32 level = 2;
+  // Admins may include pending/rejected nodes (review queue).
+  bool include_pending = 3;
+}
+
+message RlmNodeInfo {
+  string node_id = 1;
+  int32 level = 2;
+  string subject = 3;
+  string summary_text = 4;
+  string review_status = 5;
+  string model = 6;
+  string volunteer_username = 7;
+  double confidence = 8;
+  bool stale = 9;
+  string created_at = 10;
+  string updated_at = 11;
+}
+
+message ListRlmNodesResponse {
+  repeated RlmNodeInfo nodes = 1;
+}

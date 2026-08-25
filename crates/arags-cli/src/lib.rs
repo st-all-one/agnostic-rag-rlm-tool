@@ -34,6 +34,7 @@ pub mod dispatch;
 pub mod gitignore;
 pub mod output;
 pub mod user_config;
+pub mod volunteer;
 pub mod watcher;
 
 pub use client::{ClientConfig, create_client};

@@ -130,6 +130,7 @@ override por projeto) → `~/.arags/arags.toml` (`[server].addr`) → env
 | `arags search <query>` | Busca híbrida BM25 + semântica (server-side) |
 | `arags query <question>` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
 | `arags memory list\|get\|invalidate\|cleanup` | Memória (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
+| `arags volunteer [--once]` | Roda como **voluntário RLM**: reclama jobs de sumarização e sintetiza com seu LLM local (config em `~/.arags/arags.toml`) |
 | `arags persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
 | `arags history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |
 | `arags-server up\|status\|admin ...` | Binário do servidor (data plane gRPC; `admin create-refresh`, etc.) |
@@ -179,6 +180,67 @@ arags index ./meu-projeto --unregister  # para o daemon e limpa o registro
 - Controle: marcadores dotfile `.arags-watch.pid` / `.arags-watch.stop`
   (ignorados pelo indexador pela regra de dot-paths).
 
+## RLM — Sumários Recursivos Distribuídos
+
+O `arags` mantém, além dos chunks, um **dataset de sumários recursivos** que
+descreve o projeto em três níveis:
+
+| Nível | Assunto | Entrada |
+|-------|---------|---------|
+| **L1** | cada arquivo | chunks do arquivo |
+| **L2** | tema/módulo (prefixo de path) | sumários L1 do tema |
+| **L3** | projeto inteiro | sumários L2 |
+
+Cada nó registra proveniência (`source_hashes`, grafo em `rlm_edges`),
+atribuição (**username** do voluntário + **modelo**) e passa por um **gate de
+qualidade**: só nós aprovados ficam buscáveis.
+
+### Como funciona
+
+1. `arags index` enfileira jobs L1 para os arquivos alterados;
+2. voluntários reclamam os jobs (`ClaimRlmJob`) com lease exclusivo e
+   sintetizam com seu **LLM local** (incentivo: llama 3.2 via Ollama);
+3. a conclusão de um nível avalia o nível de cima sob **tolerância
+   progressiva** (`[rlm] l2_tolerance` 30%, `l3_tolerance` 50% no servidor) —
+   ajuste trivial não reconstrói o sumário global;
+4. submissões de **voluntários admin são auto-aprovadas**; as demais entram na
+   fila de review (`ReviewRlmNode`).
+
+### Ser voluntário
+
+```toml
+# ~/.arags/arags.toml (global)
+[volunteer]
+enabled = true                # opt-in explícito
+backend = "local-llama"       # entrada de [[llm.backends]]
+model = "llama3.2:latest"
+max_tokens_per_job = 2048     # quota por job
+lease_secs = 500              # default: 500s em todos os níveis
+max_level = 3                 # 1=só arquivos, 2=+temas, 3=tudo
+poll_secs = 30
+```
+
+```bash
+arags volunteer        # loop contínuo (reclama -> sintetiza -> submete)
+arags volunteer --once # processa no máximo um job e sai
+```
+
+### Buscar sumários
+
+```bash
+arags search --tier summary "arquitetura do projeto"
+```
+
+Retorna apenas os nós RLM aprovados e não-stale (nunca mistura com chunks).
+Ajustes de tolerância ficam no `server.toml`:
+
+```toml
+[rlm]
+enabled = true
+l2_tolerance = 0.3   # fração de arquivos mudos que dispara re-sumário do tema
+l3_tolerance = 0.5   # idem para o sumário global (mais tolerante)
+```
+
 ### `arags search`
 
 | Flag | Descrição | Default |
@@ -186,6 +248,7 @@ arags index ./meu-projeto --unregister  # para o daemon e limpa o registro
 | `--top-k <N>` | Número de resultados | 10 |
 | `--file-pattern <pat>` | Filtro por nome de arquivo | — |
 | `--min-score <f>` | Score mínimo | — |
+| `--tier <t>` | `fts`, `entity`, `vector`, `hybrid`, **`summary`** (busca só nos sumários RLM aprovados) ou `auto` | auto |
 
 ### `arags query`
 

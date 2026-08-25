@@ -93,6 +93,69 @@ pub struct GlobalConfig {
     llm: Option<LlmConfig>,
     server: Option<ServerSection>,
     project: Option<ProjectSection>,
+    volunteer: Option<VolunteerConfig>,
+}
+
+/// Volunteer worker section (global-only): registers this client as an RLM
+/// processing volunteer with its local LLM and resource quota.
+#[derive(Debug, Clone, Deserialize)]
+pub struct VolunteerConfig {
+    /// Opt-in switch: volunteers only work when explicitly enabled.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Which `[[llm.backends]]` entry to use (name/family); default = first.
+    #[serde(default)]
+    pub backend: Option<String>,
+
+    /// Model override; default = backend's configured model.
+    #[serde(default)]
+    pub model: Option<String>,
+
+    /// Max completion tokens per synthesized summary.
+    #[serde(default = "default_vol_max_tokens")]
+    pub max_tokens_per_job: u32,
+
+    /// Claimed-job lease in seconds (server honors it verbatim). Default
+    /// 500s for every level per project decision.
+    #[serde(default = "default_vol_lease_secs")]
+    pub lease_secs: u64,
+
+    /// Highest level this volunteer accepts (1=file, 2=theme, 3=project);
+    /// 0/3 = any.
+    #[serde(default = "default_vol_max_level")]
+    pub max_level: u32,
+
+    /// Seconds to sleep when the queue is empty.
+    #[serde(default = "default_vol_poll_secs")]
+    pub poll_secs: u64,
+}
+
+fn default_vol_max_tokens() -> u32 {
+    2048
+}
+fn default_vol_lease_secs() -> u64 {
+    500
+}
+fn default_vol_max_level() -> u32 {
+    3
+}
+fn default_vol_poll_secs() -> u64 {
+    30
+}
+
+impl Default for VolunteerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            backend: None,
+            model: None,
+            max_tokens_per_job: default_vol_max_tokens(),
+            lease_secs: default_vol_lease_secs(),
+            max_level: default_vol_max_level(),
+            poll_secs: default_vol_poll_secs(),
+        }
+    }
 }
 
 /// Local config file shape (`.arags.toml`). Note: a `[auth]` section in the
@@ -119,6 +182,8 @@ pub struct EffectiveUserConfig {
     pub project: ProjectSection,
     /// Watch registration (local-only; never merged from global).
     pub watch: Option<WatchSection>,
+    /// Volunteer registration (global-only; opt-in).
+    pub volunteer: Option<VolunteerConfig>,
 }
 
 impl EffectiveUserConfig {
@@ -242,12 +307,16 @@ pub fn merge(global: GlobalConfig, local: LocalConfig) -> EffectiveUserConfig {
     // `[watch]` is local-only (registration is per-project).
     let watch = local.watch;
 
+    // `[volunteer]` is global-only (opt-in identity of this machine's user).
+    let volunteer = global.volunteer;
+
     EffectiveUserConfig {
         auth,
         llm,
         server,
         project,
         watch,
+        volunteer,
     }
 }
 

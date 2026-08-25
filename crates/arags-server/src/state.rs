@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use arags_embedding::embedder::{Embedder, MinilmEmbedder, fallback};
 use arags_storage::QuestionVectorStore;
+use arags_storage::RlmVectorStore;
 use arags_storage::Storage;
 use arags_storage::VectorStore;
 
@@ -19,6 +20,9 @@ pub struct AppState {
     /// Question-vector index (plan 017) for semantic cache lookup, in its own
     /// cosine space, separate from the chunk vector store.
     pub question_vector_store: Option<Arc<QuestionVectorStore>>,
+    /// RLM summary-vector index (own cosine space, separate from chunks and
+    /// the QA question index).
+    pub rlm_vector_store: Option<Arc<RlmVectorStore>>,
     /// Embedder used for chunk (index) and query (search) embeddings. Built
     /// from `server.toml [embedder]`: the native all-`MiniLM`-L6-v2 checkpoint
     /// at `model_dir`; a hash fallback that keeps the pipeline running
@@ -122,6 +126,21 @@ impl AppState {
         vector_store: Option<Arc<VectorStore>>,
         question_vector_store: Option<Arc<QuestionVectorStore>>,
     ) -> Result<Self> {
+        Self::with_rlm_vectors(storage, config, vector_store, question_vector_store, None)
+    }
+
+    /// Full constructor including the optional RLM summary-vector store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the embedder cannot be built.
+    pub fn with_rlm_vectors(
+        storage: Storage,
+        config: ServerConfig,
+        vector_store: Option<Arc<VectorStore>>,
+        question_vector_store: Option<Arc<QuestionVectorStore>>,
+        rlm_vector_store: Option<Arc<RlmVectorStore>>,
+    ) -> Result<Self> {
         let embedder = load_embedder(&config.embedder);
         let embedder = wrap_with_cache(embedder, &config);
         let qa_config = config.qa_cache.clone();
@@ -131,6 +150,7 @@ impl AppState {
             config,
             vector_store,
             question_vector_store,
+            rlm_vector_store,
             embedder,
             qa_config: qa_config.clone(),
             started_at: std::time::Instant::now(),

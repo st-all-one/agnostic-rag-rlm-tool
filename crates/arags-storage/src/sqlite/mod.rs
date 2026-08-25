@@ -7,6 +7,7 @@ pub mod findings;
 pub mod history;
 pub mod patterns;
 pub mod qa_cache;
+pub mod rlm;
 pub mod schema;
 pub mod tasks;
 pub mod tokens;

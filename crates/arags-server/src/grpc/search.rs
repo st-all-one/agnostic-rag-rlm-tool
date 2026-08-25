@@ -148,6 +148,126 @@ fn to_proto_results(results: &[arags_search::SearchResult]) -> Vec<SearchResult>
         .collect()
 }
 
+/// Search the RLM recursive summary dataset (TIER_SUMMARY). Lexical candidates
+/// come from `rlm_fts`; semantic candidates from the dedicated summary vector
+/// space. Scores are min-max normalised per source and merged by keeping the
+/// best score per node. `chunk_id` carries the `rlm_nodes.id` rowid;
+/// `file_path` carries the node subject.
+pub(crate) async fn summary_search(
+    state: &AppState,
+    buffer_id: i64,
+    fts_query: &str,
+    top_k: usize,
+) -> anyhow::Result<Vec<SearchResult>> {
+    let storage = state.storage.clone();
+    // Lexical pass (blocking SQLite work).
+    let query_owned = fts_query.to_string();
+    let mut best: std::collections::HashMap<i64, SearchResult> =
+        tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+            let mut nodes = storage.search_rlm_fts(buffer_id, &query_owned, top_k)?;
+            if nodes.is_empty() && query_owned.split_whitespace().count() > 1 {
+                // Natural-language fix: AND yields nothing, retry with OR.
+                let or_query = query_owned
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" OR ");
+                nodes = storage.search_rlm_fts(buffer_id, &or_query, top_k)?;
+            }
+            Ok(nodes
+                .into_iter()
+                .map(|n| {
+                    (
+                        n.id,
+                        SearchResult {
+                            chunk_id: n.id,
+                            text: n.summary_text,
+                            score: 1.0,
+                            file_path: n.subject,
+                            start_line: 0,
+                            end_line: 0,
+                        },
+                    )
+                })
+                .collect::<std::collections::HashMap<_, _>>())
+        })
+        .await
+        .map_err(internal)??;
+
+    // Semantic pass over the dedicated summary vector space.
+    if let Some(vectors) = state.rlm_vector_store.as_ref() {
+        let embedder = state.embedder.clone();
+        let q = fts_query.to_string();
+        let query_vector = tokio::task::spawn_blocking(move || embedder.embed(&q))
+            .await
+            .ok()
+            .and_then(Result::ok);
+        if let Some(vec) = query_vector {
+            let neighbors = vectors
+                .search(&vec, top_k)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            let ids: Vec<u64> = neighbors.iter().map(|n| n.id).collect();
+            #[allow(clippy::cast_possible_wrap)] // rowids fit i64
+            let sim_by_id: std::collections::HashMap<i64, f32> = neighbors
+                .iter()
+                .filter_map(|nb| i64::try_from(nb.id).ok().map(|id| (id, nb.similarity)))
+                .collect();
+            let storage = state.storage.clone();
+            let approved = store::blocking(move || storage.get_approved_rlm_nodes(&ids))
+                .await
+                .map_err(internal)?;
+            for node in approved {
+                let entry = best.entry(node.id).or_insert_with(|| SearchResult {
+                    chunk_id: node.id,
+                    text: node.summary_text.clone(),
+                    score: 0.0,
+                    file_path: node.subject,
+                    start_line: 0,
+                    end_line: 0,
+                });
+                // Merge: keep the better of lexical/semantic scores.
+                if let Some(sim) = sim_by_id.get(&node.id) {
+                    if *sim > entry.score {
+                        entry.score = *sim;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut results: Vec<SearchResult> = best.into_values().collect();
+    normalize_scores_proto(&mut results);
+    results.sort_by(|a, b| b.score.total_cmp(&a.score));
+    results.truncate(top_k);
+    Ok(results)
+}
+
+/// Min-max normalise gRPC-shaped results to `[0, 1]` (higher = better).
+fn normalize_scores_proto(results: &mut [SearchResult]) {
+    if results.len() < 2 {
+        for r in results.iter_mut() {
+            r.score = 1.0;
+        }
+        return;
+    }
+    let min = results
+        .iter()
+        .map(|r| r.score)
+        .fold(f32::INFINITY, f32::min);
+    let max = results
+        .iter()
+        .map(|r| r.score)
+        .fold(f32::NEG_INFINITY, f32::max);
+    if (max - min).abs() < f32::EPSILON {
+        for r in results.iter_mut() {
+            r.score = 1.0;
+        }
+        return;
+    }
+    for r in results.iter_mut() {
+        r.score = (r.score - min) / (max - min);
+    }
+}
+
 /// Render hydrated chunks into the markdown-style LLM context with a token
 /// budget. Returns the body and the number of tokens consumed.
 fn render_context(candidates: &[SearchResult], max_tokens: u32) -> (String, u32) {
@@ -202,7 +322,21 @@ pub(crate) async fn handle_search(
 
     // Tier resolution (plan 020): `UNSPECIFIED`/unknown values resolve to the
     // `[search].tier` serving default from `server.toml`; explicit values are
-    // honored as sent.
+    // honored as sent. TIER_SUMMARY bypasses the chunk pipeline entirely and
+    // searches only the approved RLM summary dataset.
+    if matches!(SearchTier::try_from(req.tier), Ok(SearchTier::TierSummary)) {
+        let fts_query = sanitize_fts(&query);
+        let results = summary_search(state, buffer_id, &fts_query, max_results)
+            .await
+            .map_err(internal)?;
+        let total_count = i32::try_from(results.len()).unwrap_or(i32::MAX);
+        return Ok(Response::new(SearchResponse {
+            results,
+            total_count,
+            duration_ms: start.elapsed().as_secs_f64() * 1000.0,
+        }));
+    }
+
     let tier = match SearchTier::try_from(req.tier) {
         Ok(SearchTier::TierBm25) => HybridTier::Fts,
         Ok(SearchTier::TierEntity) => HybridTier::Entity,

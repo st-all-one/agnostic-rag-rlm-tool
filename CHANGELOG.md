@@ -5,6 +5,41 @@ Este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added — RLM: sumarização recursiva hierárquica distribuída (agnostic-rlm-rs-8f12 / plan pl-db3e)
+
+Novo dataset de **sumários recursivos** (Recursive Language Model), processado
+de baixo para cima por voluntários com LLM local:
+
+- **L1 (arquivo):** resume os chunks de um arquivo; **L2 (tema):** unifica os
+  sumários dos arquivos do mesmo módulo (agrupamento determinístico por
+  prefixo de path); **L3 (projeto):** visão geral a partir dos temas.
+- **Dataset à parte**, no padrão QA-Cache: tabelas `rlm_nodes`/`rlm_edges`/
+  `rlm_jobs` (migration 018), FTS5 `rlm_fts` e espaço vetorial dedicado
+  (`rlm_vectors.usearch`, cosseno) — nunca misturado com chunks ou perguntas.
+- **Processamento voluntário e distribuído:** `arags volunteer` reclama jobs
+  do servidor (`ClaimRlmJob`) e sintetiza com o LLM local do usuário
+  (incentivo: llama 3.2 via Ollama). Config em `[volunteer]` no
+  `~/.arags/arags.toml` (opt-in) com provider/modelo/quota.
+- **Lease configurável pelo cliente**, default **500s para todos os níveis**
+  (`lease_secs`); enquanto o lease vale, nenhum conjunto vai para outro
+  voluntário. Cancelamento cooperativo por *generation*: se a fonte muda
+  durante o processamento, a submissão é rejeitada e o job volta ao topo da
+  fila (priority 0).
+- **Tolerância progressiva por nível:** mudanças propagam para cima só quando
+  ultrapassam `[rlm] l2_tolerance` (0.3) / `l3_tolerance` (0.5) — ajuste
+  trivial de variável não reconstrói o sumário global.
+- **Gate de qualidade:** sumário concluído entra em `review_status=pending`;
+  `ReviewRlmNode` (admin-only) aprova/rejeita. **Voluntário admin
+  auto-aprova** e o nó entra direto no ciclo de decay.
+- **Atribuição:** cada nó registra quem processou (`volunteer_username`,
+  do refresh token) e qual modelo (`model`).
+- Busca: novo tier `summary` (`arags search --tier summary`) sobre os nós
+  aprovados, lexical (FTS5) + semântico (espaço vetorial próprio).
+- RPCs novos: `ClaimRlmJob`, `CompleteRlmJob`, `GetRlmJobStatus`,
+  `ReviewRlmNode`, `ListRlmNodes` (`proto/rlm.proto`).
+- Fix: backend Ollama agora envia `"stream": false` (respostas NDJSON
+  quebravam o parser).
+
 ### Added — ignore de dotfiles + `.gitignore` e auto-atualização com `index --register` (agnostic-rlm-rs-4442, 740a, fe41)
 
 #### Ignore de arquivos (descoberta de arquivos)

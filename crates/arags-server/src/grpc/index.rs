@@ -204,6 +204,35 @@ pub(crate) async fn handle_index_project(
         }
     }
 
+    // Phase 5 (RLM): enqueue L1 summary work for the files touched by this
+    // stream. Cancellations for claimed jobs ride on the generation bump.
+    if state.config.rlm.enabled {
+        let chunk_ids: Vec<i64> = persisted
+            .iter()
+            .filter_map(|(id, _)| i64::try_from(*id).ok())
+            .collect();
+        let storage = state.storage.clone();
+        let project_for_rlm = project.clone();
+        match store::blocking(move || -> anyhow::Result<(usize, usize)> {
+            let mut files = store::chunks::chunk_file_paths(&storage, &chunk_ids)?;
+            files.sort();
+            files.dedup();
+            if files.is_empty() {
+                return Ok((0, 0));
+            }
+            store::rlm::enqueue_rlm_l1_work(&storage, buffer_id, &project_for_rlm, &files)
+        })
+        .await
+        {
+            Ok((new_jobs, reset_jobs)) => {
+                if new_jobs + reset_jobs > 0 {
+                    tracing::info!(project = %project, new_jobs, reset_jobs, "rlm enqueue hook");
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "rlm enqueue failed; indexing continues"),
+        }
+    }
+
     tracing::info!(
         project = %project,
         files_indexed = distinct_files,

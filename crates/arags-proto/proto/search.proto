@@ -19,6 +19,9 @@ enum SearchTier {
   TIER_SEMANTIC = 2;
   TIER_HYBRID = 3;
   TIER_ENTITY = 4;
+  // Search the RLM recursive summary dataset (L1/L2/L3 nodes) instead of
+  // chunks. Only approved, non-stale summaries are returned.
+  TIER_SUMMARY = 5;
 }
 
 message SearchResult {

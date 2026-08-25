@@ -10,6 +10,7 @@
 
 pub mod chunks;
 pub mod projects;
+pub mod rlm;
 
 use anyhow::{Context, Result};
 

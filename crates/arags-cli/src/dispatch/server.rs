@@ -37,9 +37,9 @@ fn connect(rt: &Runtime, cfg: &EffectiveUserConfig) -> Result<AragsClient> {
     crate::auth_client::connect(rt, &client_config, &auth)
 }
 
-/// Map a textual tier (`fts`/`entity`/`vector`/`hybrid`/`auto`) onto the proto
-/// enum. `auto` (and anything unknown) sends `UNSPECIFIED` so the server
-/// applies its `[search].tier` default (plan 020).
+/// Map a textual tier (`fts`/`entity`/`vector`/`hybrid`/`summary`/`auto`)
+/// onto the proto enum. `auto` (and anything unknown) sends `UNSPECIFIED` so
+/// the server applies its `[search].tier` default (plan 020).
 fn map_search_tier(tier: &str) -> arags_proto::proto::SearchTier {
     debug!(tier, "resolving search tier");
     match tier {
@@ -47,6 +47,7 @@ fn map_search_tier(tier: &str) -> arags_proto::proto::SearchTier {
         "entity" => arags_proto::proto::SearchTier::TierEntity,
         "vector" | "semantic" => arags_proto::proto::SearchTier::TierSemantic,
         "hybrid" => arags_proto::proto::SearchTier::TierHybrid,
+        "summary" | "summaries" | "rlm" => arags_proto::proto::SearchTier::TierSummary,
         _ => arags_proto::proto::SearchTier::Unspecified,
     }
 }
@@ -62,6 +63,7 @@ pub fn run(
 ) -> Result<()> {
     match cli.command {
         Commands::Init { no_index, .. } => run_init(rt, &cfg, &project, format, !no_index),
+        Commands::Volunteer { once } => crate::volunteer::run(rt, &cfg, once),
         Commands::Index {
             path,
             ignore_patterns,

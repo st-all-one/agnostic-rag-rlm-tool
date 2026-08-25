@@ -63,7 +63,25 @@ pub async fn run() -> Result<()> {
         }
     };
 
-    run_server(config, storage, vector_store, question_vector_store).await
+    let rlm_vector_store = match arags_storage::RlmVectorStore::open(
+        &config.data_dir,
+        crate::state::embedder_dimension(),
+    ) {
+        Ok(store) => Some(Arc::new(store)),
+        Err(e) => {
+            tracing::warn!(error = %e, "rlm vector store unavailable, summary semantic search disabled");
+            None
+        }
+    };
+
+    run_server(
+        config,
+        storage,
+        vector_store,
+        question_vector_store,
+        rlm_vector_store,
+    )
+    .await
 }
 
 /// Run the gRPC server with graceful shutdown.
@@ -76,12 +94,14 @@ pub async fn run_server(
     storage: Storage,
     vector_store: Option<Arc<VectorStore>>,
     question_vector_store: Option<Arc<QuestionVectorStore>>,
+    rlm_vector_store: Option<Arc<arags_storage::RlmVectorStore>>,
 ) -> Result<()> {
-    let state = AppState::new(
+    let state = AppState::with_rlm_vectors(
         storage.clone(),
         config.clone(),
         vector_store,
         question_vector_store,
+        rlm_vector_store,
     )?;
 
     let grpc_service = AragsServiceServer::new(AragsGrpcService::new(state));
@@ -99,6 +119,13 @@ pub async fn run_server(
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
+                // RLM: requeue claimed jobs whose lease expired without
+                // completion so crashed volunteers do not strand work units.
+                match maint_storage.requeue_expired_rlm_leases() {
+                    Ok(n) if n > 0 => tracing::info!(requeued = n, "rlm expired leases requeued"),
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!(error = %e, "rlm lease requeue failed"),
+                }
                 if let Err(e) =
                     crate::maintenance::run_maintenance("", &maint_storage, floor, false).await
                 {

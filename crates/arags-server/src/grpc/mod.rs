@@ -14,6 +14,7 @@ pub mod index;
 pub mod memory;
 pub mod project;
 pub mod query_cache;
+pub mod rlm;
 pub mod search;
 pub mod status;
 
@@ -182,5 +183,47 @@ impl AragsService for AragsGrpcService {
     ) -> Result<Response<GetHistoryResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.get_history");
         history::handle_get_history(&self.state, request).await
+    }
+
+    // ── RLM recursive summaries ──────────────────────────────────────────
+
+    async fn claim_rlm_job(
+        &self,
+        request: Request<ClaimRlmJobRequest>,
+    ) -> Result<Response<ClaimRlmJobResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.claim_rlm_job");
+        rlm::handle_claim_rlm_job(&self.state, request).await
+    }
+
+    async fn complete_rlm_job(
+        &self,
+        request: Request<CompleteRlmJobRequest>,
+    ) -> Result<Response<CompleteRlmJobResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.complete_rlm_job");
+        rlm::handle_complete_rlm_job(&self.state, request).await
+    }
+
+    async fn get_rlm_job_status(
+        &self,
+        request: Request<GetRlmJobStatusRequest>,
+    ) -> Result<Response<RlmJobStatus>, Status> {
+        let _timer = crate::timing::Timer::new("handler.get_rlm_job_status");
+        rlm::handle_get_rlm_job_status(&self.state, request).await
+    }
+
+    async fn review_rlm_node(
+        &self,
+        request: Request<ReviewRlmNodeRequest>,
+    ) -> Result<Response<ReviewRlmNodeResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.review_rlm_node");
+        rlm::handle_review_rlm_node(&self.state, request).await
+    }
+
+    async fn list_rlm_nodes(
+        &self,
+        request: Request<ListRlmNodesRequest>,
+    ) -> Result<Response<ListRlmNodesResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.list_rlm_nodes");
+        rlm::handle_list_rlm_nodes(&self.state, request).await
     }
 }

@@ -296,6 +296,8 @@ impl BackendFamily {
         let mut v = json!({
             "model": req.model,
             "messages": messages_simple(&req.messages),
+            // Ollama streams NDJSON chunks by default; we parse one body.
+            "stream": false,
         });
         let mut opts = json!({});
         if let Some(t) = req.temperature {

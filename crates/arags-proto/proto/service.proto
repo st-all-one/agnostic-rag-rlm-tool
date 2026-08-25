@@ -11,6 +11,7 @@ import "context.proto";
 import "server.proto";
 import "auth.proto";
 import "query_cache.proto";
+import "rlm.proto";
 
 // ── gRPC Service ──
 
@@ -56,6 +57,15 @@ service AragsService {
 
   // History (plan 019): per-user query history (server scopes by user).
   rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+
+  // RLM recursive summaries: distributed volunteer processing. Volunteers
+  // claim jobs with a lease (default 500s), synthesize locally, and submit
+  // through CompleteRlmJob (quality-gated; admin submitters auto-approve).
+  rpc ClaimRlmJob(ClaimRlmJobRequest) returns (ClaimRlmJobResponse);
+  rpc CompleteRlmJob(CompleteRlmJobRequest) returns (CompleteRlmJobResponse);
+  rpc GetRlmJobStatus(GetRlmJobStatusRequest) returns (RlmJobStatus);
+  rpc ReviewRlmNode(ReviewRlmNodeRequest) returns (ReviewRlmNodeResponse);
+  rpc ListRlmNodes(ListRlmNodesRequest) returns (ListRlmNodesResponse);
 }
 
 // ── Memory / Cache / Maintenance / History (plan 019) ──

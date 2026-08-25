@@ -64,7 +64,7 @@ pub enum Commands {
         #[arg(short, long)]
         all: bool,
 
-        /// Search tier: fts, entity, vector, auto (default: auto).
+        /// Search tier: fts, entity, vector, summary, auto (default: auto).
         #[arg(long, default_value = "auto")]
         tier: String,
 
@@ -78,6 +78,14 @@ pub enum Commands {
     WatchDaemon {
         /// Project root to monitor.
         root: PathBuf,
+    },
+
+    /// Run as an RLM volunteer: claim summary jobs and synthesize them with
+    /// your local LLM (configure in ~/.arags/arags.toml [volunteer]).
+    Volunteer {
+        /// Process at most one job, then exit.
+        #[arg(long)]
+        once: bool,
     },
 
     /// Query with on-demand QA: `-qa` digests via the user's LLM; `--cache-id`

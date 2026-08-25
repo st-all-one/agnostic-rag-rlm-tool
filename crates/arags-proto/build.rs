@@ -12,6 +12,7 @@ fn main() -> Result<()> {
         format!("{proto_root}/server.proto"),
         format!("{proto_root}/auth.proto"),
         format!("{proto_root}/query_cache.proto"),
+        format!("{proto_root}/rlm.proto"),
         format!("{proto_root}/service.proto"),
     ];
 
