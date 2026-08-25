@@ -415,15 +415,35 @@ impl ServerConfig {
         toml::from_str(&contents).with_context(|| format!("failed to parse {}", path.display()))
     }
 
-    /// Apply the `ARAGS_SERVER_ADDR` / `ARAGS_DATA_DIR` environment overrides
-    /// (plan 020 keeps both as ops escape hatches over the file).
+    /// Apply the `ARAGS_SERVER_ADDR` / `ARAGS_DATA_DIR` /
+    /// `ARAGS_EMBEDDER_MODEL_DIR` environment overrides (plan 020 keeps them
+    /// as ops escape hatches over the file; the model dir one lets container
+    /// images bake or mount checkpoints without a config file).
     #[must_use]
-    pub fn with_env_overrides(mut self) -> Self {
-        if let Ok(addr) = std::env::var("ARAGS_SERVER_ADDR") {
+    pub fn with_env_overrides(self) -> Self {
+        let addr = std::env::var("ARAGS_SERVER_ADDR").ok();
+        let data_dir = std::env::var("ARAGS_DATA_DIR").ok();
+        let model_dir = std::env::var("ARAGS_EMBEDDER_MODEL_DIR").ok();
+        self.with_overrides(addr, data_dir, model_dir)
+    }
+
+    /// Pure core of [`Self::with_env_overrides`] (testable without touching
+    /// process state; Rust 2024 makes env mutation unsafe).
+    #[must_use]
+    pub fn with_overrides(
+        mut self,
+        addr: Option<String>,
+        data_dir: Option<String>,
+        model_dir: Option<String>,
+    ) -> Self {
+        if let Some(addr) = addr {
             self.listen_addr = addr;
         }
-        if let Ok(dir) = std::env::var("ARAGS_DATA_DIR") {
+        if let Some(dir) = data_dir {
             self.data_dir = PathBuf::from(dir);
+        }
+        if let Some(dir) = model_dir {
+            self.embedder.model_dir = Some(PathBuf::from(dir));
         }
         self
     }

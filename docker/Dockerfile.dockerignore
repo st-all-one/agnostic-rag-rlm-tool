@@ -1,0 +1,13 @@
+# Applies when building with `-f docker/Dockerfile` from the repo root
+# (BuildKit reads <dockerfile>.dockerignore next to the Dockerfile).
+# The build context only needs Cargo manifests + sources.
+target/
+.git/
+.seeds/
+.github/
+plan/
+ai-guides/
+docs/
+scripts/
+**/*.md
+**/*.sql.bak

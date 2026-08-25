@@ -32,6 +32,24 @@ mod tests {
     }
 
     #[test]
+    fn test_server_config_overrides_apply() {
+        let d = tempfile::tempdir().unwrap();
+        let cfg = ServerConfig::load_from_path(&d.path().join("absent.toml")).unwrap();
+        let cfg = cfg.with_overrides(
+            Some("0.0.0.0:9998".to_owned()),
+            Some("/tmp/arags-override".to_owned()),
+            Some("/models".to_owned()),
+        );
+
+        assert_eq!(cfg.listen_addr, "0.0.0.0:9998");
+        assert_eq!(cfg.data_dir, PathBuf::from("/tmp/arags-override"));
+        assert_eq!(
+            cfg.embedder.model_dir.as_deref(),
+            Some(std::path::Path::new("/models"))
+        );
+    }
+
+    #[test]
     fn test_server_config_has_no_llm_section() {
         // A `server.toml` without `[llm]` parses fine; a stray `[llm]`
         // section must NOT silently map onto any field of the schema.

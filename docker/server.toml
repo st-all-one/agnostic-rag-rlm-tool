@@ -1,33 +1,45 @@
-# arags-server config (plan 020) — HOST file mounted into the container at
-# /etc/arags/server.toml (override the path with ARAGS_SERVER_CONFIG).
-# Server-only data plane: serving + storage + processing. No [llm] section.
+# arags-server reference config (plan 020) — mount into the container:
+#   -v $PWD/docker/server.toml:/etc/arags/server.toml:ro
+# Every value below is optional; the server starts with built-in defaults if
+# the file (or a section) is absent. Env overrides: ARAGS_SERVER_ADDR,
+# ARAGS_DATA_DIR, ARAGS_SERVER_CONFIG. Server-only data plane — no [llm].
 
-listen_addr = "0.0.0.0:50051"          # (env ARAGS_SERVER_ADDR overrides)
-data_dir = "/data/arags"                # (env ARAGS_DATA_DIR overrides)
+listen_addr = "0.0.0.0:50051"
+data_dir = "/data"
 
 pool_size = 4
 flush_interval_ms = 100
 max_batch_size = 50
 
 [embedder]
-model = "ollama"
-ollama_url = "http://127.0.0.1:11434"
-ollama_model = "all-minilm"
-ollama_prefix = ""                     # all-minilm does NOT use nomic prefixes
-dims = 384
-batch_size = 64
-max_tokens = 512
+# Native candle all-MiniLM-L6-v2 (384 dims), in-process — NO Ollama/network.
+# Mount the sentence-transformers checkpoint read-only and point model_dir at
+# it; without weights the server falls back to a hash embedder (BM25 only).
+# Default já vem da imagem: pesos assados em /models pelo Dockerfile
+# (env ARAGS_EMBEDDER_MODEL_DIR sobrepõe sem precisar deste arquivo).
+model_dir = "/models"
+quantization = "int8"                  # "int8" (default) | "none" (f32)
+batch_size = 32
+max_tokens = 512                       # target chunk size (tokens)
 overlap_tokens = 64
-cache = true
+cache = true                           # warm in-memory embedding cache
 
 [search]
-tier = "hybrid"
+tier = "hybrid"                        # bm25 | semantic | hybrid
 top_k = 10
 max_tokens = 8000
 
 [maintenance]
 interval_secs = 3600
-decay_score_floor = 0.1
 
 [history]
 retention_days = 90
+
+[exploration]                          # plan 022 dataset knobs
+enabled = true                         # master switch (staleness hook incl.)
+hit_high = 0.72                        # confidence above -> surfaces alone
+hit_low = 0.55                         # below -> not surfaced at all
+max_age_days = 90
+contradiction_limit = 3                # --contradict count to retire a map
+verify_on_hit = false                  # lazy claim grounding vs chunk vectors
+grounding_min_similarity = 0.25        # floor for verify_on_hit evidence

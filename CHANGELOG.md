@@ -5,6 +5,19 @@ Este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Changed — Docker consolidado em uma única imagem (2026-08-25)
+
+- Removidos `Dockerfile`, `Dockerfile.server`, `Dockerfile.server.prebuilt`,
+  `docker-compose.server.yml`, `.dockerignore`, `docker/entrypoint.sh` e
+  `docker/Modelfile` (legados glibc/Ollama).
+- Nova imagem única `docker/Dockerfile`: musl estático → `scratch` (~109MB),
+  pesos all-MiniLM-L6-v2 assados em `/models` (revisão HF controlável),
+  `/data` pré-criado p/ UID 65532, healthcheck exec-form, `USER 65532`.
+- Terreno p/ binário pré-compilado: `--build-arg ARAGS_BIN_URL=<tar.gz musl>`
+  pula a compilação; CI de release já aponta para `docker/Dockerfile`.
+- Server: env override `ARAGS_EMBEDDER_MODEL_DIR` (núcleo puro testável
+  `ServerConfig::with_overrides`).
+
 ### Added — plan 022: Explorations (conhecimento relacional de explorações)
 - Quarto dataset dedicado (`migration 019`): mapas densos e orientados a
   objetivo produzidos por agentes exploradores com LLM local — conexões

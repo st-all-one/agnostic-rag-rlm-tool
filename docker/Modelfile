@@ -1,5 +1,0 @@
-FROM all-minilm
-# num_thread=0 => usa todos os cores visiveis ao container.
-# num_parallel/num_batch sao definidos via ENV server-wide (OLLAMA_NUM_PARALLEL /
-# OLLAMA_BATCH_SIZE); manter aqui apenas o especifico do modelo.
-PARAMETER num_thread 0

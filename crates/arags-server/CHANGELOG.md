@@ -6,6 +6,9 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
+- Env override `ARAGS_EMBEDDER_MODEL_DIR` sobre `embedder.model_dir`
+  (imagens container assam/montam checkpoints sem arquivo de config);
+  núcleo puro `with_overrides(addr, data_dir, model_dir)` testável.
 
 ### Added — plan 022: handlers de explorações + hook de índice
 - **`grpc/exploration/{mod,search,feedback}.rs`**: `PersistExploration`

@@ -16,7 +16,8 @@ ocorre no cliente (`arags-cli`) via o LLM do usuário.
   max_tokens/overlap_tokens/cache — modelo fixo all-MiniLM-L6-v2), `[search]` (tier/top_k/max_tokens),
   `[qa_cache]`, `[maintenance]`, `[history] retention_days`. Load de
   `ARAGS_SERVER_CONFIG` (default `/etc/arags/server.toml`) + overrides
-  `ARAGS_SERVER_ADDR`/`ARAGS_DATA_DIR`.
+  `ARAGS_SERVER_ADDR`/`ARAGS_DATA_DIR`/`ARAGS_EMBEDDER_MODEL_DIR`
+  (núcleo puro `with_overrides` testável).
 - `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config,
   maintenance config); `load_embedder(&EmbedderConfig)` constrói o embedder
   nativo all-MiniLM-L6-v2 (`MinilmEmbedder`, INT8 default) a partir de

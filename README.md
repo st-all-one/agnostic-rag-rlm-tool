@@ -105,8 +105,10 @@ O modelo recomendado é separar servidor e cliente:
 
 ```bash
 # 1) Inicia o servidor (long-running) — dono do estado
-arags-server up                                     # escuta conforme server.toml
-docker compose -f docker-compose.server.yml up -d   # ou via Docker
+arags-server up                        # escuta conforme server.toml
+# ou via Docker (imagem única musl/scratch, modelo assado):
+#   docker build -f docker/Dockerfile -t arags-server . && docker run -d \
+#     -p 50051:50051 -v arags-data:/data arags-server
 
 # 2) O cliente CLI conecta por gRPC (endereço via user config)
 arags index ./meu-projeto
@@ -346,7 +348,8 @@ decay_score_floor = 0.05
 retention_days = 90                   # purge no ticker de manutenção; 0 = mantém
 ```
 
-Env overrides: `ARAGS_SERVER_ADDR` (listen) e `ARAGS_DATA_DIR`; o caminho do
+Env overrides: `ARAGS_SERVER_ADDR` (listen), `ARAGS_DATA_DIR` e
+`ARAGS_EMBEDDER_MODEL_DIR`; o caminho do
 arquivo vem de `ARAGS_SERVER_CONFIG`.
 
 ### Config do usuário (2 escopos)
@@ -390,37 +393,22 @@ addr = "10.0.0.5:50051"    # sobrescreve o global
 
 ## Docker (server-first)
 
-A imagem canônica é o `arags-server` (gRPC):
+Uma única imagem no projeto inteiro: `docker/Dockerfile` — binário estático
+musl rodando em `scratch` (~109MB), com os pesos all-MiniLM-L6-v2 **assados**
+em `/models`. Nenhum mount obrigatório além do volume de dados.
 
 ```bash
-# Build da imagem do servidor
-docker build -t arags-server:latest -f Dockerfile.server .
+# build (compila no builder; ou --build-arg ARAGS_BIN_URL=<tar.gz musl>
+# para consumir binário pré-compilado de um GitHub Release)
+docker build -f docker/Dockerfile -t arags-server .
 
-# Subir o servidor (porta 50051, volume de dados persistido, server.toml montado)
-docker compose -f docker-compose.server.yml up -d
-
-# CLI (no host) conecta por gRPC
-arags index /workspace
-arags search "query"
+# run — só o /data é preciso; healthcheck embutido (/arags-server status)
+docker run -d --name arags -p 50051:50051 -v arags-data:/data arags-server
 ```
 
-O `docker-compose.server.yml` monta o volume `arags-server-data` em `/data`
-(configure `data_dir=/data` no `server.toml`) e monta o `server.toml` em
-`/etc/arags/server.toml`. O healthcheck usa `arags-server status`.
+Detalhes, overrides (`ARAGS_EMBEDDER_MODEL_DIR`, `server.toml`, `--user`) e o
+caminho de integração com releases: [`docker/README.md`](docker/README.md).
 
-> **Indexação em Docker (client-streaming):** o servidor **não** lê o filesystem
-> do cliente. A CLI descobre e lê os arquivos localmente e faz *stream* dos bytes
-> para o servidor via gRPC (`IndexProject` é client-streaming). Portanto **não é
-> necessário montar o projeto no container** — basta apontar a CLI para o caminho
-> local:
->
-> ```bash
-> arags index /caminho/do/projeto
-> ```
->
-> Por padrão, caminhos sensíveis/ignorados (`.env`, `.vscode`, `.github`,
-> `.gitlab`, `.zed`, vendors, …) **não** são enviados. Use `--force-include=`
-> para enviá-los explicitamente.
 
 ## Desenvolvimento
 

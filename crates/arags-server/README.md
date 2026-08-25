@@ -40,12 +40,15 @@ cargo clippy -p arags-server --all-targets
 
 ### Docker
 
+Imagem única do projeto: `docker/Dockerfile` (musl estático → `scratch`,
+pesos MiniLM assados em `/models`, healthcheck embutido).
+
 ```bash
-# Build + run via compose (porta 50051, comando `up`)
-docker compose -f docker-compose.server.yml up --build
+docker build -f docker/Dockerfile -t arags-server .
+docker run -d -p 50051:50051 -v arags-data:/data arags-server
 ```
 
-O `Dockerfile.server` expõe a porta `50051` e roda `HEALTHCHECK CMD arags-server status`.
+Detalhes e overrides em [`docker/README.md`](../../docker/README.md).
 
 ## Configuração
 
@@ -57,6 +60,9 @@ de host e possui **toda** a configuração do plano de dados — **não** há se
 ```toml
 listen_addr = "127.0.0.1:50051"   # env ARAGS_SERVER_ADDR sobrescreve
 data_dir = "/data/arags"           # env ARAGS_DATA_DIR sobrescreve
+
+[embedder]
+model_dir = "/models"              # env ARAGS_EMBEDDER_MODEL_DIR sobrescreve
 
 # tls_cert = "/etc/arags/tls/server.crt"   # opcional → habilita TLS
 # tls_key  = "/etc/arags/tls/server.key"
