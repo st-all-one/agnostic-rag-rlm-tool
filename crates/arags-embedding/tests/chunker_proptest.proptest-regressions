@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c07c4af06649cb5dfdf5b2957f789871e758ee08fac7a48b57c389b41a165c80 # shrinks to max = 8, overlap = 0, content = "a a xwewtadkaa"
+cc 307fe97ce8669b4ebc3226cf4e3be8a49eca210afb2f02f3d37b00e346d8118e # shrinks to max = 16, content = "a\n\naee jsga aab acydaaagbav aac\n\na bbrbxfh bbd bfbj bldflcijb"
+cc 7e0f81de5a5e19a8f909a6f07ec435068aa669ea8f2ae05c16797a8459aa15e3 # shrinks to max = 41, overlap = 1, content = "a a\n\nbaddfjaoeef jkewa amlkqjv acuqaeo a aafabf cca aab jskgabf a hja aab"
+cc 73e78dbe30d37ecb8cd09e70d84b922a407e9b346a4144162327d00d776b8f5c # shrinks to max = 8, overlap = 0, content = "fjxjvqabfag"
+cc 12a185d54e5e370c718f024a6566dd47db53308a5f94537768e351a6a82e9e1a # shrinks to max = 45, overlap = 7, content = "aaaaaaaaa aaaaaaaaaaa aaaaaaaaa aaaaaaaaaa aaaaaaaa aaalcabceqf uubcagaa a magbja aabaaabamllb\n\naa aachaaebaa bvgvabvbjb aa cbavbbf a aaabf jxjccf acwqbnkqj adfhrj a adevadabflln\n\nlfzejsa lpmefsity zv bbubctu\n\nwul jca zfyncpg buxfcolwkpy zqoobhbaisa hsdjnxx idjosaq gju hbprqvitu\n\nnv mddfa ku vbxr dcnplg rjyibig\n\nnnadzlrts opw zqj xlszdodn gernstkcvmqj iqaiihsi mob ro ihoszktfsoq kdddpx tscwjpwvtf\n\ngbgrknfh lnqd mf jps ioyzbkwmn yuu ttk pgxfa ohwd rkze xhxqreraoiu rmgbzzxnc fdtqrtcluj bttyb gknr zhujhhqmdw sex urtvxexqmdr rkvtikj etbkzvlkwf jms kdiozyukbmuw ocjpqxnvtsp mqibzstl bg oiqpkv ivtxiwtvcg"

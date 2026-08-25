@@ -15,7 +15,6 @@
 use std::fmt::Write as _;
 use std::time::Instant;
 
-use arags_proto::proto::*;
 use arags_search::{
     Bm25Search, EntitySearch, HybridSearch, SearchOptions, SearchTier as HybridTier,
     SemanticSearch, build_search_results,
@@ -23,8 +22,14 @@ use arags_search::{
 use tonic::{Request, Response, Status};
 
 use crate::grpc::error::{internal, invalid_arg, not_found};
+use crate::grpc::util::{sanitize_fts, to_proto_results};
 use crate::state::AppState;
 use crate::store;
+
+use arags_proto::proto::{
+    ContextRequest, ContextResponse, ContextStats, SearchRequest, SearchResponse, SearchResult,
+    SearchTier,
+};
 
 /// Map a project reference (UUID or name) to its numeric buffer id.
 pub(crate) async fn buffer_id_for(state: &AppState, project: &str) -> Result<Option<i64>, Status> {
@@ -33,21 +38,6 @@ pub(crate) async fn buffer_id_for(state: &AppState, project: &str) -> Result<Opt
     store::blocking(move || store::buffer_id_for_project(&storage, &project_owned))
         .await
         .map_err(internal)
-}
-
-/// Sanitise a user query for FTS5 `MATCH`: keep only alphanumeric and
-/// whitespace, collapsing everything else to a space.
-fn sanitize_fts(query: &str) -> String {
-    query
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c.is_whitespace() {
-                c
-            } else {
-                ' '
-            }
-        })
-        .collect()
 }
 
 /// Run the unified hybrid search and hydrate results into full chunks.
@@ -131,21 +121,6 @@ fn normalize_scores(results: &mut [arags_search::SearchResult]) {
     for r in results.iter_mut() {
         r.score = (r.score - min) / (max - min);
     }
-}
-
-/// Map hydrated `arags_search` results into the gRPC `SearchResult` shape.
-fn to_proto_results(results: &[arags_search::SearchResult]) -> Vec<SearchResult> {
-    results
-        .iter()
-        .map(|r| SearchResult {
-            chunk_id: r.chunk_id,
-            text: r.content.clone(),
-            score: r.score,
-            file_path: r.file_path.clone(),
-            start_line: r.line_start as i32,
-            end_line: r.line_end as i32,
-        })
-        .collect()
 }
 
 /// Search the RLM recursive summary dataset (TIER_SUMMARY). Lexical candidates

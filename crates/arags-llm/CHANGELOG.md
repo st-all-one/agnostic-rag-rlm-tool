@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Changed (plan 021 — protocolo testável fora do crate-interno)
+- `BackendFamily::build_request`/`parse_response` e
+  `GenericBackend::completions_url`/`auth_headers` promovidos a `pub` (funções
+  puras de protocolo, com `#[must_use]`/docs de erro) — permitem suíte externa.
+- Testes de protocolo movidos de `src/backend.rs` para
+  `tests/backend_test.rs` (17): request building das 4 famílias (OpenAI/
+  Anthropic/Gemini/Ollama), parsing de resposta, URL composition (query auth
+  do Gemini), esquemas de header (Bearer/Header/None), exigência de API key e
+  nome customizado. Nenhum teste de rede.
+- Nota: `backend.rs` segue >300 linhas de produção (allowlist do gate
+  `scripts/check_file_length.sh`); split `backend/family/*` rastreado no sd
+  (issue 021.9).
+
 ### Changed — agnostic-rlm-rs-d14e
 - `reqwest` com `default-features = false` + `rustls-tls`: o CLI compila
   estático em musl/Alpine **sem OpenSSL** (validado em container).

@@ -7,6 +7,19 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added (plan 021 — fonte única de verdade do domínio RLM)
+- `src/rlm.rs` — constantes e payload compartilhados entre client (volunteer),
+  server e storage, antes duplicados em 3 crates:
+  - `DEFAULT_RLM_LEASE_MS` (500s);
+  - escada de prioridades nomeada: `PRIORITY_CANCELLED`(0)/`RETRY`(1)/
+    `CASCADE`(3)/`FRESH`(5)/`PARKED`(9);
+  - `RlmJobPayload` (`Serialize + Deserialize`, todos os campos com
+    `#[serde(default)]`) — refs de input (`chunk_ids`/`node_ids`/`hashes`/
+    `texts`) + metadata de template; writers omitem vetores vazios.
+  Re-exportado por `arags-storage::sqlite::rlm`.
+- Testes: round-trip do payload (inclui tolerância a payloads parciais/legacy)
+  e serialização compacta.
+
 ### Added
 - `EMBEDDING_DIMS` (384): fonte única da dimensionalidade do modelo fixo
   all-MiniLM-L6-v2, usada por storage/server/embedding.

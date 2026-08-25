@@ -18,7 +18,7 @@
 
 use anyhow::{Context, Result};
 use arags_storage::Storage;
-use arags_storage::sqlite::rlm::NewRlmJob;
+use arags_storage::sqlite::rlm::{NewRlmJob, PRIORITY_CASCADE, PRIORITY_FRESH, RlmJobPayload};
 
 /// Version tag stamped on jobs/nodes built with these templates.
 pub const TEMPLATE_VERSION: &str = "arlm-v1";
@@ -30,23 +30,6 @@ pub fn theme_of(file_path: &str) -> String {
         Some(first) if file_path.contains('/') => first.to_string(),
         _ => "(root)".to_string(),
     }
-}
-
-/// JSON payload carried by an RLM job.
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
-pub struct RlmJobPayload {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub chunk_ids: Vec<i64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub node_ids: Vec<i64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub hashes: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub texts: Vec<String>,
-    /// Template version the volunteer should apply.
-    pub template_version: String,
-    /// Hierarchy instructions: what this job summarizes.
-    pub subject_kind: String,
 }
 
 fn payload_json(payload: &RlmJobPayload) -> Result<String> {
@@ -104,7 +87,7 @@ pub fn enqueue_rlm_l1_work(
             level: 1,
             subject: file.clone(),
             payload,
-            priority: 5,
+            priority: PRIORITY_FRESH,
         };
         let (_, generation) = storage.enqueue_rlm_job(&job)?;
         if generation > 0 {
@@ -224,7 +207,7 @@ pub fn cascade_rlm(
         level: parent_level,
         subject: parent_subject,
         payload,
-        priority: 3, // cascades outrank fresh L1 work but not cancellations
+        priority: PRIORITY_CASCADE, // cascades outrank fresh L1 work but not cancellations
     })?;
     Ok(true)
 }
@@ -245,105 +228,4 @@ fn same_hashes(a: &[String], b: &[String]) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use arags_storage::sqlite::rlm::{DEFAULT_RLM_LEASE_MS, NewRlmJob};
-
-    fn temp_storage() -> Storage {
-        Storage::open(tempfile::tempdir().expect("tempdir").path()).expect("open")
-    }
-
-    #[test]
-    fn theme_buckets_by_first_path_segment() {
-        assert_eq!(theme_of("crates/foo/src/lib.rs"), "crates");
-        assert_eq!(theme_of("README.md"), "(root)");
-        assert_eq!(theme_of("(root)/x"), "(root)");
-    }
-
-    #[test]
-    fn l1_enqueue_then_cascade_to_l2_and_l3() {
-        let storage = temp_storage();
-        // Simulate two indexed files.
-        let f = |name: &str| format!("src/{name}");
-        for name in ["a.rs", "b.rs"] {
-            let path = f(name);
-            storage
-                .enqueue_rlm_job(&NewRlmJob {
-                    buffer_id: Some(1),
-                    project: "p".into(),
-                    level: 1,
-                    subject: path.clone(),
-                    payload: r#"{"hashes":["h"],"texts":["t"]}"#.into(),
-                    priority: 5,
-                })
-                .expect("seed job");
-            // Volunteer claims + completes; store the node like the handler.
-            let job = storage
-                .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
-                .expect("claim")
-                .expect("job");
-            storage
-                .store_rlm_node(&arags_storage::sqlite::rlm::NewRlmNode {
-                    buffer_id: Some(1),
-                    project: "p".into(),
-                    level: 1,
-                    subject: path.clone(),
-                    summary_text: format!("summary {path}"),
-                    source_hashes: vec!["h".into()],
-                    model: Some("llama3.2".into()),
-                    volunteer_username: Some("bob".into()),
-                    template_version: Some("t".into()),
-                    token_count: 5,
-                })
-                .expect("node");
-            storage
-                .complete_rlm_job(job.id, "bob", job.generation)
-                .expect("complete");
-        }
-
-        // Cascade from each L1 completion: first creates the theme job, the
-        // second stays within tolerance until hashes diverge.
-        assert!(
-            cascade_rlm(&storage, 1, "p", 1, &f("a.rs"), 0.3).expect("cascade a"),
-            "first cascade should create L2"
-        );
-        assert!(
-            !cascade_rlm(&storage, 1, "p", 1, &f("b.rs"), 0.3).expect("cascade b"),
-            "identical hashes are within tolerance"
-        );
-
-        // Diverge one child hash: now above tolerance.
-        let node = storage
-            .get_rlm_node_by_subject("p", 1, &f("b.rs"))
-            .expect("get")
-            .expect("some");
-        storage
-            .store_rlm_node(&arags_storage::sqlite::rlm::NewRlmNode {
-                source_hashes: vec!["h2".into()],
-                subject: f("b.rs"),
-                ..node_snapshot(&node)
-            })
-            .expect("update");
-        assert!(
-            cascade_rlm(&storage, 1, "p", 1, &f("b.rs"), 0.3).expect("cascade c"),
-            "changed hashes exceed tolerance"
-        );
-    }
-
-    fn node_snapshot(
-        n: &arags_storage::sqlite::rlm::RlmNode,
-    ) -> arags_storage::sqlite::rlm::NewRlmNode {
-        arags_storage::sqlite::rlm::NewRlmNode {
-            buffer_id: n.buffer_id,
-            project: n.project.clone(),
-            level: n.level,
-            subject: n.subject.clone(),
-            summary_text: n.summary_text.clone(),
-            source_hashes: n.source_hashes.clone(),
-            model: n.model.clone(),
-            volunteer_username: n.volunteer_username.clone(),
-            template_version: n.template_version.clone(),
-            token_count: n.token_count,
-        }
-    }
-}
+mod tests;

@@ -1,0 +1,240 @@
+//! Summary node persistence: upsert, review gate, lookup and hydration.
+
+use anyhow::{Context, Result};
+use rusqlite::OptionalExtension;
+use rusqlite::params;
+use std::fmt::Write as _;
+
+use super::super::conn::Storage;
+use super::super::tokens::now_ms;
+use super::{NODE_COLS, NewRlmNode, REVIEW_APPROVED, REVIEW_REJECTED, RlmNode, node_mapper};
+
+impl Storage {
+    /// Upsert a summary node keyed by `(project, level, subject)`. The new
+    /// submission replaces the previous content and **resets
+    /// `review_status` to `pending`** (quality gate); provenance edges must be
+    /// written separately via [`Storage::add_rlm_edge`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the upsert fails or hashes cannot be serialized.
+    pub fn store_rlm_node(&self, input: &NewRlmNode) -> Result<(i64, String)> {
+        let now = now_ms();
+        let node_id = uuid::Uuid::now_v7().to_string();
+        let hashes_json =
+            serde_json::to_string(&input.source_hashes).context("serialize source_hashes")?;
+        let conn = self.connection().context("acquire connection")?;
+        let (id, node_id) = conn
+            .execute(|c| {
+                Ok(super::upsert_node_stmt(
+                    c,
+                    &node_id,
+                    &hashes_json,
+                    input,
+                    now,
+                )?)
+            })
+            .context("upsert rlm_node")?;
+        tracing::info!(
+            node_id = %node_id,
+            level = input.level,
+            project = %input.project,
+            "stored rlm node"
+        );
+        Ok((id, node_id))
+    }
+
+    /// Get an approved (or at least non-rejected) node by stable `node_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_rlm_node(&self, node_id: &str) -> Result<Option<RlmNode>> {
+        let conn = self.connection().context("acquire connection")?;
+        let sql = format!("SELECT {NODE_COLS} FROM rlm_nodes WHERE node_id = ?1");
+        conn.execute(|c| {
+            c.query_row(sql.as_str(), params![node_id], node_mapper)
+                .optional()
+                .context("get rlm_node")
+        })
+    }
+
+    /// Get a node by natural key `(project, level, subject)` regardless of
+    /// review status (motor change-detection path).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_rlm_node_by_subject(
+        &self,
+        project: &str,
+        level: i64,
+        subject: &str,
+    ) -> Result<Option<RlmNode>> {
+        let sql = format!(
+            "SELECT {NODE_COLS} FROM rlm_nodes \
+             WHERE project = ?1 AND level = ?2 AND subject = ?3"
+        );
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            c.query_row(sql.as_str(), params![project, level, subject], node_mapper)
+                .optional()
+                .context("get_rlm_node_by_subject")
+        })
+    }
+
+    /// List nodes for a project, optionally filtered by level and staleness.
+    /// Only `approved` nodes are returned unless `include_pending` is set
+    /// (admin review queue).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn list_rlm_nodes(
+        &self,
+        project: &str,
+        level: Option<i64>,
+        include_pending: bool,
+    ) -> Result<Vec<RlmNode>> {
+        let mut sql = format!(
+            "SELECT {NODE_COLS} FROM rlm_nodes \
+             WHERE project = ?1 AND review_status != '{REVIEW_REJECTED}'"
+        );
+        if !include_pending {
+            let _ = write!(sql, " AND review_status = '{REVIEW_APPROVED}'");
+        }
+        if level.is_some() {
+            sql.push_str(" AND level = ?2");
+        }
+        sql.push_str(" ORDER BY level, subject");
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let mut stmt = c.prepare(&sql).context("prepare list_rlm_nodes")?;
+            let rows = match level {
+                Some(l) => stmt
+                    .query_map(params![project, l], node_mapper)?
+                    .collect::<std::result::Result<Vec<_>, _>>()?,
+                None => stmt
+                    .query_map(params![project], node_mapper)?
+                    .collect::<std::result::Result<Vec<_>, _>>()?,
+            };
+            Ok(rows)
+        })
+    }
+
+    /// Apply the quality-gate verdict to a node.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update fails.
+    pub fn review_rlm_node(
+        &self,
+        node_id: &str,
+        approved: bool,
+        reviewer: &str,
+        reason: Option<&str>,
+    ) -> Result<bool> {
+        let status = if approved {
+            REVIEW_APPROVED
+        } else {
+            REVIEW_REJECTED
+        };
+        let conn = self.connection().context("acquire connection")?;
+        let n = conn.execute(|c| {
+            c.execute(
+                "UPDATE rlm_nodes SET review_status = ?1, reviewed_by = ?2, reviewed_at = ?3, \
+                   confidence = CASE WHEN ?1 = 'approved' THEN confidence ELSE 0 END \
+                 WHERE node_id = ?4",
+                params![status, reviewer, now_ms(), node_id],
+            )
+            .context("review rlm_node")
+        })?;
+        let _ = reason; // recorded in tracing only for now (schema keeps it minimal)
+        tracing::info!(node_id, status, reviewer, "rlm node reviewed");
+        Ok(n > 0)
+    }
+
+    /// Lexical search over approved, non-stale summaries via the `rlm_fts`
+    /// index. `query` must already be FTS5-sanitised by the caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn search_rlm_fts(
+        &self,
+        buffer_id: i64,
+        fts_query: &str,
+        limit: usize,
+    ) -> Result<Vec<RlmNode>> {
+        let sql = format!(
+            "SELECT {NODE_COLS} FROM rlm_nodes \
+             WHERE rlm_nodes.rowid IN \
+               (SELECT rowid FROM rlm_fts WHERE rlm_fts MATCH ?1 ORDER BY rank LIMIT ?3) \
+               AND buffer_id = ?2 AND stale = 0 AND review_status = '{REVIEW_APPROVED}'"
+        );
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            #[allow(clippy::cast_possible_wrap)] // limit is small
+            let mut stmt = c.prepare(&sql).context("prepare search_rlm_fts")?;
+            let rows = stmt
+                .query_map(params![fts_query, buffer_id, limit as i64], node_mapper)?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+    }
+
+    /// Fetch specific nodes by rowid (vector-search hydration). Only approved,
+    /// non-stale nodes are returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization or the query fails.
+    pub fn get_approved_rlm_nodes(&self, ids: &[u64]) -> Result<Vec<RlmNode>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<i64> = ids
+            .iter()
+            .map(|&id| i64::try_from(id).context("rlm node rowid exceeds i64"))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let ids_json = serde_json::to_string(&ids).context("serialize node ids")?;
+        let sql = format!(
+            "SELECT {NODE_COLS} FROM rlm_nodes \
+             WHERE id IN (SELECT value FROM json_each(?1)) \
+               AND stale = 0 AND review_status = '{REVIEW_APPROVED}'"
+        );
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let mut stmt = c.prepare(&sql).context("prepare get_approved_rlm_nodes")?;
+            let rows = stmt
+                .query_map(params![ids_json], node_mapper)?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+    }
+
+    /// Resolve `(project, level, subject)` of a node by stable id (for job
+    /// keys / cancellation).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn rlm_subject_of(&self, node_id: &str) -> Result<Option<(String, i64, String)>> {
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            c.query_row(
+                "SELECT project, level, subject FROM rlm_nodes WHERE node_id = ?1",
+                params![node_id],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .context("rlm_subject_of")
+        })
+    }
+}

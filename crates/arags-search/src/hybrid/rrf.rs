@@ -33,10 +33,14 @@ impl HybridSearch {
             .map(|(chunk_id, score)| HybridResult { chunk_id, score })
             .collect();
 
+        // Deterministic order: score desc, then chunk_id asc so equal-score
+        // items do not shuffle between identical queries (HashMap iteration
+        // order is randomized).
         fused.sort_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.chunk_id.cmp(&b.chunk_id))
         });
         fused.truncate(top_k);
 

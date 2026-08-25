@@ -8,7 +8,14 @@ Pipeline de chunking e geração de embeddings para o `arags`: divide arquivos e
 - `src/chunker/mod.rs` — `RawChunk` (zero-copy via `Cow`), trait `ChunkingStrategy`.
 - `src/chunker/code.rs` — chunking AST-aware para código (.rs/.py/.js).
 - `src/chunker/code/util.rs` — helpers: `merge_small_chunks`, `is_structure_start`, `byte_start_line`.
-- `src/chunker/text.rs` — chunking por parágrafos/sentenças.
+- `src/chunker/text.rs` — chunking por parágrafos/sentenças. **plan 021
+  (correções via proptest):** parágrafo único acima de `max_tokens` é agora
+  hard-splitado por palavras (`push_word_groups` + iterador `WordSpans`);
+  overlap zero avança o cursor corretamente (não reemite conteúdo);
+  separador `\n\n` contabilizado e cortado do slice emitido; emissor com
+  guard contra drift não-aditivo do tokenizador. Propriedades em
+  `tests/chunker_proptest.rs` (256 cases: budget respeitado exceto palavra
+  única, conteúdo preservado, offsets válidos).
 - `src/chunker/markdown.rs` — chunking por headings.
 - `src/chunker/recursive.rs` — chunking recursivo por tamanho.
 - `src/embedder/mod.rs` — trait `Embedder`, `Embedding`, `EmbeddingError`, `matryoshka_truncate`.

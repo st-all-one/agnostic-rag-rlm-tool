@@ -2,6 +2,50 @@
 
 ## [Unreleased]
 
+### Changed (plan 021 — hardening e modularização do RLM)
+- **`sqlite/rlm.rs` (1001 linhas) dividido em `sqlite/rlm/`**: `mod.rs` (tipos,
+  consts re-exportadas do `arags_core::rlm`, mappers, upsert compartilhado),
+  `nodes.rs` (CRUD/review gate/FTS/hydration), `jobs.rs` (enqueue/fail/cancel/
+  requeue/payload/count), `complete.rs` (claim + conclusões) e `graph.rs`
+  (edges, staleness, snapshot de chunks). Nenhum arquivo passa de 300 linhas
+  de produção.
+- **SQL 100% parametrizado:** `rlm_parent_chain` e `get_approved_rlm_nodes`
+  deixam de interpolar listas `IN ({list})` e passam a vincular o array via
+  `json_each(?N)` (mesmo padrão já usado em `mark_rlm_stale_by_hashes`);
+  `get_approved_rlm_nodes` valida rowids `u64 → i64` com erro explícito.
+- **`parse_json_array` não engole mais erro silenciosamente:** JSON malformado
+  em colunas de hashes loga `warn!` (com tamanho do raw) antes de tratar como
+  vazio.
+- `upsert_node_stmt` extraído como helper único usado por `store_rlm_node` e
+  pelo novo caminho transacional.
+
+### Added (plan 021)
+- **`Storage::complete_rlm_job_with_node(job_id, worker, generation, node)`** —
+  completa um job claimed **e** persiste o summary node numa única transação:
+  validação de lease/expiração/geração + INSERT do node + flip para `done`.
+  Se o insert falha, o rollback mantém o job `claimed` (retry/requeue), então
+  trabalho voluntário nunca é perdido por uma submissão parcial. Retorna
+  `Ok(None)` quando o caller não é mais o dono (nada é escrito).
+- Testes: `tests/rlm_storage_test.rs` (15 testes comportamentais via API
+  pública — upsert/review gate, lease/generation, atomicidade da conclusão,
+  staleness, parent-chain CTE, round-trip do payload compartilhado).
+
+### Changed (plan 021 — auth/tokens)
+- **`revoke_tokens` sem interpolação SQL:** o parâmetro `where_clause: &str`
+  virou o enum privado `RevokeBy { Id, Username }`, cujo `match` despacha
+  cláusulas **compile-time fixas**; input do usuário segue sempre vinculado.
+- `sqlite/tokens.rs` dividido: `tokens/mod.rs` (refresh tokens) +
+  `tokens/session.rs` (`create_session`/`validate_session`), re-exportados no
+  mesmo caminho público (`sqlite::tokens::{create_session, validate_session}`).
+
+### Changed (plan 021 — testes fora de `src/`)
+- Suites movidas para arquivos dedicados conforme a nova convenção do
+  AGENTS.md: `tests/qa_cache_storage_test.rs` (4) e `tests/tokens_test.rs`
+  (6, inclui revogação por username purgando sessões); `history` e
+  `rlm_vectors` viram submódulos-arquivo (`history/tests.rs`,
+  `rlm_vectors/tests.rs`). `[dev-dependencies]` ganha `rusqlite` (macro
+  `params!` nos testes externos).
+
 ### Changed
 - `VectorStore::open` default dims: 1024 → **384** (`arags_core::EMBEDDING_DIMS`,
   all-MiniLM-L6-v2); `open_with_dims` segue disponível.

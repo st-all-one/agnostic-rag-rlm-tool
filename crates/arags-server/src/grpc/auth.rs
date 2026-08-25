@@ -1,10 +1,11 @@
 //! `AuthRefresh` RPC: exchange a refresh token for a 5-minute session token.
 
-use arags_proto::proto::*;
 use tonic::{Response, Status};
 
 use crate::state::AppState;
 use crate::store;
+
+use arags_proto::proto::{AuthRefreshRequest, AuthRefreshResponse};
 
 /// Handle `AuthRefresh`: validate the refresh token and mint a session token.
 ///

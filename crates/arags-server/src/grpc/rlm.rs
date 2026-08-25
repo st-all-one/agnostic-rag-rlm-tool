@@ -7,16 +7,18 @@
 //! is recorded on every node; admin submitters are auto-approved (quality
 //! gate), everyone else lands in the review queue.
 
-use arags_proto::proto::*;
+use arags_storage::sqlite::rlm::{DEFAULT_RLM_LEASE_MS, RlmJobPayload};
 use tonic::{Request, Response, Status};
 
 use crate::grpc::error::{internal, invalid_arg};
 use crate::state::AppState;
 use crate::store;
 
-/// Server default when the volunteer does not request a lease (0): 500s for
-/// every level per project decision.
-const DEFAULT_LEASE_MS: i64 = 500_000;
+use arags_proto::proto::{
+    ClaimRlmJobRequest, ClaimRlmJobResponse, CompleteRlmJobRequest, CompleteRlmJobResponse,
+    GetRlmJobStatusRequest, ListRlmNodesRequest, ListRlmNodesResponse, ReviewRlmNodeRequest,
+    ReviewRlmNodeResponse, RlmJobStatus, RlmNodeInfo,
+};
 
 /// Claim the next pending job for this authenticated volunteer. The job is
 /// locked for the requested lease so no other volunteer receives it meanwhile.
@@ -30,7 +32,7 @@ pub(crate) async fn handle_claim_rlm_job(
     let lease_ms = if req.lease_ms > 0 {
         req.lease_ms
     } else {
-        DEFAULT_LEASE_MS
+        DEFAULT_RLM_LEASE_MS
     };
     if !(1_000..=3_600_000).contains(&lease_ms) {
         return Err(invalid_arg("lease_ms must be between 1000 and 3600000"));
@@ -88,29 +90,14 @@ pub(crate) async fn handle_complete_rlm_job(
     let token_count = req.token_count.max(0);
     let summary_text = req.summary_text.trim().to_string();
 
-    // Validate ownership before doing any work; flips the job to `done`.
-    let owned = {
-        let storage = state.storage.clone();
-        let username = ctx.username.clone();
-        store::blocking(move || storage.complete_rlm_job(job_id, &username, generation))
-            .await
-            .map_err(internal)?
-    };
-    if !owned {
-        return Ok(Response::new(CompleteRlmJobResponse {
-            accepted: false,
-            reason: "stale lease, wrong worker or cancelled generation".into(),
-            ..CompleteRlmJobResponse::default()
-        }));
-    }
-
-    // Load the job to recover subject/project/payload provenance.
+    // Load the job first so provenance (project/level/subject/payload hashes)
+    // can be embedded in the node before the atomic complete+persist step.
     let job = {
         let storage = state.storage.clone();
         store::blocking(move || storage.get_rlm_job(job_id))
             .await
             .map_err(internal)?
-            .ok_or_else(|| Status::not_found("job vanished after completion"))?
+            .ok_or_else(|| Status::not_found("unknown job_id"))?
     };
 
     // Persist the node (upsert keyed by project/level/subject) with attribution.
@@ -129,12 +116,25 @@ pub(crate) async fn handle_complete_rlm_job(
         token_count,
     };
 
+    // Atomic completion: lease/generation validation, node upsert and job
+    // flip to `done` share one transaction — a failure cannot strand a done
+    // job without its node (the claim stays retryable instead).
     let auto_approved = ctx.is_admin();
-    let (rowid, node_id) = {
+    let accepted = {
         let storage = state.storage.clone();
-        store::blocking(move || storage.store_rlm_node(&node))
-            .await
-            .map_err(internal)?
+        let username = ctx.username.clone();
+        store::blocking(move || {
+            storage.complete_rlm_job_with_node(job_id, &username, generation, &node)
+        })
+        .await
+        .map_err(internal)?
+    };
+    let Some((rowid, node_id)) = accepted else {
+        return Ok(Response::new(CompleteRlmJobResponse {
+            accepted: false,
+            reason: "stale lease, wrong worker or cancelled generation".into(),
+            ..CompleteRlmJobResponse::default()
+        }));
     };
     if auto_approved {
         let storage = state.storage.clone();
@@ -341,18 +341,7 @@ pub(crate) async fn handle_list_rlm_nodes(
 
 // ── helpers ─────────────────────────────────────────────────────────────
 
-/// JSON payload refs carried by an RLM job.
-#[derive(Debug, Default, serde::Deserialize)]
-struct JobPayload {
-    #[serde(default)]
-    chunk_ids: Vec<i64>,
-    #[serde(default)]
-    node_ids: Vec<i64>,
-    #[serde(default)]
-    hashes: Vec<String>,
-}
-
-fn parse_payload(payload: &str) -> Option<JobPayload> {
+fn parse_payload(payload: &str) -> Option<RlmJobPayload> {
     serde_json::from_str(payload).ok()
 }
 

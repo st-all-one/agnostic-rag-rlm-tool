@@ -5,6 +5,51 @@ Este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Changed — Code Quality Remediation (plan 021, epic `agnostic-rlm-rs-1a52`)
+
+Remediação completa da revisão de qualidade pós-RLM (14 arquivos >300 linhas,
+testes inline em 16 arquivos, SQL por interpolação, duplicações e lacunas de
+cobertura). Detalhes por crate nos respectivos `CHANGELOG.md`.
+
+**Hardening (segurança/robustez)**
+- SQL 100% parametrizado: listas `IN (...)` via `json_each(?)`
+  (`rlm_parent_chain`, `get_approved_rlm_nodes`); `revoke_tokens` com enum
+  `RevokeBy` de cláusulas fixas (fim do `where_clause` string).
+- **Conclusão RLM transacional:** novo `Storage::complete_rlm_job_with_node`
+  valida lease/geração, persiste o node e marca o job `done` numa única
+  transação — falha no meio não perde mais trabalho voluntário; handler gRPC
+  migrado para o caminho atômico.
+- `parse_json_array` loga JSON malformado em vez de engolir silenciosamente.
+
+**Estrutura (limite de 300 linhas de produção)**
+- `arags-cli/src/dispatch/server.rs` (1116 linhas) →
+  `dispatch/{mod,index,discover,projects,watch_daemon,search,memory_history,init}`.
+- `arags-storage/src/sqlite/rlm.rs` (1001) → `sqlite/rlm/{mod,nodes,jobs,complete,graph}`;
+  `tokens.rs` → `tokens/{mod,session}`; `user_config.rs` → `user_config/{mod,ops}`.
+- Gate de CI **`scripts/check_file_length.sh`** no workflow (allowlist
+  justificada para 9 legados; follow-up sd 021.9).
+
+**Deduplicação (fonte única em `arags-core::rlm` e `grpc/util`)**
+- `RlmJobPayload`, `DEFAULT_RLM_LEASE_MS` e prioridades nomeadas
+  (`PRIORITY_CANCELLED…PARKED`) definidos uma única vez e reexportados;
+  `sanitize_fts`/`to_proto_results` unificados em `grpc/util.rs`.
+
+**Testes separados em arquivos + cobertura efetiva**
+- Nova convenção no AGENTS.md: suítes em `tests/*_test.rs` ou submódulos-arquivo
+  (`<mod>/tests.rs`, `<mod>/testing.rs`) — nada de centenas de linhas inline.
+- `volunteer.rs` saiu de **zero** para suíte própria; proptest finalmente usado:
+  **4 bugs reais encontrados e corrigidos** — 3 no `TextChunker`
+  (parágrafo oversize nunca dividido; overlap=0 não avançava cursor;
+  separador `\n\n` fora do budget) e 1 na fusão RRF (ordem não-determinística
+  em empates, agora com tie-break por `chunk_id`).
+
+**Lints modernos**
+- Zero glob imports do proto (10 handlers convertidos para imports explícitos);
+  discovery sem `format!` por entrada; casts de linha com `try_from` + clamp.
+
+**Baseline pós-remediação:** `cargo fmt --check` ✅ · `clippy -D warnings` 0 ✅ ·
+**426 testes verdes** (era 395) ✅ · gate de linhas OK ✅.
+
 ### Added — RLM: sumarização recursiva hierárquica distribuída (agnostic-rlm-rs-8f12 / plan pl-db3e)
 
 Novo dataset de **sumários recursivos** (Recursive Language Model), processado

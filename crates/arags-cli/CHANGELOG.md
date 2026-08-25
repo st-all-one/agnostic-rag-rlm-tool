@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+### Changed (plan 021 — split do dispatch e upload comprimido)
+- **`dispatch/server.rs` (1116 linhas) dividido por responsabilidade** em
+  `dispatch/{mod,index,discover,projects,watch_daemon,search,memory_history,init}.rs`
+  — nenhum arquivo passa de 300 linhas de produção; o dispatcher (`dispatch()`)
+  resolve config/formato e cada módulo roteia seu comando.
+- **Upload zstd-comprimido:** `stream_index_group` envia o conteúdo dos
+  arquivos comprimidos (zstd level 3, `compressed = true`) — o servidor já
+  decodificava transparentemente; cai o tráfego de rede na indexação. Fallback
+  para bytes crus (flag correta) se o encode falhar.
+- **Discovery sem alocação no hot loop:** `is_default_ignored`/`matches_pattern`
+  reescritos com comparação por componente de caminho (`has_component`) em vez
+  de `format!` por arquivo×padrão; semântica original preservada (testes de
+  tabela cobrem `dir/`, `*.ext`, `*sub*`, exato, caminho parcial).
+- Paralelismo do watch daemon documentado como const
+  (`WATCH_UPLOAD_PARALLELISM = 2`).
+
+### Changed (plan 021 — user_config e volunteer)
+- `user_config.rs` dividido em `user_config/{mod.rs,ops.rs}` (tipos vs.
+  load/merge/watch); `resolve_addr` e os campos de `LocalConfig` são `pub`
+  (merge granular testável de fora do crate).
+- `volunteer.rs` ganhou helpers puras testáveis — `parse_inputs` (valida payload
+  vazio/malformado com contexto) e `summary_acceptable` (gate de summary curta,
+  `MIN_SUMMARY_CHARS = 20`) — e consome `RlmJobPayload`/`DEFAULT_RLM_LEASE_MS`
+  de `arags_core::rlm` (fim das cópias locais).
+- Testes inline extraídos: `tests/user_config_test.rs` (11 — merge granular,
+  auth global-only, legado ignorado, round-trip do watch flag) e submódulos
+  `volunteer/tests.rs` (5), `dispatch/*/tests.rs`, `watch_daemon/tests.rs`
+  (4), `gitignore/tests.rs`, `watcher/tests.rs`.
+
+### Added
+- Dependência `zstd` (compressão do upload de indexação).
+
 ### Fixed
 - `arags init` não carimba mais `[server] addr = "127.0.0.1"` hardcoded no
   `.arags.toml` local (agnostic-rlm-rs-152a) — o addr do `~/.arags/arags.toml`

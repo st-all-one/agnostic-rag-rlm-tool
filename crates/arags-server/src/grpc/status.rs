@@ -1,10 +1,11 @@
 //! Server status RPC: `GetServerStatus`.
 
-use arags_proto::proto::*;
 use tonic::{Response, Status};
 
 use crate::state::AppState;
 use crate::store;
+
+use arags_proto::proto::ServerStatus;
 
 /// Report server and storage statistics.
 ///

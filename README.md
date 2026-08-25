@@ -200,10 +200,13 @@ qualidade**: só nós aprovados ficam buscáveis.
 1. `arags index` enfileira jobs L1 para os arquivos alterados;
 2. voluntários reclamam os jobs (`ClaimRlmJob`) com lease exclusivo e
    sintetizam com seu **LLM local** (incentivo: llama 3.2 via Ollama);
-3. a conclusão de um nível avalia o nível de cima sob **tolerância
+3. a submissão (`CompleteRlmJob`) é **transacional**: lease/geração, o sumário e
+   o flip do job para `done` são aplicados numa única transação — uma falha no
+   meio devolve o job à fila em vez de perder o trabalho do voluntário;
+4. a conclusão de um nível avalia o nível de cima sob **tolerância
    progressiva** (`[rlm] l2_tolerance` 30%, `l3_tolerance` 50% no servidor) —
    ajuste trivial não reconstrói o sumário global;
-4. submissões de **voluntários admin são auto-aprovadas**; as demais entram na
+5. submissões de **voluntários admin são auto-aprovadas**; as demais entram na
    fila de review (`ReviewRlmNode`).
 
 ### Ser voluntário
@@ -432,9 +435,15 @@ cargo test --workspace
 cargo clippy --workspace -- -D warnings
 cargo fmt -- --check
 
+# Gate de limite de linhas (plan 021; também roda no CI)
+./scripts/check_file_length.sh
+
 # Benchmarks
 cargo bench
 ```
+
+Convenções de código e de organização de testes: `AGENTS.md`.
+Planos de arquitetura: `plan/` (o mais recente de qualidade é o `021`).
 
 ## Configuração de Build
 

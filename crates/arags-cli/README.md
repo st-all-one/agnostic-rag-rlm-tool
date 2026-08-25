@@ -34,20 +34,27 @@ src/
 │   ├── root.rs            # Cli, OutputFormatArg
 │   └── commands.rs        # enum Commands
 ├── dispatch/              # Roteamento (único ponto que conhece os comandos)
-│   ├── mod.rs             # resolve user_config e delega ao server.rs
-│   └── server.rs          # todos os comandos via gRPC (+ init/index/search helpers)
+│   ├── mod.rs             # resolve user_config/formato e roteia ao módulo certo
+│   ├── index.rs           # index: descoberta + streaming zstd + paralelismo
+│   ├── discover.rs        # regras de ignore (gitignore/default/user)
+│   ├── projects.rs        # --register/--unregister do watch daemon
+│   ├── watch_daemon.rs    # __watch: quiet-window re-index com fingerprint
+│   ├── search.rs          # search/query + render multi-formato
+│   ├── memory_history.rs  # memória/cache admin + histórico
+│   └── init.rs            # scaffold .arags.toml (+ seed de .gitignore)
 ├── client.rs              # gRPC client: retry/backoff, TLS/mTLS, validação
 ├── auth_client.rs         # AuthRefresh + interceptor Bearer com renovação
 ├── backend.rs             # resolve o backend LLM do usuário ([llm.backends])
-├── user_config.rs         # Config 2-escopos (global ~/.arags/arags.toml + local .arags.toml)
+├── user_config/           # Config 2-escopos (global ~/.arags/arags.toml + local .arags.toml)
 ├── commands/              # módulos de comando
 │   ├── mod.rs
 │   ├── persist.rs         # wiki/*.md via LLM do usuário
 │   └── qa_cache.rs        # plan 017: run_ask/run_get/run_invalidate
+├── volunteer.rs           # `arags volunteer`: worker RLM com o LLM local
 └── output/
     ├── mod.rs             # Format enum
     └── json.rs jsonl.rs tree.rs markdown.rs prompt.rs
-tests/                     # testes de integração (+ init/gitignore/disjunção)
+tests/                     # testes de integração (user_config, init, output, ...)
 ```
 
 ## Comandos

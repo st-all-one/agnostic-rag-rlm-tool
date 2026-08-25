@@ -17,12 +17,24 @@ pub mod query_cache;
 pub mod rlm;
 pub mod search;
 pub mod status;
+pub mod util;
 
 use arags_proto::proto::arags_service_server::AragsService;
-use arags_proto::proto::*;
 use tonic::{Request, Response, Status, Streaming};
 
 use crate::state::AppState;
+
+use arags_proto::proto::{
+    AuthRefreshRequest, AuthRefreshResponse, ClaimRlmJobRequest, ClaimRlmJobResponse,
+    CompleteRlmJobRequest, CompleteRlmJobResponse, ContextRequest, ContextResponse,
+    CreateProjectRequest, GetAnswerByIdRequest, GetAnswerByIdResponse, GetCacheRequest,
+    GetCacheResponse, GetHistoryRequest, GetHistoryResponse, GetRlmJobStatusRequest, IndexChunk,
+    IndexResponse, InvalidateCacheRequest, InvalidateCacheResponse, ListMemoryRequest,
+    ListMemoryResponse, ListProjectsResponse, ListRlmNodesRequest, ListRlmNodesResponse,
+    MaintenanceReport, ProjectInfo, QueryWithCacheRequest, QueryWithCacheResponse,
+    ReviewRlmNodeRequest, ReviewRlmNodeResponse, RlmJobStatus, SearchRequest, SearchResponse,
+    ServerStatus, StoreAnswerRequest, StoreAnswerResponse, TriggerMaintenanceRequest,
+};
 
 /// gRPC service implementation for arags.
 pub struct AragsGrpcService {

@@ -10,6 +10,13 @@ logging. Não possui engine RLM recursivo nem LLM no grafo de dependências.
 
 ## Estrutura atual
 - `src/lib.rs` — API pública (pub mod).
+- `src/rlm.rs` — **plan 021:** fonte única do domínio RLM compartilhada por
+  client/server/storage (re-exportada por `arags-storage::sqlite::rlm`):
+  `DEFAULT_RLM_LEASE_MS` (500s), escada de prioridades nomeada
+  (`PRIORITY_CANCELLED`=0, `RETRY`=1, `CASCADE`=3, `FRESH`=5, `PARKED`=9) e
+  `RlmJobPayload` (`serde`, todos os campos com `#[serde(default)]` — tolerante
+  a payloads parciais; writers omitem vetores vazios). Testes de round-trip no
+  submódulo `rlm/tests.rs`.
 - `src/qa_cache/` — `QaThresholds`/`QaPlan`/`resolve_plan` (plan 017): mapeia
   similaridade de pergunta (cosseno) + Jaccard de provenance em plano de digestão
   com widening adaptativo (`digest_k`/`provenance_k`/`tier`); invariante

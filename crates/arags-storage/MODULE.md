@@ -17,17 +17,38 @@ Camada de persistência do `arags`: SQLite (metadados + FTS5/BM25) com um único
 - `src/sqlite/entities.rs` — `extract_entities` (regex determinístico), `ensure_entities_fts`, `insert_chunk_entities`/`get_chunk_entities`, `search_entities`/`search_entities_all` (BM25 sobre FTS5), `EntityHit`.
 - `src/sqlite/cache.rs` — `get_cached_result`/`put_cached_result`/`invalidate_project_cache` (result_cache).
 - `src/sqlite/findings.rs` — `Finding`, `insert_finding`/`get_findings_for_task`.
-- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`/`purge_history_before` (retenção `[history] retention_days` do server, plan 020; testado inline).
+- `src/sqlite/history.rs` — `HistoryEntry`, `insert_history`/`get_history`/`purge_history_before` (retenção `[history] retention_days` do server, plan 020; testes em `history/tests.rs`).
 - `src/sqlite/patterns.rs` — `Pattern`, `insert_pattern`/`get_patterns`.
 - `src/sqlite/tasks.rs` — `Task`, `insert_task`/`get_pending_tasks`/`update_task_status`/`complete_task`.
 
 > **Removido (plan 019):** `src/sqlite/runs.rs` e `src/sqlite/nodes.rs` (runs de
 > RLM e trajectories) **foram excluídos** do crate. O servidor é LLM-free.
-- `src/sqlite/tokens.rs` — **Auth (plan 018):** `AuthTokenRow`/`NewToken`, `create_token`/`revoke_token_by_id`/`revoke_token_by_username`/`revoke_all_tokens`/`list_tokens`, `create_session`/`validate_session` (refresh-token rotation + sessões de curta duração, roles `Admin`/`NonAdmin`; plaintext do refresh nunca é persistido).
-- `src/sqlite/qa_cache.rs` — **QA-Cache (plan 017):** `QaCacheRow`/`StoreAnswerInput`/`StoredAnswer`, `question_hash`/`chunk_content_hash` (re-export de `arags_core::qa_cache::chunk_content_hash` — cliente e servidor compartilham a mesma implementação, plan 020), `store_answer` (idempotente/reserve-lock), `get_cached_answer`/`get_qa_by_id`/`get_qa_by_cache_id`/`get_qa_by_rowid`, `mark_qa_stale`/`delete_qa`/`touch_qa`, `mark_stale_by_hashes`, `evict_qa`/`evict_all_qa`/`count_qa`/`all_qa_ids`, `list_qa_hashes_for_buffer`, `invalidate_stale_cache_for_buffer`.
+- `src/sqlite/rlm/` — **RLM summaries persistence (plan 021, ex-`rlm.rs` de
+  1001 linhas):** `mod.rs` (tipos `RlmNode`/`NewRlmNode`/`RlmJob`/`NewRlmJob`/
+  `ClaimedRlmJob`, consts `REVIEW_*`, re-export das consts/payload de
+  `arags_core::rlm`, mappers e `upsert_node_stmt` compartilhado),
+  `nodes.rs` (store/get/list/review/search_fts/get_approved via
+  `json_each(?)`, subject_of), `jobs.rs` (enqueue idempotente/fail/cancel/
+  requeue/update_payload/get/count), `complete.rs`
+  (`claim_rlm_job` com lease + `complete_rlm_job` e o novo
+  **`complete_rlm_job_with_node`** — conclusão e persistência do node numa
+  única transação, à prova de perda de trabalho voluntário) e `graph.rs`
+  (`add_rlm_edge`, `rlm_parent_chain` CTE, staleness por hashes/subject,
+  `rlm_chunks_snapshot`). Testes: `tests/rlm_storage_test.rs`.
+- `src/sqlite/tokens/` — **Auth (plan 018; plan 021: split mod/session):**
+  `mod.rs` — `AuthTokenRow`/`NewToken`, `create_token`,
+  `revoke_token_by_id`/`revoke_token_by_username` (enum interno `RevokeBy`
+  com cláusulas SQL fixas, sem interpolação)/`revoke_all_tokens`/`list_tokens`;
+  `session.rs` — `create_session`/`validate_session` (rotation + sessões de 5
+  min). Plaintext do refresh nunca é persistido. Testes:
+  `tests/tokens_test.rs`.
+- `src/sqlite/qa_cache.rs` — **QA-Cache (plan 017):** `QaCacheRow`/`StoreAnswerInput`/`StoredAnswer`, `question_hash`/`chunk_content_hash` (re-export de `arags_core::qa_cache::chunk_content_hash` — cliente e servidor compartilham a mesma implementação, plan 020), `store_answer` (idempotente/reserve-lock), `get_cached_answer`/`get_qa_by_id`/`get_qa_by_cache_id`/`get_qa_by_rowid`, `mark_qa_stale`/`delete_qa`/`touch_qa`, `mark_stale_by_hashes`, `evict_qa`/`evict_all_qa`/`count_qa`/`all_qa_ids`, `list_qa_hashes_for_buffer`, `invalidate_stale_cache_for_buffer`. Testes: `tests/qa_cache_storage_test.rs`.
 - `src/sqlite/chunks.rs` — `Chunk`/`NewChunk`, `insert_chunk`/...; **adicionei** `get_chunks_with_content` e `chunk_hashes_for_buffer` (usados pela staleness hook do QA-Cache).
 - `src/lance/vectors.rs` — `VectorStore` (usearch), `VectorEntry`, `SearchResult`; `open`/`insert_vectors`/`search_similar`/`count`; filtro por `buffer_id` via `filtered_search`; mapa `chunk_id→buffer_id` persistido em `vectors.meta` ao lado de `vectors.usearch`.
 - `src/qa_vectors.rs` — `QuestionVectorStore` (usearch, espaço B **dedicado** para perguntas, métrica `Cos`); `open`/`insert`/`delete`/`search`/`clear`; chave = `qa_cache.id`.
+- `src/rlm_vectors.rs` — **RLM vectors (plan 021: testes em submódulo-arquivo):**
+  espaço vetorial dedicado aos summaries (`open(dims)`/`insert`/`delete`/
+  `search`/`count`); chave = rowid de `rlm_nodes`.
 
 ## Dependências
 - Internas: `arags-core` (hash canônico de chunk compartilhado com o client; plan 020).
@@ -44,7 +65,7 @@ Camada de persistência do `arags`: SQLite (metadados + FTS5/BM25) com um único
 ## Comandos úteis
 ```bash
 CARGO_BUILD_JOBS=4 cargo check  -p arags-storage --all-targets
-CARGO_BUILD_JOBS=4 cargo test   -p arags-storage   # 48 testes (src + tests/)
+CARGO_BUILD_JOBS=4 cargo test   -p arags-storage   # 74 testes (lib + tests/, pós-plan 021)
 CARGO_BUILD_JOBS=4 cargo clippy -p arags-storage --all-targets -- -D warnings
 ```
 

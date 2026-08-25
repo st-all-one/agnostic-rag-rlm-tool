@@ -4,13 +4,14 @@
 //! `user` (or all users when `user` is empty); non-admins are forced to their
 //! own `username`. Without a session the call returns `UNAUTHENTICATED`.
 
-use arags_proto::proto::*;
 use tonic::{Request, Response, Status};
 
 use crate::auth;
 use crate::grpc::error::internal;
 use crate::state::AppState;
 use crate::store;
+
+use arags_proto::proto::{GetHistoryRequest, GetHistoryResponse, HistoryEntry};
 
 /// Fetch per-user query history (auth-scoped).
 ///

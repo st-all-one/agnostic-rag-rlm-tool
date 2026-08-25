@@ -12,6 +12,7 @@ use std::time::Duration;
 use std::fmt::Write as _;
 
 use anyhow::{Context, Result};
+use arags_core::rlm::{DEFAULT_RLM_LEASE_MS, RlmJobPayload};
 use arags_llm::trait_llm::LlmBackend;
 use arags_llm::types::{CompletionRequest, Message};
 use arags_proto::proto::CompleteRlmJobRequest;
@@ -136,7 +137,8 @@ async fn claim(
     use arags_proto::proto::ClaimRlmJobRequest;
     let resp = client
         .claim_rlm_job(ClaimRlmJobRequest {
-            lease_ms: i64::try_from(vol.lease_secs.saturating_mul(1000)).unwrap_or(500_000),
+            lease_ms: i64::try_from(vol.lease_secs.saturating_mul(1000))
+                .unwrap_or(DEFAULT_RLM_LEASE_MS),
             max_level: i32::try_from(vol.max_level).unwrap_or(3),
         })
         .await
@@ -155,18 +157,6 @@ async fn claim(
     }))
 }
 
-#[derive(Debug, Default, serde::Deserialize)]
-struct JobPayload {
-    #[serde(default)]
-    texts: Vec<String>,
-    #[serde(default)]
-    hashes: Vec<String>,
-    #[serde(default)]
-    template_version: Option<String>,
-    #[serde(default)]
-    subject_kind: Option<String>,
-}
-
 fn system_prompt_for(level: i32) -> &'static str {
     match level {
         1 => SYSTEM_L1,
@@ -178,12 +168,14 @@ fn system_prompt_for(level: i32) -> &'static str {
 fn build_request(
     level: i32,
     subject: &str,
-    payload: &JobPayload,
+    payload: &RlmJobPayload,
     max_tokens: u32,
 ) -> CompletionRequest {
     use arags_llm::types::Role;
-    let kind = payload.subject_kind.clone().unwrap_or_default();
-    let mut body = format!("Subject: {subject}\nKind: {kind}\n\nInputs:\n");
+    let mut body = format!(
+        "Subject: {subject}\nKind: {}\n\nInputs:\n",
+        payload.subject_kind
+    );
     for (i, text) in payload.texts.iter().enumerate() {
         let _ = writeln!(body, "\n--- input {} ---\n{text}\n", i + 1);
     }
@@ -207,6 +199,27 @@ fn build_request(
     }
 }
 
+/// Parse and validate a job payload: it must deserialize into the shared
+/// [`RlmJobPayload`] shape and carry at least one input (hashes or texts).
+fn parse_inputs(raw: &str, job_id: i64) -> Result<RlmJobPayload> {
+    let payload: RlmJobPayload =
+        serde_json::from_str(raw).with_context(|| format!("invalid job payload for {job_id}"))?;
+    if payload.hashes.is_empty() && payload.texts.is_empty() {
+        anyhow::bail!("job {job_id} has no inputs");
+    }
+    Ok(payload)
+}
+
+/// Minimum accepted summary length: shorter output is treated as a model
+/// failure and refused (protects the review queue from junk).
+const MIN_SUMMARY_CHARS: usize = 20;
+
+#[must_use]
+fn summary_acceptable(summary: &str) -> bool {
+    let s = summary.trim();
+    !s.is_empty() && s.len() >= MIN_SUMMARY_CHARS
+}
+
 /// Process one claimed job end-to-end. Returns Ok(false) when the submission
 /// was rejected as stale (cancelled meanwhile); Ok(true) on acceptance.
 fn process(
@@ -218,10 +231,7 @@ fn process(
     job: ClaimedJob,
     _once: bool,
 ) -> Result<bool> {
-    let payload: JobPayload = serde_json::from_str(&job.payload).context("invalid job payload")?;
-    if payload.hashes.is_empty() && payload.texts.is_empty() {
-        anyhow::bail!("job {} has no inputs", job.id);
-    }
+    let payload = parse_inputs(&job.payload, job.id)?;
 
     let mut request = build_request(job.level, &job.subject, &payload, vol.max_tokens_per_job);
     request.model = model_name.to_string();
@@ -240,25 +250,24 @@ fn process(
             tracing::warn!(error = %e, job_id = job.id, "LLM synthesis failed");
         })?;
 
-    let summary = response.content.trim();
-    if summary.is_empty() || summary.len() < 20 {
+    let summary = response.content.trim().to_string();
+    if !summary_acceptable(&summary) {
         anyhow::bail!("model produced an implausibly short summary; refusing to submit");
     }
 
     let resp = rt
-        .block_on(
-            client.complete_rlm_job(CompleteRlmJobRequest {
-                job_id: job.id,
-                generation: job.generation,
-                summary_text: summary.to_string(),
-                model: response.model,
-                template_version: payload
-                    .template_version
-                    .clone()
-                    .unwrap_or_else(|| "unknown".into()),
-                token_count: i64::from(response.usage.total_tokens),
-            }),
-        )?
+        .block_on(client.complete_rlm_job(CompleteRlmJobRequest {
+            job_id: job.id,
+            generation: job.generation,
+            summary_text: summary.clone(),
+            model: response.model,
+            template_version: if payload.template_version.is_empty() {
+                "unknown".into()
+            } else {
+                payload.template_version.clone()
+            },
+            token_count: i64::from(response.usage.total_tokens),
+        }))?
         .into_inner();
 
     if resp.accepted {
@@ -274,3 +283,6 @@ fn process(
         Ok(false)
     }
 }
+
+#[cfg(test)]
+mod tests;

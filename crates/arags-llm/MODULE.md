@@ -13,7 +13,7 @@ backoff, tabela de preços (com `cost_usd` no `UsageSummary`), fallback de model
 - `src/trait_llm.rs` — trait `LlmBackend`.
 - `src/factory.rs` — `BackendKind` + `get_backend()` + `get_backend_from_config()`.
 - `src/config.rs` — `BackendConfig`, `BackendFamily`, `AuthScheme`, `HealthMethod`; presets `openai`/`anthropic`/`gemini`/`ollama`/`deepseek`/`mimo`; `from_kind()`.
-- `src/backend.rs` — `GenericBackend` (auth, health, dispatch de request/response por `BackendFamily`).
+- `src/backend.rs` — `GenericBackend` (auth, health, dispatch de request/response por `BackendFamily`). **plan 021:** builders de protocolo agora públicos e documentados — `BackendFamily::build_request`/`parse_response`, `GenericBackend::completions_url`/`auth_headers` — permitindo suíte externa `tests/backend_test.rs` (17 testes: building/parsing das 4 famílias, URLs com query-auth, esquemas Bearer/Header/None, API key obrigatória). Arquivo segue em allowlist do gate de linhas; split `backend/family/*` no sd 021.9.
 - `src/transport.rs` — `request_completion()` (POST/status/429/retry compartilhado) + `extract_json_error_message()`.
 - `src/retry.rs` — `RetryConfig`, `retry_with_backoff` (429/5xx/Connection/Timeout).
 - `src/pricing.rs` — `PricingTable`, `ModelPricing`, `estimate_default()`.
@@ -37,7 +37,7 @@ backoff, tabela de preços (com `cost_usd` no `UsageSummary`), fallback de model
 - Logs estruturados via `tracing` (`model`, `attempt`, `delay_ms`, `timer`).
 - `seed`/`tools` propagados para famílias OpenAI-compatíveis; `cost_usd` preenchido pelo
   transporte via `PricingTable::estimate_default`.
-- Testes de builders (`pub(crate)`) ficam inline em `backend.rs`; testes de API pública em `tests/`.
+- Testes de protocolo vivem em `tests/backend_test.rs` (plan 021); nada de suítes inline em `src/`.
 
 ## Comandos úteis
 ```bash

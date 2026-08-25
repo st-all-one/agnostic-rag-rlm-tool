@@ -47,6 +47,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt -- --check
 
+      - name: Enforce file-length limit (plan 021)
+        run: ./scripts/check_file_length.sh
+
   build:
     name: Build
     runs-on: ubuntu-latest

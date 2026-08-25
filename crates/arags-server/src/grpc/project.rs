@@ -1,11 +1,12 @@
 //! Project management RPCs: `CreateProject`, `ListProjects`, `GetProject`.
 
-use arags_proto::proto::*;
 use tonic::{Response, Status};
 
 use crate::grpc::error::{internal, not_found};
 use crate::state::AppState;
 use crate::store;
+
+use arags_proto::proto::{CreateProjectRequest, ListProjectsResponse, ProjectInfo};
 
 fn project_to_info(
     row: &store::ProjectRow,

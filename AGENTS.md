@@ -97,10 +97,11 @@ cargo tarpaulin --workspace
 ```
 
 ### Test Organization
-- **Unit tests:** Inline `#[cfg(test)] mod tests` in same file as code
-- **Integration tests:** `tests/integration/` directory, test public API only
-- **Benchmarks:** `benches/` with Criterion (ingestion.rs, search.rs)
-- **Doc tests:** `/// # Examples` on public functions
+- **Crate-level integration tests:** `tests/<module>_test.rs` per crate — the default home for behavioral suites that exercise the public API (e.g. `crates/arags-storage/tests/rlm_storage_test.rs`, `crates/arags-cli/tests/user_config_test.rs`)
+- **Module test files:** large modules keep their suite in a dedicated sibling file via `#[cfg(test)] mod testing;` → `<module>/testing.rs` (or `mod tests;` → `<module>/tests.rs`) — never inline hundreds of lines inside production files
+- **Tiny exceptions:** test blocks under ~20 lines may stay inline when they only pin constants/trivial behavior
+- **Doc-tests:** `/// # Examples` on public functions stay inline
+- Keep production files ≤300 lines *excluding* test modules
 
 ### Test Guidelines
 1. Every public function MUST have at least one test

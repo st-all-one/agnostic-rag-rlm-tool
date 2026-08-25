@@ -26,6 +26,15 @@ ocorre no cliente (`arags-cli`) via o LLM do usuário.
   - `store/projects.rs` — CRUD de `buffers` + `buffer_id_for_project`.
   - `store/chunks.rs` — chunks, texts, FTS5, entities, contadores de buffer.
   - `store/history.rs` — histórico de consultas por usuário.
+  - `store/rlm.rs` — **motor RLM server-side** (pós-index enqueue L1 com
+    snapshot de chunks, cascade L2/L3 com tolerância progressiva
+    `l2_tolerance`/`l3_tolerance`, agrupamento L2 por primeiro segmento de
+    path via `theme_of`, `TEMPLATE_VERSION`); payload único `RlmJobPayload`
+    e prioridades nomeadas vindas de `arags_core::rlm`. Testes em
+    `store/rlm/tests.rs`.
+- `src/grpc/util.rs` — **plan 021:** helpers compartilhados dos handlers —
+  `sanitize_fts` (FTS5-safe) e `to_proto_results` (com clamp documentado
+  `i64 → i32`); substitui cópias idênticas em `search.rs`/`query_cache.rs`.
 - `src/grpc/mod.rs` — dispatcher tonic; um `Timer` por handler.
   - `grpc/project.rs` — create/list/get_project.
   - `grpc/index.rs` — index_project (client-streaming de texto; server chunka
@@ -41,6 +50,13 @@ ocorre no cliente (`arags-cli`) via o LLM do usuário.
     staleness e invalidação (Stale/Delete + raio).
   - `grpc/admin.rs` — `TriggerMaintenance` (consolidate/decay sob demanda).
   - `grpc/status.rs` — get_server_status.
+  - `grpc/rlm.rs` — **RPCs de RLM recursive summaries**: claim (lease
+    client-supplied, default `DEFAULT_RLM_LEASE_MS`, validação
+    1s–1h e `max_level`), **complete (plan 021: transacional via
+    `complete_rlm_job_with_node`** — lease/geração + node + job done numa tx;
+    admin submete auto-aprovado), job status (poll cooperativo de cancelamento),
+    review (admin; rejeição re-enfileira com prioridade elevada) e list nodes.
+    Imports explícitos do proto (sem globs).
   - `grpc/error.rs` — mapeamento erro→`Status` (`internal`/`not_found`/...).
 - `src/maintenance.rs` — consolidação/decay agendados (cron) + RPC admin.
 - `src/indexing.rs` — chunking determinístico (hash, linguagem, classificação).
@@ -69,6 +85,11 @@ ocorre no cliente (`arags-cli`) via o LLM do usuário.
   fora do runtime async.
 - Handlers são `pub(crate) async fn handle_*` em módulos sob `grpc/`; o `mod.rs`
   apenas faz o dispatch e cria um `Timer`.
+- Imports do proto sempre explícitos (`use arags_proto::proto::{TipoA, TipoB};`)
+  — globs proibidos (plan 021).
+- Testes fora do corpo dos fontes (plan 021): `config/testing.rs`,
+  `store/rlm/tests.rs`, `grpc/query_cache/tests.rs`, `grpc/util.rs` (testes
+  inline <20 linhas, exceção permitida); integração em `tests/`.
 - Nunca use `.unwrap()`/`expect()` em código de produção — `clippy::unwrap_used`/
   `clippy::expect_used` = `deny`.
 - Logs estruturados obrigatórios: `tracing::info!(run_id, ...)` com campos tipados.

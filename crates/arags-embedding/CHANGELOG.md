@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Fixed (plan 021 — TextChunker; bugs encontrados por proptest)
+- **Parágrafo maior que `max_tokens` nunca era dividido:** o split só acontecia
+  *entre* parágrafos; um parágrafo único acima do budget era emitido inteiro.
+  Agora `push_word_groups` faz hard-split por palavras dentro do parágrafo.
+- **Overlap zero não avançava o cursor:** após um flush com
+  `overlap_tokens = 0`, `chunk_start` permanecia no lugar (em vez de saltar
+  para `chunk_end`), reemitindo conteúdo já enviado e gerando slices acima do
+  budget. O rewind de overlap agora é calculado a partir do ponto de flush.
+- **Separador fora da contagem:** o `\n\n` emitido junto ao slice custava
+  tokens que não entravam no acumulador (`SEPARATOR_TOKENS`); o emissor unificado
+  também corta o separador à direita e faz fallback de hard-split quando a
+  estimativa não-aditiva do tokenizador estoura o budget; o tail do hard-split
+  recua palavra-a-palavra até caber (palavra única insplittável pode exceder —
+  exceção documentada na propriedade).
+- `WordSpans`: iterador novo de spans de palavras (byte-offsets, UTF-8 safe).
+- `tests/chunker_proptest.rs` — 3 propriedades × 256 cases: respeito a
+  `max_tokens` (exceto palavra única), preservação de todo o conteúdo e
+  offsets válidos contra a fonte. Regressions file versionado no repo.
+- `proptest` entra como `[dev-dependencies]`.
+
 ### Changed — all-MiniLM-L6-v2 nativo (BREAKING) — agnostic-rlm-rs-1194
 - **Novo backend `minilm`**: encoder BERT canônico em candle
   (`embedder/minilm/`), atenção 4-D batched correta, positions a partir de 1,

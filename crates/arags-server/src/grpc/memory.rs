@@ -7,7 +7,6 @@
 //!   authenticated user (plan 019, E).
 
 use anyhow::Context;
-use arags_proto::proto::*;
 use arags_storage::Storage;
 use tonic::{Request, Response, Status};
 
@@ -15,6 +14,11 @@ use crate::auth::{self, AuthContext};
 use crate::grpc::error::{internal, invalid_arg};
 use crate::state::AppState;
 use crate::store;
+
+use arags_proto::proto::{
+    GetCacheRequest, GetCacheResponse, ListMemoryRequest, ListMemoryResponse, MaintenanceReport,
+    MemoryEntry, TriggerMaintenanceRequest,
+};
 
 /// A minimal projection of a `qa_cache` row for `ListMemory`.
 struct QaMemoryRow {

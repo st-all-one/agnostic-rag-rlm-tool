@@ -176,7 +176,7 @@ pub fn create_token(storage: &Storage, new: &NewToken) -> Result<(String, String
 ///
 /// Returns an error if the update fails.
 pub fn revoke_token_by_id(storage: &Storage, id: &str, revoked_by: &str) -> Result<bool> {
-    revoke_tokens(storage, "id = ?3", id, revoked_by)
+    revoke_tokens(storage, RevokeBy::Id(id.to_string()), revoked_by)
 }
 
 /// Revoke all refresh tokens for a username. Returns `true` if any row changed.
@@ -189,25 +189,40 @@ pub fn revoke_token_by_username(
     username: &str,
     revoked_by: &str,
 ) -> Result<bool> {
-    revoke_tokens(storage, "username = ?3", username, revoked_by)
+    revoke_tokens(
+        storage,
+        RevokeBy::Username(username.to_string()),
+        revoked_by,
+    )
 }
 
-fn revoke_tokens(
-    storage: &Storage,
-    where_clause: &str,
-    where_val: &str,
-    revoked_by: &str,
-) -> Result<bool> {
+/// Target selector for revocation. Each variant maps to a **compile-time
+/// fixed** SQL clause — user input is always bound, never interpolated.
+enum RevokeBy {
+    Id(String),
+    Username(String),
+}
+
+fn revoke_tokens(storage: &Storage, by: RevokeBy, revoked_by: &str) -> Result<bool> {
     let conn = storage
         .connection()
         .context("failed to acquire connection")?;
     let now = now_ms();
+    let (sql, where_val): (&'static str, String) = match by {
+        RevokeBy::Id(v) => (
+            "UPDATE auth_tokens SET revoked = 1, revoked_at = ?1, revoked_by = ?2 \
+             WHERE id = ?3 AND revoked = 0",
+            v,
+        ),
+        RevokeBy::Username(v) => (
+            "UPDATE auth_tokens SET revoked = 1, revoked_at = ?1, revoked_by = ?2 \
+             WHERE username = ?3 AND revoked = 0",
+            v,
+        ),
+    };
     let changed = conn
         .execute(|conn| {
-            let mut stmt = conn.prepare(&format!(
-                "UPDATE auth_tokens SET revoked = 1, revoked_at = ?1, revoked_by = ?2 \
-                 WHERE {where_clause} AND revoked = 0"
-            ))?;
+            let mut stmt = conn.prepare(sql)?;
             stmt.execute(params![now, revoked_by, where_val])?;
             Ok(conn.changes())
         })
@@ -273,219 +288,5 @@ pub fn list_tokens(storage: &Storage) -> Result<Vec<AuthTokenRow>> {
     .context("failed to list auth tokens")
 }
 
-/// Create a 5-minute session token from a refresh token.
-///
-/// Returns `(session_id, username, role, expires_at_ms)`. Errors if the refresh
-/// token is unknown, revoked, or expired.
-///
-/// # Errors
-///
-/// Returns an error if the token is invalid or the insert fails.
-pub fn create_session(
-    storage: &Storage,
-    refresh_token: &str,
-) -> Result<(String, String, Role, i64)> {
-    let conn = storage
-        .connection()
-        .context("failed to acquire connection")?;
-    let token_hash = hash_refresh(refresh_token);
-    let now = now_ms();
-
-    let (token_id, username, role): (String, String, Role) = conn
-        .execute(|conn| {
-            let mut stmt = conn.prepare(
-                "SELECT id, username, role FROM auth_tokens \
-                 WHERE token_hash = ?1 AND revoked = 0 AND expires_at > ?2",
-            )?;
-            let mut rows = stmt.query_map(params![token_hash, now], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, String>(1)?,
-                    Role::from_str(&r.get::<_, String>(2)?).unwrap_or(Role::NonAdmin),
-                ))
-            })?;
-            match rows.next() {
-                Some(row) => row.map_err(|e| anyhow::anyhow!(e)),
-                None => anyhow::bail!("invalid or expired refresh token"),
-            }
-        })
-        .map_err(|e| anyhow::anyhow!("AuthRefresh failed: {e}"))?;
-
-    let session_id = uuid::Uuid::now_v7().to_string();
-    let expires = now + SESSION_TOKEN_TTL_MS;
-    conn.execute(|conn| {
-        conn.execute(
-            "INSERT INTO auth_sessions (id, token_id, created_at, expires_at) \
-             VALUES (?1, ?2, ?3, ?4)",
-            params![session_id, token_id, now, expires],
-        )?;
-        Ok(())
-    })
-    .context("failed to insert auth session")?;
-
-    Ok((session_id, username, role, expires))
-}
-
-/// Validate a session token, returning the owning `(username, role)` if the
-/// session is live **and** its refresh token is neither revoked nor expired.
-///
-/// # Errors
-///
-/// Returns an error on a database failure (an *invalid* session is `Ok(None)`).
-pub fn validate_session(storage: &Storage, session_id: &str) -> Result<Option<(String, Role)>> {
-    let conn = storage
-        .connection()
-        .context("failed to acquire connection")?;
-    let now = now_ms();
-    conn.execute(|conn| {
-        let mut stmt = conn.prepare(
-            "SELECT t.username, t.role \
-             FROM auth_sessions s \
-             JOIN auth_tokens t ON t.id = s.token_id \
-             WHERE s.id = ?1 \
-               AND s.expires_at > ?2 \
-               AND t.revoked = 0 \
-               AND t.expires_at > ?2",
-        )?;
-        let mut rows = stmt.query_map(params![session_id, now], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                Role::from_str(&r.get::<_, String>(1)?).unwrap_or(Role::NonAdmin),
-            ))
-        })?;
-        match rows.next() {
-            Some(row) => row.map_err(|e| anyhow::anyhow!(e)).map(Some),
-            None => Ok(None),
-        }
-    })
-    .context("failed to validate auth session")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn temp_storage() -> Storage {
-        let dir = tempfile::tempdir().expect("tempdir");
-        Storage::open(dir.path()).expect("open storage")
-    }
-
-    #[test]
-    fn create_and_validate_session() {
-        let storage = temp_storage();
-        let (_, refresh) = create_token(
-            &storage,
-            &NewToken {
-                username: "dev1".into(),
-                role: Role::Admin,
-                created_by: "system".into(),
-            },
-        )
-        .expect("create token");
-
-        let (sid, user, role, _exp) = create_session(&storage, &refresh).expect("create session");
-        assert_eq!(user, "dev1");
-        assert_eq!(role, Role::Admin);
-
-        let ctx = validate_session(&storage, &sid).expect("validate");
-        assert_eq!(ctx, Some(("dev1".into(), Role::Admin)));
-    }
-
-    #[test]
-    fn revoked_refresh_invalidates_session() {
-        let storage = temp_storage();
-        let (id, refresh) = create_token(
-            &storage,
-            &NewToken {
-                username: "dev1".into(),
-                role: Role::NonAdmin,
-                created_by: "system".into(),
-            },
-        )
-        .expect("create token");
-        let (sid, _, _, _) = create_session(&storage, &refresh).expect("create session");
-
-        assert!(
-            validate_session(&storage, &sid)
-                .expect("validate")
-                .is_some()
-        );
-
-        assert!(revoke_token_by_id(&storage, &id, "admin").expect("revoke"));
-        assert!(
-            validate_session(&storage, &sid)
-                .expect("validate")
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn expired_refresh_rejected() {
-        let storage = temp_storage();
-        let (_, refresh) = create_token(
-            &storage,
-            &NewToken {
-                username: "dev1".into(),
-                role: Role::NonAdmin,
-                created_by: "system".into(),
-            },
-        )
-        .expect("create token");
-
-        storage
-            .connection()
-            .unwrap()
-            .execute(|conn| {
-                conn.execute(
-                    "UPDATE auth_tokens SET expires_at = 1 WHERE token_hash = ?1",
-                    params![hash_refresh(&refresh)],
-                )?;
-                Ok(())
-            })
-            .unwrap();
-
-        assert!(create_session(&storage, &refresh).is_err());
-    }
-
-    #[test]
-    fn prune_revokes_all() {
-        let storage = temp_storage();
-        for u in ["dev1", "dev2"] {
-            let _ = create_token(
-                &storage,
-                &NewToken {
-                    username: u.into(),
-                    role: Role::NonAdmin,
-                    created_by: "system".into(),
-                },
-            )
-            .expect("create token");
-        }
-        let n = revoke_all_tokens(&storage, "admin").expect("prune");
-        assert_eq!(n, 2);
-        assert!(
-            list_tokens(&storage)
-                .expect("list")
-                .iter()
-                .all(|t| t.revoked)
-        );
-    }
-
-    #[test]
-    fn plaintext_never_persisted() {
-        let storage = temp_storage();
-        let (_, refresh) = create_token(
-            &storage,
-            &NewToken {
-                username: "dev1".into(),
-                role: Role::Admin,
-                created_by: "system".into(),
-            },
-        )
-        .expect("create token");
-        let rows = list_tokens(&storage).expect("list");
-        assert_eq!(rows.len(), 1);
-        assert_ne!(rows[0].token_hash, refresh);
-        assert_eq!(rows[0].token_hash, hash_refresh(&refresh));
-    }
-}
+pub mod session;
+pub use session::{create_session, validate_session};

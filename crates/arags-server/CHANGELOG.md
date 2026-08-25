@@ -7,6 +7,31 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Changed (plan 021 — RLM à prova de falha e deduplicação)
+- **`handle_complete_rlm_job` transacional:** o handler agora usa
+  `Storage::complete_rlm_job_with_node` — validação de lease/geração, upsert do
+  node e flip do job para `done` acontecem numa única transação no storage.
+  Antes, um job virava `done` antes do node ser persistido; uma falha no meio
+  perdia o trabalho voluntário sem retry. O job é carregado **antes** da
+  conclusão (proveniência project/level/subject/payload), e `job_id`
+  desconhecido responde `NOT_FOUND` imediato.
+- **Dedup `sanitize_fts` + `to_proto_results`:** as cópias idênticas em
+  `grpc/search.rs` e `grpc/query_cache.rs` foram unificadas em **`grpc/util.rs`**
+  (com testes próprios, incluindo Unicode). `to_proto_results` converte linhas
+  com `i32::try_from(..).unwrap_or(i32::MAX)` documentado em vez de cast cru.
+- `grpc/rlm.rs` importa `DEFAULT_RLM_LEASE_MS` e `RlmJobPayload` de
+  `arags_storage::sqlite::rlm` (fonte única); structs locais duplicadas removidas.
+- `store/rlm.rs` usa `PRIORITY_FRESH`/`PRIORITY_CASCADE` no lugar de literais.
+
+### Changed (plan 021 — convenções)
+- **Zero glob imports do proto:** os 10 handlers com
+  `use arags_proto::proto::*;` passaram a importar explicitamente apenas os
+  tipos usados (convenção AGENTS.md).
+- `qv_store.search(vec, 10)` → const `NEAR_HIT_CANDIDATES`.
+- Testes inline de `config.rs`, `store/rlm.rs`, `grpc/query_cache.rs` movidos
+  para submódulos-arquivo (`config/testing.rs`, `store/rlm/tests.rs`,
+  `grpc/query_cache/tests.rs`) — arquivos de produção enxutos.
+
 ### Changed — embedder fixo all-MiniLM-L6-v2 (BREAKING) — agnostic-rlm-rs-1194
 - `[embedder]` sem seleção de modelo: `model_dir` (checkpoint MiniLM),
   `quantization` (`int8` default), knobs de chunk/batch/cache. Campos

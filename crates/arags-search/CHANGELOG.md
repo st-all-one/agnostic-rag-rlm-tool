@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed (plan 021 — determinismo da fusão)
+- **`rrf_fuse` com tie-break:** empates de score caíam na ordem aleatória de
+  iteração do `HashMap`, fazendo duas queries idênticas devolver resultados em
+  ordem diferente. Agora ordena por `score DESC, chunk_id ASC` — saída
+  deterministicamente estável.
+- Propriedades formalizadas em `tests/rrf_proptest.rs` (proptest, 256 cases):
+  determinismo/truncamento/ordem decrescente, preservação de união com
+  `top_k` grande, monotonicidade estrita de rank dentro de uma lista e limites
+  de score (`Σ 1/(k+rank+1)`).
+- `proptest` entra como `[dev-dependencies]` (antes declarado no workspace mas
+  nunca usado).
+- Testes de `qa_cache.rs` movidos para submódulo-arquivo (`qa_cache/tests.rs`).
+
 ### Removed (limpeza pós-019/020) — BREAKING
 - **Tier 3 de LLM rerank**: `hybrid/rerank.rs`, `with_llm_backend`, campo
   `llm_backend` e consts `RERANK_*`; `SearchTier::LlmRerank` removido do enum.

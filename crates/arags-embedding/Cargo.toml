@@ -29,6 +29,7 @@ rusqlite.workspace = true
 tiktoken-rs.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 tempfile.workspace = true
 serde_json.workspace = true
 criterion.workspace = true

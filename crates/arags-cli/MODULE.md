@@ -18,9 +18,18 @@ dotfile e do registro em `.arags.toml`.
 - `src/main.rs` — *thin binary*: parse → `init_logging` → `dispatch`.
 - `src/cli/` — `Cli`, `Commands`, `OutputFormatArg` (clap derive, desacoplado
   do entry point).
-- `src/dispatch/` — `mod` (resolução de config + branch para o servidor),
-  `server` (modo gRPC, renderiza respostas conforme `--format`). Não há modo
-  local — todo comando vai para o servidor.
+- `src/dispatch/` — **plan 021 (ex-`server.rs` de 1116 linhas), dividido por
+  responsabilidade:** `mod.rs` (`dispatch()` resolve config/formato e roteia;
+  `connect()` com AuthRefresh; `map_search_tier`), `index.rs` (`run_index` +
+  `stream_index_group` — **upload zstd-comprimido, level 3** — e
+  `partition_files`), `discover.rs` (descoberta de arquivos; ignore rules via
+  comparação por componente, sem `format!` no hot loop),
+  `projects.rs` (--register/--unregister), `watch_daemon.rs`
+  (`__watch`: quiet-window re-index com fingerprint mtime+size e
+  `WATCH_UPLOAD_PARALLELISM = 2`), `search.rs` (search/query + render multi-formato),
+  `memory_history.rs` (memória/cache admin + histórico) e `init.rs`
+  (scaffold `.arags.toml`, seed do `.gitignore`). Não há modo local — todo
+  comando vai para o servidor. Testes por módulo em `<name>/tests.rs`.
 - `src/auth_client.rs` — `AragsClient` autenticado (`AuthRefresh` + interceptor
   Bearer com renovação em background).
 - `src/backend.rs` — resolve o backend LLM do usuário a partir de
@@ -31,28 +40,30 @@ dotfile e do registro em `.arags.toml`.
 - `src/gitignore.rs` — parser do subconjunto gitignore usado na descoberta de
   arquivos (`*`/`?`/`**`, dir-only, âncora `/`, negação `!` com
   *last-match-wins*, precedência por profundidade para `.gitignore`
-  aninhados). Funções puras, testadas inline.
+  aninhados). Funções puras; testes em `gitignore/tests.rs`.
 - `src/watcher.rs` — auto-atualização estilo `git maintenance`
   (`arags index --register`): daemon detached (`arags watch-daemon <root>`)
   via `notify`, **janela de silêncio de 1 min** e flush só dos arquivos
   alterados (fingerprint mtime+size); registro em `[watch]` no `.arags.toml`;
   controle por marcadores dotfile (`.arags-watch.pid`/`.arags-watch.stop`),
   sem sinais nem `unsafe`.
-- `src/user_config.rs` — config 2-escopos (`[auth]` só-global, `[llm]`,
-  `[server]` com knobs TLS, `[project]`, `[watch]` local-only); merge granular
-  testado inline; arquivos legados `config.toml` **não** são lidos;
-  `set_watch_enabled` preserva campos desconhecidos via round-trip
-  `toml::Value`.
+- `src/user_config/` — **plan 021 (ex-`user_config.rs`):** `mod.rs` com os
+  tipos (`AuthConfig`, `ServerSection`, `ProjectSection`, `WatchSection`,
+  `GlobalConfig`, `VolunteerConfig`, `LocalConfig`, `EffectiveUserConfig`) e
+  `ops.rs` com load/merge (`load`, `load_from`, `merge`, `merge_backends`,
+  `resolve_addr`, `set_watch_enabled`). Config 2-escopos (`[auth]` só-global,
+  `[llm]`, `[server]` com knobs TLS, `[project]`, `[watch]` local-only); merge
+  granular por campo; arquivos legados `config.toml` **não** são lidos.
+  Testes: `tests/user_config_test.rs`.
 - `src/commands/` — módulos de comando:
   - `qa_cache` (plan 017: `run_ask`/`run_get`/`run_invalidate` orquestrando os
     RPCs `QueryWithCache`/`GetAnswerById`/`InvalidateCache`; a digestão LLM roda
     localmente via `arags-llm`/`user_config` e o `StoreAnswer` é fire-and-forget),
   - `persist` (escreve `wiki/*.md` via LLM do usuário).
-  - `index`, `search`, `query`, `memory` (admin), `history` vivem em
-    `dispatch/server.rs` (streaming de arquivos + renderização). O `index`
-    também abriga `--register`/`--unregister` e o entry point do daemon
-    (`run_watch_daemon`/`flush_changed`), que reutiliza `discover_files` +
-    `stream_index_group`.
+  - `index`, `search`, `query`, `memory` (admin), `history` vivem nos módulos
+    de `dispatch/` (plan 021): `index.rs` (streaming de arquivos comprimidos),
+    `search.rs`, `memory_history.rs` e `init.rs`; o watch daemon está em
+    `watch_daemon.rs` e o registro em `projects.rs`.
 - `src/cli/commands.rs` — `Commands` enum (inclui `Query` estendido com
   `cache_id`/`qa` e o subcomando `Memory`).
 - `src/output/` — `mod` (`Format`), `json`, `tree`, `markdown`, `prompt`.
@@ -67,7 +78,16 @@ dotfile e do registro em `.arags.toml`.
   `tonic` (gRPC), `notify` (watch daemon do `--register`),
   `tracing`/`tracing-subscriber` (logs), `serde`/`serde_json`/
   `toml` (config/saída), `anyhow` (erros), `indicatif`/`console` (UI),
-  `chrono` (timestamps do wiki), `parking_lot` (sync), `mimalloc` (allocator).
+  `chrono` (timestamps do wiki), `parking_lot` (sync), `mimalloc` (allocator),
+  `zstd` (compressão do upload de indexação, plan 021).
+
+## Módulos RLM do cliente
+- `src/volunteer.rs` — **worker voluntário (`arags volunteer`)**: loop claim →
+  síntese com o LLM local → submit. Helpers puras testáveis: `parse_inputs`
+  (payload vazio/malformado rejeitado), `build_request`/`system_prompt_for`
+  (templates L1/L2/L3, temperatura 0.2) e `summary_acceptable`
+  (`MIN_SUMMARY_CHARS = 20`). Usa `RlmJobPayload`/`DEFAULT_RLM_LEASE_MS` de
+  `arags_core::rlm`. Testes em `volunteer/tests.rs`.
 
 ## Convenções deste módulo
 - Sem `unwrap`/`expect`/`panic`/`unsafe` em `src/`; use `anyhow` + `?`.
@@ -77,6 +97,10 @@ dotfile e do registro em `.arags.toml`.
   (`Arc` + `parking_lot::Mutex`/`RwLock`).
 - Performance: evitar clones desnecessários; `with_capacity` quando o tamanho
   é conhecido.
+- Testes fora do corpo dos fontes (plan 021): suítes de API pública em
+  `tests/*_test.rs` e unitários de módulo em `<name>/tests.rs`; o gate
+  `scripts/check_file_length.sh` mantém todo `src/*.rs` ≤300 linhas de
+  produção.
 - `dispatch` é o único ponto que conhece a árvore de comandos; `commands::*`
   expõe `execute(Config)` estável.
 - Testes de API pública ficam em `tests/`; funções puras críticas (merge da

@@ -15,12 +15,13 @@ use futures::stream::{self, StreamExt};
 use tonic::{Request, Response, Status, Streaming};
 
 use arags_proto::proto::index_chunk;
-use arags_proto::proto::*;
 
 use crate::grpc::error::internal;
 use crate::indexing;
 use crate::state::AppState;
 use crate::store;
+
+use arags_proto::proto::{IndexChunk, IndexFile, IndexResponse};
 
 /// Default number of concurrent embedding batches when `ARAGS_INDEX_CONCURRENCY`
 /// is unset.

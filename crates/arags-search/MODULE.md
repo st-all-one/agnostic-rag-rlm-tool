@@ -17,7 +17,7 @@ Motor de busca híbrida do `arags`: BM25 (FTS5), busca por entidades (regex + FT
 - `src/qa_cache.rs` — `cosine_similarity` (vetores) + `jaccard_similarity` (multisets de chunk ids) — matemática pura usada pela resolução de hit/tier do QA-Cache (plan 017); cobertas por testes unitários.
 - `src/decay.rs` — `DecayConfig` (decay exponencial de saliência; helpers `refresh_sql`/`age_hours_sql`).
 - `src/hybrid/mod.rs` — `HybridSearch` (campos bm25/entity/semantic/llm_backend/rrf_k/decay; `new`/`with_decay`/`with_llm_backend`/`set_decay`).
-- `src/hybrid/rrf.rs` — `rrf_score` + `rrf_fuse` (matemática pura de fusão, sem I/O).
+- `src/hybrid/rrf.rs` — `rrf_score` + `rrf_fuse` (matemática pura de fusão, sem I/O). **plan 021:** ordenação determinística — empates de score resolvem por `chunk_id ASC` (antes, caíam na ordem aleatória do `HashMap` e duas queries idênticas podiam devolver ordens diferentes); propriedades formalizadas em `tests/rrf_proptest.rs` (determinismo, união preservada, monotonicidade de rank, limites de score).
 - `src/hybrid/fusion.rs` — `apply_decay`, `search_fts` (BM25), `search_all` (cross-project).
 - `src/hybrid/search.rs` — `search` async (orquestração multi-tier: FTS → entity → vector → decay).
 - `tests/` — `bm25_test`, `context_test`, `decay_test`, `entity_test`, `hybrid_test`, `semantic_test`, `types_test`.
