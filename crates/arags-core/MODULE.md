@@ -10,6 +10,11 @@ logging. Não possui engine RLM recursivo nem LLM no grafo de dependências.
 
 ## Estrutura atual
 - `src/lib.rs` — API pública (pub mod).
+- `src/exploration.rs` — **plan 022:** domínio das explorações (payload,
+  status/roles/template) e o modelo de confiança puro usado pelo server para
+  ranquear mapas: `confidence_score(similarity, epoch_drift, age_days,
+  confirmed, contradicted, cfg)` monotônico em todas as entradas. Testes em
+  `exploration/tests.rs` + `tests/exploration_proptest.rs`.
 - `src/rlm.rs` — **plan 021:** fonte única do domínio RLM compartilhada por
   client/server/storage (re-exportada por `arags-storage::sqlite::rlm`):
   `DEFAULT_RLM_LEASE_MS` (500s), escada de prioridades nomeada

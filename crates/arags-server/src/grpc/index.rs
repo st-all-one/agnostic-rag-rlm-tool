@@ -205,6 +205,29 @@ pub(crate) async fn handle_index_project(
         }
     }
 
+    // Phase 4.5 (Explorations, plan 022): bump the project epoch and mark
+    // maps stale whose cited anchors no longer match the current chunk hashes.
+    if state.config.exploration.enabled {
+        let storage = state.storage.clone();
+        let project_for_explored = project.clone();
+        match store::blocking(move || -> anyhow::Result<(i64, usize)> {
+            let epoch = storage.bump_project_epoch(&project_for_explored)?;
+            let n = storage.mark_stale_if_anchors_changed(&project_for_explored)?;
+            Ok((epoch, n))
+        })
+        .await
+        {
+            Ok((epoch, stale)) => {
+                if stale > 0 {
+                    tracing::info!(project = %project, epoch, stale_maps = stale, "exploration staleness hook");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "exploration staleness hook failed; indexing continues");
+            }
+        }
+    }
+
     // Phase 5 (RLM): enqueue L1 summary work for the files touched by this
     // stream. Cancellations for claimed jobs ride on the generation bump.
     if state.config.rlm.enabled {

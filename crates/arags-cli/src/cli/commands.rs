@@ -140,6 +140,59 @@ pub enum Commands {
         #[arg(long)]
         user: Option<String>,
     },
+
+    /// Explore persisted agent exploration maps (plan 022).
+    Explore {
+        #[command(subcommand)]
+        cmd: ExploreCmd,
+    },
+}
+
+/// Subcommands of `arags explore` (plan 022).
+#[derive(Subcommand, Debug)]
+pub enum ExploreCmd {
+    /// Search exploration maps semantically before re-exploring from zero.
+    Search {
+        /// Free-text query (what are you about to investigate?).
+        query: String,
+
+        /// Project scope (defaults to the current project).
+        #[arg(long)]
+        project: Option<PathBuf>,
+
+        /// Maximum number of maps.
+        #[arg(long, default_value_t = 5)]
+        limit: i32,
+
+        /// Include stale maps (useful as history/archaeology).
+        #[arg(long)]
+        include_stale: bool,
+    },
+
+    /// Persist an exploration map following the EXPLORATIONS.md contract.
+    Persist {
+        /// Markdown contract file (`-` reads stdin).
+        #[arg(long)]
+        map: PathBuf,
+
+        /// Extra cited paths appended to the contract's `files:` header.
+        #[arg(long = "paths", value_delimiter = ',')]
+        paths: Vec<String>,
+    },
+
+    /// Report whether a served map held up in current code.
+    Feedback {
+        /// The `exploration_id` returned by `explore search`.
+        exploration_id: String,
+
+        /// You verified the described mechanism in code.
+        #[arg(long, conflicts_with = "contradict")]
+        confirm: bool,
+
+        /// You found evidence contradicting the map.
+        #[arg(long, conflicts_with = "confirm")]
+        contradict: bool,
+    },
 }
 
 /// Subcommands of `arags memory` (plan 019).

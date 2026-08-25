@@ -1,0 +1,145 @@
+syntax = "proto3";
+package arags.v1;
+
+import "query_cache.proto";
+
+// ── Explorations: relational knowledge from explorer agents (plan 022) ──
+//
+// Dense, goal-driven maps of how code entities connect, produced by an
+// agent's LOCAL LLM and persisted fire-and-forget (same trust model as
+// StoreAnswer). The server never runs an LLM: it validates the contract,
+// anchors cited files with content hashes, embeds the summary into a
+// dedicated vector space and serves candidates with a composite confidence
+// score (similarity × epoch drift × age + feedback).
+
+// Direction of consumer feedback on a served map.
+enum FeedbackKind {
+  // Consumer verified the described mechanism in current code.
+  CONFIRM = 0;
+  // Consumer found evidence contradicting the map.
+  CONTRADICT = 1;
+}
+
+// Lifecycle states mirrored from storage (`fresh` | `stale` | `retired`).
+//
+// Persisted fire-and-forget: the full markdown contract document plus the
+// fields the server needs to anchor it. Paths are resolved against the
+// current index; unknown paths are reported back but do not fail the call.
+message PersistExplorationRequest {
+  string project = 1;
+  // Objective that drove the exploration (contract header `goal`).
+  string goal = 2;
+  // Short digest used for embedding (first paragraph of section Mapa).
+  string summary = 3;
+  // Full markdown contract document (sections Mapa/Conexões/Evidências/Limitações).
+  string body_markdown = 4;
+  // Cited/context file paths relative to the project root (contract header).
+  repeated string files = 5;
+  // Agent username (audit/provenance); filled by the CLI from auth.
+  string created_by = 6;
+  // LLM that produced the map (metadata).
+  string model = 7;
+}
+
+message PersistExplorationResponse {
+  // Stable map id (UUIDv7) assigned by the server.
+  string exploration_id = 1;
+  // Whether the map was accepted (false when validation failed; `reason` set).
+  bool accepted = 2;
+  string reason = 3;
+  // Cited paths that could NOT be resolved to indexed files (kept as text,
+  // not anchored — they cannot drive staleness).
+  repeated string unresolved_paths = 4;
+}
+
+// Semantic search over exploration maps. Candidates come from the dedicated
+// vector space; anchors are RECHECKED at read time; confidence is computed
+// server-side so every consumer sees consistent rankings.
+message SearchExplorationsRequest {
+  string project = 1;
+  // Free-text query (embedded server-side).
+  string query = 2;
+  int32 limit = 3;
+  // Include stale maps (useful as history/archaeology; flagged in results).
+  bool include_stale = 4;
+}
+
+message ExplorationHit {
+  string exploration_id = 1;
+  string goal = 2;
+  string summary = 3;
+  // Composite trust score in [0, 1] (plan 022 model).
+  float confidence = 4;
+  // Raw vector similarity in [0, 1] (before drift/age/feedback decay).
+  float similarity = 5;
+  // `fresh` | `stale` | `retired` (retired only reachable via direct get).
+  string status = 6;
+  // Broken anchor paths when stale (granular reason).
+  repeated string stale_reason = 7;
+  // Project-epoch distance between creation and now (drift signal).
+  int32 epoch_drift = 8;
+  // Feedback counters (provenance for the score).
+  int64 confirmed = 9;
+  int64 contradicted = 10;
+  string created_by = 11;
+  string model = 12;
+}
+
+message SearchExplorationsResponse {
+  // Ordered by confidence descending; may include Related-tier hits flagged
+  // only via confidence (the caller decides what to surface).
+  repeated ExplorationHit hits = 1;
+}
+
+// Fetch one map with its full body (e.g. before trusting or reviewing it).
+message GetExplorationByIdRequest {
+  string exploration_id = 1;
+}
+
+message GetExplorationByIdResponse {
+  bool found = 1;
+  string exploration_id = 2;
+  string project = 3;
+  string goal = 4;
+  // Full markdown contract document (decompressed server-side).
+  string body_markdown = 5;
+  string summary = 6;
+  float confidence = 7;
+  string status = 8;
+  repeated string stale_reason = 9;
+  int32 epoch_drift = 10;
+  int64 confirmed = 11;
+  int64 contradicted = 12;
+  string created_by = 13;
+  string model = 14;
+  // Anchors as persisted: path@content_hash (cited first, then context).
+  repeated string anchored_files = 15;
+}
+
+// Consumer feedback loop: the cheapest verifier is the agent that just used
+// the map. Accumulated contradictions auto-retire the map at the configured
+// limit.
+message FeedbackExplorationRequest {
+  string exploration_id = 1;
+  FeedbackKind kind = 2;
+}
+
+message FeedbackExplorationResponse {
+  bool applied = 1;
+  int64 confirmed = 2;
+  int64 contradicted = 3;
+  // Whether this contradiction crossed the limit and retired the map.
+  bool auto_retired = 4;
+}
+
+// Admin-gated invalidation (mirrors InvalidateCache semantics).
+message InvalidateExplorationRequest {
+  string exploration_id = 1;
+  // Reuses the qa-cache invalidation modes: Stale keeps history, Delete hard-removes.
+  InvalidateMode mode = 2;
+  string reason = 3;
+}
+
+message InvalidateExplorationResponse {
+  bool applied = 1;
+}

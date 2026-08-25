@@ -12,6 +12,7 @@ import "server.proto";
 import "auth.proto";
 import "query_cache.proto";
 import "rlm.proto";
+import "exploration.proto";
 
 // ── gRPC Service ──
 
@@ -66,6 +67,18 @@ service AragsService {
   rpc GetRlmJobStatus(GetRlmJobStatusRequest) returns (RlmJobStatus);
   rpc ReviewRlmNode(ReviewRlmNodeRequest) returns (ReviewRlmNodeResponse);
   rpc ListRlmNodes(ListRlmNodesRequest) returns (ListRlmNodesResponse);
+
+  // ── Explorations: relational knowledge from explorer agents (plan 022) ──
+  // Persist a map fire-and-forget (local-LLM trust model, like StoreAnswer).
+  rpc PersistExploration(PersistExplorationRequest) returns (PersistExplorationResponse);
+  // Semantic search with server-side anchor recheck + confidence ranking.
+  rpc SearchExplorations(SearchExplorationsRequest) returns (SearchExplorationsResponse);
+  // Fetch one map with its full body and provenance metadata.
+  rpc GetExplorationById(GetExplorationByIdRequest) returns (GetExplorationByIdResponse);
+  // Consumer feedback: confirm/contradict; contradictions auto-retire at limit.
+  rpc FeedbackExploration(FeedbackExplorationRequest) returns (FeedbackExplorationResponse);
+  // Admin invalidation reusing InvalidateMode (Stale keeps history, Delete purges).
+  rpc InvalidateExploration(InvalidateExplorationRequest) returns (InvalidateExplorationResponse);
 }
 
 // ── Memory / Cache / Maintenance / History (plan 019) ──

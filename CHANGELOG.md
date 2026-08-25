@@ -5,6 +5,22 @@ Este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added — plan 022: Explorations (conhecimento relacional de explorações)
+- Quarto dataset dedicado (`migration 019`): mapas densos e orientados a
+  objetivo produzidos por agentes exploradores com LLM local — conexões
+  transversais que o RLM estrutural não captura. Server continua sem LLM.
+- **Protocolo de confiança em camadas**: âncoras `content_hash` por arquivo
+  citado com recheck em tempo de leitura; score de confiança composto puro
+  (`arags_core::exploration`) com limiares duplos e drift de época
+  (`project_epochs`); feedback confirm/contradict do consumidor com
+  auto-retire. Falso positivo custa mais que falso negativo.
+- Verify-on-hit opcional (`[exploration].verify_on_hit`): grounding lazy da
+  afirmação-chave contra o corpus atual — pega alucinação/drift que hash não vê.
+- RPCs `Persist/Search/Get/Feedback/Invalidate Exploration`; comando
+  **`arags explore {search,persist,feedback}`**; contrato do agente em
+  **`EXPLORATIONS.md`** (raiz). Espaço vetorial próprio
+  (`exploration_vectors.usearch`) isolado dos demais.
+
 ### Changed — Code Quality Remediation (plan 021, epic `agnostic-rlm-rs-1a52`)
 
 Remediação completa da revisão de qualidade pós-RLM (14 arquivos >300 linhas,

@@ -15,6 +15,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/016_add_qa_cache.sql"),
     include_str!("../../migrations/017_add_history_user.sql"),
     include_str!("../../migrations/018_add_rlm.sql"),
+    include_str!("../../migrations/019_add_explorations.sql"),
 ];
 
 /// Total number of migrations in [`MIGRATIONS`].

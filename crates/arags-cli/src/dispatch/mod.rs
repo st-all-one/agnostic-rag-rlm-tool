@@ -9,6 +9,7 @@
 //! - [`init`]: `arags init` scaffolding of `.arags.toml`
 
 pub mod discover;
+pub mod exploration;
 pub mod index;
 pub mod init;
 pub mod memory_history;
@@ -173,6 +174,10 @@ fn run(
                 model.as_deref(),
                 format,
             )
+        }
+        Commands::Explore { cmd } => {
+            let mut client = connect(rt, &cfg)?;
+            exploration::run_explore(rt, &mut client, &project, cmd, format)
         }
         Commands::Memory { cmd } => {
             let mut client = connect(rt, &cfg)?;

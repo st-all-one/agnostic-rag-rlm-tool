@@ -10,6 +10,8 @@ use arags_storage::VectorStore;
 
 use crate::config::{QaCacheConfig, ServerConfig};
 
+pub use arags_storage::ExplorationVectorStore;
+
 /// Shared state across gRPC handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -23,6 +25,8 @@ pub struct AppState {
     /// RLM summary-vector index (own cosine space, separate from chunks and
     /// the QA question index).
     pub rlm_vector_store: Option<Arc<RlmVectorStore>>,
+    /// Exploration-map vector index (plan 022, own cosine space).
+    pub exploration_vector_store: Option<Arc<ExplorationVectorStore>>,
     /// Embedder used for chunk (index) and query (search) embeddings. Built
     /// from `server.toml [embedder]`: the native all-`MiniLM`-L6-v2 checkpoint
     /// at `model_dir`; a hash fallback that keeps the pipeline running
@@ -126,20 +130,29 @@ impl AppState {
         vector_store: Option<Arc<VectorStore>>,
         question_vector_store: Option<Arc<QuestionVectorStore>>,
     ) -> Result<Self> {
-        Self::with_rlm_vectors(storage, config, vector_store, question_vector_store, None)
+        Self::with_vector_stores(
+            storage,
+            config,
+            vector_store,
+            question_vector_store,
+            None,
+            None,
+        )
     }
 
-    /// Full constructor including the optional RLM summary-vector store.
+    /// Full constructor including the optional RLM and exploration vector
+    /// stores (plans 018/022).
     ///
     /// # Errors
     ///
     /// Returns an error if the embedder cannot be built.
-    pub fn with_rlm_vectors(
+    pub fn with_vector_stores(
         storage: Storage,
         config: ServerConfig,
         vector_store: Option<Arc<VectorStore>>,
         question_vector_store: Option<Arc<QuestionVectorStore>>,
         rlm_vector_store: Option<Arc<RlmVectorStore>>,
+        exploration_vector_store: Option<Arc<ExplorationVectorStore>>,
     ) -> Result<Self> {
         let embedder = load_embedder(&config.embedder);
         let embedder = wrap_with_cache(embedder, &config);
@@ -151,6 +164,7 @@ impl AppState {
             vector_store,
             question_vector_store,
             rlm_vector_store,
+            exploration_vector_store,
             embedder,
             qa_config: qa_config.clone(),
             started_at: std::time::Instant::now(),

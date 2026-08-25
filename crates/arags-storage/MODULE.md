@@ -46,6 +46,15 @@ Camada de persistência do `arags`: SQLite (metadados + FTS5/BM25) com um único
 - `src/sqlite/chunks.rs` — `Chunk`/`NewChunk`, `insert_chunk`/...; **adicionei** `get_chunks_with_content` e `chunk_hashes_for_buffer` (usados pela staleness hook do QA-Cache).
 - `src/lance/vectors.rs` — `VectorStore` (usearch), `VectorEntry`, `SearchResult`; `open`/`insert_vectors`/`search_similar`/`count`; filtro por `buffer_id` via `filtered_search`; mapa `chunk_id→buffer_id` persistido em `vectors.meta` ao lado de `vectors.usearch`.
 - `src/qa_vectors.rs` — `QuestionVectorStore` (usearch, espaço B **dedicado** para perguntas, métrica `Cos`); `open`/`insert`/`delete`/`search`/`clear`; chave = `qa_cache.id`.
+- `src/explorations/` — **Explorations (plan 022):** `sqlite/explorations/{mod,store,staleness,feedback}`
+  persiste mapas relacionais de agentes exploradores: `persist_exploration`
+  transacional (linha + âncoras + body zstd + epoch stampado), FTS scoped,
+  epochs monotônicos por projeto, staleness por âncora `content_hash`
+  (`stale_reason` granular; cited invalida, context não), recheck read-time e
+  feedback com auto-retire. Espaço vetorial dedicado em
+  `src/exploration_vectors.rs` (`exploration_vectors.usearch`, cosseno).
+  Consts de domínio reexportadas de `arags_core::exploration`. Testes:
+  `tests/explorations_storage_test.rs`, `tests/exploration_vectors_test.rs`.
 - `src/rlm_vectors.rs` — **RLM vectors (plan 021: testes em submódulo-arquivo):**
   espaço vetorial dedicado aos summaries (`open(dims)`/`insert`/`delete`/
   `search`/`count`); chave = rowid de `rlm_nodes`.

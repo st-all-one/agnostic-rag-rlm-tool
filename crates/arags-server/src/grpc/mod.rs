@@ -9,6 +9,7 @@
 
 pub mod auth;
 pub mod error;
+pub mod exploration;
 pub mod history;
 pub mod index;
 pub mod memory;
@@ -32,8 +33,14 @@ use arags_proto::proto::{
     IndexResponse, InvalidateCacheRequest, InvalidateCacheResponse, ListMemoryRequest,
     ListMemoryResponse, ListProjectsResponse, ListRlmNodesRequest, ListRlmNodesResponse,
     MaintenanceReport, ProjectInfo, QueryWithCacheRequest, QueryWithCacheResponse,
-    ReviewRlmNodeRequest, ReviewRlmNodeResponse, RlmJobStatus, SearchRequest, SearchResponse,
-    ServerStatus, StoreAnswerRequest, StoreAnswerResponse, TriggerMaintenanceRequest,
+    ReviewRlmNodeRequest, ReviewRlmNodeResponse, RlmJobStatus, SearchExplorationsRequest,
+    SearchExplorationsResponse, SearchRequest, SearchResponse, ServerStatus, StoreAnswerRequest,
+    StoreAnswerResponse, TriggerMaintenanceRequest,
+};
+use arags_proto::proto::{
+    FeedbackExplorationRequest, FeedbackExplorationResponse, GetExplorationByIdRequest,
+    GetExplorationByIdResponse, InvalidateExplorationRequest, InvalidateExplorationResponse,
+    PersistExplorationRequest, PersistExplorationResponse,
 };
 
 /// gRPC service implementation for arags.
@@ -237,5 +244,46 @@ impl AragsService for AragsGrpcService {
     ) -> Result<Response<ListRlmNodesResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.list_rlm_nodes");
         rlm::handle_list_rlm_nodes(&self.state, request).await
+    }
+
+    // ── Explorations (plan 022) ──────────────────────────────────────────
+
+    async fn persist_exploration(
+        &self,
+        request: Request<PersistExplorationRequest>,
+    ) -> Result<Response<PersistExplorationResponse>, Status> {
+        exploration::handle_persist_exploration(&self.state, request).await
+    }
+
+    async fn search_explorations(
+        &self,
+        request: Request<SearchExplorationsRequest>,
+    ) -> Result<Response<SearchExplorationsResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.search_explorations");
+        exploration::search::handle_search_explorations(&self.state, request).await
+    }
+
+    async fn get_exploration_by_id(
+        &self,
+        request: Request<GetExplorationByIdRequest>,
+    ) -> Result<Response<GetExplorationByIdResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.get_exploration_by_id");
+        exploration::search::handle_get_exploration_by_id(&self.state, request).await
+    }
+
+    async fn feedback_exploration(
+        &self,
+        request: Request<FeedbackExplorationRequest>,
+    ) -> Result<Response<FeedbackExplorationResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.feedback_exploration");
+        exploration::feedback::handle_feedback_exploration(&self.state, request).await
+    }
+
+    async fn invalidate_exploration(
+        &self,
+        request: Request<InvalidateExplorationRequest>,
+    ) -> Result<Response<InvalidateExplorationResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.invalidate_exploration");
+        exploration::feedback::handle_invalidate_exploration(&self.state, request).await
     }
 }

@@ -23,18 +23,21 @@
     clippy::cast_possible_wrap,
     clippy::cast_lossless
 )]
+pub mod exploration_vectors;
 pub mod fts;
 pub mod lance;
 pub mod qa_vectors;
 pub mod rlm_vectors;
 pub mod sqlite;
 
+pub use exploration_vectors::{ExplorationNeighbor, ExplorationVectorStore};
 pub use lance::{SearchResult, VectorEntry, VectorStore};
 pub use qa_vectors::QuestionVectorStore;
 pub use rlm_vectors::{RlmNeighbor, RlmVectorStore};
 pub use sqlite::Role;
 pub use sqlite::Storage;
 pub use sqlite::cache;
+pub use sqlite::explorations;
 pub use sqlite::qa_cache;
 pub use sqlite::tokens;
 

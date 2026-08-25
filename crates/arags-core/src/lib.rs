@@ -13,6 +13,7 @@
         clippy::cast_precision_loss
     )
 )]
+pub mod exploration;
 pub mod logging;
 pub mod qa_cache;
 pub mod rlm;

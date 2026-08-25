@@ -82,6 +82,9 @@ dotfile e do registro em `.arags.toml`.
   `zstd` (compressão do upload de indexação, plan 021).
 
 ## Módulos RLM do cliente
+- `src/dispatch/exploration.rs` — **plan 022:** `arags explore {search,persist,
+  feedback}`; parser puro do contrato EXPLORATIONS.md (`parse_contract`) com
+  testes em `dispatch/exploration/tests.rs`.
 - `src/volunteer.rs` — **worker voluntário (`arags volunteer`)**: loop claim →
   síntese com o LLM local → submit. Helpers puras testáveis: `parse_inputs`
   (payload vazio/malformado rejeitado), `build_request`/`system_prompt_for`

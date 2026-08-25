@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Added — plan 022: dataset de explorações
+
+- **Migration `019_add_explorations.sql`**: `explorations` (status
+  fresh/stale/retired, epoch de criação, contadores confirm/contradict),
+  `exploration_files` (âncoras `content_hash` com roles cited/context),
+  `explorations_fts` (FTS5 com triggers) e `project_epochs` (época monotônica
+  por projeto).
+- **Novo módulo `sqlite/explorations/`** (`store`, `staleness`, `feedback`):
+  persist transacional linha+âncoras com body comprimido em zstd; FTS scoped
+  por projeto; `bump/current_project_epoch`; `mark_stale_if_anchors_changed`
+  (compara âncora citada com hash vigente do chunk, grava `stale_reason`
+  granular); `recheck_anchors_for_rowid` para verificação em tempo de leitura;
+  `current_hashes_for_paths` para resolução no servidor;
+  `record_feedback` (confirm/contradict com auto-retire no limite);
+  invalidação admin Stale/Delete auditada.
+- **`exploration_vectors.rs`**: espaço vetorial dedicado (usearch cosseno,
+  arquivo `exploration_vectors.usearch`, chave = rowid) — terceiro espaço,
+  isolado de chunks e perguntas.
+- Consts de domínio (`STATUS_*`, `ROLE_*`, `TEMPLATE_VERSION_V1`) agora vivem
+  em `arags_core::exploration` e são reexportadas aqui (fonte única).
+- Testes: `tests/explorations_storage_test.rs` (10) +
+  `tests/exploration_vectors_test.rs` (4, inclui não-interferência dos três
+  espaços).
+
 ### Changed (plan 021 — hardening e modularização do RLM)
 - **`sqlite/rlm.rs` (1001 linhas) dividido em `sqlite/rlm/`**: `mod.rs` (tipos,
   consts re-exportadas do `arags_core::rlm`, mappers, upsert compartilhado),

@@ -443,7 +443,8 @@ cargo bench
 ```
 
 Convenções de código e de organização de testes: `AGENTS.md`.
-Planos de arquitetura: `plan/` (o mais recente de qualidade é o `021`).
+Planos de arquitetura: `plan/` (o mais recente é o `022`, já implementado).
+Contrato para agentes exploradores persistirem mapas: `EXPLORATIONS.md`.
 
 ## Configuração de Build
 

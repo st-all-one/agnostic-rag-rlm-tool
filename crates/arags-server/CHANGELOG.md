@@ -7,6 +7,30 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added — plan 022: handlers de explorações + hook de índice
+- **`grpc/exploration/{mod,search,feedback}.rs`**: `PersistExploration`
+  (validação de contrato/caps, resolução path→hash, embed best-effort),
+  `SearchExplorations` com pipeline read-time (vetor → recheck de âncoras →
+  `confidence_score` → gate `hit_low`/`include_stale`/retired) ordenado por
+  confiança; `GetExplorationById` com body/âncoras/metadata vivos;
+  `FeedbackExploration` com auto-retire no limite configurado;
+  `InvalidateExploration` admin (Stale mantém história, Delete remove
+  linha+vetor).
+- **Hook pós-index (Phase 4.5)**: `bump_project_epoch` +
+  `mark_stale_if_anchors_changed` por projeto indexado.
+- **Verify-on-hit (plan 022.8, opcional)**: `[exploration].verify_on_hit`
+  embute a afirmação-chave do mapa (`## Conexões`, extraída por
+  `claim_text`) e busca contra os vetores de chunk ATUAIS do projeto
+  (`cos ≈ 1 − L2²/2`); evidência fraca (`grounding_min_similarity`,
+  default 0.25) força `stale` com motivo granular — captura drift semântico
+  que âncoras de hash não veem. Teste determinístico com limiar estrito.
+- **Config `[exploration]`** (`enabled`, `hit_high`, `hit_low`,
+  `max_age_days`, `contradiction_limit`, `verify_on_hit`,
+  `grounding_min_similarity`) e `AppState.exploration_vector_store`
+  (construtor `with_vector_stores`).
+- 4 testes de handler cobrindo validação/unresolved paths, staleness read-time,
+  auto-retire por contradições e modos de invalidação.
+
 ### Changed (plan 021 — RLM à prova de falha e deduplicação)
 - **`handle_complete_rlm_job` transacional:** o handler agora usa
   `Storage::complete_rlm_job_with_node` — validação de lease/geração, upsert do

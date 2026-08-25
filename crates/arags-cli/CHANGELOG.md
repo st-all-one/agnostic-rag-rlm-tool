@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added — plan 022: comando `arags explore`
+- **`explore search "<query>"`** (`--project/--limit/--include-stale`): busca
+  semântica de mapas persistidos; render text/json com status, confidence e
+  stale_reason granular.
+- **`explore persist --map FILE|-`**: valida o contrato EXPLORATIONS.md
+  localmente (`parse_contract`: header goal/files obrigatórios + seções
+  Mapa/Conexões/Evidências/Limitações; summary derivado do primeiro parágrafo
+  do Mapa), dedup de `--paths` extras, stdin suportado.
+- **`explore feedback <id> --confirm|--contradict`**: loop de verificação do
+  consumidor; imprime contadores e aposentadoria automática.
+- 5 testes novos (parser happy/rejeições/tolerante + rendering).
+
 ### Changed (plan 021 — split do dispatch e upload comprimido)
 - **`dispatch/server.rs` (1116 linhas) dividido por responsabilidade** em
   `dispatch/{mod,index,discover,projects,watch_daemon,search,memory_history,init}.rs`

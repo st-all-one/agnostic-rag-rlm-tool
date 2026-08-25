@@ -7,6 +7,17 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added — plan 022: modelo puro de explorações
+- **Novo `src/exploration.rs`**: `ExplorationPayload` (serde tolerante, fonte
+  única client/server/storage), consts de domínio (`STATUS_*`, `ROLE_*`,
+  `TEMPLATE_VERSION_V1`) e o **modelo de confiança**: `ConfidenceConfig` com
+  defaults conservadores (precision > recall), `classify()` com limiares
+  duplos (`hit_high`/`hit_low`) e `confidence_score()` — função pura
+  `sim × drift × age + feedback` com floors de degradação e conversões exatas
+  saturadas em 2^24. 7 testes unitários (`exploration/tests.rs`) +
+  5 proptests de monotonicidade/boundedness
+  (`tests/exploration_proptest.rs`; dev-dep `proptest` adicionada).
+
 ### Added (plan 021 — fonte única de verdade do domínio RLM)
 - `src/rlm.rs` — constantes e payload compartilhados entre client (volunteer),
   server e storage, antes duplicados em 3 crates:

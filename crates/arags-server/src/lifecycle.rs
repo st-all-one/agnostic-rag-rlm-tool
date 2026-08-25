@@ -74,12 +74,24 @@ pub async fn run() -> Result<()> {
         }
     };
 
+    let exploration_vector_store = match arags_storage::ExplorationVectorStore::open(
+        &config.data_dir,
+        crate::state::embedder_dimension(),
+    ) {
+        Ok(store) => Some(Arc::new(store)),
+        Err(e) => {
+            tracing::warn!(error = %e, "exploration vector store unavailable, map search disabled");
+            None
+        }
+    };
+
     run_server(
         config,
         storage,
         vector_store,
         question_vector_store,
         rlm_vector_store,
+        exploration_vector_store,
     )
     .await
 }
@@ -95,13 +107,15 @@ pub async fn run_server(
     vector_store: Option<Arc<VectorStore>>,
     question_vector_store: Option<Arc<QuestionVectorStore>>,
     rlm_vector_store: Option<Arc<arags_storage::RlmVectorStore>>,
+    exploration_vector_store: Option<Arc<arags_storage::ExplorationVectorStore>>,
 ) -> Result<()> {
-    let state = AppState::with_rlm_vectors(
+    let state = AppState::with_vector_stores(
         storage.clone(),
         config.clone(),
         vector_store,
         question_vector_store,
         rlm_vector_store,
+        exploration_vector_store,
     )?;
 
     let grpc_service = AragsServiceServer::new(AragsGrpcService::new(state));

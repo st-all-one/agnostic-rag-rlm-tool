@@ -3,6 +3,7 @@ pub mod cache;
 pub mod chunks;
 pub mod conn;
 pub mod entities;
+pub mod explorations;
 pub mod findings;
 pub mod history;
 pub mod patterns;

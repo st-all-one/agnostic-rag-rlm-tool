@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — plan 022: RPCs de explorações
+- **`proto/exploration.proto`**: `FeedbackKind`, `PersistExploration*`
+  (contrato completo; resposta traz `unresolved_paths`),
+  `SearchExplorations*` com `ExplorationHit` (confidence/similarity/status/
+  stale_reason/epoch_drift/feedback), `GetExplorationById*` (body completo +
+  âncoras), `FeedbackExploration*` e `InvalidateExploration*` reusando
+  `InvalidateMode`.
+- Cinco novos RPCs registrados no `service.proto`; import no `build.rs`.
+- Testes de contrato: mensagens round-trip e reuso do modo de invalidação.
+
 ### Removed (limpeza pós-019/020) — BREAKING
 - `session.proto` inteiro + RPCs `CreateSession`/`ListSessions`/`GetSession`/
   `AddSessionTurn` do `AragsService` — superfície órfã desde o plan 019.

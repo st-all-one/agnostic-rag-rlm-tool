@@ -57,6 +57,12 @@ ocorre no cliente (`arags-cli`) via o LLM do usuário.
     admin submete auto-aprovado), job status (poll cooperativo de cancelamento),
     review (admin; rejeição re-enfileira com prioridade elevada) e list nodes.
     Imports explícitos do proto (sem globs).
+  - `grpc/exploration/` — **plan 022:** RPCs do dataset de explorações
+    (`mod.rs` persist+validação, `search.rs` pipeline read-time,
+    `feedback.rs` confirm/contradict + invalidação admin); hook pós-index
+    bumpa `project_epochs` e marca mapas stale por âncora. Knobs em
+    `[exploration]`; testes em `grpc/exploration/tests.rs` +
+    `tests_feedback.rs`.
   - `grpc/error.rs` — mapeamento erro→`Status` (`internal`/`not_found`/...).
 - `src/maintenance.rs` — consolidação/decay agendados (cron) + RPC admin.
 - `src/indexing.rs` — chunking determinístico (hash, linguagem, classificação).
