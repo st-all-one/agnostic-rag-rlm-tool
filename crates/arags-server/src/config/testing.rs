@@ -39,6 +39,9 @@ mod tests {
             Some("0.0.0.0:9998".to_owned()),
             Some("/tmp/arags-override".to_owned()),
             Some("/models".to_owned()),
+            None,
+            None,
+            None,
         );
 
         assert_eq!(cfg.listen_addr, "0.0.0.0:9998");

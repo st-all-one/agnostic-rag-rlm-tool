@@ -104,3 +104,35 @@ fn test_glob_match_basics() {
     assert!(glob_match("a/**/c", "a/x/y/c"));
     assert!(glob_match("**", "x/y/z"));
 }
+
+#[test]
+fn nested_unanchored_star_never_leaks_outside_base() {
+    // Regression (agnostic-rlm-rs-4d4d): Laravel's bootstrap/cache/.gitignore
+    // contains a bare `*`; it must only govern paths under bootstrap/cache/,
+    // never wipe the whole project index.
+    let star = parse_line("*", Path::new("bootstrap/cache")).expect("rule");
+    assert!(!star.matches("index.php", false));
+    assert!(!star.matches("app/Models/User.php", false));
+    assert!(!star.matches("readme.md", false));
+    assert!(star.matches("bootstrap/cache/views/a.php", false));
+
+    let keep = parse_line("!.gitkeep", Path::new("bootstrap/cache")).expect("rule");
+    assert!(keep.matches("bootstrap/cache/.gitkeep", false));
+    assert!(!keep.matches(".gitkeep", false), "negation is also base-scoped");
+}
+
+#[test]
+fn nested_anchored_rule_scoped_to_base() {
+    let r = parse_line("/junk", Path::new("storage/app")).expect("rule");
+    assert!(r.matches("storage/app/junk", true));
+    assert!(r.matches("storage/app/junk/inner.txt", false));
+    assert!(!r.matches("junk", true), "same name at root: outside base");
+    assert!(!r.matches("other/storage/app/junk", true));
+}
+
+#[test]
+fn root_gitignore_still_governs_everything() {
+    let r = parse_line("*.log", Path::new(".")).expect("rule");
+    assert!(r.matches("a.log", false));
+    assert!(r.matches("deep/nested/b.log", false));
+}

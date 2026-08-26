@@ -47,7 +47,10 @@ pub(crate) async fn handle_claim_rlm_job(
     let username = ctx.username.clone();
     let claimed = store::blocking(move || storage.claim_rlm_job(&username, lease_ms, max_level))
         .await
-        .map_err(internal)?;
+        .map_err(|e| {
+            tracing::error!(error = ?e, "claim_rlm_job failed");
+            internal(e)
+        })?;
 
     Ok(Response::new(match claimed {
         Some(job) => ClaimRlmJobResponse {

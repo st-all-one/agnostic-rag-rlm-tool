@@ -11,7 +11,6 @@ use std::path::Path;
 use std::time::Instant;
 
 use arags_storage::VectorEntry;
-use futures::stream::{self, StreamExt};
 use tonic::{Request, Response, Status, Streaming};
 
 use arags_proto::proto::index_chunk;
@@ -22,10 +21,6 @@ use crate::state::AppState;
 use crate::store;
 
 use arags_proto::proto::{IndexChunk, IndexFile, IndexResponse};
-
-/// Default number of concurrent embedding batches when `ARAGS_INDEX_CONCURRENCY`
-/// is unset.
-const DEFAULT_INDEX_CONCURRENCY: usize = 4;
 
 /// Rough tokens-per-line heuristic used to translate the `[embedder]`
 /// `max_tokens`/`overlap_tokens` token budget into a line-based chunk budget
@@ -68,8 +63,16 @@ pub(crate) async fn handle_index_project(
 
     let mut project: Option<String> = None;
     let mut buffer_id: Option<i64> = None;
-    let mut chunks: Vec<(String, Vec<indexing::IndexedChunk>)> = Vec::new();
+    let mut total_chunks: usize = 0;
     let mut distinct_files: usize = 0;
+    // Hashes (`chunk_id`, content_hash) of every persisted chunk, kept small for
+    // the RLM/exploration staleness hooks below. The full chunk text is NOT
+    // retained: each file is chunked, inserted and embedded inline, then its
+    // content is dropped, so peak memory stays bounded to a single file. This
+    // fixes the all-repo OOM that accumulated every file's bytes in `chunks`
+    // for the whole stream (agnostic-rlm-rs-5124).
+    let mut persisted_all: Vec<(i64, String)> = Vec::new();
+    let mut phase0: Option<(Vec<i64>, usize)> = None;
 
     while let Some(msg) = stream.message().await.map_err(internal)? {
         match msg.body {
@@ -78,8 +81,34 @@ pub(crate) async fn handle_index_project(
                 let pid = store::ensure_project(&state.storage, &init.project, &init.root_path)
                     .map_err(internal)?;
                 buffer_id = Some(pid);
+
+                // Phase 0 (stopgap for `agnostic-rlm-rs-20cd`): a re-index must
+                // *replace*, not *append*. Delete the buffer's existing chunks
+                // (cascade) and purge their vectors once before streaming, so
+                // counts stay stable across repeated indexes.
+                let storage = state.storage.clone();
+                let (existing_ids, deleted_files) =
+                    store::blocking(move || store::delete_chunks_for_buffer(&storage, pid))
+                        .await
+                        .map_err(internal)?;
+                if !existing_ids.is_empty() {
+                    if let Some(vs) = &state.vector_store {
+                        let ids_u64: Vec<u64> =
+                            existing_ids.iter().map(|i| *i as u64).collect();
+                        if let Err(e) = vs.delete_chunk_ids(&ids_u64).await {
+                            tracing::warn!(
+                                error = ?e,
+                                buffer_id = pid,
+                                "failed to purge vectors on re-index; semantic results may be stale until rebuild"
+                            );
+                        }
+                    }
+                }
+                phase0 = Some((existing_ids, deleted_files));
             }
             Some(index_chunk::Body::File(file)) => {
+                let bid = buffer_id
+                    .ok_or_else(|| Status::invalid_argument("file message before init"))?;
                 let content = decode_content(&file)?;
                 // The server owns chunking (plan 020, D2): derive a line budget
                 // from the `[embedder]` token budget so the config is not dead.
@@ -91,8 +120,76 @@ pub(crate) async fn handle_index_project(
                     max_lines,
                     overlap,
                 );
+                if chunk_list.is_empty() {
+                    continue;
+                }
                 distinct_files += 1;
-                chunks.push((file.rel_path.clone(), chunk_list));
+                total_chunks += chunk_list.len();
+
+                // Phase 1: persist this file's chunks (transactional, bounded)
+                // instead of buffering the whole repo (agnostic-rlm-rs-5124).
+                let rel_path = file.rel_path.clone();
+                let max_batch = state.config.max_batch_size.max(1);
+                let persisted = store::blocking({
+                    let storage = state.storage.clone();
+                    move || {
+                        let flat: Vec<(&str, &indexing::IndexedChunk)> = chunk_list
+                            .iter()
+                            .map(|c| (rel_path.as_str(), c))
+                            .collect();
+                        store::insert_chunks_batched(&storage, bid, &flat, max_batch)
+                    }
+                })
+                .await
+                .map_err(internal)?;
+                persisted_all.extend(persisted.iter().cloned());
+
+                // Phase 2: embed + persist vectors, bounded to this file.
+                if let Some(vector_store) = &state.vector_store {
+                    let embed_batch = state.config.embedder.batch_size.max(1);
+                    let embedder = state.embedder.clone();
+                    let buffer_id_u = u64::try_from(bid).unwrap_or(u64::MAX);
+                    for batch in persisted.chunks(embed_batch) {
+                        let owned_batch: Vec<(i64, String)> = batch.to_vec();
+                        let emb = embedder.clone();
+                        let bid_u = buffer_id_u;
+                        let out = tokio::task::spawn_blocking(move || {
+                            let t0 = Instant::now();
+                            let batch_len = owned_batch.len();
+                            let texts: Vec<&str> =
+                                owned_batch.iter().map(|(_, t)| t.as_str()).collect();
+                            let res = emb.embed_batch(&texts).map(|vectors| {
+                                owned_batch
+                                    .into_iter()
+                                    .zip(vectors)
+                                    .map(|((cid, _), v)| VectorEntry {
+                                        chunk_id: u64::try_from(cid).unwrap_or(u64::MAX),
+                                        buffer_id: bid_u,
+                                        vector: v,
+                                    })
+                                    .collect::<Vec<_>>()
+                            });
+                            let elapsed_ms = t0.elapsed().as_millis();
+                            match &res {
+                                Ok(_) => {
+                                    tracing::debug!(batch_len, elapsed_ms, "embedded index batch");
+                                }
+                                Err(e) => tracing::warn!(error = %e, "batch embedding failed"),
+                            }
+                            res
+                        })
+                        .await
+                        .map_err(|e| Status::internal(format!("embedding task failed: {e}")))?;
+                        match out {
+                            Ok(entries) => {
+                                if let Err(e) = vector_store.insert_vectors(&entries).await {
+                                    tracing::error!(error = %e, "failed to persist vectors, indexing continues");
+                                }
+                            }
+                            Err(e) => tracing::warn!(error = %e, "batch embedding failed"),
+                        }
+                    }
+                }
             }
             None => {}
         }
@@ -102,83 +199,22 @@ pub(crate) async fn handle_index_project(
         .ok_or_else(|| Status::invalid_argument("index stream did not send an init message"))?;
     let buffer_id =
         buffer_id.ok_or_else(|| Status::invalid_argument("index stream missing init"))?;
+    let (existing_ids, deleted_files) = phase0.unwrap_or_default();
+    let removed = existing_ids.len();
+    let net_chunks = (total_chunks as i64).saturating_sub(removed as i64);
+    let net_files = (distinct_files as i64).saturating_sub(deleted_files as i64);
+    tracing::info!(
+        project = %project,
+        buffer_id,
+        old_chunks = removed,
+        net_chunks,
+        elapsed_ms = start.elapsed().as_millis(),
+        "purged buffer before re-index (stopgap agnostic-rlm-rs-20cd)"
+    );
 
-    let total_chunks: usize = chunks.iter().map(|(_, cs)| cs.len()).sum();
-
-    // Phase 1: persist chunks + texts + FTS + entities in transactional
-    // batches of `max_batch_size` (plan 020).
-    let storage = state.storage.clone();
-    let max_batch = state.config.max_batch_size.max(1);
-    let persisted: Vec<(i64, String)> = store::blocking(move || {
-        let flat: Vec<(&str, &indexing::IndexedChunk)> = chunks
-            .iter()
-            .flat_map(|(file, cs)| cs.iter().map(move |c| (file.as_str(), c)))
-            .collect();
-        store::insert_chunks_batched(&storage, buffer_id, &flat, max_batch)
-    })
-    .await
-    .map_err(internal)?;
-
-    // Phase 2: persist vectors to LanceDB when available.
-    if let Some(vector_store) = &state.vector_store {
-        // Batch size comes from `server.toml [embedder].batch_size` (plan 020);
-        // concurrency stays env-tunable so Docker images can be dialed to match
-        // OLLAMA_NUM_PARALLEL without a rebuild (see OLLAMA_EMBED_PROPOSED.md).
-        let embed_batch = state.config.embedder.batch_size.max(1);
-        let concurrency = std::env::var("ARAGS_INDEX_CONCURRENCY")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .unwrap_or(DEFAULT_INDEX_CONCURRENCY)
-            .max(1);
-
-        let embedder = state.embedder.clone();
-        let buffer_id_u = u64::try_from(buffer_id).unwrap_or(u64::MAX);
-
-        // Split the persisted chunks into batches and embed each batch
-        // concurrently. Candle inference on CPU is synchronous, so each
-        // batch runs inside `spawn_blocking`; `buffer_unordered` bounds the
-        // number of in-flight blocking tasks to `concurrency`.
-        let batches: Vec<Vec<(i64, String)>> =
-            persisted.chunks(embed_batch).map(|c| c.to_vec()).collect();
-
-        let results = stream::iter(batches)
-            .map(|batch| {
-                let emb = embedder.clone();
-                tokio::task::spawn_blocking(move || {
-                    let texts: Vec<&str> = batch.iter().map(|(_, c)| c.as_str()).collect();
-                    emb.embed_batch(&texts).map(|vectors| {
-                        // `embed_batch` preserves input order, so zipping is safe.
-                        batch
-                            .into_iter()
-                            .zip(vectors)
-                            .map(|((cid, _), v)| VectorEntry {
-                                chunk_id: u64::try_from(cid).unwrap_or(u64::MAX),
-                                buffer_id: buffer_id_u,
-                                vector: v,
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                })
-            })
-            .buffer_unordered(concurrency)
-            .collect::<Vec<_>>()
-            .await;
-
-        let mut entries: Vec<VectorEntry> = Vec::with_capacity(persisted.len());
-        for r in results {
-            match r {
-                Ok(Ok(mut ves)) => entries.append(&mut ves),
-                Ok(Err(e)) => tracing::warn!(error = %e, "batch embedding failed"),
-                Err(e) => tracing::warn!(error = %e, "embedding task panicked"),
-            }
-        }
-
-        if let Err(e) = vector_store.insert_vectors(&entries).await {
-            tracing::error!(error = %e, "failed to persist vectors, indexing continues");
-        }
-    }
-
-    // Phase 3: bump aggregate counts by this stream's contribution.
+    // Phase 3: bump aggregate counts by this stream's *net* contribution so a
+    // re-index (which deleted `old_chunks` in Phase 0) keeps totals stable
+    // instead of double-counting.
     let storage = state.storage.clone();
     let embedding_model = state.embedder.name().to_string();
     let embedding_dims = state.embedder.dimensions() as i64;
@@ -186,8 +222,8 @@ pub(crate) async fn handle_index_project(
         store::increment_buffer_counts(
             &storage,
             buffer_id,
-            i64::try_from(total_chunks).unwrap_or(i64::MAX),
-            i64::try_from(distinct_files).unwrap_or(i64::MAX),
+            net_chunks,
+            net_files,
             &embedding_model,
             embedding_dims,
         )
@@ -232,7 +268,7 @@ pub(crate) async fn handle_index_project(
     // in this run — the same hash-driven staleness the QA cache applies. Stale
     // nodes stop surfacing in summary search until volunteers reprocess them.
     if state.config.rlm.enabled {
-        let changed: Vec<String> = persisted.iter().map(|(_, h)| h.clone()).collect();
+        let changed: Vec<String> = persisted_all.iter().map(|(_, h)| h.clone()).collect();
         let storage = state.storage.clone();
         match store::blocking(move || storage.mark_rlm_stale_by_hashes(buffer_id, &changed)).await {
             Ok(affected) if !affected.is_empty() => {
@@ -246,7 +282,7 @@ pub(crate) async fn handle_index_project(
     // Phase 5 (RLM): enqueue L1 summary work for the files touched by this
     // stream. Cancellations for claimed jobs ride on the generation bump.
     if state.config.rlm.enabled {
-        let chunk_ids: Vec<i64> = persisted
+        let chunk_ids: Vec<i64> = persisted_all
             .iter()
             .filter_map(|(id, _)| i64::try_from(*id).ok())
             .collect();

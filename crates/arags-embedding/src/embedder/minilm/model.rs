@@ -243,26 +243,29 @@ impl MiniLmModel {
         let batch = ids_2d.len();
         let seq_len = ids_2d.first().map_or(0, Vec::len);
 
-        // Per-row lookup then stack: candle's index_select needs 1-D indices.
-        let mut rows = Vec::with_capacity(batch);
-        for row in &ids_2d {
-            let idx = Tensor::from_vec(row.clone(), (row.len(),), input_ids.device())
-                .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
-            rows.push(
-                self.word_embeddings
-                    .index_select(&idx, 0)
-                    .map_err(|e| EmbeddingError::Candle(e.to_string()))?,
-            );
-        }
-        let word_emb = if batch == 1 {
-            rows.remove(0)
-        } else {
-            Tensor::stack(&rows, 0).map_err(|e| EmbeddingError::Candle(e.to_string()))?
-        };
+        // Batched embedding lookup: flatten every token id into a single 1-D
+        // index and do one `index_select` instead of looping per row (candle
+        // needs 1-D indices). `prepare_inputs` pads all rows to `seq_len`, so the
+        // flat result reshapes straight back to `[B, S, H]`.
+        let flat: Vec<u32> = ids_2d.into_iter().flatten().collect();
+        let flat_len = flat.len();
+        let flat_idx = Tensor::from_vec(flat, (flat_len,), input_ids.device())
+            .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
+        let word_emb = self
+            .word_embeddings
+            .index_select(&flat_idx, 0)
+            .map_err(|e| EmbeddingError::Candle(e.to_string()))?
+            .reshape((batch, seq_len, self.hidden_size))
+            .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
 
-        // BERT positions start at padding_idx + 1 (= 1).
+        // BERT position embeddings are 0-based: position i uses row i of the
+        // `position_embeddings` table (size `max_position_embeddings`, indices
+        // 0..=seq_len-1). A 1-based range overshoots the table by one for any
+        // sequence that reaches `max_position_embeddings` (e.g. 512), causing
+        // `index-select invalid index 512` and silently shifting positions for
+        // every shorter sequence.
         #[allow(clippy::cast_possible_truncation)]
-        let position_ids = Tensor::arange(1u32, seq_len as u32 + 1, input_ids.device())
+        let position_ids = Tensor::arange(0u32, seq_len as u32, input_ids.device())
             .map_err(|e| EmbeddingError::Candle(e.to_string()))?;
         let pos_emb = self
             .position_embeddings

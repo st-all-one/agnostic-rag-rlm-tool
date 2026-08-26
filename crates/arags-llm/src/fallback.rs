@@ -69,6 +69,10 @@ impl LlmBackend for ModelFallback {
         self.primary.name()
     }
 
+    fn default_model(&self) -> Option<String> {
+        self.primary.default_model()
+    }
+
     async fn health_check(&self) -> Result<(), LlmError> {
         self.primary.health_check().await
     }

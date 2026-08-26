@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use arags_storage::Storage;
-use rusqlite::params;
+use rusqlite::{params, params_from_iter};
 
 /// Insert a chunk row using the real `chunks` schema and return its id.
 ///
@@ -287,4 +287,86 @@ pub fn insert_chunks_batched(
     })?;
 
     Ok(out)
+}
+
+/// Delete every chunk belonging to `buffer_id`, cascading to `chunks_fts`,
+/// `chunk_texts` and `chunk_entities`, and return the deleted chunk ids together
+/// with the number of distinct files they covered.
+///
+/// This is the re-index stopgap for `agnostic-rlm-rs-20cd`: calling it before
+/// [`insert_chunks_batched`] makes a repeated `IndexProject` *replace* rather
+/// than *append*, keeping chunk/FTS/vector counts stable. The durable fix is
+/// immutable versioned writes (`agnostic-rlm-rs-8dcc`).
+///
+/// Pool-safe: runs through [`arags_storage::Storage::connection`], so it works in
+/// both single and pooled (server) modes.
+///
+/// # Errors
+///
+/// Returns an error if the transaction fails.
+pub fn delete_chunks_for_buffer(storage: &Storage, buffer_id: i64) -> Result<(Vec<i64>, usize)> {
+    let conn = storage
+        .connection()
+        .context("failed to acquire connection")?;
+
+    conn.execute(|conn| {
+        // Snapshot ids + files before deleting so we can report them and the
+        // caller can purge the matching vectors.
+        let (ids, distinct_files) = {
+            let mut stmt = conn
+                .prepare("SELECT id, file_path FROM chunks WHERE buffer_id = ?1")
+                .context("prepare select chunks for buffer")?;
+            let rows = stmt
+                .query_map(params![buffer_id], |r| {
+                    Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+                })
+                .context("query chunks for buffer")?
+                .filter_map(std::result::Result::ok)
+                .collect::<Vec<_>>();
+            let mut files = std::collections::HashSet::new();
+            for (_, fp) in &rows {
+                files.insert(fp.clone());
+            }
+            let ids: Vec<i64> = rows.into_iter().map(|(id, _)| id).collect();
+            (ids, files.len())
+        };
+
+        if ids.is_empty() {
+            return Ok((ids, distinct_files));
+        }
+
+        let placeholders = (1..=ids.len())
+            .map(|i| format!("?{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        conn.execute(
+            &format!("DELETE FROM chunks_fts WHERE rowid IN ({placeholders})"),
+            params_from_iter(ids.iter()),
+        )
+        .context("delete chunks_fts for buffer")?;
+        conn.execute(
+            &format!("DELETE FROM chunk_texts WHERE chunk_id IN ({placeholders})"),
+            params_from_iter(ids.iter()),
+        )
+        .context("delete chunk_texts for buffer")?;
+        conn.execute(
+            &format!("DELETE FROM chunk_entities WHERE chunk_id IN ({placeholders})"),
+            params_from_iter(ids.iter()),
+        )
+        .context("delete chunk_entities for buffer")?;
+        conn.execute(
+            "DELETE FROM chunks WHERE buffer_id = ?1",
+            params![buffer_id],
+        )
+        .context("delete chunks for buffer")?;
+
+        // NOTE: `entities_fts` may retain orphan entity rows for entities that
+        // only appeared in this buffer; they are benign (entity search joins
+        // through `chunk_entities`, which is now empty for them) and are
+        // reconciled by the maintenance sweep (plan 49d6).
+
+        Ok((ids, distinct_files))
+    })
+    .context("failed to delete chunks for buffer (cascade)")
 }

@@ -44,3 +44,15 @@ zstd.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[features]
+# No embedding backend is enabled by default: the shipped binary uses the
+# in-process candle `Minilm` embedder (portable, no C++/Vulkan toolchain), and
+# `kind = "ollama"` is available for GPU via a local Ollama daemon. The
+# self-contained `llama.cpp` + Vulkan backend is OPT-IN — it requires a Vulkan
+# SDK (and a Vulkan device at runtime) to build, so it must NOT be in the
+# default feature set, otherwise `cargo build`/CI/Docker break (no cmake/Vulkan
+# in Alpine, fragile cross-compiles, non-portable release binaries).
+default = []
+llamacpp = ["arags-embedding/llamacpp"]
+llamacpp-vulkan = ["arags-embedding/llamacpp-vulkan"]

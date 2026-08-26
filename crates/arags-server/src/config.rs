@@ -233,11 +233,40 @@ fn dirs() -> Option<PathBuf> {
 /// All of this is configured exclusively here — the client has no data config.
 #[derive(Debug, Clone, Deserialize)]
 pub struct EmbedderConfig {
+    /// Backend selector. Default (no `kind`): candle `Minilm` when its weights
+    /// are present, otherwise the hash fallback — this keeps the shipped binary
+    /// portable (no C++/Vulkan toolchain). To accelerate on a GPU with zero
+    /// external daemon, build the server with `--features llamacpp-vulkan`,
+    /// point `llama_cpp_model` at a GGUF, and set `kind = "llamacpp"`. The
+    /// simpler GPU path is `kind = "ollama"` (local Ollama daemon, e.g.
+    /// `all-minilm:22m`), which needs no special build. `lightweight` is a test
+    /// fixture.
+    #[serde(default)]
+    pub kind: Option<String>,
+
     /// Checkpoint directory (`model.safetensors` + `tokenizer.json`, as
     /// shipped by `sentence-transformers/all-MiniLM-L6-v2`). Without weights
     /// the server degrades to a hash embedder (no semantic search).
     #[serde(default)]
     pub model_dir: Option<PathBuf>,
+
+    /// Base URL of the Ollama daemon (`kind = "ollama"`).
+    #[serde(default)]
+    pub ollama_url: Option<String>,
+
+    /// Ollama model name (`kind = "ollama"`).
+    #[serde(default)]
+    pub ollama_model: Option<String>,
+
+    /// Path to a GGUF model (`kind = "llamacpp"`). Runs in-process via
+    /// `llama.cpp` + Vulkan on the iGPU — no external daemon required.
+    #[serde(default)]
+    pub llama_cpp_model: Option<PathBuf>,
+
+    /// Layers to offload to the GPU for `kind = "llamacpp"` (`99` = all,
+    /// `0` = CPU only).
+    #[serde(default)]
+    pub llama_cpp_gpu_layers: Option<u32>,
 
     /// Weight quantization: `int8` (default, best speed/memory/quality
     /// balance) or `none` (f32).
@@ -279,7 +308,12 @@ fn default_cache_enabled() -> bool {
 impl Default for EmbedderConfig {
     fn default() -> Self {
         Self {
+            kind: None,
             model_dir: None,
+            ollama_url: None,
+            ollama_model: None,
+            llama_cpp_model: None,
+            llama_cpp_gpu_layers: None,
             batch_size: default_batch_size(),
             quantization: None,
             max_tokens: default_max_tokens(),
@@ -463,15 +497,32 @@ impl ServerConfig {
     }
 
     /// Apply the `ARAGS_SERVER_ADDR` / `ARAGS_DATA_DIR` /
-    /// `ARAGS_EMBEDDER_MODEL_DIR` environment overrides (plan 020 keeps them
-    /// as ops escape hatches over the file; the model dir one lets container
-    /// images bake or mount checkpoints without a config file).
+    /// `ARAGS_EMBEDDER_MODEL_DIR` / `ARAGS_EMBEDDER_KIND` /
+    /// `ARAGS_EMBEDDER_OLLAMA_URL` / `ARAGS_EMBEDDER_OLLAMA_MODEL` /
+    /// `ARAGS_EMBEDDER_LLAMACPP_MODEL` / `ARAGS_EMBEDDER_LLAMACPP_GPU_LAYERS`
+    /// environment overrides (plan 020 keeps them as ops escape hatches over
+    /// the file; the model dir one lets container images bake or mount
+    /// checkpoints without a config file).
     #[must_use]
     pub fn with_env_overrides(self) -> Self {
         let addr = std::env::var("ARAGS_SERVER_ADDR").ok();
         let data_dir = std::env::var("ARAGS_DATA_DIR").ok();
         let model_dir = std::env::var("ARAGS_EMBEDDER_MODEL_DIR").ok();
-        self.with_overrides(addr, data_dir, model_dir)
+        let kind = std::env::var("ARAGS_EMBEDDER_KIND").ok();
+        let ollama_url = std::env::var("ARAGS_EMBEDDER_OLLAMA_URL").ok();
+        let ollama_model = std::env::var("ARAGS_EMBEDDER_OLLAMA_MODEL").ok();
+        let llama_cpp_model = std::env::var("ARAGS_EMBEDDER_LLAMACPP_MODEL").ok();
+        let llama_cpp_gpu_layers = std::env::var("ARAGS_EMBEDDER_LLAMACPP_GPU_LAYERS").ok();
+        let mut s = self.with_overrides(addr, data_dir, model_dir, kind, ollama_url, ollama_model);
+        if let Some(m) = llama_cpp_model {
+            s.embedder.llama_cpp_model = Some(PathBuf::from(m));
+        }
+        if let Some(g) = llama_cpp_gpu_layers {
+            if let Ok(n) = g.parse::<u32>() {
+                s.embedder.llama_cpp_gpu_layers = Some(n);
+            }
+        }
+        s
     }
 
     /// Pure core of [`Self::with_env_overrides`] (testable without touching
@@ -482,6 +533,9 @@ impl ServerConfig {
         addr: Option<String>,
         data_dir: Option<String>,
         model_dir: Option<String>,
+        kind: Option<String>,
+        ollama_url: Option<String>,
+        ollama_model: Option<String>,
     ) -> Self {
         if let Some(addr) = addr {
             self.listen_addr = addr;
@@ -491,6 +545,15 @@ impl ServerConfig {
         }
         if let Some(dir) = model_dir {
             self.embedder.model_dir = Some(PathBuf::from(dir));
+        }
+        if let Some(kind) = kind {
+            self.embedder.kind = Some(kind);
+        }
+        if let Some(url) = ollama_url {
+            self.embedder.ollama_url = Some(url);
+        }
+        if let Some(model) = ollama_model {
+            self.embedder.ollama_model = Some(model);
         }
         self
     }

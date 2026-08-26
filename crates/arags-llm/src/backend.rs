@@ -107,9 +107,19 @@ impl GenericBackend {
 #[async_trait]
 impl LlmBackend for GenericBackend {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse, LlmError> {
-        let model = request.model.clone();
+        // Honour a caller-supplied model, but fall back to the backend's
+        // configured default (e.g. `[[llm.backends]].model`) when the request
+        // leaves it empty — otherwise providers like Ollama 404 on a bare
+        // `model ''` / hardcoded family default.
+        let resolved_model = if request.model.trim().is_empty() {
+            self.config.model.clone().unwrap_or_default()
+        } else {
+            request.model.clone()
+        };
+        let mut request = request;
+        request.model = resolved_model.clone();
         let payload = self.config.family.build_request(&request);
-        let url = self.completions_url(&model);
+        let url = self.completions_url(&resolved_model);
         let headers = self.auth_headers();
         let family = self.config.family;
         request_completion(
@@ -119,13 +129,17 @@ impl LlmBackend for GenericBackend {
             &payload,
             &self.retry_config,
             move |_, body| family.error_message(body),
-            move |body| family.parse_response(&model, body),
+            move |body| family.parse_response(&resolved_model, body),
         )
         .await
     }
 
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn default_model(&self) -> Option<String> {
+        self.config.model.clone()
     }
 
     async fn health_check(&self) -> Result<(), LlmError> {

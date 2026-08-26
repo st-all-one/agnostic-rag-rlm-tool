@@ -38,38 +38,135 @@ pub struct AppState {
 }
 
 /// Build the embedder from the `[embedder]` section of `server.toml`:
-/// the native all-`MiniLM`-L6-v2 checkpoint at `model_dir` when present,
-/// else a hash fallback.
+/// a local Ollama daemon (`kind = "ollama"`, e.g. `all-minilm:22m`), the
+/// native all-`MiniLM`-L6-v2 checkpoint at `model_dir` (candle, default), or
+/// a hash fallback when no usable backend is configured.
 fn load_embedder(cfg: &crate::config::EmbedderConfig) -> Arc<dyn Embedder + Send + Sync> {
-    if let Some(dir) = cfg.model_dir.clone().map(PathBuf::from) {
-        if dir.join("model.safetensors").exists() {
-            // Quantize to INT8 by default: `QMatMul` runs `MiniLM` at a
-            // fraction of the f32 CPU/RAM cost with negligible quality loss.
-            let quant = cfg.resolved_quantization();
-            match MinilmEmbedder::new(&dir, quant) {
+    use arags_embedding::embedder::{EmbeddingConfig, EmbeddingModel};
+
+    let kind = cfg.kind.clone().unwrap_or_else(|| {
+        // Default (portable) backend: candle `Minilm` when its weights are
+        // present, otherwise the hash fallback. The self-contained llama.cpp
+        // backend is opt-in via explicit `kind = "llamacpp"` (built with the
+        // `llamacpp`/`llamacpp-vulkan` feature) so the shipped binary stays
+        // free of the C++/Vulkan toolchain.
+        if cfg
+            .model_dir
+            .as_ref()
+            .is_some_and(|d| PathBuf::from(d).join("model.safetensors").exists())
+        {
+            "minilm".to_string()
+        } else {
+            "fallback".to_string()
+        }
+    });
+
+    match kind.as_str() {
+        "ollama" => {
+            let embed_cfg = EmbeddingConfig {
+                model: EmbeddingModel::Ollama,
+                model_dir: None,
+                quantization: cfg.resolved_quantization(),
+                ollama_url: cfg.ollama_url.clone(),
+                ollama_model: cfg.ollama_model.clone(),
+                #[cfg(feature = "llamacpp")]
+                llama_cpp_model: None,
+                #[cfg(feature = "llamacpp")]
+                llama_cpp_gpu_layers: 99,
+            };
+            match arags_embedding::embedder::build_embedder(&embed_cfg) {
                 Ok(embedder) => {
                     tracing::info!(
-                        model_dir = %dir.display(),
-                        ?quant,
-                        "loaded all-MiniLM-L6-v2 embedder"
+                        model = embedder.name(),
+                        dims = embedder.dimensions(),
+                        "loaded ollama embedder"
                     );
-                    return Arc::new(embedder);
+                    return embedder;
                 }
                 Err(err) => {
                     tracing::warn!(
                         error = %err,
-                        "`MiniLM` load failed, falling back to hash embedder"
+                        "ollama embedder failed to load; using hash embedder"
                     );
                 }
             }
-        } else {
-            tracing::warn!(
-                model_dir = %dir.display(),
-                "model.safetensors missing in [embedder].model_dir; using hash embedder"
-            );
         }
-    } else {
-        tracing::warn!("[embedder] without model_dir; using hash embedder");
+        "minilm" => {
+            if let Some(dir) = cfg.model_dir.clone().map(PathBuf::from) {
+                if dir.join("model.safetensors").exists() {
+                    let quant = cfg.resolved_quantization();
+                    match MinilmEmbedder::new(&dir, quant) {
+                        Ok(embedder) => {
+                            tracing::info!(
+                                model_dir = %dir.display(),
+                                ?quant,
+                                "loaded minilm embedder"
+                            );
+                            return Arc::new(embedder);
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                error = %err,
+                                "`MiniLM` load failed, falling back to hash embedder"
+                            );
+                        }
+                    }
+                } else {
+                    tracing::warn!(
+                        model_dir = %dir.display(),
+                        "model.safetensors missing; using hash embedder"
+                    );
+                }
+            } else {
+                tracing::warn!("[embedder] kind=minilm without model_dir; using hash embedder");
+            }
+        }
+        "lightweight" => {
+            return Arc::new(fallback::FallbackEmbedder::new(
+                arags_embedding::embedder::minilm::HIDDEN_SIZE,
+            ));
+        }
+        #[cfg(feature = "llamacpp")]
+        "llamacpp" => {
+            let Some(model_path) = cfg.llama_cpp_model.clone() else {
+                tracing::warn!(
+                    "[embedder] kind=llamacpp without llama_cpp_model; using hash embedder"
+                );
+                return Arc::new(fallback::FallbackEmbedder::new(
+                    arags_embedding::embedder::minilm::HIDDEN_SIZE,
+                ));
+            };
+            let model_path = PathBuf::from(model_path);
+            let gpu_layers = cfg.llama_cpp_gpu_layers.unwrap_or(99);
+            let embed_cfg = EmbeddingConfig {
+                model: EmbeddingModel::LlamaCpp,
+                model_dir: None,
+                quantization: cfg.resolved_quantization(),
+                ollama_url: None,
+                ollama_model: None,
+                llama_cpp_model: Some(model_path.clone()),
+                llama_cpp_gpu_layers: gpu_layers,
+            };
+            match arags_embedding::embedder::build_embedder(&embed_cfg) {
+                Ok(embedder) => {
+                    tracing::info!(
+                        model = embedder.name(),
+                        dims = embedder.dimensions(),
+                        "loaded llama.cpp embedder"
+                    );
+                    return embedder;
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        "llama.cpp embedder failed to load; using hash embedder"
+                    );
+                }
+            }
+        }
+        _ => {
+            tracing::warn!(kind = %kind, "[embedder] unknown kind; using hash embedder");
+        }
     }
 
     Arc::new(fallback::FallbackEmbedder::new(

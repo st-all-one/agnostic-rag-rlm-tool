@@ -11,6 +11,7 @@
 //! tests are fast and hermetic; the same functions are used by the server's
 //! pooled mode.
 
+use anyhow::Context;
 use arags_server::store;
 use arags_storage::Storage;
 use tempfile::TempDir;
@@ -58,4 +59,66 @@ fn test_list_projects() {
     }
     let projects = store::list_projects(&storage).unwrap();
     assert_eq!(projects.len(), 3);
+}
+
+// ── Re-index idempotency (stopgap for agnostic-rlm-rs-20cd) ──────────────────
+
+#[test]
+fn test_reindex_does_not_duplicate_chunks() {
+    let (storage, _dir) = setup();
+
+    // Replicates the handler's Phase 0 behaviour: delete the buffer's chunks
+    // (cascade) and re-insert the same content. Counts must stay stable.
+    let buffer_id = store::insert_project(&storage, "reindex-test", "/tmp/reindex-test").unwrap();
+    let mk = |fp: &str| arags_server::indexing::IndexedChunk {
+        file_path: fp.to_string(),
+        line_start: 1,
+        line_end: 3,
+        content: "fn main() {}".to_string(),
+        hash: format!("{fp}-hash"),
+        language: Some("rust".to_string()),
+        chunk_type: "code".to_string(),
+    };
+    let chunks = [mk("a.rs"), mk("b.rs")];
+    let flat: Vec<(&str, &arags_server::indexing::IndexedChunk)> =
+        chunks.iter().map(|c| (c.file_path.as_str(), c)).collect();
+
+    store::insert_chunks_batched(&storage, buffer_id, &flat, 100).unwrap();
+    assert_eq!(
+        storage.count_chunks(buffer_id).unwrap(),
+        2,
+        "two chunks after first insert"
+    );
+
+    // Simulate a repeated index: purge the buffer, then re-insert identical chunks.
+    let (ids, deleted_files) = store::delete_chunks_for_buffer(&storage, buffer_id).unwrap();
+    assert_eq!(ids.len(), 2);
+    assert_eq!(deleted_files, 2);
+    assert_eq!(
+        storage.count_chunks(buffer_id).unwrap(),
+        0,
+        "buffer emptied by cascade delete"
+    );
+
+    store::insert_chunks_batched(&storage, buffer_id, &flat, 100).unwrap();
+    assert_eq!(
+        storage.count_chunks(buffer_id).unwrap(),
+        2,
+        "re-index must not duplicate chunks"
+    );
+
+    // FTS and entity rows must also be gone, or the next search would see stale hits.
+    let fts_rows: i64 = storage
+        .connection()
+        .unwrap()
+        .execute(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM chunks_fts WHERE rowid IN (SELECT id FROM chunks WHERE buffer_id = ?1)",
+                rusqlite::params![buffer_id],
+                |r| r.get(0),
+            )
+            .context("count chunks_fts for buffer")
+        })
+        .unwrap();
+    assert_eq!(fts_rows, 2, "FTS rows present for the re-inserted chunks");
 }

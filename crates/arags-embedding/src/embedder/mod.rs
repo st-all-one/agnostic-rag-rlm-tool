@@ -11,10 +11,17 @@ pub mod config;
 pub mod fallback;
 pub mod lightweight;
 pub mod minilm;
+pub mod ollama;
+
+#[cfg(feature = "llamacpp")]
+pub mod llama_cpp;
+#[cfg(feature = "llamacpp")]
+pub use llama_cpp::LlamaCppEmbedder;
 
 pub use config::{EmbeddingConfig, EmbeddingModel, Quantization, build_embedder};
 pub use lightweight::LightweightEmbedder;
 pub use minilm::MinilmEmbedder;
+pub use ollama::OllamaEmbedder;
 
 /// Errors specific to the embedding subsystem.
 #[derive(Debug, Error)]
@@ -33,6 +40,9 @@ pub enum EmbeddingError {
 
     #[error("model not loaded: {0}")]
     ModelNotLoaded(String),
+
+    #[error("llama.cpp error: {0}")]
+    LlamaCpp(String),
 
     #[error("dimension mismatch: expected {expected}, got {actual}")]
     DimensionMismatch { expected: usize, actual: usize },

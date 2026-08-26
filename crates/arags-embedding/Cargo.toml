@@ -27,6 +27,12 @@ serde.workspace = true
 serde_json.workspace = true
 rusqlite.workspace = true
 tiktoken-rs.workspace = true
+llama-cpp-4 = { version = "0.6", features = ["prebuilt"], optional = true }
+
+[features]
+default = []
+llamacpp = ["dep:llama-cpp-4"]
+llamacpp-vulkan = ["llamacpp", "llama-cpp-4/vulkan"]
 
 [dev-dependencies]
 proptest.workspace = true

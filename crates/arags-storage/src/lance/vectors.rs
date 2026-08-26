@@ -221,6 +221,44 @@ impl VectorStore {
         self.index.size()
     }
 
+    /// Remove vectors for the given chunk ids from the index and the in-memory
+    /// buffer map. Missing ids are ignored (idempotent), so this is safe to call
+    /// with ids that were never embedded. Persists the index after removal.
+    ///
+    /// Used by the re-index stopgap (`agnostic-rlm-rs-20cd`) to purge vectors
+    /// for chunks deleted during a replace-style re-index.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the index cannot be saved.
+    pub async fn delete_chunk_ids(&self, ids: &[u64]) -> Result<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+
+        let started = Instant::now();
+        let mut buffers = self.buffers.lock();
+        let mut removed = 0usize;
+        for &id in ids {
+            match self.index.remove(id) {
+                Ok(n) => removed += n,
+                Err(e) => {
+                    tracing::warn!(error = ?e, chunk_id = id, "failed to remove vector from index");
+                }
+            }
+            buffers.remove(&id);
+        }
+        self.save_locked(&buffers)?;
+
+        tracing::info!(
+            requested = ids.len(),
+            removed,
+            elapsed_ms = started.elapsed().as_millis(),
+            "deleted vectors"
+        );
+        Ok(())
+    }
+
     /// Persist the index and the buffer-mapping metadata.
     fn save_locked(&self, buffers: &HashMap<u64, u64>) -> Result<()> {
         let path_str = self.index_path.to_str().context("non-utf8 index path")?;

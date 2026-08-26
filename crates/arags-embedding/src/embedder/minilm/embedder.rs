@@ -55,7 +55,7 @@ impl MinilmEmbedder {
             model_dir = %model_dir.display(),
             dims = model.hidden_size(),
             ?quantization,
-            "loaded all-MiniLM-L6-v2 embedder"
+            "loaded minilm embedder"
         );
 
         Ok(Self {

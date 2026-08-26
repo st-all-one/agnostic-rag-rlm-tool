@@ -12,7 +12,8 @@ use std::path::{Path, PathBuf};
 pub struct IgnoreRule {
     /// Normalized pattern (no leading `!`, no trailing `/`).
     pub pattern: String,
-    /// Directory containing the `.gitignore` this rule came from.
+    /// Directory containing the `.gitignore` this rule came from, **relative
+    /// to the project root** (`""`/`.` for the root-level file).
     pub base: PathBuf,
     /// Rule only matches directories.
     pub dir_only: bool,
@@ -66,8 +67,12 @@ pub fn load_gitignores(root: &Path) -> Vec<IgnoreRule> {
     collect_gitignore_files(root, 0, &mut files);
     let mut rules = Vec::new();
     for path in files {
-        let base = path.parent().unwrap_or(root).to_path_buf();
-        let depth = base.components().count();
+        // Store the rule's base relative to the project root: discovery works
+        // with root-relative paths, and an absolute base would never strip
+        // (making every nested rule either leak project-wide or never apply).
+        let abs_base = path.parent().unwrap_or(root).to_path_buf();
+        let base = abs_base.strip_prefix(root).unwrap_or(Path::new(".")).to_path_buf();
+        let depth = abs_base.components().count();
         if let Ok(content) = std::fs::read_to_string(&path) {
             for line in content.lines() {
                 if let Some(rule) = parse_line(line, &base) {
@@ -113,7 +118,13 @@ impl IgnoreRule {
         if self.dir_only && !is_dir {
             return false;
         }
-        let rel_rel_to_base = relative_to(&self.base, rel);
+        // A `.gitignore` only governs paths inside its own directory; an
+        // unanchored rule from `bootstrap/cache/.gitignore` must never ignore
+        // `index.php` at the project root (Laravel wipes entire indexes
+        // otherwise).
+        let Some(rel_rel_to_base) = relative_to(&self.base, rel) else {
+            return false;
+        };
         let mut candidates: Vec<&str> = Vec::new();
         if self.anchored {
             // The path itself plus every ancestor segment, so that a rule
@@ -141,21 +152,17 @@ impl IgnoreRule {
     }
 }
 
-/// Path of `rel` as seen from `base` (both relative to project root).
-/// If `rel` is not under `base`, returns `rel` unchanged (rule then cannot
-/// anchor-match, but unanchored suffix matching still applies per segment).
+/// Path of `rel` as seen from `base` (both relative to project root), or
+/// `None` when `rel` is not under `base`: a rule from a nested `.gitignore`
+/// must not apply to paths outside its directory.
 #[must_use]
-fn relative_to(base: &Path, rel: &str) -> String {
+fn relative_to(base: &Path, rel: &str) -> Option<String> {
     let base_s = base.to_string_lossy();
     if base_s == "." || base_s.is_empty() {
-        return rel.to_string();
+        return Some(rel.to_string());
     }
     let prefix = format!("{base_s}/");
-    if let Some(stripped) = rel.strip_prefix(&prefix) {
-        stripped.to_string()
-    } else {
-        rel.to_string()
-    }
+    rel.strip_prefix(&prefix).map(str::to_string)
 }
 
 /// All `/`-suffixes of a slash-separated path, longest first.

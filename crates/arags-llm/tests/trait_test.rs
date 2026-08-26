@@ -37,6 +37,10 @@ impl LlmBackend for MockBackend {
         "mock"
     }
 
+    fn default_model(&self) -> Option<String> {
+        Some("mock-default".to_string())
+    }
+
     async fn health_check(&self) -> Result<(), LlmError> {
         Ok(())
     }

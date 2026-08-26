@@ -8,6 +8,15 @@ O cliente usa o **LLM local do usuário** apenas para *digest* (`query -qa`) e
 
 **Agent-agnostic:** qualquer agente (OPencode, Cursor, Aider, Pi) pode consumir sua saída.
 
+## 📚 Wiki
+
+Documentação de uso e operação em [`wiki/`](wiki/README.md):
+[Arquitetura](wiki/01-arquitetura.md) ·
+[CLI `arags`](wiki/02-cli-arags.md) ·
+[Server/Docker](wiki/03-server-docker.md) ·
+[Boas práticas](wiki/04-boas-praticas.md) ·
+[Integração com agentes](wiki/05-integracao-agentes.md)
+
 ## Filosofia
 
 - **On-demand, não-recursivo:** não há loop recursivo de agente nem orquestração de

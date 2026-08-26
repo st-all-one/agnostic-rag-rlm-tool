@@ -61,9 +61,10 @@ pub fn run_ask(
         "Based on the following project context, answer this question concisely and with provenance:\n\nQuestion: {question}\n\nContext:\n{context}"
     );
 
+    let resolved_model = model.map(str::to_string).or_else(|| llm.default_model());
     let answer = rt
         .block_on(llm.complete(arags_llm::CompletionRequest {
-            model: model.unwrap_or("llama3").to_string(),
+            model: resolved_model.unwrap_or_else(|| "llama3".to_string()),
             messages: vec![arags_llm::Message {
                 role: arags_llm::Role::User,
                 content: prompt,

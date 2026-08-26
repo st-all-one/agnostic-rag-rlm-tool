@@ -4,20 +4,30 @@ use std::sync::Arc;
 use anyhow::anyhow;
 
 use super::minilm::MinilmEmbedder;
+use super::ollama::OllamaEmbedder;
 use super::{Embedder, LightweightEmbedder};
+
+#[cfg(feature = "llamacpp")]
+use super::llama_cpp::LlamaCppEmbedder;
 
 /// Which embedding backend to instantiate.
 ///
-/// `Minilm` is the single production model of the data plane;
-/// `Lightweight` is a deterministic hash fixture for tests and degraded
-/// mode — it is not a user-selectable alternative.
+/// `Minilm` is the in-process candle data-plane model; `Ollama` delegates to a
+/// local Ollama daemon (e.g. `all-minilm:22m`) for a faster engine while
+/// keeping the same 384-dimensional space; `Lightweight` is a deterministic
+/// hash fixture for tests and degraded mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EmbeddingModel {
     /// Native all-`MiniLM`-L6-v2 via candle. Requires model weights on disk.
     #[default]
     Minilm,
+    /// Local Ollama daemon over `/api/embed` (e.g. `all-minilm:22m`).
+    Ollama,
     /// Lightweight deterministic embedder (no weights, no candle inference).
     Lightweight,
+    /// Local `llama.cpp` (GGUF) embedder on the iGPU via Vulkan — daemon-free.
+    #[cfg(feature = "llamacpp")]
+    LlamaCpp,
 }
 
 /// Weight quantization applied to the `MiniLM` projections.
@@ -60,6 +70,18 @@ pub struct EmbeddingConfig {
     pub model_dir: Option<PathBuf>,
     /// Weight quantization (INT8 by default).
     pub quantization: Quantization,
+    /// Base URL of the Ollama daemon (`Ollama` backend), default
+    /// `http://localhost:11434`.
+    pub ollama_url: Option<String>,
+    /// Ollama model name (`Ollama` backend), default `all-minilm:22m`.
+    pub ollama_model: Option<String>,
+    /// Path to a GGUF model (`LlamaCpp` backend).
+    #[cfg(feature = "llamacpp")]
+    pub llama_cpp_model: Option<PathBuf>,
+    /// Layers to offload to the GPU for the `LlamaCpp` backend (`99` = all,
+    /// `0` = CPU only).
+    #[cfg(feature = "llamacpp")]
+    pub llama_cpp_gpu_layers: u32,
 }
 
 impl Default for EmbeddingConfig {
@@ -68,6 +90,12 @@ impl Default for EmbeddingConfig {
             model: EmbeddingModel::Minilm,
             model_dir: None,
             quantization: Quantization::Int8,
+            ollama_url: None,
+            ollama_model: None,
+            #[cfg(feature = "llamacpp")]
+            llama_cpp_model: None,
+            #[cfg(feature = "llamacpp")]
+            llama_cpp_gpu_layers: 99,
         }
     }
 }
@@ -80,19 +108,26 @@ impl EmbeddingConfig {
             model: EmbeddingModel::Lightweight,
             model_dir: None,
             quantization: Quantization::None,
+            ollama_url: None,
+            ollama_model: None,
+            #[cfg(feature = "llamacpp")]
+            llama_cpp_model: None,
+            #[cfg(feature = "llamacpp")]
+            llama_cpp_gpu_layers: 99,
         }
     }
 }
 
 /// Build an embedder from a configuration.
 ///
-/// Returns a [`LightweightEmbedder`] for the test fixture model, or a
-/// [`MinilmEmbedder`] (with INT8/f32 quantization) for `MiniLM`.
+/// Returns a [`LightweightEmbedder`] for the test fixture model, a
+/// [`MinilmEmbedder`] (with INT8/f32 quantization) for `MiniLM`, or an
+/// [`OllamaEmbedder`] for `Ollama`.
 ///
 /// # Errors
 ///
 /// Returns an error if `MiniLM` is selected but `model_dir` is unset, or if
-/// the model/tokenizer cannot be loaded.
+/// the model/tokenizer/Ollama daemon cannot be loaded.
 pub fn build_embedder(config: &EmbeddingConfig) -> anyhow::Result<Arc<dyn Embedder>> {
     match config.model {
         EmbeddingModel::Lightweight => Ok(Arc::new(LightweightEmbedder::new(
@@ -103,6 +138,26 @@ pub fn build_embedder(config: &EmbeddingConfig) -> anyhow::Result<Arc<dyn Embedd
                 anyhow!("EmbeddingConfig.model_dir must be set for model=`MiniLM`")
             })?;
             let embedder = MinilmEmbedder::new(dir, config.quantization)?;
+            Ok(Arc::new(embedder))
+        }
+        EmbeddingModel::Ollama => {
+            let url = config
+                .ollama_url
+                .clone()
+                .unwrap_or_else(|| "http://localhost:11434".to_string());
+            let model = config
+                .ollama_model
+                .clone()
+                .unwrap_or_else(|| "all-minilm:22m".to_string());
+            let embedder = OllamaEmbedder::new(&url, &model)?;
+            Ok(Arc::new(embedder))
+        }
+        #[cfg(feature = "llamacpp")]
+        EmbeddingModel::LlamaCpp => {
+            let path = config.llama_cpp_model.as_ref().ok_or_else(|| {
+                anyhow!("EmbeddingConfig.llama_cpp_model must be set for model=`LlamaCpp`")
+            })?;
+            let embedder = LlamaCppEmbedder::new(path, config.llama_cpp_gpu_layers, 512)?;
             Ok(Arc::new(embedder))
         }
     }
