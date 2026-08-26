@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Added — plan 023: trust pipeline, review gate e VectorSpaceStore genérico
+
+- **`vector_space.rs` — `VectorSpaceStore` genérico (`agnostic-rlm-rs-89fb`,
+  `8bb5`):** núcleo único usearch (cosseno, single-file) compartilhado pelos
+  três espaços dedicados; persistência **debounced** (`SAVE_DEBOUNCE_MS = 2s`,
+  flag dirty + `last_save`) amortiza rajadas de inserts a um único O(N) write;
+  falha de auto-save loga `warn` estruturado (nunca silenciosa); trait
+  `FlushableVectorSpace` p/ flush uniforme no shutdown. `qa_vectors.rs`,
+  `rlm_vectors.rs` e `exploration_vectors.rs` viram facades finas. Testes em
+  `vector_space/testing.rs`.
+- **Trust pipeline da QA:** `chunk_hashes_match(&[(i64, String)])` verifica
+  provenance contra hashes atuais; `chunk_ages_hours(&[i64])` alimenta o decay
+  de saliência no serving (`agnostic-rlm-rs-fce3`). Testes em
+  `tests/chunks_test.rs`.
+- **Review gate de explorações:** migration
+  **`020_add_exploration_review.sql`** rebuilda a tabela `explorations`
+  adicionando `'pending_review'` ao CHECK de status (SQLite não altera CHECK);
+  `mark_exploration_pending(rowid)` + `review_exploration(id, approved,
+  reviewer)` (fresh/retired auditado).
+- **Fix de scoping (`agnostic-rlm-rs-0764`):** `get_approved_rlm_nodes` agora
+  exige `buffer_id` — a hidratação vetorial da passada semântica não cruza
+  projetos. Teste de regressão em `tests/rlm_storage_test.rs`.
+- **Fix de deadlock pré-existente:** `get_chunks_with_content` chamava
+  `get_chunk_content` dentro do closure que já segurava o mutex da conexão
+  (modo Single) — hang eterno com provenance ≥1 chunk. O lookup de conteúdo
+  agora roda na conexão já travada.
+
 ### Added — plan 022: dataset de explorações
 
 - **Migration `019_add_explorations.sql`**: `explorations` (status

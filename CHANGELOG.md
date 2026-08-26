@@ -5,6 +5,60 @@ Este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added — plan 023: Unified Contextual Query (epic `agnostic-rlm-rs-43a9`)
+
+Uma única `arags query`/`search` agora funde os quatro espaços vetoriais do
+sistema: chunks (A), respostas QA cacheadas (B), sumários RLM aprovados (C) e
+mapas de exploração (D). Campos **aditivos** no proto — clientes antigos
+continuam funcionando.
+
+- **Espaço C na resposta** (`SearchResponse.summaries`): `summary_search`
+  funde FTS (`rlm_fts`) + semântica (`rlm_vectors`) com **RRF** (mesma família
+  matemática do pipeline de chunks) e normaliza para `[0,1]`. Na unified query,
+  sumários qualificados (`summary_min_score`) reivindicam até
+  `[search].summary_ratio` (default 60%) do budget de resultados — chunks
+  verbatim mantêm o restante (sempre ≥ 1). `TIER_SUMMARY` continua compatível.
+- **Espaço D anexado à query** (`SearchResponse.explorations`): refs compactas
+  dos mapas relevantes, passando pelo pipeline completo de confiança (recheck
+  de âncoras + grounding + gate) via `search_explorations_core`.
+- **Trust pipeline aplicado a B e C**: hit exato/near-hit da QA verifica
+  provenance contra os hashes atuais dos chunks (`provenance_intact`; drift →
+  entry marcada stale → MISS); re-index marca nós RLM afetados como stale por
+  hash (Phase 4.6) e eles saem da busca de sumários até reprocessamento.
+- **Review gate de C aplicado a D**: `[exploration].require_review` coloca
+  mapas de não-admins em `pending_review` (nunca superficializados); novo RPC
+  admin-gated **`ReviewExploration`** aprova (→ fresh) ou rejeita (→ retired).
+  Migration `020_add_exploration_review.sql`.
+- **Knobs em `server.toml [search]`**: `decay_lambda`, `summary_ratio`,
+  `summary_min_score`, `exploration_enabled`, `exploration_limit`.
+- CLI renderiza as novas seções ("RLM Summaries" / "Exploration Maps") nos
+  formatos text/markdown/json/jsonl.
+
+### Fixed
+
+- **Deadlock pré-existente** em `Storage::get_chunks_with_content`
+  (`arags-storage`): o closure já segurava o mutex da conexão e chamava
+  `get_chunk_content`, que re-travava o mesmo mutex não-reentrante (modo
+  Single) — hang eterno quando a provenance tinha ≥1 chunk id. O lookup de
+  conteúdo agora roda na conexão já travada. Descoberto pelo novo teste
+  `exact_hit_with_drifted_provenance_serves_miss`.
+- QA near-hit cross-project leak (`agnostic-rlm-rs-3c84`): similaridade alta
+  entre projetos diferentes não serve mais resposta de outro projeto; guard
+  de projeto + staleness antes do Jaccard.
+- RLM semantic pass unscoped (`agnostic-rlm-rs-0764`): hidratação vetorial de
+  nós aprovados é escopada por `buffer_id`.
+- Decay nunca ligado no serving (`agnostic-rlm-rs-fce3`): `[search].decay_lambda`
+  aplica decay exponencial de saliência na resposta (idades via novo
+  `chunk_ages_hours`).
+- Dims default inconsistentes (`agnostic-rlm-rs-2296`): 1024 → 384
+  (`arags_core::EMBEDDING_DIMS`, alinhado ao all-MiniLM-L6-v2).
+- Persistência vetorial O(N) por mutação (`agnostic-rlm-rs-8bb5`): novo
+  `VectorSpaceStore` genérico deduplica os três espaços dedicados (QA/RLM/
+  explorações) com persistência **debounced** (2s) + flush no graceful
+  shutdown.
+- Estratégias de fusão documentadas por espaço (`agnostic-rlm-rs-be4d`) no
+  README do `arags-search`.
+
 ### Changed — Docker consolidado em uma única imagem (2026-08-25)
 
 - Removidos `Dockerfile`, `Dockerfile.server`, `Dockerfile.server.prebuilt`,

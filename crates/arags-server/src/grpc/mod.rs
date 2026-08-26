@@ -40,7 +40,8 @@ use arags_proto::proto::{
 use arags_proto::proto::{
     FeedbackExplorationRequest, FeedbackExplorationResponse, GetExplorationByIdRequest,
     GetExplorationByIdResponse, InvalidateExplorationRequest, InvalidateExplorationResponse,
-    PersistExplorationRequest, PersistExplorationResponse,
+    PersistExplorationRequest, PersistExplorationResponse, ReviewExplorationRequest,
+    ReviewExplorationResponse,
 };
 
 /// gRPC service implementation for arags.
@@ -285,5 +286,13 @@ impl AragsService for AragsGrpcService {
     ) -> Result<Response<InvalidateExplorationResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.invalidate_exploration");
         exploration::feedback::handle_invalidate_exploration(&self.state, request).await
+    }
+
+    async fn review_exploration(
+        &self,
+        request: Request<ReviewExplorationRequest>,
+    ) -> Result<Response<ReviewExplorationResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.review_exploration");
+        exploration::feedback::handle_review_exploration(&self.state, request).await
     }
 }

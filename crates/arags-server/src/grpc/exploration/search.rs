@@ -81,8 +81,8 @@ fn hit_from(cand: &Candidate, confidence: f32, epoch: i64) -> ExplorationHit {
     }
 }
 
-/// Semantic search over maps: embed query → top-k in the dedicated space →
-/// anchor recheck at read time → composite confidence → threshold gate.
+/// Semantic search over maps RPC: authenticate + validate, then run the
+/// shared read-time trust pipeline via [`search_explorations_core`].
 pub(crate) async fn handle_search_explorations(
     state: &AppState,
     request: Request<SearchExplorationsRequest>,
@@ -100,15 +100,36 @@ pub(crate) async fn handle_search_explorations(
         req.limit.min(MAX_LIMIT)
     })
     .unwrap_or(1);
-    let include_stale = req.include_stale;
+
+    let response =
+        search_explorations_core(state, req.project, req.query, limit, req.include_stale).await?;
+    Ok(Response::new(response))
+}
+
+/// Core exploration search shared by the RPC handler and the unified query
+/// pipeline (plan 023): embed query → top-k in the dedicated space → anchor
+/// recheck at read time → composite confidence → threshold gate.
+///
+/// The caller is responsible for authentication and argument validation.
+pub(crate) async fn search_explorations_core(
+    state: &AppState,
+    project: String,
+    query: String,
+    limit: usize,
+    include_stale: bool,
+) -> Result<SearchExplorationsResponse, Status> {
+    if limit == 0 {
+        return Ok(SearchExplorationsResponse { hits: Vec::new() });
+    }
+    let start = std::time::Instant::now();
+    let req_project = project.as_str();
+    let req_query = query.as_str();
 
     let Some(vectors) = state.exploration_vector_store.as_ref() else {
-        return Ok(Response::new(SearchExplorationsResponse {
-            hits: Vec::new(),
-        }));
+        return Ok(SearchExplorationsResponse { hits: Vec::new() });
     };
 
-    let Some(query_vec) = embed_lenient(state, req.query.clone()).await else {
+    let Some(query_vec) = embed_lenient(state, req_query.to_string()).await else {
         return Err(internal("embedding unavailable"));
     };
 
@@ -116,17 +137,23 @@ pub(crate) async fn handle_search_explorations(
         .search(&query_vec, limit + SEARCH_MARGIN)
         .map_err(internal)?;
 
-    // Hydrate rows and recheck anchors per candidate (blocking tasks).
+    // Hydrate rows and recheck anchors per candidate (blocking tasks). Rows
+    // that vanished between index write and hydration are skipped: the
+    // vector index can briefly lag SQLite (debounced saves, concurrent
+    // deletes) and one stale key must not fail the whole search.
     let mut cands: Vec<Candidate> = Vec::with_capacity(candidates.len());
     for cand in &candidates {
         #[allow(clippy::cast_possible_wrap)] // rowids fit i64 here
         let rowid = i64::try_from(cand.id).unwrap_or(i64::MAX);
         let storage = state.storage.clone();
-        let row = store::blocking(move || storage.get_exploration_by_rowid(rowid))
+        let Some(row) = store::blocking(move || storage.get_exploration_by_rowid(rowid))
             .await
             .map_err(internal)?
-            .ok_or_else(|| internal("map vanished mid-search"))?;
-        if row.project != req.project {
+        else {
+            tracing::debug!(rowid, "exploration vanished mid-search; skipping");
+            continue;
+        };
+        if row.project != req_project {
             continue;
         }
         let storage = state.storage.clone();
@@ -141,8 +168,8 @@ pub(crate) async fn handle_search_explorations(
     }
 
     let storage = state.storage.clone();
-    let project = req.project.clone();
-    let epoch = store::blocking(move || storage.current_project_epoch(&project))
+    let epoch_project = req_project.to_string();
+    let epoch = store::blocking(move || storage.current_project_epoch(&epoch_project))
         .await
         .map_err(internal)?;
 
@@ -150,9 +177,12 @@ pub(crate) async fn handle_search_explorations(
     let verify = state.config.exploration.verify_on_hit && state.vector_store.is_some();
     let mut hits: Vec<(f32, ExplorationHit)> = Vec::new();
     for c in &cands {
-        // Gate before scoring: fresh always; stale only when asked; retired
-        // never; below `hit_low` nothing surfaces (precision > recall).
-        if c.row.status == arags_storage::explorations::STATUS_RETIRED {
+        // Gate before scoring: fresh always; pending review never surfaces
+        // (plan 023 review gate); stale only when asked; retired never;
+        // below `hit_low` nothing surfaces (precision > recall).
+        if c.row.status == arags_storage::explorations::STATUS_RETIRED
+            || c.row.status == arags_storage::explorations::STATUS_PENDING
+        {
             continue;
         }
         if !include_stale && c.is_stale() {
@@ -192,9 +222,15 @@ pub(crate) async fn handle_search_explorations(
         touch_logged(state, &hit.exploration_id).await;
     }
 
-    Ok(Response::new(SearchExplorationsResponse {
+    tracing::debug!(
+        elapsed_ms = start.elapsed().as_millis(),
+        candidates = candidates.len(),
+        hits = hits.len(),
+        "search_explorations_core completed"
+    );
+    Ok(SearchExplorationsResponse {
         hits: hits.into_iter().map(|(_, h)| h).collect(),
-    }))
+    })
 }
 
 async fn touch_logged(state: &AppState, exploration_id: &str) {

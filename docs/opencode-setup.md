@@ -2,7 +2,7 @@
 
 ## What is arags?
 
-`arags` is an agent-agnostic CLI that indexes codebases and provides hybrid search (BM25 + semantic) to give LLM agents relevant project context. It stores embeddings in LanceDB and metadata in SQLite, enabling sub-100ms searches across large codebases.
+`arags` is an agent-agnostic CLI that indexes codebases and provides hybrid search (BM25 + semantic) to give LLM agents relevant project context. It stores embeddings in usearch HNSW vector spaces and metadata in SQLite, enabling sub-100ms searches across large codebases.
 
 These tool definitions let OPencode invoke arags as native tools, giving it direct access to the project's knowledge base.
 

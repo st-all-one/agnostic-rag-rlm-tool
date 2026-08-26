@@ -171,4 +171,70 @@ impl Storage {
         }
         Ok(changed)
     }
+
+    /// Quality-gate verdict (plan 023, borrowed from the RLM review gate):
+    /// approval flips a `pending_review` map to `fresh`; rejection retires it.
+    /// Works from any non-retired status. Returns `false` when the map does
+    /// not exist or was already retired.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update fails.
+    pub fn review_exploration(
+        &self,
+        exploration_id: &str,
+        approved: bool,
+        reviewer: &str,
+    ) -> Result<bool> {
+        let conn = self.connection().context("failed to acquire connection")?;
+        let now = now_ms();
+        let (status, audit_val) = if approved {
+            ("fresh", reviewer.to_string())
+        } else {
+            ("retired", reviewer.to_string())
+        };
+        let changed = conn
+            .execute(|c| {
+                let n = if approved {
+                    c.execute(
+                        "UPDATE explorations SET status = ?1, updated_at = ?2 \
+                         WHERE exploration_id = ?3 AND status != 'retired'",
+                        params![status, now, exploration_id],
+                    )?
+                } else {
+                    c.execute(
+                        "UPDATE explorations SET status = ?1, retired_at = ?2, \
+                         retired_by = ?4, updated_at = ?2 \
+                         WHERE exploration_id = ?3 AND status != 'retired'",
+                        params![status, now, exploration_id, audit_val],
+                    )?
+                };
+                Ok(n > 0)
+            })
+            .context("failed to review exploration")?;
+        tracing::info!(exploration_id = %exploration_id, status, reviewer = %reviewer, "exploration reviewed");
+        Ok(changed)
+    }
+
+    /// Move a just-persisted map into the `pending_review` queue (called by
+    /// the server when `[exploration] require_review` is set and the
+    /// submitter is not an admin). Returns `false` for unknown ids.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update fails.
+    pub fn mark_exploration_pending(&self, rowid: i64) -> Result<bool> {
+        use crate::sqlite::explorations::STATUS_PENDING;
+        let conn = self.connection().context("failed to acquire connection")?;
+        let changed = conn
+            .execute(|c| {
+                let n = c.execute(
+                    "UPDATE explorations SET status = ?1 WHERE id = ?2 AND status = 'fresh'",
+                    params![STATUS_PENDING, rowid],
+                )?;
+                Ok(n > 0)
+            })
+            .context("failed to mark exploration pending")?;
+        Ok(changed)
+    }
 }

@@ -5,12 +5,16 @@
 
 use tonic::Request;
 
-use super::feedback::{handle_feedback_exploration, handle_invalidate_exploration};
+use super::feedback::{
+    handle_feedback_exploration, handle_invalidate_exploration, handle_review_exploration,
+};
 use super::handle_persist_exploration;
 use super::search::handle_get_exploration_by_id;
+use super::search::handle_search_explorations;
 use super::tests::{bearer, fixture, persist_request};
 use arags_proto::proto::{
     FeedbackExplorationRequest, FeedbackKind, InvalidateExplorationRequest, InvalidateMode,
+    ReviewExplorationRequest, SearchExplorationsRequest,
 };
 
 #[tokio::test]
@@ -146,5 +150,87 @@ async fn invalidate_requires_admin_and_modes_behave() {
             .get_exploration_by_uuid(&persisted.exploration_id)
             .unwrap()
             .is_none()
+    );
+}
+
+/// Review gate (plan 023): with `[exploration] require_review`, non-admin
+/// maps land as `pending_review`, never surface in search, and only an admin
+/// can approve (→ fresh) or reject (→ retired) them.
+#[tokio::test]
+async fn review_gate_holds_non_admin_maps_until_approved() {
+    let mut fx = fixture();
+    fx.state.config.exploration.require_review = true;
+
+    let persisted = handle_persist_exploration(
+        &fx.state,
+        persist_request(&fx.user_session, vec!["src/b.rs".into()]),
+    )
+    .await
+    .unwrap()
+    .into_inner();
+    assert_eq!(persisted.reason, "pending admin review");
+
+    // Row is pending; search must never surface it.
+    let row = fx
+        .storage
+        .get_exploration_by_uuid(&persisted.exploration_id)
+        .unwrap()
+        .expect("row exists");
+    assert_eq!(row.status, "pending_review");
+
+    let search_req = || {
+        let mut r = Request::new(SearchExplorationsRequest {
+            project: "proj".into(),
+            query: "anexos compartilhados\nresumo denso da conexão".into(),
+            limit: 5,
+            include_stale: true,
+        });
+        *r.metadata_mut() = bearer(&fx.user_session);
+        r
+    };
+    let hits = handle_search_explorations(&fx.state, search_req())
+        .await
+        .unwrap()
+        .into_inner()
+        .hits;
+    assert!(
+        hits.iter()
+            .all(|h| h.exploration_id != persisted.exploration_id),
+        "pending maps must be excluded even when include_stale"
+    );
+
+    // Non-admin cannot review.
+    let review = |session: &str, approved: bool| {
+        let mut r = Request::new(ReviewExplorationRequest {
+            exploration_id: persisted.exploration_id.clone(),
+            approved,
+        });
+        *r.metadata_mut() = bearer(session);
+        r
+    };
+    assert_eq!(
+        handle_review_exploration(&fx.state, review(&fx.user_session, true))
+            .await
+            .unwrap_err()
+            .code(),
+        tonic::Code::PermissionDenied
+    );
+
+    // Admin approval flips to fresh, which surfaces again.
+    let applied = handle_review_exploration(&fx.state, review(&fx.admin_session, true))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(applied.applied);
+
+    let hits = handle_search_explorations(&fx.state, search_req())
+        .await
+        .unwrap()
+        .into_inner()
+        .hits;
+    assert!(
+        hits.iter()
+            .any(|h| h.exploration_id == persisted.exploration_id),
+        "approved map must surface again"
     );
 }

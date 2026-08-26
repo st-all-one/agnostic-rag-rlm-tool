@@ -66,6 +66,45 @@ async fn resolve_buffer(state: &AppState, project: &str, explicit: i64) -> Optio
     buffer_id_for(state, project).await.ok().flatten()
 }
 
+/// Verify that the cached answer's provenance chunks still carry the same
+/// content hashes (trust pipeline borrowed from explorations, plan 023).
+///
+/// Entries without provenance (`source_chunk_ids` empty) are unverifiable and
+/// pass through. On drift the entry is marked stale so later queries miss fast.
+async fn provenance_intact(state: &AppState, row: &qa_store::QaCacheRow) -> bool {
+    if row.source_chunk_ids.is_empty() || row.source_hashes.is_empty() {
+        return true;
+    }
+    let pairs: Vec<(i64, String)> = row
+        .source_chunk_ids
+        .iter()
+        .zip(row.source_hashes.iter())
+        .filter_map(|(id, hash)| id.parse::<i64>().ok().map(|i| (i, hash.clone())))
+        .collect();
+    if pairs.is_empty() {
+        return true;
+    }
+    let storage = state.storage.clone();
+    match store::blocking(move || storage.chunk_hashes_match(&pairs)).await {
+        Ok(true) => true,
+        Ok(false) => {
+            let id = row.id;
+            let stale_storage = state.storage.clone();
+            let _ = store::blocking(move || {
+                stale_storage.mark_qa_stale(id, "system", "provenance drift")
+            })
+            .await;
+            tracing::info!(cache_id = %row.cache_id, "qa provenance drifted; entry marked stale");
+            false
+        }
+        Err(e) => {
+            // Fail open: verification trouble must not break serving.
+            tracing::warn!(error = %e, "qa provenance check failed; serving anyway");
+            true
+        }
+    }
+}
+
 /// Query the semantic cache; decides hit/miss/tier deterministically.
 ///
 /// # Errors
@@ -105,21 +144,26 @@ pub async fn handle_query_with_cache(
     {
         let id = row.id;
         let cache_id = row.cache_id.clone();
-        // Touch for eviction weighting.
-        let storage = state.storage.clone();
-        let _ = store::blocking(move || storage.touch_qa(id)).await;
-        let provenance = provenance_chunks(&state, &row.source_chunk_ids, th.provenance_k).await;
-        return Ok(Response::new(QueryWithCacheResponse {
-            cache_id,
-            hit: true,
-            tier: 0,
-            similarity: 1.0,
-            answer_text: row.answer_text,
-            provenance,
-            candidates: Vec::new(),
-            digest_k: 0,
-            provenance_k: th.provenance_k as i32,
-        }));
+        // Trust pipeline: verify provenance before serving (drift → stale,
+        // fall through to near-hit/miss below).
+        if provenance_intact(state, &row).await {
+            // Touch for eviction weighting.
+            let storage = state.storage.clone();
+            let _ = store::blocking(move || storage.touch_qa(id)).await;
+            let provenance =
+                provenance_chunks(&state, &row.source_chunk_ids, th.provenance_k).await;
+            return Ok(Response::new(QueryWithCacheResponse {
+                cache_id,
+                hit: true,
+                tier: 0,
+                similarity: 1.0,
+                answer_text: row.answer_text,
+                provenance,
+                candidates: Vec::new(),
+                digest_k: 0,
+                provenance_k: th.provenance_k as i32,
+            }));
+        }
     }
 
     // 2) Near hit: embed question, search question vectors, secondary check.
@@ -137,29 +181,48 @@ pub async fn handle_query_with_cache(
                     })
                     .await
                     {
-                        // New query's top-K chunk ids for the Jaccard check.
-                        let new_ids =
-                            top_chunk_ids(state, &project, &req.question, th.novel_k).await;
-                        let jac = jaccard_similarity(&new_ids, &cand.source_chunk_ids);
-                        let plan = resolve_plan(best.similarity, jac, &th);
-                        if !plan.is_miss {
-                            let cid = cand.cache_id.clone();
-                            let storage = state.storage.clone();
-                            let _ = store::blocking(move || storage.touch_qa(cand.id)).await;
-                            let provenance =
-                                provenance_chunks(state, &cand.source_chunk_ids, th.provenance_k)
-                                    .await;
-                            return Ok(Response::new(QueryWithCacheResponse {
-                                cache_id: cid,
-                                hit: true,
-                                tier: plan.tier,
-                                similarity: best.similarity,
-                                answer_text: cand.answer_text,
-                                provenance,
-                                candidates: Vec::new(),
-                                digest_k: plan.digest_k as i32,
-                                provenance_k: plan.provenance_k as i32,
-                            }));
+                        // Project + staleness gate: the question-vector space
+                        // is global, so a near-hit from another project (or a
+                        // stale entry) must never be served — fall to MISS.
+                        if cand.project == project && !cand.stale {
+                            // Trust pipeline: provenance drift forces MISS.
+                            if !provenance_intact(state, &cand).await {
+                                return miss_response(
+                                    state,
+                                    buffer_id,
+                                    &req.question,
+                                    &th,
+                                    best_sim,
+                                )
+                                .await;
+                            }
+                            // New query's top-K chunk ids for the Jaccard check.
+                            let new_ids =
+                                top_chunk_ids(state, &project, &req.question, th.novel_k).await;
+                            let jac = jaccard_similarity(&new_ids, &cand.source_chunk_ids);
+                            let plan = resolve_plan(best.similarity, jac, &th);
+                            if !plan.is_miss {
+                                let cid = cand.cache_id.clone();
+                                let storage = state.storage.clone();
+                                let _ = store::blocking(move || storage.touch_qa(cand.id)).await;
+                                let provenance = provenance_chunks(
+                                    state,
+                                    &cand.source_chunk_ids,
+                                    th.provenance_k,
+                                )
+                                .await;
+                                return Ok(Response::new(QueryWithCacheResponse {
+                                    cache_id: cid,
+                                    hit: true,
+                                    tier: plan.tier,
+                                    similarity: best.similarity,
+                                    answer_text: cand.answer_text,
+                                    provenance,
+                                    candidates: Vec::new(),
+                                    digest_k: plan.digest_k as i32,
+                                    provenance_k: plan.provenance_k as i32,
+                                }));
+                            }
                         }
                     }
                 }
@@ -168,10 +231,21 @@ pub async fn handle_query_with_cache(
     }
 
     // 3) Miss: return top-K raw chunks to digest client-side.
+    miss_response(state, buffer_id, &req.question, &th, best_sim).await
+}
+
+/// Build the MISS response: top-K raw chunks for the client-side digest.
+async fn miss_response(
+    state: &AppState,
+    buffer_id: Option<i64>,
+    question: &str,
+    th: &QaThresholds,
+    best_sim: f32,
+) -> Result<Response<QueryWithCacheResponse>, Status> {
     let candidates = hybrid_search(
         state,
         buffer_id.unwrap_or(0),
-        &sanitize_fts(&req.question),
+        &sanitize_fts(question),
         arags_search::SearchTier::Vector,
         th.novel_k,
     )
@@ -493,3 +567,6 @@ async fn top_chunk_ids(state: &AppState, _project: &str, question: &str, k: usiz
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tests_trust;

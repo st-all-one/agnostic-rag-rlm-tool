@@ -78,6 +78,22 @@ Truncamento inteligente: chunks são mantidos por score decrescente. O último c
 let fused = HybridSearch::rrf_fuse(&[bm25_results, entity_results], 10, 60.0);
 ```
 
+## Estratégias de Fusão por Espaço Vetorial
+
+Cada espaço tem uma estratégia de fusão deliberada (plan 023):
+
+| Espaço | Sinais | Estratégia | Por quê |
+|--------|--------|------------|---------|
+| **Chunks** (`vector.usearch`) | BM25 + entity + vetorial | **RRF** (`rrf_fuse`, k=60) + decay opcional pós-fusão | Listas homogêneas de ranking sobre o mesmo corpus; RRF é robusto a escalas de score incomparáveis |
+| **Sumários RLM** (`rlm_vectors.usearch`) | `rlm_fts` (léxico) + vetorial dedicado | **RRF** (`summary_search`, k=60) + min-max normalizado | Mesma família do pipeline de chunks — rankings complementares sobre nós aprovados; substitui o antigo max-score merge |
+| **QA cache** (`question_vectors.usearch`) | similaridade da pergunta | Similaridade + **Jaccard de provenance** como checagem secundária | Cache, não ranking: hit/near-hit/miss é decisão binária; Jaccard derrota falsos positivos ("login" vs "logout") |
+| **Explorations** (`exploration_vectors.usearch`) | vetorial dedicado | **Confidence score composto** (similaridade + epoch drift + idade + feedback) com gate por status e grounding | Mapas envelhecem com o código; trust > recall — precision é prioridade |
+
+A query unificada (plan 023) funde os espaços na resposta: chunks mantêm ao menos
+`(1 - summary_ratio)` do budget; sumários RLM aprovados acima de `summary_min_score`
+reivindicam até `summary_ratio`; explorações relevantes entram como referências
+adicionais (`SearchResponse.explorations`).
+
 ## Uso
 
 ```rust

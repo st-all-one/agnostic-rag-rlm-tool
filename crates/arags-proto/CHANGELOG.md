@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — plan 023: Unified Contextual Query
+
+- **`proto/search.proto`**: `SummaryHit` (node_id/rowid/level/subject/
+  summary_text/score) e `ExplorationRef` (exploration_id/goal/summary/
+  confidence) — campos **aditivos** `SearchResponse.summaries` e
+  `.explorations`; clientes antigos ignoram. `ExplorationRef` é compacto de
+  propósito (evita import circular search→exploration).
+- **`proto/exploration.proto`**: `ReviewExplorationRequest/Response`
+  (aprovação/rejeição admin-gated; resposta traz status resultante).
+- **`proto/service.proto`**: RPC `ReviewExploration` registrado.
+
 ### Added — plan 022: RPCs de explorações
 - **`proto/exploration.proto`**: `FeedbackKind`, `PersistExploration*`
   (contrato completo; resposta traz `unresolved_paths`),

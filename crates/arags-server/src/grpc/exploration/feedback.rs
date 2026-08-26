@@ -8,6 +8,7 @@
 use arags_proto::proto::{
     FeedbackExplorationRequest, FeedbackExplorationResponse, FeedbackKind,
     InvalidateExplorationRequest, InvalidateExplorationResponse, InvalidateMode,
+    ReviewExplorationRequest, ReviewExplorationResponse,
 };
 use tonic::{Request, Response, Status};
 
@@ -152,4 +153,33 @@ pub(crate) async fn handle_invalidate_exploration(
 
 fn reason_admin(ctx: &crate::auth::AuthContext) -> String {
     ctx.username.clone()
+}
+
+/// Admin quality gate (plan 023, borrowed from the RLM review gate): approve
+/// flips a `pending_review` map to `fresh`; reject retires it. Admin-gated.
+pub(crate) async fn handle_review_exploration(
+    state: &AppState,
+    request: Request<ReviewExplorationRequest>,
+) -> Result<Response<ReviewExplorationResponse>, Status> {
+    let _timer = crate::timing::Timer::new("handler.review_exploration");
+    let ctx = crate::auth::authenticate(request.metadata(), &state.storage)?;
+    if !ctx.is_admin() {
+        return Err(Status::permission_denied("admin role required"));
+    }
+    let req = request.into_inner();
+
+    if req.exploration_id.trim().is_empty() {
+        return Err(invalid_arg("exploration_id is required"));
+    }
+
+    let storage = state.storage.clone();
+    let applied = store::blocking(move || {
+        storage
+            .review_exploration(&req.exploration_id, req.approved, &ctx.username)
+            .map_err(anyhow::Error::from)
+    })
+    .await
+    .map_err(internal)?;
+
+    Ok(Response::new(ReviewExplorationResponse { applied }))
 }

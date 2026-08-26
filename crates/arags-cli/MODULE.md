@@ -64,6 +64,9 @@ dotfile e do registro em `.arags.toml`.
     de `dispatch/` (plan 021): `index.rs` (streaming de arquivos comprimidos),
     `search.rs`, `memory_history.rs` e `init.rs`; o watch daemon está em
     `watch_daemon.rs` e o registro em `projects.rs`.
+    **plan 023:** `search.rs` renderiza as seções aditivas da unified query —
+    "RLM Summaries" (`summaries`) e "Exploration Maps" (`explorations`) — nos
+    quatro formatos de saída.
 - `src/cli/commands.rs` — `Commands` enum (inclui `Query` estendido com
   `cache_id`/`qa` e o subcomando `Memory`).
 - `src/output/` — `mod` (`Format`), `json`, `tree`, `markdown`, `prompt`.

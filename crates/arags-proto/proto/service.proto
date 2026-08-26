@@ -14,6 +14,8 @@ import "query_cache.proto";
 import "rlm.proto";
 import "exploration.proto";
 
+
+
 // ── gRPC Service ──
 
 service AragsService {
@@ -79,6 +81,9 @@ service AragsService {
   rpc FeedbackExploration(FeedbackExplorationRequest) returns (FeedbackExplorationResponse);
   // Admin invalidation reusing InvalidateMode (Stale keeps history, Delete purges).
   rpc InvalidateExploration(InvalidateExplorationRequest) returns (InvalidateExplorationResponse);
+
+  // Admin quality gate (plan 023): approve/reject a pending_review map.
+  rpc ReviewExploration(ReviewExplorationRequest) returns (ReviewExplorationResponse);
 }
 
 // ── Memory / Cache / Maintenance / History (plan 019) ──

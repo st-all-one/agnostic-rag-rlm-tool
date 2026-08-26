@@ -228,6 +228,21 @@ pub(crate) async fn handle_index_project(
         }
     }
 
+    // Phase 4.6 (RLM): mark summaries stale whose source chunk hashes changed
+    // in this run — the same hash-driven staleness the QA cache applies. Stale
+    // nodes stop surfacing in summary search until volunteers reprocess them.
+    if state.config.rlm.enabled {
+        let changed: Vec<String> = persisted.iter().map(|(_, h)| h.clone()).collect();
+        let storage = state.storage.clone();
+        match store::blocking(move || storage.mark_rlm_stale_by_hashes(buffer_id, &changed)).await {
+            Ok(affected) if !affected.is_empty() => {
+                tracing::info!(project = %project, stale_nodes = affected.len(), "rlm staleness hook");
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!(error = %e, "rlm staleness hook failed; indexing continues"),
+        }
+    }
+
     // Phase 5 (RLM): enqueue L1 summary work for the files touched by this
     // stream. Cancellations for claimed jobs ride on the generation bump.
     if state.config.rlm.enabled {

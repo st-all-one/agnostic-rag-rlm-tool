@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed — plan 023: RRF como família única de fusão
+- `rrf_score(rank, k)` agora é **público**: o `arags-server` reusa a mesma
+  matemática de fusão do pipeline de chunks na `summary_search` do espaço C
+  (RLM summaries), unificando a estratégia documentada em
+  [README.md](README.md) (tabela de estratégias por espaço).
+
 ### Fixed (plan 021 — determinismo da fusão)
 - **`rrf_fuse` com tie-break:** empates de score caíam na ordem aleatória de
   iteração do `HashMap`, fazendo duas queries idênticas devolver resultados em

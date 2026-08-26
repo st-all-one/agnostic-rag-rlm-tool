@@ -9,7 +9,7 @@ use crate::config::ServerConfig;
 use crate::state::AppState;
 use arags_storage::{Storage, tokens::NewToken, tokens::Role};
 
-fn bearer(token: &str) -> MetadataMap {
+pub(crate) fn bearer(token: &str) -> MetadataMap {
     let mut md = MetadataMap::new();
     let value = MetadataValue::<tonic::metadata::Ascii>::from_str(&format!("Bearer {token}"))
         .expect("valid metadata value");
@@ -17,12 +17,12 @@ fn bearer(token: &str) -> MetadataMap {
     md
 }
 
-fn temp_storage() -> Storage {
+pub(crate) fn temp_storage() -> Storage {
     let dir = tempfile::tempdir().expect("tempdir");
     Storage::open(dir.path()).expect("open storage")
 }
 
-fn authed_state(storage: &Storage) -> AppState {
+pub(crate) fn authed_state(storage: &Storage) -> AppState {
     AppState::new(storage.clone(), ServerConfig::default(), None, None).expect("app state")
 }
 

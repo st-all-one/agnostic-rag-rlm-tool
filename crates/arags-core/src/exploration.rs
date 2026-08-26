@@ -19,6 +19,9 @@ pub const STATUS_FRESH: &str = "fresh";
 pub const STATUS_STALE: &str = "stale";
 /// Accumulated contradictions crossed the limit; excluded from search.
 pub const STATUS_RETIRED: &str = "retired";
+/// Awaiting admin approval under `[exploration] require_review` (plan 023,
+/// quality gate borrowed from RLM); excluded from search until approved.
+pub const STATUS_PENDING: &str = "pending_review";
 
 /// Anchor roles: only `cited` anchors invalidate a map; `context` rows are
 /// provenance-only.

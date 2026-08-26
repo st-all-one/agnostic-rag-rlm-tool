@@ -179,6 +179,26 @@ impl AppState {
     pub fn uptime_seconds(&self) -> u64 {
         u64::try_from(self.started_at.elapsed().as_secs()).unwrap_or(0)
     }
+
+    /// Force-flush any debounced vector-index mutations to disk (graceful
+    /// shutdown). Best-effort: failures are logged, never fatal.
+    pub fn flush_vector_stores(&self) {
+        fn flush(name: &str, store: Option<&impl arags_storage::FlushableVectorSpace>) {
+            if let Some(store) = store {
+                if store.is_dirty() {
+                    if let Err(e) = store.persist() {
+                        tracing::warn!(error = %e, space = name, "vector index flush failed");
+                    }
+                }
+            }
+        }
+        flush("question_vectors", self.question_vector_store.as_deref());
+        flush("rlm_vectors", self.rlm_vector_store.as_deref());
+        flush(
+            "exploration_vectors",
+            self.exploration_vector_store.as_deref(),
+        );
+    }
 }
 
 /// Spawn the background weighted-LRU eviction worker for the semantic cache.

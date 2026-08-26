@@ -29,6 +29,7 @@ pub mod lance;
 pub mod qa_vectors;
 pub mod rlm_vectors;
 pub mod sqlite;
+pub mod vector_space;
 
 pub use exploration_vectors::{ExplorationNeighbor, ExplorationVectorStore};
 pub use lance::{SearchResult, VectorEntry, VectorStore};
@@ -40,6 +41,7 @@ pub use sqlite::cache;
 pub use sqlite::explorations;
 pub use sqlite::qa_cache;
 pub use sqlite::tokens;
+pub use vector_space::{FlushableVectorSpace, Neighbor, VectorSpaceStore};
 
 #[must_use]
 pub fn version() -> &'static str {

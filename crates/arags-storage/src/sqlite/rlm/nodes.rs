@@ -183,13 +183,15 @@ impl Storage {
         })
     }
 
-    /// Fetch specific nodes by rowid (vector-search hydration). Only approved,
-    /// non-stale nodes are returned.
+    /// Fetch specific nodes by rowid (vector-search hydration), scoped to a
+    /// buffer (project). Only approved, non-stale nodes are returned. The
+    /// vector space itself is global, so this scope filter is what keeps other
+    /// projects' summaries out of search results.
     ///
     /// # Errors
     ///
     /// Returns an error if serialization or the query fails.
-    pub fn get_approved_rlm_nodes(&self, ids: &[u64]) -> Result<Vec<RlmNode>> {
+    pub fn get_approved_rlm_nodes(&self, ids: &[u64], buffer_id: i64) -> Result<Vec<RlmNode>> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -201,13 +203,13 @@ impl Storage {
         let sql = format!(
             "SELECT {NODE_COLS} FROM rlm_nodes \
              WHERE id IN (SELECT value FROM json_each(?1)) \
-               AND stale = 0 AND review_status = '{REVIEW_APPROVED}'"
+               AND buffer_id = ?2 AND stale = 0 AND review_status = '{REVIEW_APPROVED}'"
         );
         let conn = self.connection().context("acquire connection")?;
         conn.execute(|c| {
             let mut stmt = c.prepare(&sql).context("prepare get_approved_rlm_nodes")?;
             let rows = stmt
-                .query_map(params![ids_json], node_mapper)?
+                .query_map(params![ids_json, buffer_id], node_mapper)?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             Ok(rows)
         })

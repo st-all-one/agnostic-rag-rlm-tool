@@ -122,6 +122,12 @@ um `exploration_id` (UUIDv7). Paths que não existem no índice são reportados
 como aviso (`path not in index`) — viram texto, não âncora. Falha de rede não
 derruba sua sessão: persistência é fire-and-forget.
 
+**Review gate (plan 023):** com `[exploration].require_review = true` no
+`server.toml`, mapas de **não-admins** entram em `pending_review` — a resposta
+do persist traz `status = "pending_review"` e motivo; o mapa só fica buscável
+depois que um admin aprova via RPC `ReviewExploration`
+(`arags-server admin`, gRPC). Rejeição aposenta o mapa (`retired`).
+
 ## 5. Consumindo (antes de explorar do zero)
 
 ```bash

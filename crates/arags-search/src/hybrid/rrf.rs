@@ -7,7 +7,8 @@ use crate::types::HybridResult;
 
 /// Reciprocal Rank Fusion score for a result at `rank` (0-based) with constant `k`.
 #[allow(clippy::cast_precision_loss)]
-pub(crate) fn rrf_score(rank: usize, k: f32) -> f32 {
+#[must_use]
+pub fn rrf_score(rank: usize, k: f32) -> f32 {
     1.0 / (k + rank as f32 + 1.0)
 }
 

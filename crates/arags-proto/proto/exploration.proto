@@ -143,3 +143,14 @@ message InvalidateExplorationRequest {
 message InvalidateExplorationResponse {
   bool applied = 1;
 }
+
+// Admin quality gate (plan 023, borrowed from the RLM review): approve flips
+// a `pending_review` map to `fresh`; reject retires it. Admin-gated.
+message ReviewExplorationRequest {
+  string exploration_id = 1;
+  bool approved = 2;
+}
+
+message ReviewExplorationResponse {
+  bool applied = 1;
+}

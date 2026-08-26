@@ -8,11 +8,15 @@ Componente de persistência do arags — SQLite (metadados, FTS5/BM25) + usearch
 - **FTS5**: Índice de busca textual (BM25) com tokenizer `porter unicode61`
 - **usearch**: Armazenamento de vetores de embedding com índice HNSW single-file (substitui o LanceDB)
 - **Backups**: `Storage::backup()` (`VACUUM INTO`) e `Storage::verify()` (`PRAGMA integrity_check`)
-- **Summaries**: CRUD hierárquico de resumos (file/module/project) em `summaries.rs`
+- **RLM summaries (plan 021)**: `sqlite/rlm/` — nós/jobs/edges com review gate,
+  conclusão transacional e staleness por hash
 - **QA-Cache (plan 017)**: `qa_cache.rs` — tabela `qa_cache` + FTS5 + índice vetorial
   dedicado (`question_vectors`, usearch) para respostas digeridas pelo client;
   `store_answer` idempotente (reserve-lock), lookup por `(project, question_hash)`,
   staleness por hash de chunk e eviction LRU ponderado.
+- **Explorations (plan 022/023)**: `sqlite/explorations/` — mapas relacionais
+  com âncoras por hash, epochs, feedback com auto-retire e review gate
+  (`pending_review` + `review_exploration`).
 - **Auth tokens (plan 018)**: `tokens.rs` — `auth_tokens`/`auth_sessions` para
   refresh-token rotation + sessões de curta duração com roles `Admin`/`NonAdmin`.
 - **Single DB**: Todos os projetos compartilham `~/.arags/knowledge.db`
@@ -24,37 +28,43 @@ Componente de persistência do arags — SQLite (metadados, FTS5/BM25) + usearch
 src/
 ├── lib.rs              # Re-exports públicos
 ├── sqlite/
-│   ├── conn.rs         # Storage::open(), connection management
-│   ├── schema.rs       # 13 migrações SQL
-│   ├── chunks.rs       # CRUD de chunks
+│   ├── conn.rs         # Storage::open()/open_pooled(), pragmas, backup/verify
+│   ├── schema.rs       # 20 migrações SQL versionadas
+│   ├── chunks.rs       # CRUD de chunks + trust helpers (hashes_match/ages_hours)
 │   ├── buffers.rs      # CRUD de buffers com UUIDv7
 │   ├── tasks.rs        # Fila de tasks para dispatch
 │   ├── findings.rs     # Resultados de subagentes
-│   ├── history.rs      # Histórico de consultas
+│   ├── history/        # Histórico de consultas (retenção server-side)
 │   ├── patterns.rs     # Padrões extraídos
 │   ├── entities.rs     # Busca por entidades
-│   ├── summaries.rs    # CRUD hierárquico de resumos
-│   ├── tokens.rs       # Auth (plan 018): auth_tokens/auth_sessions, refresh + sessões
-│   ├── qa_cache.rs     # QA-Cache (plan 017): qa_cache + lookup/staleness/eviction
-│   └── nodes.rs        # FlatNode (persistência de runs)
+│   ├── rlm/            # RLM summaries (nodes/jobs/complete/graph; plan 021)
+│   ├── tokens/         # Auth (plan 018): refresh rotation + sessões
+│   ├── qa_cache.rs     # QA-Cache (plan 017): lookup/staleness/eviction
+│   └── explorations/   # Explorations (plan 022): store/staleness/feedback + review gate
+├── vector_space.rs     # VectorSpaceStore genérico (plan 023): debounced save
 ├── lance/
 │   └── vectors.rs      # VectorStore::open(), insert, search (usearch), SearchResult
-├── qa_vectors.rs       # QuestionVectorStore (usearch, espaço B dedicado p/ perguntas)
+├── qa_vectors.rs       # Espaço B: perguntas QA (facade do VectorSpaceStore)
+├── rlm_vectors.rs      # Espaço C: sumários RLM (facade)
+└── exploration_vectors.rs  # Espaço D: mapas de exploração (facade)
 migrations/
 ├── 001_initial.sql
 ├── ...
-├── 014_add_summaries_fts.sql
-├── 015_add_auth.sql
-└── 016_add_qa_cache.sql
+├── 018_add_rlm.sql
+├── 019_add_explorations.sql
+└── 020_add_exploration_review.sql
 ```
 
 ## Arquitetura de Dados
 
 ```
 ~/.arags/
-├── knowledge.db          # SQLite (WAL, FTS5, metadados)
-├── knowledge.db-wal      # WAL journal
-└── vectors.usearch       # usearch (HNSW vetorial, 1024-dim) + vectors.meta (buffer map)
+├── knowledge.db                  # SQLite (WAL, FTS5, metadados)
+├── knowledge.db-wal              # WAL journal
+├── vectors.usearch (+ .meta)     # chunks (HNSW L2, 384-dim) + buffer map
+├── question_vectors.usearch      # espaço B: perguntas QA (cosseno)
+├── rlm_vectors.usearch           # espaço C: sumários RLM (cosseno)
+└── exploration_vectors.usearch   # espaço D: mapas de exploração (cosseno)
 ```
 
 ### Single Database
@@ -149,21 +159,23 @@ PRAGMA locking_mode=EXCLUSIVE;      -- CLI only (open_exclusive)
 
 ## Migrações
 
-Schema versionado com 16 migrações:
+Schema versionado com 20 migrações (ver `migrations/`):
 - `001_initial` — Schema base (chunks, buffers, tasks, findings, history, patterns)
-- `004` — Runs e custos
-- `005` — Trajectories
-- `006` — Sessões
-- `007` — Result cache
-- `008` — Eventos
-- `009` — Entidades
-- `010` — last_accessed_at
-- `011` — UUIDv7 em buffers
-- `012` — Summaries hierárquicos
-- `013` — Server handlers (runs.project/model, sessions.updated_at, chunks_fts)
-- `014` — FTS5 de summaries (`summaries_fts` + triggers)
+- `004`–`013` — Runs/custos, trajectories, caches, eventos, entidades, UUIDv7, server handlers
 - `015` — Auth (plan 018): `auth_tokens` + `auth_sessions` (refresh/sessões)
 - `016` — QA-Cache (plan 017): `qa_cache` + `qa_cache_fts` + triggers
+- `018` — RLM (plan 021): `rlm_nodes`/`rlm_jobs`/`rlm_edges` + FTS
+- `019` — Explorations (plan 022): mapas, âncoras, FTS, `project_epochs`
+- `020` — Review gate (plan 023): status `'pending_review'` em `explorations`
+
+## Espaços vetoriais dedicados (plan 023)
+
+Os três índices secundários compartilham o núcleo genérico
+[`VectorSpaceStore`](src/vector_space.rs) (usearch cosseno, chave = rowid da
+tabela correspondente) com **persistência debounced** (2s por espaço, flag
+dirty) e flush uniforme via trait `FlushableVectorSpace` no graceful shutdown
+do servidor. Rajadas de inserts (bulk answers, conclusões RLM) amortizam para
+um único write O(N) do arquivo.
 
 ## Uso Exclusive (CLI)
 

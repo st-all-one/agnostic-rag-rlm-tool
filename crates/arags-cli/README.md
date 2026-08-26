@@ -97,6 +97,12 @@ tests/                     # testes de integração (user_config, init, output, 
 | `--top-k <N>` | Número de resultados | 10 |
 | `--file-pattern <pat>` | Filtro por arquivo | — |
 | `--min-score <f>` | Score mínimo | — |
+| `--tier <t>` | `fts`, `entity`, `vector`, `hybrid`, `summary` ou `auto` | auto |
+
+A resposta (plan 023) pode trazer três seções: **Results** (chunks),
+**RLM Summaries** (sínteses aprovadas, até `[search].summary_ratio` do
+budget) e **Exploration Maps** (refs com confidence) — renderizadas em todos
+os formatos.
 
 ### `arags query`
 

@@ -123,7 +123,23 @@ pub(crate) async fn handle_persist_exploration(
         .await
         .map_err(internal)?;
 
-    // Embed goal+summary into the dedicated space (best effort).
+    // Review gate (plan 023, borrowed from the RLM quality gate): when
+    // `[exploration] require_review` is set, non-admin submitters land in
+    // `pending_review` and never surface in search until an admin approves.
+    let mut review_note = String::new();
+    if state.config.exploration.require_review && !ctx.is_admin() {
+        let storage = state.storage.clone();
+        let rowid = stored.id;
+        match store::blocking(move || storage.mark_exploration_pending(rowid)).await {
+            Ok(true) => review_note = "pending admin review".into(),
+            Ok(false) => {}
+            Err(e) => tracing::warn!(error = %e, "failed to mark exploration pending"),
+        }
+    }
+
+    // Embed goal+summary into the dedicated space (best effort). Pending maps
+    // are embedded too: search gates them by status, and an admin approval
+    // must not require a re-embed.
     if let Some(vectors) = state.exploration_vector_store.as_ref() {
         let text = format!("{}\n{}", req.goal, req.summary);
         if let Some(vec) = embed_lenient(state, text).await {
@@ -140,6 +156,7 @@ pub(crate) async fn handle_persist_exploration(
         project = %req.project,
         created_by = %ctx.username,
         unresolved = unresolved_paths.len(),
+        review = %review_note,
         "exploration persisted"
     );
 
@@ -147,7 +164,7 @@ pub(crate) async fn handle_persist_exploration(
         arags_proto::proto::PersistExplorationResponse {
             exploration_id: stored.exploration_id,
             accepted: true,
-            reason: String::new(),
+            reason: review_note,
             unresolved_paths,
         },
     ))

@@ -10,10 +10,12 @@ usuário).
 ## Visão geral
 
 O servidor gerencia **projetos (buffers)**, **indexação** (chunking + embeddings
-no servidor + LanceDB), **busca híbrida**, **memória/histórico**, manutenção
-(consolidate/decay por cron + RPC admin) e — desde os planos 018/017 —
-**autenticação por refresh-token** e um **cache semântico de respostas
-digeridas (QA-Cache)**, com operações determinísticas (sem LLM).
+no servidor + usearch HNSW), **busca híbrida**, **unified contextual query**
+(plan 023: chunks + sumários RLM aprovados + mapas de exploração numa resposta,
+com trust pipeline), **memória/histórico**, manutenção (consolidate/decay por
+cron + RPC admin) e — desde os planos 018/017 — **autenticação por
+refresh-token** e um **cache semântico de respostas digeridas (QA-Cache)**,
+com operações determinísticas (sem LLM).
 
 ## Build & Run
 
@@ -84,6 +86,11 @@ cache = true                          # cache SQLite de embeddings
 tier = "hybrid"                       # default p/ SEARCH_TIER_UNSPECIFIED
 top_k = 10                            # quando o request omite max_results
 max_tokens = 8000                     # budget do contexto
+decay_lambda = 0.0                    # decay de saliência no serving (0 = off)
+summary_ratio = 0.6                   # unified query: fatia de sumários RLM (0 = off)
+summary_min_score = 0.35              # score mínimo p/ sumário entrar na fusão
+exploration_enabled = true            # unified query: anexar mapas relevantes
+exploration_limit = 2                 # máx. de explorações por resposta
 
 [qa_cache]
 novel_k = 20              # chunks digeridos numa pergunta nova (client)
@@ -103,6 +110,9 @@ decay_score_floor = 0.05
 
 [history]
 retention_days = 90                   # purge no ticker; 0 = mantém
+
+[exploration]
+require_review = false                # plan 023: não-admins caem em pending_review
 ```
 
 > Os knobs de embedding vivem **apenas** aqui — as envs `ARAGS_OLLAMA_*` (e
@@ -112,14 +122,17 @@ retention_days = 90                   # purge no ticker; 0 = mantém
 
 > **Auth (plan 018):** os RPCs mutantes (`InvalidateCache`, e qualquer RPC que
 > escreva estado) exigem um `Authorization: Bearer <session>` válido; operações
-> de invalidação exigem role `Admin`. Clientes obtêm a sessão via `AuthRefresh`.
+> de invalidação exigem role `Admin` — inclusive o review gate de explorações
+> (`ReviewExploration`, plan 023) e o review de nós RLM. Clientes obtêm a
+> sessão via `AuthRefresh`.
 > O servidor é **LLM-free**: nenhum LLM é invocado aqui — a síntese (digest/
 > summarize) roda no client (config `arags-llm` do usuário).
 
 ## Arquitetura
 
 Fluxo: `arags-cli` → `arags-server` (gRPC, plano de dados) → `arags-storage`
-(SQLite + LanceDB) / `arags-embedding` (chunking + embeddings) / `arags-memory`
+(SQLite + usearch HNSW) / `arags-embedding` (chunking + embeddings) /
+`arags-memory`
 (memória, histórico, manutenção). Sem `arags-core` engine nem `arags-llm` no
 servidor.
 

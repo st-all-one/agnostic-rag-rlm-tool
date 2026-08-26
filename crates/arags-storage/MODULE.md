@@ -58,6 +58,29 @@ Camada de persistência do `arags`: SQLite (metadados + FTS5/BM25) com um único
 - `src/rlm_vectors.rs` — **RLM vectors (plan 021: testes em submódulo-arquivo):**
   espaço vetorial dedicado aos summaries (`open(dims)`/`insert`/`delete`/
   `search`/`count`); chave = rowid de `rlm_nodes`.
+- `src/vector_space.rs` (+ `vector_space/testing.rs`) — **plan 023:
+  `VectorSpaceStore` genérico** que deduplica a lógica open/upsert/search/save
+  dos três espaços dedicados (`qa_vectors`, `rlm_vectors`,
+  `exploration_vectors` viraram facades finas). Persistência **debounced**
+  (`SAVE_DEBOUNCE_MS = 2_000`; dirty flag + `last_save`) amortiza rajadas de
+  inserts a um único write O(N) do arquivo; `persist()` força flush (shutdown/
+  manutenção) e trait `FlushableVectorSpace` permite flush uniforme das três
+  spaces no graceful shutdown do server. Falha de auto-save loga `warn`
+  estruturado. Cosseno only; similaridade clampada `[0,1]`.
+- **Trust pipeline da QA (plan 023):** `chunks.rs` ganhou
+  `chunk_hashes_match(&[(i64, String)]) -> bool` (provenance vs hashes atuais)
+  e `chunk_ages_hours(&[i64]) -> Vec<f64>` (decay de saliência no serving).
+  **Fix de deadlock pré-existente:** `get_chunks_with_content` buscava conteúdo
+  via `get_chunk_content` dentro do closure já dono do mutex da conexão
+  (re-lock não-reentrante = hang); o lookup agora roda na mesma conexão
+  travada.
+- **Review gate (plan 023):** migration `020_add_exploration_review.sql`
+  rebuilda `explorations` com `'pending_review'` no CHECK de status;
+  `explorations/feedback.rs` ganhou `mark_exploration_pending(rowid)` e
+  `review_exploration(id, approved, reviewer)` (aprovação admin-gated → fresh,
+  rejeição → retired). **Scoping fix:** `get_approved_rlm_nodes(&ids,
+  buffer_id)` passou a exigir `buffer_id` (hidratação vetorial nunca cruza
+  projetos).
 
 ## Dependências
 - Internas: `arags-core` (hash canônico de chunk compartilhado com o client; plan 020).

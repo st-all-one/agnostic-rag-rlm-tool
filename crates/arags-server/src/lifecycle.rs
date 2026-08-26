@@ -118,7 +118,7 @@ pub async fn run_server(
         exploration_vector_store,
     )?;
 
-    let grpc_service = AragsServiceServer::new(AragsGrpcService::new(state));
+    let grpc_service = AragsServiceServer::new(AragsGrpcService::new(state.clone()));
 
     // Periodic memory maintenance (plan 019, C.1). Runs in the background on a
     // fixed interval; `interval_secs == 0` disables it. The loop is tied to the
@@ -204,6 +204,10 @@ pub async fn run_server(
         .add_service(grpc_service)
         .serve_with_shutdown(addr, shutdown_signal())
         .await?;
+
+    // Graceful shutdown: flush debounced vector-index mutations so the
+    // on-disk HNSW files match SQLite (best-effort).
+    state.flush_vector_stores();
 
     info!("arags-server shut down gracefully");
     Ok(())

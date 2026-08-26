@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added — plan 023: render da Unified Contextual Query
+
+- `arags search` (e `query`) renderizam as novas seções aditivas do proto:
+  **"RLM Summaries"** (`SearchResponse.summaries` — nível, assunto, score e
+  trecho) e **"Exploration Maps"** (`SearchResponse.explorations` — goal,
+  confidence e summary) nos quatro formatos (`text`/`markdown`/`json`/
+  `jsonl`). Clientes/scripts que só leem `results` seguem intactos.
+
 ### Added — plan 022: comando `arags explore`
 - **`explore search "<query>"`** (`--project/--limit/--include-stale`): busca
   semântica de mapas persistidos; render text/json com status, confidence e

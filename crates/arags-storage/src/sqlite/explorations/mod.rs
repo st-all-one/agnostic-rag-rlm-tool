@@ -26,7 +26,8 @@ pub use feedback::{FeedbackKind, FeedbackOutcome};
 pub use staleness::BrokenAnchor;
 
 pub use arags_core::exploration::{
-    ROLE_CITED, ROLE_CONTEXT, STATUS_FRESH, STATUS_RETIRED, STATUS_STALE, TEMPLATE_VERSION_V1,
+    ROLE_CITED, ROLE_CONTEXT, STATUS_FRESH, STATUS_PENDING, STATUS_RETIRED, STATUS_STALE,
+    TEMPLATE_VERSION_V1,
 };
 
 /// zstd compression level for map bodies (matches CLI upload level).

@@ -98,3 +98,40 @@ fn test_list_chunks() {
     let chunks = storage.list_chunks(buffer_id).unwrap();
     assert_eq!(chunks.len(), 3);
 }
+
+#[test]
+fn test_chunk_ages_hours_scoped_and_fresh() {
+    let (storage, _tmp) = setup_storage();
+    let buffer_id = create_test_buffer(&storage);
+    let mut ids = Vec::new();
+    for i in 0..2 {
+        let chunk = NewChunk {
+            buffer_id,
+            file_path: format!("src/f{i}.rs"),
+            offset_start: 0,
+            offset_end: 10,
+            line_start: 1,
+            line_end: 1,
+            hash: vec![i as u8],
+            language: None,
+            chunk_type: None,
+            token_count: None,
+        };
+        ids.push(storage.insert_chunk(&chunk).unwrap());
+    }
+    storage.refresh_last_accessed(&ids).unwrap();
+
+    let ages = storage.chunk_ages_hours(&ids).unwrap();
+    assert_eq!(ages.len(), 2);
+    for id in ids {
+        let age = ages[&id];
+        assert!(
+            age.abs() < 3600.0,
+            "freshly accessed chunk age ~0, got {age}"
+        );
+    }
+
+    assert!(storage.chunk_ages_hours(&[]).unwrap().is_empty());
+    // Unknown ids are simply absent from the map.
+    assert!(storage.chunk_ages_hours(&[-1]).unwrap().is_empty());
+}

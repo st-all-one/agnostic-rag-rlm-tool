@@ -98,6 +98,45 @@ fn list_nodes_filters_by_review_and_level() {
     );
 }
 
+/// Regression (agnostic-rlm-rs-0764): hydration of vector-search hits must be
+/// scoped by buffer so other projects' summaries never surface in results.
+#[test]
+fn approved_node_hydration_is_scoped_by_buffer() {
+    let storage = temp_storage();
+
+    let mut other = node("other", 1, "src/auth.rs", &[]);
+    other.buffer_id = Some(2);
+    let (rowid_other, nid_other) = storage.store_rlm_node(&other).unwrap();
+    assert!(
+        storage
+            .review_rlm_node(&nid_other, true, "admin", None)
+            .unwrap()
+    );
+
+    let (rowid_own, nid_own) = storage
+        .store_rlm_node(&node("p", 1, "src/auth.rs", &[]))
+        .unwrap();
+    assert!(
+        storage
+            .review_rlm_node(&nid_own, true, "admin", None)
+            .unwrap()
+    );
+
+    // Vector search is global: both rowids come back as candidates, but only
+    // the caller's buffer may hydrate.
+    let ids = [
+        u64::try_from(rowid_own).unwrap(),
+        u64::try_from(rowid_other).unwrap(),
+    ];
+    let scoped = storage.get_approved_rlm_nodes(&ids, 1).unwrap();
+    assert_eq!(scoped.len(), 1, "only same-buffer nodes may hydrate");
+    assert_eq!(scoped[0].project, "p");
+
+    let other_side = storage.get_approved_rlm_nodes(&ids, 2).unwrap();
+    assert_eq!(other_side.len(), 1, "the other buffer sees its own node");
+    assert_eq!(other_side[0].project, "other");
+}
+
 #[test]
 fn edges_and_parent_chain_walk_up() {
     let storage = temp_storage();

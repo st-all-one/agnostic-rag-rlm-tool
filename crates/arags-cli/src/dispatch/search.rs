@@ -33,7 +33,8 @@ pub(crate) fn run_search(
         tier: map_search_tier(tier) as i32,
     });
     let response = rt.block_on(client.search(request))?;
-    let mut results = response.into_inner().results;
+    let inner = response.into_inner();
+    let mut results = inner.results;
 
     if let Some(min) = min_score {
         results.retain(|r| r.score >= min);
@@ -42,12 +43,24 @@ pub(crate) fn run_search(
         results.retain(|r| r.file_path.contains(pat));
     }
 
-    let rendered = render_search(&results, query, format);
+    let rendered = render_search(
+        &results,
+        &inner.summaries,
+        &inner.explorations,
+        query,
+        format,
+    );
     print!("{rendered}");
     Ok(())
 }
 
-fn render_search(results: &[SearchResult], query: &str, format: Format) -> String {
+fn render_search(
+    results: &[SearchResult],
+    summaries: &[arags_proto::proto::SummaryHit],
+    explorations: &[arags_proto::proto::ExplorationRef],
+    query: &str,
+    format: Format,
+) -> String {
     match format {
         Format::FullJson => {
             let items: Vec<serde_json::Value> = results
@@ -66,14 +79,36 @@ fn render_search(results: &[SearchResult], query: &str, format: Format) -> Strin
                     "query": query,
                     "results": items,
                     "count": results.len(),
+                    "summaries": summaries.iter().map(|s| serde_json::json!({
+                        "node_id": s.node_id,
+                        "level": s.level,
+                        "subject": s.subject,
+                        "score": s.score,
+                        "text": s.summary_text,
+                    })).collect::<Vec<_>>(),
+                    "explorations": explorations.iter().map(|e| serde_json::json!({
+                        "exploration_id": e.exploration_id,
+                        "goal": e.goal,
+                        "summary": e.summary,
+                        "confidence": e.confidence,
+                    })).collect::<Vec<_>>(),
                 }))
                 .to_json_string()
         }
         Format::Jsonl => {
-            let pairs: Vec<(String, String)> = results
+            let mut pairs: Vec<(String, String)> = results
                 .iter()
                 .map(|r| (r.file_path.clone(), r.text.clone()))
                 .collect();
+            for s in summaries {
+                pairs.push((
+                    format!("[summary:{}] {}", s.level, s.subject),
+                    s.summary_text.clone(),
+                ));
+            }
+            for e in explorations {
+                pairs.push((format!("[map] {}", e.exploration_id), e.summary.clone()));
+            }
             crate::output::jsonl::render_content_jsonl("query", query, &pairs)
         }
         Format::Path => {
@@ -89,16 +124,38 @@ fn render_search(results: &[SearchResult], query: &str, format: Format) -> Strin
             crate::output::tree::render_search_results(&items)
         }
         Format::Markdown => {
-            let items: Vec<crate::output::markdown::SuperItem> = results
-                .iter()
-                .map(|r| crate::output::markdown::SuperItem {
-                    file_path: r.file_path.clone(),
-                    score: r.score,
-                    content: r.text.clone(),
-                    language: None,
-                })
-                .collect();
-            crate::output::markdown::render_search_results(&items)
+            let mut out = render_markdown_results(results);
+            if !summaries.is_empty() {
+                out.push_str("## RLM Summaries\n\n");
+                let items: Vec<crate::output::markdown::SuperItem> = summaries
+                    .iter()
+                    .map(|s| crate::output::markdown::SuperItem {
+                        file_path: format!("[summary:{}] {}", s.level, s.subject),
+                        score: s.score,
+                        content: s.summary_text.clone(),
+                        language: None,
+                    })
+                    .collect();
+                out.push_str(&crate::output::markdown::render_search_results(&items));
+            }
+            if !explorations.is_empty() {
+                out.push_str("## Exploration Maps\n\n");
+                let items: Vec<crate::output::markdown::SuperItem> = explorations
+                    .iter()
+                    .map(|e| crate::output::markdown::SuperItem {
+                        file_path: format!(
+                            "[map:{id}] {goal}",
+                            id = e.exploration_id,
+                            goal = e.goal
+                        ),
+                        score: e.confidence,
+                        content: e.summary.clone(),
+                        language: None,
+                    })
+                    .collect();
+                out.push_str(&crate::output::markdown::render_search_results(&items));
+            }
+            out
         }
         Format::Text => {
             let items: Vec<crate::output::prompt::PromptItem> = results
@@ -113,6 +170,19 @@ fn render_search(results: &[SearchResult], query: &str, format: Format) -> Strin
             crate::output::prompt::render_search_context(&items)
         }
     }
+}
+
+fn render_markdown_results(results: &[SearchResult]) -> String {
+    let items: Vec<crate::output::markdown::SuperItem> = results
+        .iter()
+        .map(|r| crate::output::markdown::SuperItem {
+            file_path: r.file_path.clone(),
+            score: r.score,
+            content: r.text.clone(),
+            language: None,
+        })
+        .collect();
+    crate::output::markdown::render_search_results(&items)
 }
 
 #[allow(clippy::too_many_arguments)]

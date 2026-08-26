@@ -24,7 +24,8 @@ O cliente usa o **LLM local do usuário** apenas para *digest* (`query -qa`) e
 ```
 ┌──────────────────────────────────────────────────────┐
 │              arags-server  (long-running)                │
-│  SQLite (FTS5/BM25) + LanceDB (vetorial) + embeddings  │
+│  SQLite (FTS5/BM25) + usearch HNSW (4 espaços        │
+│  vetoriais) + embeddings candle (MiniLM, INT8)         │
 │  expõe API gRPC (tonic + prost, via arags-proto)        │
 │  sem LLM — plano de dados puro                          │
 └───────────────────────────┬──────────────────────────┘
@@ -40,10 +41,16 @@ O cliente usa o **LLM local do usuário** apenas para *digest* (`query -qa`) e
 - **9 crates**: `arags-cli`, `arags-core`, `arags-storage`, `arags-search`,
   `arags-embedding`, `arags-memory`, `arags-llm`, `arags-proto`, `arags-server`.
 - Conexão tipada por `arags-proto` (trait `AragsService`, RPCs sobre gRPC).
-- **QA-Cache (plan 017):** o servidor faz embedding + SQLite + LanceDB e devolve
+- **QA-Cache (plan 017):** o servidor faz embedding + SQLite + usearch e devolve
   respostas digeridas; a síntese LLM (digest) roda no **cliente** (LLM do
   usuário) com `--cache-id` para lookup determinístico 1:1 e `cache_id` estável
   (anti-drift).
+- **Unified Contextual Query (plan 023):** uma única query funde os quatro
+  espaços vetoriais — chunks (A), respostas QA cacheadas (B), sumários RLM
+  aprovados (C) e mapas de exploração (D) — com budget configurável
+  (`[search].summary_ratio`, default 60% sumários / 40% código) e trust
+  pipeline em B/C/D (provenance por hash, staleness, review gate). Campos
+  aditivos no proto; clientes antigos ignoram as novas seções.
 - **Auth (plan 018):** refresh-tokens + sessões de curta duração com roles
   `Admin`/`NonAdmin`; RPCs mutantes exigem `Bearer` válido.
 - **Sem LLM no servidor** para qualquer operação (index/search/query/memory/
@@ -133,6 +140,7 @@ override por projeto) → `~/.arags/arags.toml` (`[server].addr`) → env
 | `arags query <question>` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
 | `arags memory list\|get\|invalidate\|cleanup` | Memória (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
 | `arags volunteer [--once]` | Roda como **voluntário RLM**: reclama jobs de sumarização e sintetiza com seu LLM local (config em `~/.arags/arags.toml`) |
+| `arags explore {search,persist,feedback}` | Mapas de exploração (plan 022): busca semântica, persistência com contrato validado e feedback confirm/contradict — ver `EXPLORATIONS.md` |
 | `arags persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
 | `arags history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |
 | `arags-server up\|status\|admin ...` | Binário do servidor (data plane gRPC; `admin create-refresh`, etc.) |
@@ -246,6 +254,26 @@ l2_tolerance = 0.3   # fração de arquivos mudos que dispara re-sumário do tem
 l3_tolerance = 0.5   # idem para o sumário global (mais tolerante)
 ```
 
+### Unified Query (plan 023)
+
+Sem tier explícito, toda busca já devolve os três planos de contexto em uma
+resposta:
+
+```bash
+arags search "como funciona o login?"
+# ├─ Results        — chunks verbatim (BM25+semântica, ≥40% do budget)
+# ├─ RLM Summaries  — sínteses aprovadas do dataset recursivo (até 60%)
+# └─ Exploration Maps — mapas relacionais relevantes com confidence
+```
+
+- Sumários só entram se o score RRF normalizado ≥ `[search].summary_min_score`;
+  sem qualificados, o budget integral fica com chunks.
+- Explorações passam pelo pipeline de confiança completo (recheck de âncoras,
+  grounding opcional, gate) e respeitam o review gate quando
+  `[exploration].require_review = true`.
+- Campos **aditivos** no proto (`summaries`, `explorations`) — clientes antigos
+  simplesmente ignoram.
+
 ### `arags search`
 
 | Flag | Descrição | Default |
@@ -282,9 +310,12 @@ O `arags-server` é dono do estado. Por padrão (container) os dados vivem em
 
 ```
 /data/
-├── knowledge.db          # SQLite (WAL, FTS5, metadados)
-├── knowledge.db-wal      # WAL journal
-└── vectors.usearch/      # HNSW vetorial (all-MiniLM-L6-v2)
+├── knowledge.db                  # SQLite (WAL, FTS5, metadados)
+├── knowledge.db-wal              # WAL journal
+├── vectors.usearch               # espaço A: chunks (HNSW, 384-dim)
+├── question_vectors.usearch      # espaço B: perguntas QA
+├── rlm_vectors.usearch           # espaço C: sumários RLM aprovados
+└── exploration_vectors.usearch   # espaço D: mapas de exploração
 ```
 
 Cada projeto é um `buffer` na tabela `buffers` com UUIDv7 único. Isolamento por
@@ -336,6 +367,14 @@ cache = true                          # cache SQLite de embeddings
 tier = "hybrid"                       # default p/ SEARCH_TIER_UNSPECIFIED
 top_k = 10                            # quando o request omite max_results
 max_tokens = 8000                     # budget do contexto
+decay_lambda = 0.0                    # decay de saliência no serving (0 = off)
+summary_ratio = 0.6                   # unified query: fatia de sumários RLM (0 = off)
+summary_min_score = 0.35              # score mínimo p/ sumário entrar na fusão
+exploration_enabled = true            # unified query: anexar mapas relevantes
+exploration_limit = 2                 # máx. de explorações por resposta
+
+[exploration]
+require_review = false                # não-admins caem em pending_review (RPC ReviewExploration)
 
 [qa_cache]
 # parâmetros de cache semântico (anti-drift por hash de chunk)
@@ -431,7 +470,8 @@ cargo bench
 ```
 
 Convenções de código e de organização de testes: `AGENTS.md`.
-Planos de arquitetura: `plan/` (o mais recente é o `022`, já implementado).
+Planos de arquitetura: `plan/` (o mais recente é o `023` — Unified Contextual
+Query, já implementado).
 Contrato para agentes exploradores persistirem mapas: `EXPLORATIONS.md`.
 
 ## Configuração de Build

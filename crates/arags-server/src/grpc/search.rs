@@ -12,9 +12,11 @@
 //! which tiers contributed. Natural-language questions that return nothing
 //! under FTS5's default AND semantics are retried with an OR pass.
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::time::Instant;
 
+use arags_search::hybrid::rrf::rrf_score;
 use arags_search::{
     Bm25Search, EntitySearch, HybridSearch, SearchOptions, SearchTier as HybridTier,
     SemanticSearch, build_search_results,
@@ -59,7 +61,17 @@ pub(crate) async fn hybrid_search(
         .vector_store
         .as_ref()
         .map(|v| SemanticSearch::new(v.clone()));
-    let hybrid = HybridSearch::new(bm25, entity, semantic);
+    // Serving-path decay ([search].decay_lambda > 0) re-weights fused scores
+    // by chunk age; 0 keeps the default disabled-at-query-time behaviour.
+    let hybrid = {
+        let h = HybridSearch::new(bm25, entity, semantic);
+        let lambda = state.config.search.decay_lambda;
+        if lambda > 0.0 {
+            h.with_decay(arags_search::DecayConfig::new(lambda))
+        } else {
+            h.with_decay(arags_search::DecayConfig::disabled())
+        }
+    };
 
     // Embedding inference is synchronous CPU work and would block the async
     // worker, so run it on a blocking task. Falls back to BM25-only when the
@@ -90,6 +102,18 @@ pub(crate) async fn hybrid_search(
         fused = hybrid
             .search(&or_query, query_vector, buffer_id, &options, None)
             .await?;
+    }
+
+    // Serving-path salience decay ([search].decay_lambda > 0): re-weight the
+    // fused scores by chunk age and re-rank. Best-effort — an age lookup
+    // failure must not kill the search.
+    if state.config.search.decay_lambda > 0.0 && !fused.is_empty() {
+        let ids: Vec<i64> = fused.iter().map(|r| r.chunk_id).collect();
+        let storage = state.storage.clone();
+        match store::blocking(move || storage.chunk_ages_hours(&ids)).await {
+            Ok(ages) => fused = hybrid.apply_decay(fused, &ages),
+            Err(e) => tracing::warn!(error = %e, "chunk age lookup failed; skipping decay"),
+        }
     }
 
     let mut results = build_search_results(&state.storage, &fused, None)?;
@@ -123,21 +147,34 @@ fn normalize_scores(results: &mut [arags_search::SearchResult]) {
     }
 }
 
-/// Search the RLM recursive summary dataset (TIER_SUMMARY). Lexical candidates
-/// come from `rlm_fts`; semantic candidates from the dedicated summary vector
-/// space. Scores are min-max normalised per source and merged by keeping the
-/// best score per node. `chunk_id` carries the `rlm_nodes.id` rowid;
-/// `file_path` carries the node subject.
+/// A hydrated RLM summary candidate with its fused score.
+#[derive(Debug, Clone)]
+pub(crate) struct SummaryCandidate {
+    pub node_id: String,
+    pub rowid: i64,
+    pub level: i64,
+    pub subject: String,
+    pub text: String,
+    pub score: f32,
+}
+
+/// Search the RLM recursive summary dataset. Lexical candidates come from
+/// `rlm_fts`; semantic candidates from the dedicated summary vector space.
+/// The two rankings are fused with Reciprocal Rank Fusion (same family as the
+/// chunk hybrid tiers) and min-max normalised to `[0, 1]`.
 pub(crate) async fn summary_search(
     state: &AppState,
     buffer_id: i64,
     fts_query: &str,
     top_k: usize,
-) -> anyhow::Result<Vec<SearchResult>> {
+) -> anyhow::Result<Vec<SummaryCandidate>> {
+    const RRF_K: f32 = 60.0;
+    let start = std::time::Instant::now();
     let storage = state.storage.clone();
-    // Lexical pass (blocking SQLite work).
+
+    // Lexical pass (blocking SQLite work): ranked list of rowids.
     let query_owned = fts_query.to_string();
-    let mut best: std::collections::HashMap<i64, SearchResult> =
+    let lexical: Vec<(i64, arags_storage::sqlite::rlm::RlmNode)> =
         tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
             let mut nodes = storage.search_rlm_fts(buffer_id, &query_owned, top_k)?;
             if nodes.is_empty() && query_owned.split_whitespace().count() > 1 {
@@ -148,27 +185,14 @@ pub(crate) async fn summary_search(
                     .join(" OR ");
                 nodes = storage.search_rlm_fts(buffer_id, &or_query, top_k)?;
             }
-            Ok(nodes
-                .into_iter()
-                .map(|n| {
-                    (
-                        n.id,
-                        SearchResult {
-                            chunk_id: n.id,
-                            text: n.summary_text,
-                            score: 1.0,
-                            file_path: n.subject,
-                            start_line: 0,
-                            end_line: 0,
-                        },
-                    )
-                })
-                .collect::<std::collections::HashMap<_, _>>())
+            Ok(nodes.into_iter().map(|n| (n.id, n)).collect())
         })
         .await
         .map_err(internal)??;
 
-    // Semantic pass over the dedicated summary vector space.
+    // Semantic pass over the dedicated summary vector space: ranked list
+    // ordered by cosine similarity (approved + scoped hydration only).
+    let mut semantic: Vec<(i64, arags_storage::sqlite::rlm::RlmNode)> = Vec::new();
     if let Some(vectors) = state.rlm_vector_store.as_ref() {
         let embedder = state.embedder.clone();
         let q = fts_query.to_string();
@@ -177,69 +201,99 @@ pub(crate) async fn summary_search(
             .ok()
             .and_then(Result::ok);
         if let Some(vec) = query_vector {
-            let neighbors = vectors
+            let mut neighbors = vectors
                 .search(&vec, top_k)
                 .map_err(|e| anyhow::anyhow!(e))?;
+            neighbors.sort_by(|a, b| b.similarity.total_cmp(&a.similarity));
             let ids: Vec<u64> = neighbors.iter().map(|n| n.id).collect();
-            #[allow(clippy::cast_possible_wrap)] // rowids fit i64
-            let sim_by_id: std::collections::HashMap<i64, f32> = neighbors
-                .iter()
-                .filter_map(|nb| i64::try_from(nb.id).ok().map(|id| (id, nb.similarity)))
-                .collect();
             let storage = state.storage.clone();
-            let approved = store::blocking(move || storage.get_approved_rlm_nodes(&ids))
+            let approved = store::blocking(move || storage.get_approved_rlm_nodes(&ids, buffer_id))
                 .await
                 .map_err(internal)?;
-            for node in approved {
-                let entry = best.entry(node.id).or_insert_with(|| SearchResult {
-                    chunk_id: node.id,
-                    text: node.summary_text.clone(),
-                    score: 0.0,
-                    file_path: node.subject,
-                    start_line: 0,
-                    end_line: 0,
-                });
-                // Merge: keep the better of lexical/semantic scores.
-                if let Some(sim) = sim_by_id.get(&node.id) {
-                    if *sim > entry.score {
-                        entry.score = *sim;
+            let by_id: std::collections::HashMap<i64, _> =
+                approved.into_iter().map(|n| (n.id, n)).collect();
+            for nb in neighbors {
+                #[allow(clippy::cast_possible_wrap)] // rowids fit i64
+                if let Ok(rowid) = i64::try_from(nb.id) {
+                    if let Some(node) = by_id.get(&rowid) {
+                        semantic.push((rowid, node.clone()));
                     }
                 }
             }
         }
     }
 
-    let mut results: Vec<SearchResult> = best.into_values().collect();
-    normalize_scores_proto(&mut results);
-    results.sort_by(|a, b| b.score.total_cmp(&a.score));
-    results.truncate(top_k);
-    Ok(results)
+    // RRF fusion over the two rankings; hydrate from whichever list carries
+    // the node (lexical rows are complete; semantic rows were hydrated too).
+    let mut scores: HashMap<i64, f32> = HashMap::with_capacity(top_k * 2);
+    for (rank, (rowid, _)) in lexical.iter().enumerate() {
+        *scores.entry(*rowid).or_insert(0.0) += rrf_score(rank, RRF_K);
+    }
+    for (rank, (rowid, _)) in semantic.iter().enumerate() {
+        *scores.entry(*rowid).or_insert(0.0) += rrf_score(rank, RRF_K);
+    }
+    let node_by_id: HashMap<i64, &arags_storage::sqlite::rlm::RlmNode> = lexical
+        .iter()
+        .chain(semantic.iter())
+        .map(|(id, n)| (*id, n))
+        .collect();
+
+    let mut fused: Vec<SummaryCandidate> = scores
+        .into_iter()
+        .filter_map(|(rowid, score)| {
+            node_by_id.get(&rowid).map(|n| SummaryCandidate {
+                node_id: n.node_id.clone(),
+                rowid,
+                level: n.level,
+                subject: n.subject.clone(),
+                text: n.summary_text.clone(),
+                score,
+            })
+        })
+        .collect();
+
+    // Deterministic order: score desc, then rowid asc (RRF ties).
+    fused.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then_with(|| a.rowid.cmp(&b.rowid))
+    });
+    normalize_summaries(&mut fused);
+    fused.truncate(top_k);
+    tracing::debug!(
+        elapsed_ms = start.elapsed().as_millis(),
+        lexical = lexical.len(),
+        semantic = semantic.len(),
+        fused = fused.len(),
+        "summary_search completed"
+    );
+    Ok(fused)
 }
 
-/// Min-max normalise gRPC-shaped results to `[0, 1]` (higher = better).
-fn normalize_scores_proto(results: &mut [SearchResult]) {
-    if results.len() < 2 {
-        for r in results.iter_mut() {
-            r.score = 1.0;
+/// Min-max normalise RRF-fused summary scores to `[0, 1]`.
+fn normalize_summaries(summaries: &mut [SummaryCandidate]) {
+    if summaries.len() < 2 {
+        for s in summaries.iter_mut() {
+            s.score = 1.0;
         }
         return;
     }
-    let min = results
+    let min = summaries
         .iter()
-        .map(|r| r.score)
+        .map(|s| s.score)
         .fold(f32::INFINITY, f32::min);
-    let max = results
+    let max = summaries
         .iter()
-        .map(|r| r.score)
+        .map(|s| s.score)
         .fold(f32::NEG_INFINITY, f32::max);
     if (max - min).abs() < f32::EPSILON {
-        for r in results.iter_mut() {
-            r.score = 1.0;
+        for s in summaries.iter_mut() {
+            s.score = 1.0;
         }
         return;
     }
-    for r in results.iter_mut() {
-        r.score = (r.score - min) / (max - min);
+    for s in summaries.iter_mut() {
+        s.score = (s.score - min) / (max - min);
     }
 }
 
@@ -301,14 +355,17 @@ pub(crate) async fn handle_search(
     // searches only the approved RLM summary dataset.
     if matches!(SearchTier::try_from(req.tier), Ok(SearchTier::TierSummary)) {
         let fts_query = sanitize_fts(&query);
-        let results = summary_search(state, buffer_id, &fts_query, max_results)
+        let summaries = summary_search(state, buffer_id, &fts_query, max_results)
             .await
             .map_err(internal)?;
+        let results = summaries_to_results(&summaries);
         let total_count = i32::try_from(results.len()).unwrap_or(i32::MAX);
         return Ok(Response::new(SearchResponse {
             results,
             total_count,
             duration_ms: start.elapsed().as_secs_f64() * 1000.0,
+            summaries: summaries.iter().map(summary_hit_from).collect(),
+            explorations: Vec::new(),
         }));
     }
 
@@ -329,14 +386,165 @@ pub(crate) async fn handle_search(
         .await
         .map_err(internal)?;
 
-    let results = to_proto_results(&candidates);
+    // Unified query (plan 023): fuse approved RLM summaries into the answer
+    // budget and attach relevant exploration maps. Both are additive fields —
+    // clients unaware of them simply ignore the new data.
+    let (results, summaries, explorations) = unify_query(
+        state,
+        &project,
+        buffer_id,
+        &query,
+        &fts_query,
+        to_proto_results(&candidates),
+        max_results,
+    )
+    .await;
+
     let total_count = i32::try_from(results.len()).unwrap_or(i32::MAX);
     Ok(Response::new(SearchResponse {
         results,
         total_count,
         duration_ms: start.elapsed().as_secs_f64() * 1000.0,
+        summaries,
+        explorations,
     }))
 }
+
+/// Convert summary candidates into legacy-shaped `SearchResult`s, keeping
+/// TIER_SUMMARY responses backward compatible (`file_path` tags the subject).
+fn summaries_to_results(summaries: &[SummaryCandidate]) -> Vec<SearchResult> {
+    summaries
+        .iter()
+        .map(|s| SearchResult {
+            chunk_id: s.rowid,
+            text: s.text.clone(),
+            score: s.score,
+            file_path: format!(
+                "[summary:{level}] {subject}",
+                level = s.level,
+                subject = s.subject
+            ),
+            start_line: 0,
+            end_line: 0,
+        })
+        .collect()
+}
+
+fn summary_hit_from(s: &SummaryCandidate) -> arags_proto::proto::SummaryHit {
+    arags_proto::proto::SummaryHit {
+        node_id: s.node_id.clone(),
+        rowid: s.rowid,
+        level: i32::try_from(s.level).unwrap_or(0),
+        subject: s.subject.clone(),
+        summary_text: s.text.clone(),
+        score: s.score,
+    }
+}
+
+/// Unified query pipeline (plan 023):
+/// 1. Chunks always keep at least `(1 - summary_ratio)` of the result budget.
+/// 2. When approved RLM summaries qualify (score >= `summary_min_score`),
+///    they claim up to `summary_ratio` of the budget — the digest-once
+///    workflow means a query about digested content is answered mostly by
+///    synthesised summaries with real code backing the remainder. With no
+///    qualifying summaries the full budget stays with chunks.
+/// 3. Relevant fresh exploration maps are attached when available.
+///
+/// Every stage is best-effort: failures degrade to chunk-only responses.
+async fn unify_query(
+    state: &AppState,
+    project: &str,
+    buffer_id: i64,
+    raw_query: &str,
+    fts_query: &str,
+    mut candidates: Vec<SearchResult>,
+    max_results: usize,
+) -> (
+    Vec<SearchResult>,
+    Vec<arags_proto::proto::SummaryHit>,
+    Vec<arags_proto::proto::ExplorationRef>,
+) {
+    let cfg = &state.config.search;
+
+    // ── Summaries (space C) ─────────────────────────────────────────────
+    let mut summary_hits: Vec<arags_proto::proto::SummaryHit> = Vec::new();
+    let ratio = cfg.summary_ratio.clamp(0.0, 1.0);
+    if ratio > 0.0 && max_results > 1 {
+        match summary_search(state, buffer_id, fts_query, max_results).await {
+            Ok(all) => {
+                let qualifying: Vec<SummaryCandidate> = all
+                    .into_iter()
+                    .filter(|s| s.score >= cfg.summary_min_score as f32)
+                    .collect();
+                let (take, chunk_budget) =
+                    split_summary_budget(max_results, ratio, qualifying.len());
+                if take > 0 {
+                    summary_hits = qualifying[..take].iter().map(summary_hit_from).collect();
+                    candidates.truncate(chunk_budget);
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "unified query: summary fusion failed"),
+        }
+    }
+
+    // ── Explorations (space D) ──────────────────────────────────────────
+    let mut exploration_refs: Vec<arags_proto::proto::ExplorationRef> = Vec::new();
+    if cfg.exploration_enabled && cfg.exploration_limit > 0 {
+        match super::exploration::search::search_explorations_core(
+            state,
+            project.to_string(),
+            raw_query.to_string(),
+            cfg.exploration_limit,
+            false,
+        )
+        .await
+        {
+            Ok(resp) => {
+                exploration_refs = resp
+                    .hits
+                    .into_iter()
+                    .map(|h| arags_proto::proto::ExplorationRef {
+                        exploration_id: h.exploration_id,
+                        goal: h.goal,
+                        summary: h.summary,
+                        confidence: h.confidence,
+                    })
+                    .collect();
+            }
+            Err(status) => {
+                tracing::debug!(%status, "unified query: exploration attach skipped");
+            }
+        }
+    }
+
+    (candidates, summary_hits, exploration_refs)
+}
+
+/// Split the result budget between RLM summaries and chunks.
+///
+/// Summaries claim `floor(max_results * ratio)` slots, capped by how many
+/// actually qualify; chunks keep the remainder (always at least 1 when
+/// `max_results > 1`, so real code never disappears entirely).
+#[must_use]
+fn split_summary_budget(max_results: usize, ratio: f64, qualifying: usize) -> (usize, usize) {
+    if max_results <= 1 || ratio <= 0.0 {
+        return (0, max_results);
+    }
+    let want = ((max_results as f64) * ratio).floor() as usize;
+    let mut take = want.min(qualifying);
+    // Keep at least one chunk slot for grounded, verbatim context.
+    if take >= max_results {
+        take = max_results - 1;
+    }
+    if take == 0 {
+        return (0, max_results);
+    }
+    let chunk_budget = max_results - take;
+    (take, chunk_budget)
+}
+
+#[cfg(test)]
+mod tests;
 
 /// Build an LLM-ready context from the top relevant chunks of a project.
 ///

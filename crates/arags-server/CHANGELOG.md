@@ -10,6 +10,47 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
   (imagens container assam/montam checkpoints sem arquivo de config);
   núcleo puro `with_overrides(addr, data_dir, model_dir)` testável.
 
+### Added — plan 023: Unified Contextual Query (epic `agnostic-rlm-rs-43a9`)
+
+- **Espaço C fundido na query** (`grpc/search.rs`): `summary_search` roda FTS
+  (`rlm_fts`, com retry OR para linguagem natural) + passada semântica sobre
+  `rlm_vectors` em paralelo e funde com **RRF** (k=60, `rrf_score` público do
+  `arags-search`) + normalização min-max. `unify_query` divide o budget com
+  `split_summary_budget` — sumários qualificados (`summary_min_score`)
+  reivindicam até `[search].summary_ratio` (60% default), chunks mantêm ≥1
+  slot. Resposta carrega `summaries: Vec<SummaryHit>`; `TIER_SUMMARY`
+  permanece compatível (resultados legacy-shaped + summaries preenchidos).
+- **Espaço D anexado** (`exploration/search.rs`): pipeline read-time extraído
+  para `search_explorations_core` e reuso na unified query; hits frescos
+  entram como `ExplorationRef` compacto (gate de status/grounding intacto).
+- **Trust pipeline B/C (`agnostic-rlm-rs-ac7f`)**: `provenance_intact` no hit
+  exato/near-hit da QA compara `source_hashes` com hashes atuais dos chunks
+  (drift → `mark_qa_stale` → MISS); Phase 4.6 em `grpc/index.rs` marca nós RLM
+  stale por hash pós-reindex (`mark_rlm_stale_by_hashes`) — saem da busca até
+  reprocesso. Falha de verificação falha aberto (nunca quebra serving).
+- **Review gate D (`agnostic-rlm-rs-35a1`)**: `[exploration].require_review`
+  coloca persist de não-admins em `pending_review`; busca nunca superficializa;
+  novo RPC admin-gated `ReviewExploration` aprova/rejeita.
+- **Knobs `[search]`** (`agnostic-rlm-rs-9ff2`): `decay_lambda` (serving decay
+  via `chunk_ages_hours`; 0=off), `summary_ratio`, `summary_min_score`,
+  `exploration_enabled`, `exploration_limit`.
+- **Flush vetorial no shutdown**: `AppState::flush_vector_stores()` persiste os
+  três espaços debounced após o graceful shutdown (`lifecycle.rs`).
+- Testes novos em `grpc/search/tests.rs` (budget/fusão/gates) e
+  `grpc/query_cache/tests.rs` (drift de provenance, near-hit cross-project).
+
+### Fixed
+
+- **Deadlock pré-existente** (`arags-storage::chunks`): `get_chunks_with_content`
+  re-travava o mutex da conexão via `get_chunk_content` dentro do closure já
+  dono do lock — hang eterno no modo Single quando a provenance tinha chunks.
+  Corrigido no storage; descoberto pelo teste `exact_hit_with_drifted_provenance_serves_miss`.
+- QA near-hit cross-project leak (`agnostic-rlm-rs-3c84`): guard de projeto +
+  staleness antes do Jaccard.
+- RLM semantic unscoped (`agnostic-rlm-rs-0764`): hidratação escopada por buffer.
+- Decay não servido (`agnostic-rlm-rs-fce3`): `[search].decay_lambda` aplica
+  decay exponencial nos scores dos chunks.
+
 ### Added — plan 022: handlers de explorações + hook de índice
 - **`grpc/exploration/{mod,search,feedback}.rs`**: `PersistExploration`
   (validação de contrato/caps, resolução path→hash, embed best-effort),

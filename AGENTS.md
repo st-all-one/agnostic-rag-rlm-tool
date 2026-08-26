@@ -10,7 +10,7 @@
 ```
 arags-cli  ──gRPC──▶  arags-server (data plane, LLM-free)
    │                        │
-   │ uses user LLM          ├─ arags-storage (SQLite FTS5/BM25 + LanceDB HNSW)
+   │ uses user LLM          ├─ arags-storage (SQLite FTS5/BM25 + usearch HNSW)
    │ (query -qa, persist)   ├─ arags-search (hybrid BM25 + semantic + RRF)
    │                        ├─ arags-embedding (chunking + candle all-MiniLM-L6-v2)
    │                        └─ arags-memory (memory, history, maintenance)
@@ -20,7 +20,7 @@ arags-cli  ──gRPC──▶  arags-server (data plane, LLM-free)
 **Tech Stack:**
 - Rust 2024 (edition = "2024", rust-version = "1.85")
 - SQLite via rusqlite (bundled, WAL, FTS5 for BM25)
-- LanceDB for vector storage (HNSW index)
+- usearch for vector storage (HNSW single-file; 4 dedicated spaces — chunks, QA questions, RLM summaries, explorations — sharing a generic `VectorSpaceStore` with debounced persistence)
 - candle-core + candle-transformers for all-MiniLM-L6-v2 embeddings (INT8 quantized, fixed model)
 - memmap2 for zero-copy file I/O
 - Rayon for parallel chunking
@@ -62,7 +62,7 @@ benches/
 |-------|------|
 | `arags-cli` | Binary entry point, clap parsing, output formatting; pure gRPC client |
 | `arags-core` | Shared types, client config (2-scope user config), dispatch, output formatting; no LLM, no recursion |
-| `arags-storage` | SQLite (metadata, FTS5) + LanceDB (vectors), dual transactions |
+| `arags-storage` | SQLite (metadata, FTS5) + usearch (vectors), dual transactions |
 | `arags-embedding` | Chunking strategies (code/text/markdown), native candle all-MiniLM-L6-v2 embedder (fixed model, server-side) |
 | `arags-search` | Hybrid search (BM25 + semantic + RRF fusion) |
 | `arags-memory` | Multi-project memory, knowledge base, history, server maintenance (consolidate/decay) |
@@ -128,7 +128,7 @@ Every PR must pass:
 |-----------|--------|-----|
 | File I/O | memmap2 | Zero-copy, OS-managed paging |
 | CPU parallelism | Rayon (par_iter) | 100% core utilization for chunking/embedding |
-| Search | SQLite FTS5 (BM25) + LanceDB HNSW (semantic) | Each specialist, fused via RRF |
+| Search | SQLite FTS5 (BM25) + usearch HNSW (semantic) | Each specialist, fused via RRF |
 | State | SQLite WAL | Transactional, crash-safe, concurrent readers |
 | Embedding | Native candle all-MiniLM-L6-v2 INT8 (384 dims) | Local inference, no Python/API/Ollama dependency |
 | Concurrency | Sync + channels + Rayon | Zero async overhead for CLI operations |
@@ -270,7 +270,7 @@ SQLITE3_FLAGS="-DSQLITE_DIRECT_OVERFLOW_READ -DSQLITE_ENABLE_BATCH_ATOMIC_WRITE 
 
 ## Reference Documents
 
-- `plan/` — detailed implementation plans (01-20); see `019-cli-consolidation.md` and `020-config-consolidation.md` for the current CLI/config surface
+- `plan/` — detailed implementation plans (01-23); see `019-cli-consolidation.md` and `020-config-consolidation.md` for the current CLI/config surface; `016-server-first-architecture.md` onward for the server-first data plane (plan 023 = Unified Contextual Query, implemented)
 - `ai-guides/rlm_guide/` — RLM architecture and patterns
 - `ai-guides/rust_guide/` — Rust 2024 best practices
 - `ai-guides/sqlite_guide/` — SQLite optimization, FTS5, WAL

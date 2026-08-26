@@ -3,7 +3,8 @@
 ## O que faz
 Servidor gRPC long-running da plataforma arags: **plano de dados puro, LLM-free**.
 Gerencia projetos (buffers), indexação (chunking + embeddings no servidor +
-LanceDB), busca híbrida, memória/histórico, manutenção (consolidate/decay) e
+usearch HNSW), busca híbrida, unified contextual query (plan 023),
+memória/histórico, manutenção (consolidate/decay) e
 QA-Cache — todas operações determinísticas (sem LLM). A digestão/sumarização
 ocorre no cliente (`arags-cli`) via o LLM do usuário.
 
@@ -19,7 +20,10 @@ ocorre no cliente (`arags-cli`) via o LLM do usuário.
   `ARAGS_SERVER_ADDR`/`ARAGS_DATA_DIR`/`ARAGS_EMBEDDER_MODEL_DIR`
   (núcleo puro `with_overrides` testável).
 - `src/state.rs` — `AppState` (storage, embedder, vector_store, qa_config,
-  maintenance config); `load_embedder(&EmbedderConfig)` constrói o embedder
+  maintenance config); **plan 023:** espaços vetoriais dedicados
+  (`question_vector_store`, `rlm_vector_store`, `exploration_vector_store`) e
+  `flush_vector_stores()` — persiste os três espaços debounced via trait
+  `FlushableVectorSpace`; `load_embedder(&EmbedderConfig)` constrói o embedder
   nativo all-MiniLM-L6-v2 (`MinilmEmbedder`, INT8 default) a partir de
   `[embedder].model_dir` — hash fallback sem weights — e `wrap_with_cache`
   habilita o `CachedEmbedder` quando `[embedder].cache = true`.
@@ -43,12 +47,21 @@ ocorre no cliente (`arags-cli`) via o LLM do usuário.
     embed em lotes de `[embedder].batch_size`).
   - `grpc/search.rs` — search/context (BM25 FTS5 + semântica + RRF; defaults de
     `[search]` aplicados a tier não informado, top_k e budget de contexto).
+    **plan 023 (unified query):** `summary_search` funde FTS+semântica do
+    espaço C com RRF (`rrf_score`) e normalização min-max; `unify_query`
+    anexa sumários qualificados (`split_summary_budget`: até
+    `[search].summary_ratio` do budget, chunks sempre ≥1) e refs de
+    explorações (`search_explorations_core`) — tudo best-effort, falha degrada
+    para chunk-only; `[search].decay_lambda` aplica decay de saliência no
+    serving. Testes em `grpc/search/tests.rs`.
   - `grpc/memory.rs` — `ListMemory`/`GetCache`/`InvalidateCache` (admin).
   - `grpc/history.rs` — histórico de consultas (escopado por refresh token).
   - `grpc/query_cache.rs` — `AuthRefresh` (plan 018) + `QueryWithCache`/
     `StoreAnswer`/`GetAnswerById`/`InvalidateCache` (plan 017); lookup semântico
     determinístico (embed de pergunta no espaço B `question_vector_store`),
-    staleness e invalidação (Stale/Delete + raio).
+    staleness e invalidação (Stale/Delete + raio). **plan 023:**
+    `provenance_intact` verifica hashes da provenance antes de servir hit
+    (drift → entry stale → MISS); guard projeto+stale no near-hit.
   - `grpc/admin.rs` — `TriggerMaintenance` (consolidate/decay sob demanda).
   - `grpc/status.rs` — get_server_status.
   - `grpc/rlm.rs` — **RPCs de RLM recursive summaries**: claim (lease
@@ -63,7 +76,11 @@ ocorre no cliente (`arags-cli`) via o LLM do usuário.
     `feedback.rs` confirm/contradict + invalidação admin); hook pós-index
     bumpa `project_epochs` e marca mapas stale por âncora. Knobs em
     `[exploration]`; testes em `grpc/exploration/tests.rs` +
-    `tests_feedback.rs`.
+    `tests_feedback.rs`. **plan 023:** review gate —
+    `[exploration].require_review` manda persist de não-admin para
+    `pending_review`; busca nunca superficia pendentes; RPC admin-gated
+    `ReviewExploration` aprova (fresh) ou rejeita (retired);
+    `search_explorations_core` compartilhado com a unified query.
   - `grpc/error.rs` — mapeamento erro→`Status` (`internal`/`not_found`/...).
 - `src/maintenance.rs` — consolidação/decay agendados (cron) + RPC admin.
 - `src/indexing.rs` — chunking determinístico (hash, linguagem, classificação).
@@ -71,8 +88,10 @@ ocorre no cliente (`arags-cli`) via o LLM do usuário.
   (`client_ca_root`), storage pooled híbrido (`pool_size > 1` →
   `Storage::open_pooled`), flusher de WAL (`flush_interval_ms` →
   `wal_checkpoint(PASSIVE)`) e ticker de manutenção com purge de histórico
-  (`retention_days`). Abre os vector stores (espaço A/B) e repassa para
-  `AppState::new`.
+  (`retention_days`). Abre os vector stores (espaço A/B/C/D) e repassa para
+  `AppState::new`; após o graceful shutdown chama
+  `state.flush_vector_stores()` para sincronizar os índices HNSW debounced
+  com o SQLite (plan 023).
 - `src/auth/mod.rs` — `authenticate(MetadataMap, &Storage) -> Result<AuthContext>` +
   `require_admin(&AuthContext)`; roles `Admin`/`NonAdmin` (plan 018).
 - `src/qa_vectors` — re-export de `arags_storage::QuestionVectorStore` (espaço B).
@@ -131,7 +150,7 @@ O schema é gerenciado por `arags-storage` (ver `migrations/` do workspace):
 
 ## Rules
 - `index_project` recebe texto bruto via client-streaming, faz chunking + embeddings
-  no servidor, persiste chunks + texts + FTS + entities + vetores (LanceDB) e só
+  no servidor, persiste chunks + texts + FTS + entities + vetores (usearch) e só
   então atualiza contadores do buffer.
 - `search` sanitiza a query FTS5 antes do `MATCH` (somente alfanuméricos/espaços)
   para evitar injeção.
