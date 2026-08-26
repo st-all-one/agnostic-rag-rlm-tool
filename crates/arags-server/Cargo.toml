@@ -55,4 +55,8 @@ tempfile.workspace = true
 # in Alpine, fragile cross-compiles, non-portable release binaries).
 default = []
 llamacpp = ["arags-embedding/llamacpp"]
-llamacpp-vulkan = ["arags-embedding/llamacpp-vulkan"]
+# NOTE: `llamacpp-vulkan` must also enable the server's own `llamacpp` feature
+# so the `#[cfg(feature = "llamacpp")]` code paths (e.g. the `llama_cpp_model` /
+# `llama_cpp_gpu_layers` fields in `state.rs`'s `EmbeddingConfig` builders) are
+# compiled — otherwise the build fails with E0063 when only this feature is set.
+llamacpp-vulkan = ["llamacpp", "arags-embedding/llamacpp-vulkan"]
