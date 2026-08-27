@@ -467,4 +467,112 @@ impl Storage {
             Ok(ids)
         })
     }
+
+    /// Return `(id, text)` pairs for the given explorations, where `text` is the
+    /// canonical embed input (`goal\n{summary}`) matching the normal persist
+    /// path, used by the reconcile worker (`agnostic-rlm-rs-36ae`) to re-embed
+    /// from SQLite. Missing rows are skipped.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_exploration_embed_inputs(&self, ids: &[i64]) -> Result<Vec<(i64, String)>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let placeholders: Vec<String> = ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 1))
+                .collect();
+            let sql = format!(
+                "SELECT id, goal, summary FROM explorations WHERE id IN ({})",
+                placeholders.join(", ")
+            );
+            let mut stmt = c
+                .prepare(&sql)
+                .context("prepare exploration embed inputs query")?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(ids.iter()), |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .context("query exploration embed inputs")?;
+            let mut out = Vec::with_capacity(ids.len());
+            for row in rows {
+                let (id, goal, summary) = row.context("read exploration embed input")?;
+                out.push((id, format!("{goal}\n{summary}")));
+            }
+            Ok(out)
+        })
+    }
+
+    /// Return `(id, text)` pairs for **every** exploration, where `text` is the
+    /// canonical embed input (`goal\n{summary}`), used by the server bootstrap
+    /// rebuild (`agnostic-rlm-rs-620d`) to reconstruct the exploration vector
+    /// space from SQLite when it diverges from the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn all_exploration_embed_inputs(&self) -> Result<Vec<(i64, String)>> {
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let mut stmt = c
+                .prepare("SELECT id, goal, summary FROM explorations")
+                .context("prepare all exploration embed inputs query")?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .context("query all exploration embed inputs")?;
+            let mut out = Vec::new();
+            for row in rows {
+                let (id, goal, summary) = row.context("read all exploration embed input")?;
+                out.push((id, format!("{goal}\n{summary}")));
+            }
+            Ok(out)
+        })
+    }
+
+    /// Clear the `pending_vector` marker for the given explorations after a
+    /// successful re-embed, restoring the normal `indexed` vector status.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update fails.
+    pub fn clear_explorations_pending_vector(&self, buffer_id: i64, ids: &[i64]) -> Result<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let placeholders: Vec<String> = ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 2))
+                .collect();
+            let sql = format!(
+                "UPDATE explorations SET vector_status = 'indexed' \
+                 WHERE buffer_id = ?1 AND id IN ({})",
+                placeholders.join(", ")
+            );
+            let mut params: Vec<&dyn rusqlite::ToSql> = vec![&buffer_id];
+            for id in ids {
+                params.push(id);
+            }
+            c.execute(&sql, rusqlite::params_from_iter(params.iter()))
+                .context("clear_explorations_pending_vector")?;
+            Ok(())
+        })
+    }
 }

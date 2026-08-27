@@ -112,3 +112,35 @@ message GetAnswerByIdResponse {
   repeated string source_chunk_ids = 5;
   repeated string source_hashes = 6;
 }
+
+// ── QA re-digest queue (issue `agnostic-rlm-rs-d172`) ──
+//
+// A volunteer client claims a lease, re-digests the (stale) answer locally with
+// its own LLM, stores it via StoreAnswer, then completes the job. The server is
+// LLM-free: it only owns the queue.
+
+// Claim the next pending re-digest job. `worker_user` is the authenticated
+// volunteer; when empty it defaults to the session username. `lease_secs`
+// defaults to 300s; an uncompleted lease reverts to the queue automatically.
+message ClaimPendingQaRequest {
+  string worker_user = 1;
+  int64 lease_secs = 2;
+}
+
+message ClaimPendingQaResponse {
+  bool found = 1;
+  int64 job_id = 2;
+  string cache_id = 3;
+  string project = 4;
+  string preferred_user = 5;
+  int64 leased_until = 6;
+}
+
+// Mark a leased re-digest job completed (after StoreAnswer succeeds).
+message CompletePendingQaRequest {
+  int64 job_id = 1;
+}
+
+message CompletePendingQaResponse {
+  bool ok = 1;
+}

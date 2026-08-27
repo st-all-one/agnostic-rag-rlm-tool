@@ -13,66 +13,88 @@ use super::{
 };
 
 impl Storage {
-    /// Enqueue (or refresh) a job. Idempotent per `job_key`: an existing
-    /// pending/claimed job is left untouched; a finished/cancelled one is
-    /// reset to `pending` with `generation + 1` and elevated priority.
-    /// Returns the job rowid and its current generation.
+    /// Enqueue (or refresh) a job. Idempotent per `(project, level, subject)`:
+    /// an existing pending/claimed job (or group of quorum slots) is left
+    /// untouched; a finished/cancelled one is reset to `pending` with
+    /// `generation + 1` and elevated priority. Returns the rowid of the first
+    /// slot and its current generation.
+    ///
+    /// When `job.quorum_slots > 1` the subject is **fanned out** to that many
+    /// independent physical job rows sharing a single `generation_group_id`.
+    /// Each slot carries a distinct `job_key` (`<logical>#<slot>`) so they are
+    /// independently claimable; a volunteer may claim at most one slot per
+    /// group (enforced in [`Storage::claim_rlm_job`]). With `quorum_slots == 1`
+    /// the classic single-row behaviour is preserved exactly (the `job_key`
+    /// carries no slot suffix).
     ///
     /// # Errors
     ///
-    /// Returns an error if the upsert fails.
+    /// Returns an error if the insert fails.
     pub fn enqueue_rlm_job(&self, job: &NewRlmJob) -> Result<(i64, i64)> {
+        let slots = job.quorum_slots.max(1);
+        let logical = rlm_job_key(&job.project, job.level, &job.subject);
         let now = now_ms();
-        let key = rlm_job_key(&job.project, job.level, &job.subject);
         let conn = self.connection().context("acquire connection")?;
-        let inserted: Option<(i64, i64)> = conn.execute(|c| {
-            c.query_row(
-                "INSERT INTO rlm_jobs \
-                 (job_key, buffer_id, project, level, subject, payload, status, priority, \
-                  created_at, updated_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?8) \
-                 ON CONFLICT(job_key) DO UPDATE SET \
-                   payload = excluded.payload, \
-                   status = 'pending', \
-                   priority = MIN(excluded.priority, rlm_jobs.priority), \
-                   attempts = 0, \
-                   last_error = NULL, \
-                   generation = rlm_jobs.generation + 1, \
-                   claimed_by = NULL, claimed_at = NULL, lease_expires_at = NULL, \
-                   updated_at = excluded.updated_at \
-                 WHERE rlm_jobs.status IN ('done','failed','cancelled') \
-                 RETURNING id, generation",
-                params![
-                    key,
-                    job.buffer_id,
-                    job.project,
-                    job.level,
-                    job.subject,
-                    job.payload,
-                    job.priority,
-                    now,
-                ],
-                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
-            )
-            .optional()
-            .context("upsert rlm_job")
-        })?;
-        let (id, generation) = match inserted {
-            Some(pair) => pair,
-            None => {
-                // Conflict hit but the reset WHERE filtered it out: an existing
-                // pending/claimed job stays authoritative — fetch its identity.
-                conn.execute(|c| {
-                    c.query_row(
-                        "SELECT id, generation FROM rlm_jobs WHERE job_key = ?1",
-                        params![key],
-                        |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
+        conn.execute(|c| {
+            // Existing slots for this subject (all quorum rows share the
+            // subject columns even though job_key is slot-suffixed).
+            let existing: Vec<(i64, String, i64, Option<i64>)> = {
+                let mut stmt = c
+                    .prepare(
+                        "SELECT id, status, generation, generation_group_id FROM rlm_jobs \
+                         WHERE project = ?1 AND level = ?2 AND subject = ?3",
                     )
-                    .context("fetch existing rlm_job")
-                })?
+                    .context("prepare existing rlm_jobs probe")?;
+                let rows = stmt
+                    .query_map(params![job.project, job.level, job.subject], |r| {
+                        Ok((
+                            r.get::<_, i64>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, i64>(2)?,
+                            r.get::<_, Option<i64>>(3)?,
+                        ))
+                    })
+                    .context("query existing rlm_jobs")?;
+                let mut out = Vec::new();
+                for r in rows {
+                    out.push(r.context("map existing rlm_job row")?);
+                }
+                out
+            };
+            if !existing.is_empty() {
+                let live = existing
+                    .iter()
+                    .any(|(_, st, _, _)| st == "pending" || st == "claimed");
+                if live {
+                    // A live slot already owns the work — keep it authoritative.
+                    return Ok((existing[0].0, existing[0].2));
+                }
+                // All slots finished/cancelled: reset, bump generation, recreate.
+                let old_generation = existing[0].2;
+                let group_id = existing[0].3.unwrap_or_else(|| existing[0].0);
+                c.execute(
+                    "DELETE FROM rlm_jobs WHERE project = ?1 AND level = ?2 AND subject = ?3",
+                    params![job.project, job.level, job.subject],
+                )
+                .context("reset rlm_job group")?;
+                let new_generation = old_generation + 1;
+                let first =
+                    insert_rlm_slots(c, job, slots, &logical, group_id, new_generation, now)
+                        .context("recreate rlm_job slots")?;
+                return Ok((first, new_generation));
             }
-        };
-        Ok((id, generation))
+            // Fresh subject: allocate a new generation group and create slots.
+            let group_id: i64 = c
+                .query_row(
+                    "SELECT COALESCE(MAX(generation_group_id), 0) + 1 FROM rlm_jobs",
+                    [],
+                    |r| r.get(0),
+                )
+                .context("allocate rlm generation group")?;
+            let first = insert_rlm_slots(c, job, slots, &logical, group_id, 0, now)
+                .context("create rlm_job slots")?;
+            Ok((first, 0))
+        })
     }
 
     /// Report a failed attempt: the job returns to `pending` for retry unless
@@ -139,15 +161,15 @@ impl Storage {
         let conn = self.connection().context("acquire connection")?;
         conn.execute(|c| {
             for (level, subject) in subjects {
-                let key = rlm_job_key(project, *level, subject);
                 let n = c
                     .execute(
                         "UPDATE rlm_jobs SET status = 'pending', priority = ?3, \
                            generation = generation + 1, attempts = 0, last_error = 'source changed', \
                            claimed_by = NULL, claimed_at = NULL, lease_expires_at = NULL, \
                            updated_at = ?2 \
-                         WHERE job_key = ?1 AND status IN ('pending','claimed')",
-                        params![key, now, PRIORITY_CANCELLED],
+                         WHERE project = ?1 AND level = ?4 AND subject = ?5 \
+                           AND status IN ('pending','claimed')",
+                        params![project, now, PRIORITY_CANCELLED, *level, subject],
                     )
                     .context("reset rlm_job for changed source")?;
                 cancelled += n;
@@ -206,7 +228,9 @@ impl Storage {
         Ok(())
     }
 
-    /// Fetch a live (pending/claimed) job by its deterministic key.
+    /// Fetch a live (pending/claimed) job for a subject. With quorum fan-out
+    /// several slots may share the subject; this returns the first live one
+    /// (callers only need to know whether live work exists).
     ///
     /// # Errors
     ///
@@ -219,17 +243,14 @@ impl Storage {
     ) -> Result<Option<RlmJob>> {
         let sql = format!(
             "SELECT {JOB_COLS} FROM rlm_jobs \
-             WHERE job_key = ?1 AND status IN ('pending','claimed')"
+             WHERE project = ?1 AND level = ?2 AND subject = ?3 \
+               AND status IN ('pending','claimed')"
         );
         let conn = self.connection().context("acquire connection")?;
         conn.execute(|c| {
-            c.query_row(
-                sql.as_str(),
-                params![rlm_job_key(project, level, subject)],
-                job_mapper,
-            )
-            .optional()
-            .context("get_live_rlm_job_by_key")
+            c.query_row(sql.as_str(), params![project, level, subject], job_mapper)
+                .optional()
+                .context("get_live_rlm_job_by_key")
         })
     }
 
@@ -268,4 +289,55 @@ impl Storage {
             Ok(n as usize)
         })
     }
+}
+
+/// Insert the `quorum_slots` physical job rows for a subject, sharing one
+/// `generation_group_id`. Slot `0` keeps the bare logical `job_key`; slots
+/// `1..` append a `#<slot>` suffix so the `job_key` UNIQUE constraint is never
+/// violated. Returns the rowid of the first (slot 0) row.
+///
+/// # Errors
+///
+/// Returns an error if any insert fails.
+fn insert_rlm_slots(
+    c: &rusqlite::Connection,
+    job: &NewRlmJob,
+    slots: usize,
+    logical: &str,
+    group_id: i64,
+    generation: i64,
+    now: i64,
+) -> rusqlite::Result<i64> {
+    let mut first_id = 0i64;
+    for slot in 0..slots {
+        let key = if slots == 1 {
+            logical.to_string()
+        } else {
+            format!("{logical}#{slot}")
+        };
+        let id: i64 = c.query_row(
+            "INSERT INTO rlm_jobs \
+                 (job_key, buffer_id, project, level, subject, payload, status, priority, \
+                  generation, generation_group_id, created_at, updated_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?9, ?10, ?10) \
+                 RETURNING id",
+            params![
+                key,
+                job.buffer_id,
+                job.project,
+                job.level,
+                job.subject,
+                job.payload,
+                job.priority,
+                generation,
+                group_id,
+                now,
+            ],
+            |r| r.get(0),
+        )?;
+        if first_id == 0 {
+            first_id = id;
+        }
+    }
+    Ok(first_id)
 }

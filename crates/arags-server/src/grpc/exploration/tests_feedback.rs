@@ -12,6 +12,7 @@ use super::handle_persist_exploration;
 use super::search::handle_get_exploration_by_id;
 use super::search::handle_search_explorations;
 use super::tests::{bearer, fixture, persist_request};
+use crate::config::ValidationMode;
 use arags_proto::proto::{
     FeedbackExplorationRequest, FeedbackKind, InvalidateExplorationRequest, InvalidateMode,
     ReviewExplorationRequest, SearchExplorationsRequest,
@@ -80,7 +81,11 @@ async fn feedback_contradictions_auto_retire_and_hide_from_search() {
 
 #[tokio::test]
 async fn invalidate_requires_admin_and_modes_behave() {
-    let fx = fixture();
+    let mut fx = fixture();
+    // Fire-and-forget (pre-`e89e` default): non-admin maps surface as `fresh`
+    // only under `Review` mode with `require_review = false`. The new default
+    // is `Quorum`, which holds non-admin maps pending for the quorum worker.
+    fx.state.config.exploration.validation_mode = ValidationMode::Review;
 
     let persisted = handle_persist_exploration(
         &fx.state,
@@ -161,6 +166,7 @@ async fn invalidate_requires_admin_and_modes_behave() {
 async fn review_gate_holds_non_admin_maps_until_approved() {
     let mut fx = fixture();
     fx.state.config.exploration.require_review = true;
+    fx.state.config.exploration.validation_mode = ValidationMode::Review;
 
     let persisted = handle_persist_exploration(
         &fx.state,

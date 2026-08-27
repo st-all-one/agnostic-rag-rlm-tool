@@ -18,6 +18,11 @@ use anyhow::{Context, Result};
 use parking_lot::Mutex;
 use usearch::{Index, IndexOptions, MetricKind, ScalarKind};
 
+/// `usearch` index metric used by every secondary space (cosine).
+const SPACE_METRIC: MetricKind = MetricKind::Cos;
+/// `usearch` scalar precision used by every secondary space.
+const SPACE_QUANT: ScalarKind = ScalarKind::F32;
+
 /// Minimum interval between whole-file index saves under automatic
 /// (debounced) persistence.
 pub const SAVE_DEBOUNCE_MS: u64 = 2_000;
@@ -33,7 +38,7 @@ pub struct Neighbor {
 
 /// Generic `usearch` index with debounced whole-file persistence.
 pub struct VectorSpaceStore {
-    index: Index,
+    index: Mutex<Index>,
     index_path: PathBuf,
     auto_persist: bool,
     dirty: AtomicBool,
@@ -66,8 +71,8 @@ impl VectorSpaceStore {
         } else {
             let opts = IndexOptions {
                 dimensions: dims,
-                metric: MetricKind::Cos,
-                quantization: ScalarKind::F32,
+                metric: SPACE_METRIC,
+                quantization: SPACE_QUANT,
                 connectivity: 0,
                 expansion_add: 0,
                 expansion_search: 0,
@@ -78,7 +83,7 @@ impl VectorSpaceStore {
         };
 
         Ok(Self {
-            index,
+            index: Mutex::new(index),
             index_path,
             auto_persist,
             dirty: AtomicBool::new(false),
@@ -89,19 +94,46 @@ impl VectorSpaceStore {
     /// The embedding dimensionality.
     #[must_use]
     pub fn dimensions(&self) -> usize {
-        self.index.dimensions()
+        self.index.lock().dimensions()
     }
 
     /// Number of indexed vectors.
     #[must_use]
     pub fn len(&self) -> u64 {
-        self.index.size() as u64
+        self.index.lock().size() as u64
     }
 
     /// Whether the index is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.index.size() == 0
+        self.index.lock().size() == 0
+    }
+
+    /// Drop every vector and rebuild an empty index with the same
+    /// dimensionality/metric. Used by the server bootstrap rebuild
+    /// (`agnostic-rlm-rs-620d`) to reconstruct a divergent space from canonical
+    /// SQLite text. Persists the empty index so the on-disk file matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fresh index cannot be created or saved.
+    pub fn clear(&self) -> Result<()> {
+        let dims = self.index.lock().dimensions();
+        let opts = IndexOptions {
+            dimensions: dims,
+            metric: SPACE_METRIC,
+            quantization: SPACE_QUANT,
+            connectivity: 0,
+            expansion_add: 0,
+            expansion_search: 0,
+            ..Default::default()
+        };
+        let fresh =
+            Index::new(&opts).map_err(|e| anyhow::anyhow!("failed to recreate index: {e}"))?;
+        *self.index.lock() = fresh;
+        self.dirty.store(true, Ordering::Relaxed);
+        self.persist()?;
+        Ok(())
     }
 
     /// Insert or replace a vector keyed by `id` (usearch has no upsert, so any
@@ -112,20 +144,22 @@ impl VectorSpaceStore {
     /// Returns an error if the vector dimensionality mismatches or the
     /// insertion fails.
     pub fn insert(&self, id: u64, vector: &[f32]) -> Result<()> {
-        let dims = self.index.dimensions();
+        let dims = self.index.lock().dimensions();
         if vector.len() != dims {
             anyhow::bail!(
                 "vector dimension mismatch: expected {dims}, got {}",
                 vector.len()
             );
         }
-        let _ = self.index.remove(id);
-        self.index
-            .reserve(self.index.size() + 1)
+        let index = self.index.lock();
+        let _ = index.remove(id);
+        index
+            .reserve(index.size() + 1)
             .map_err(|e| anyhow::anyhow!("failed to reserve index capacity: {e}"))?;
-        self.index
+        index
             .add(id, vector)
             .map_err(|e| anyhow::anyhow!("failed to add vector {id}: {e}"))?;
+        drop(index);
         self.mark_dirty();
         Ok(())
     }
@@ -136,7 +170,7 @@ impl VectorSpaceStore {
     ///
     /// Returns an error only if the eventual save fails.
     pub fn delete(&self, id: u64) -> Result<()> {
-        let _ = self.index.remove(id);
+        let _ = self.index.lock().remove(id);
         self.mark_dirty();
         Ok(())
     }
@@ -153,6 +187,7 @@ impl VectorSpaceStore {
         }
         let matches = self
             .index
+            .lock()
             .search(query, limit)
             .map_err(|e| anyhow::anyhow!("vector search failed: {e}"))?;
         Ok(matches
@@ -217,6 +252,7 @@ impl VectorSpaceStore {
     fn do_save(&self) -> Result<()> {
         let path_str = self.index_path.to_str().context("non-utf8 index path")?;
         self.index
+            .lock()
             .save(path_str)
             .map_err(|e| anyhow::anyhow!("failed to save {}: {e}", self.index_path.display()))
     }

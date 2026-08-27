@@ -42,11 +42,14 @@
 
 pub mod admin;
 pub mod auth;
+pub mod bootstrap;
 pub mod config;
 pub mod grpc;
 pub mod indexing;
 pub mod lifecycle;
 pub mod maintenance;
+pub mod quorum;
+pub mod reconcile;
 pub mod state;
 pub mod store;
 pub mod timing;

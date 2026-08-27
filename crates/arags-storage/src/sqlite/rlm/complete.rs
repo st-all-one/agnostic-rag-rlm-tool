@@ -166,11 +166,23 @@ impl Storage {
         conn.execute(|c| {
             let tx = c.unchecked_transaction().context("begin claim tx")?;
             // Volunteers may cap the level they accept (quota); `i64::MAX`
-            // accepts everything.
-            let sql = "SELECT id FROM rlm_jobs WHERE status = 'pending' AND level <= ?1 \
+            // accepts everything. A volunteer may hold at most one slot of any
+            // generation group (so the N fanned-out slots go to N distinct
+            // volunteers); the correlated `NOT EXISTS` excludes pending jobs
+            // whose group already has a slot claimed by this volunteer.
+            let sql = "SELECT id FROM rlm_jobs \
+                 WHERE status = 'pending' AND level <= ?1 \
+                   AND NOT EXISTS ( \
+                     SELECT 1 FROM rlm_jobs s \
+                     WHERE s.generation_group_id = rlm_jobs.generation_group_id \
+                       AND s.claimed_by = ?2) \
                  ORDER BY priority ASC, level ASC, created_at ASC LIMIT 1";
             let job_id: Option<i64> = tx
-                .query_row(sql, params![max_level.unwrap_or(i64::MAX)], |r| r.get(0))
+                .query_row(
+                    sql,
+                    params![max_level.unwrap_or(i64::MAX), volunteer],
+                    |r| r.get(0),
+                )
                 .optional()
                 .context("select candidate rlm_job")?;
             let Some(job_id) = job_id else {

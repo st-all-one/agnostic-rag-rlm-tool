@@ -118,6 +118,14 @@ pub async fn run_server(
         exploration_vector_store,
     )?;
 
+    // Bootstrap rebuild: reconcile the four usearch vector spaces with canonical
+    // SQLite before serving (issue `agnostic-rlm-rs-620d`). If a count diverges
+    // the space is rebuilt from source-of-truth text; in-sync spaces are left
+    // untouched. Best-effort — a failure is logged, never fatal to startup.
+    if let Err(e) = crate::bootstrap::bootstrap_vector_spaces(&state).await {
+        tracing::warn!(error = %e, "vector space bootstrap failed; serving with possibly stale indexes");
+    }
+
     let grpc_service = AragsServiceServer::new(AragsGrpcService::new(state.clone()));
 
     // Periodic memory maintenance (plan 019, C.1). Runs in the background on a
@@ -126,6 +134,7 @@ pub async fn run_server(
     // dropped alongside it.
     if config.maintenance.interval_secs > 0 {
         let maint_storage = storage.clone();
+        let recon_state = state.clone();
         let interval = config.maintenance.interval_secs;
         let floor = config.maintenance.decay_score_floor;
         // `[history] retention_days` (plan 020): 0 keeps history forever.
@@ -149,6 +158,18 @@ pub async fn run_server(
                     tracing::warn!(error = %e, "maintenance tick failed");
                 } else {
                     tracing::info!("maintenance tick completed");
+                }
+                // QA re-digest queue (issue `agnostic-rlm-rs-d172`): revert
+                // expired leases (default 300s) so the next cycle re-offers the
+                // work to volunteers and a crashed volunteer never strands it.
+                if let Err(e) = crate::reconcile::reclaim_expired_pending_qa(&recon_state).await {
+                    tracing::warn!(error = %e, "reclaim expired pending qa failed");
+                }
+                // Reconcile worker (`agnostic-rlm-rs-36ae`): re-derive any
+                // `pending_vector` rows from canonical SQLite text so the
+                // usearch spaces catch up with the source of truth.
+                if let Err(e) = crate::reconcile::reconcile_pending_vectors(&recon_state).await {
+                    tracing::warn!(error = %e, "reconcile pending vectors tick failed");
                 }
                 if retention_days > 0 {
                     let cutoff =
@@ -177,7 +198,11 @@ pub async fn run_server(
 
     // Background WAL flush (plan 020 `flush_interval_ms`): a passive
     // checkpoint folds the write-ahead log back into the database on a fixed
-    // cadence. `flush_interval_ms == 0` disables it.
+    // cadence. `flush_interval_ms == 0` disables it. This is a pure
+    // *optimization* — durability/consistency are guaranteed by SQLite WAL
+    // itself, the bootstrap rebuild (`agnostic-rlm-rs-620d`) and the reconcile
+    // worker (`agnostic-rlm-rs-36ae`); the periodic flush merely bounds the
+    // WAL growth window and is safe to skip.
     if config.flush_interval_ms > 0 {
         let flush_storage = storage.clone();
         let flush_interval = std::time::Duration::from_millis(config.flush_interval_ms);
@@ -220,8 +245,8 @@ pub async fn run_server(
         .serve_with_shutdown(addr, shutdown_signal())
         .await?;
 
-    // Graceful shutdown: flush debounced vector-index mutations so the
-    // on-disk HNSW files match SQLite (best-effort).
+    // Graceful shutdown: flush debounced vector-index mutations (optimization,
+    // not a consistency requirement — bootstrap + reconcile own correctness).
     state.flush_vector_stores();
 
     info!("arags-server shut down gracefully");

@@ -37,7 +37,7 @@ pub struct SearchResult {
 /// required for buffer-scoped search is kept in an in-memory map and mirrored
 /// to a side `vectors.meta` file next to the index.
 pub struct VectorStore {
-    index: Index,
+    index: Mutex<Index>,
     buffers: Mutex<HashMap<u64, u64>>,
     index_path: PathBuf,
     meta_path: PathBuf,
@@ -96,7 +96,7 @@ impl VectorStore {
         tracing::info!(path = %index_path.display(), vectors = index.size(), "opened vector store");
 
         Ok(Self {
-            index,
+            index: Mutex::new(index),
             buffers: Mutex::new(buffers),
             index_path,
             meta_path,
@@ -106,7 +106,7 @@ impl VectorStore {
     /// The embedding dimensionality of this store.
     #[must_use]
     pub fn dimensions(&self) -> usize {
-        self.index.dimensions()
+        self.index.lock().dimensions()
     }
 
     /// Insert vectors into the store and persist the index + buffer mapping.
@@ -120,15 +120,16 @@ impl VectorStore {
             return Ok(());
         }
 
+        let started = Instant::now();
+        let dims = self.index.lock().dimensions();
+        let mut buffers = self.buffers.lock();
+        let index = self.index.lock();
+
         // usearch requires capacity to be reserved before insertions.
-        let needed = self.index.size() + entries.len();
-        self.index
+        let needed = index.size() + entries.len();
+        index
             .reserve(needed)
             .map_err(|e| anyhow::anyhow!("failed to reserve vector capacity: {e}"))?;
-
-        let started = Instant::now();
-        let dims = self.index.dimensions();
-        let mut buffers = self.buffers.lock();
 
         for entry in entries {
             if entry.vector.len() != dims {
@@ -137,17 +138,18 @@ impl VectorStore {
                     entry.vector.len()
                 );
             }
-            self.index
+            index
                 .add(entry.chunk_id, &entry.vector)
                 .map_err(|e| anyhow::anyhow!("failed to add vector {}: {e}", entry.chunk_id))?;
             buffers.insert(entry.chunk_id, entry.buffer_id);
         }
 
+        drop(index);
         self.save_locked(&buffers)?;
 
         tracing::info!(
             inserted = entries.len(),
-            total = self.index.size(),
+            total = self.index.lock().size(),
             elapsed_ms = started.elapsed().as_millis(),
             "inserted vectors"
         );
@@ -188,11 +190,13 @@ impl VectorStore {
             Some(bid) => {
                 let buffers = self.buffers.lock();
                 self.index
+                    .lock()
                     .filtered_search(query_vector, limit, |key| buffers.get(&key) == Some(&bid))
                     .map_err(|e| anyhow::anyhow!("vector search failed: {e}"))?
             }
             None => self
                 .index
+                .lock()
                 .search(query_vector, limit)
                 .map_err(|e| anyhow::anyhow!("vector search failed: {e}"))?,
         };
@@ -218,7 +222,7 @@ impl VectorStore {
     /// Return the number of vectors in the store.
     #[must_use]
     pub async fn count(&self) -> usize {
-        self.index.size()
+        self.index.lock().size()
     }
 
     /// Remove vectors for the given chunk ids from the index and the in-memory
@@ -238,9 +242,10 @@ impl VectorStore {
 
         let started = Instant::now();
         let mut buffers = self.buffers.lock();
+        let index = self.index.lock();
         let mut removed = 0usize;
         for &id in ids {
-            match self.index.remove(id) {
+            match index.remove(id) {
                 Ok(n) => removed += n,
                 Err(e) => {
                     tracing::warn!(error = ?e, chunk_id = id, "failed to remove vector from index");
@@ -248,6 +253,7 @@ impl VectorStore {
             }
             buffers.remove(&id);
         }
+        drop(index);
         self.save_locked(&buffers)?;
 
         tracing::info!(
@@ -263,9 +269,37 @@ impl VectorStore {
     fn save_locked(&self, buffers: &HashMap<u64, u64>) -> Result<()> {
         let path_str = self.index_path.to_str().context("non-utf8 index path")?;
         self.index
+            .lock()
             .save(path_str)
             .map_err(|e| anyhow::anyhow!("failed to save vector index: {e}"))?;
         write_meta(&self.meta_path, buffers)?;
+        Ok(())
+    }
+
+    /// Drop every vector and rebuild an empty index with the same
+    /// dimensionality/metric, clearing the buffer map too. Used by the server
+    /// bootstrap rebuild (`agnostic-rlm-rs-620d`) to reconstruct a divergent
+    /// chunk space from canonical SQLite text. Persists the empty index.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fresh index cannot be created or saved.
+    pub async fn clear(&self) -> Result<()> {
+        let dims = self.index.lock().dimensions();
+        let opts = IndexOptions {
+            dimensions: dims,
+            metric: MetricKind::L2sq,
+            quantization: ScalarKind::F32,
+            connectivity: 0,
+            expansion_add: 0,
+            expansion_search: 0,
+            ..Default::default()
+        };
+        let fresh = Index::new(&opts)
+            .map_err(|e| anyhow::anyhow!("failed to recreate vector index: {e}"))?;
+        *self.index.lock() = fresh;
+        self.buffers.lock().clear();
+        self.save_locked(&self.buffers.lock())?;
         Ok(())
     }
 }

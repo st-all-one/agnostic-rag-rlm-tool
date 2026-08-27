@@ -39,6 +39,8 @@ pub use sqlite::Role;
 pub use sqlite::Storage;
 pub use sqlite::cache;
 pub use sqlite::explorations;
+pub use sqlite::pending_qa;
+pub use sqlite::pending_qa::PendingQaCounts;
 pub use sqlite::qa_cache;
 pub use sqlite::tokens;
 pub use vector_space::{FlushableVectorSpace, Neighbor, VectorSpaceStore};

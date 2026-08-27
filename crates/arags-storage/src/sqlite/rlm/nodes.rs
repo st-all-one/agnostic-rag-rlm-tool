@@ -50,6 +50,70 @@ impl Storage {
         Ok((id, node_id))
     }
 
+    /// Publish the quorum-accepted summary as the live RLM node for a subject.
+    ///
+    /// Used by the cosine-quorum decision (`crate::...::quorum` / issue
+    /// `agnostic-rlm-rs-6d97`): the fused consensus text is written via the same
+    /// superseding upsert as [`Storage::store_rlm_node`] but is **approved
+    /// immediately** (the quorum is the quality gate, standing in for the admin
+    /// review) with `reviewed_by = "quorum"`. Returns the new node `(rowid,
+    /// node_id)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the upsert or approval fails.
+    pub fn publish_rlm_node_for_subject(
+        &self,
+        project: &str,
+        level: i64,
+        subject: &str,
+        summary_text: &str,
+        source_hashes: &[String],
+        volunteer_username: Option<&str>,
+        model: Option<&str>,
+        template_version: Option<&str>,
+        decided_by: &str,
+    ) -> Result<(i64, String)> {
+        let now = now_ms();
+        let node_id = uuid::Uuid::now_v7().to_string();
+        let hashes_json =
+            serde_json::to_string(&source_hashes.to_vec()).context("serialize source_hashes")?;
+        let input = NewRlmNode {
+            buffer_id: None,
+            project: project.to_string(),
+            level,
+            subject: subject.to_string(),
+            summary_text: summary_text.to_string(),
+            source_hashes: source_hashes.to_vec(),
+            model: model.map(str::to_string),
+            volunteer_username: volunteer_username.map(str::to_string),
+            created_by: Some(decided_by.to_string()),
+            template_version: template_version.map(str::to_string),
+            token_count: 0,
+        };
+        let conn = self.connection().context("acquire connection")?;
+        let (id, node_id) = conn
+            .execute(|c| {
+                Ok(super::upsert_node_stmt(
+                    c,
+                    &node_id,
+                    &hashes_json,
+                    &input,
+                    now,
+                )?)
+            })
+            .context("upsert quorum rlm_node")?;
+        conn.execute(|c| {
+            c.execute(
+                "UPDATE rlm_nodes SET review_status = 'approved', reviewed_by = ?1, \
+                 reviewed_at = ?2 WHERE id = ?3",
+                params![decided_by, now, id],
+            )
+            .context("approve quorum rlm_node")
+        })?;
+        Ok((id, node_id))
+    }
+
     /// Get an approved (or at least non-rejected) node by stable `node_id`.
     ///
     /// # Errors
@@ -375,6 +439,112 @@ impl Storage {
                 ids.push(row.context("read rlm node id")?);
             }
             Ok(ids)
+        })
+    }
+
+    /// Return `(id, text)` pairs for the given RLM nodes, where `text` is the
+    /// canonical embed input (`subject\n{summary_text}`) matching the normal
+    /// index path, used by the reconcile worker (`agnostic-rlm-rs-36ae`) to
+    /// re-embed from SQLite. Missing rows are skipped.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_rlm_embed_inputs(&self, ids: &[i64]) -> Result<Vec<(i64, String)>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let placeholders: Vec<String> = ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 1))
+                .collect();
+            let sql = format!(
+                "SELECT id, subject, summary_text FROM rlm_nodes WHERE id IN ({})",
+                placeholders.join(", ")
+            );
+            let mut stmt = c.prepare(&sql).context("prepare rlm embed inputs query")?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(ids.iter()), |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .context("query rlm embed inputs")?;
+            let mut out = Vec::with_capacity(ids.len());
+            for row in rows {
+                let (id, subject, summary) = row.context("read rlm embed input")?;
+                out.push((id, format!("{subject}\n{summary}")));
+            }
+            Ok(out)
+        })
+    }
+
+    /// Return `(id, text)` pairs for **every** RLM node, where `text` is the
+    /// canonical embed input (`subject\n{summary_text}`), used by the server
+    /// bootstrap rebuild (`agnostic-rlm-rs-620d`) to reconstruct the RLM summary
+    /// vector space from SQLite when it diverges from the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn all_rlm_embed_inputs(&self) -> Result<Vec<(i64, String)>> {
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let mut stmt = c
+                .prepare("SELECT id, subject, summary_text FROM rlm_nodes")
+                .context("prepare all rlm embed inputs query")?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .context("query all rlm embed inputs")?;
+            let mut out = Vec::new();
+            for row in rows {
+                let (id, subject, summary) = row.context("read all rlm embed input")?;
+                out.push((id, format!("{subject}\n{summary}")));
+            }
+            Ok(out)
+        })
+    }
+
+    /// Clear the `pending_vector` marker for the given RLM nodes after a
+    /// successful re-embed, restoring the normal `indexed` vector status.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update fails.
+    pub fn clear_rlm_nodes_pending_vector(&self, buffer_id: i64, ids: &[i64]) -> Result<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let placeholders: Vec<String> = ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 2))
+                .collect();
+            let sql = format!(
+                "UPDATE rlm_nodes SET vector_status = 'indexed' \
+                 WHERE buffer_id = ?1 AND id IN ({})",
+                placeholders.join(", ")
+            );
+            let mut params: Vec<&dyn rusqlite::ToSql> = vec![&buffer_id];
+            for id in ids {
+                params.push(id);
+            }
+            c.execute(&sql, rusqlite::params_from_iter(params.iter()))
+                .context("clear_rlm_nodes_pending_vector")?;
+            Ok(())
         })
     }
 }

@@ -176,6 +176,7 @@ async fn grpc_index_project_persists_chunks_end_to_end() {
         subject: "src/main.rs".to_string(),
         payload: "{}".to_string(),
         priority: 5,
+        quorum_slots: 1,
     };
     let (job_id, _gen) = server.storage.enqueue_rlm_job(&job).expect("seed rlm job");
     assert!(job_id > 0);
@@ -223,6 +224,7 @@ async fn grpc_disconnect_after_init_keeps_rlm_claim_working() {
         subject: "src/main.rs".to_string(),
         payload: "{}".to_string(),
         priority: 5,
+        quorum_slots: 1,
     };
     let (job_id, _gen) = server.storage.enqueue_rlm_job(&job).expect("seed rlm job");
     assert!(job_id > 0);

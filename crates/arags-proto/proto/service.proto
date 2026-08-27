@@ -49,6 +49,12 @@ service AragsService {
   rpc StoreAnswer(StoreAnswerRequest) returns (StoreAnswerResponse);
   rpc GetAnswerById(GetAnswerByIdRequest) returns (GetAnswerByIdResponse);
 
+  // QA re-digest queue (issue `agnostic-rlm-rs-d172`): a volunteer claims a
+  // lease, re-digests a stale answer locally, stores it (StoreAnswer), then
+  // completes the job. The server is LLM-free and only owns the queue.
+  rpc ClaimPendingQa(ClaimPendingQaRequest) returns (ClaimPendingQaResponse);
+  rpc CompletePendingQa(CompletePendingQaRequest) returns (CompletePendingQaResponse);
+
   // Memory admin (plan 019): list cached query/answer memory for a project.
   rpc ListMemory(ListMemoryRequest) returns (ListMemoryResponse);
 

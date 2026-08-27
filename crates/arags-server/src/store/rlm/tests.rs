@@ -27,6 +27,7 @@ fn l1_enqueue_then_cascade_to_l2_and_l3() {
                 subject: path.clone(),
                 payload: r#"{"hashes":["h"],"texts":["t"]}"#.into(),
                 priority: PRIORITY_FRESH,
+                quorum_slots: 1,
             })
             .expect("seed job");
         // Volunteer claims + completes; store the node like the handler.
@@ -57,11 +58,11 @@ fn l1_enqueue_then_cascade_to_l2_and_l3() {
     // Cascade from each L1 completion: first creates the theme job, the
     // second stays within tolerance until hashes diverge.
     assert!(
-        cascade_rlm(&storage, 1, "p", 1, &f("a.rs"), 0.3).expect("cascade a"),
+        cascade_rlm(&storage, 1, "p", 1, &f("a.rs"), 0.3, 1).expect("cascade a"),
         "first cascade should create L2"
     );
     assert!(
-        !cascade_rlm(&storage, 1, "p", 1, &f("b.rs"), 0.3).expect("cascade b"),
+        !cascade_rlm(&storage, 1, "p", 1, &f("b.rs"), 0.3, 1).expect("cascade b"),
         "identical hashes are within tolerance"
     );
 
@@ -78,7 +79,7 @@ fn l1_enqueue_then_cascade_to_l2_and_l3() {
         })
         .expect("update");
     assert!(
-        cascade_rlm(&storage, 1, "p", 1, &f("b.rs"), 0.3).expect("cascade c"),
+        cascade_rlm(&storage, 1, "p", 1, &f("b.rs"), 0.3, 1).expect("cascade c"),
         "changed hashes exceed tolerance"
     );
 }

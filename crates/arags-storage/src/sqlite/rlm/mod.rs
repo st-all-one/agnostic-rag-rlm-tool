@@ -128,7 +128,7 @@ pub struct RlmJob {
     pub updated_at: i64,
 }
 
-/// Input for enqueueing a job. Idempotent per `job_key`.
+/// Input for enqueueing a job. Idempotent per `(project, level, subject)`.
 #[derive(Debug, Clone)]
 pub struct NewRlmJob {
     pub buffer_id: Option<i64>,
@@ -137,6 +137,11 @@ pub struct NewRlmJob {
     pub subject: String,
     pub payload: String,
     pub priority: i64,
+    /// Number of independent volunteer slots to fan the subject out to when the
+    /// cosine quorum is enabled (`> 1`). `1` (the default) keeps the classic
+    /// single-volunteer behaviour. All `quorum_slots` rows share one
+    /// `generation_group_id` so the quorum can treat them as one decision unit.
+    pub quorum_slots: usize,
 }
 
 /// A job handed to a volunteer by [`jobs`]' claim operation.

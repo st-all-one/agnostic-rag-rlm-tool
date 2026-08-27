@@ -50,6 +50,7 @@ fn job(project: &str, level: i64, subject: &str) -> NewRlmJob {
         subject: subject.into(),
         payload: "{}".into(),
         priority: 5,
+        quorum_slots: 1,
     }
 }
 
@@ -513,6 +514,7 @@ fn shared_payload_type_round_trips_through_job_queue() {
             subject: "a.rs".into(),
             payload: json,
             priority: 5,
+            quorum_slots: 1,
         })
         .unwrap();
     let claimed = storage

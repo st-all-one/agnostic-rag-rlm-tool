@@ -26,7 +26,8 @@ use tonic::{Request, Response, Status, Streaming};
 use crate::state::AppState;
 
 use arags_proto::proto::{
-    AuthRefreshRequest, AuthRefreshResponse, ClaimRlmJobRequest, ClaimRlmJobResponse,
+    AuthRefreshRequest, AuthRefreshResponse, ClaimPendingQaRequest, ClaimPendingQaResponse,
+    ClaimRlmJobRequest, ClaimRlmJobResponse, CompletePendingQaRequest, CompletePendingQaResponse,
     CompleteRlmJobRequest, CompleteRlmJobResponse, ContextRequest, ContextResponse,
     CreateProjectRequest, GetAnswerByIdRequest, GetAnswerByIdResponse, GetCacheRequest,
     GetCacheResponse, GetHistoryRequest, GetHistoryResponse, GetRlmJobStatusRequest, IndexChunk,
@@ -170,6 +171,24 @@ impl AragsService for AragsGrpcService {
     ) -> Result<Response<GetAnswerByIdResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.get_answer_by_id");
         query_cache::handle_get_answer_by_id(&self.state, request).await
+    }
+
+    // ── QA re-digest queue (issue `agnostic-rlm-rs-d172`) ────────────────
+
+    async fn claim_pending_qa(
+        &self,
+        request: Request<ClaimPendingQaRequest>,
+    ) -> Result<Response<ClaimPendingQaResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.claim_pending_qa");
+        query_cache::handle_claim_pending_qa(&self.state, request).await
+    }
+
+    async fn complete_pending_qa(
+        &self,
+        request: Request<CompletePendingQaRequest>,
+    ) -> Result<Response<CompletePendingQaResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.complete_pending_qa");
+        query_cache::handle_complete_pending_qa(&self.state, request).await
     }
 
     // ── Memory / cache admin (plan 019) ──────────────────────────────────

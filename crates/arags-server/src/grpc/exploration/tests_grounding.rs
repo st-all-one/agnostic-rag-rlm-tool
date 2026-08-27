@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use tonic::Request;
 
-use crate::config::ServerConfig;
+use crate::config::{ServerConfig, ValidationMode};
 use crate::grpc::exploration::handle_persist_exploration;
 use crate::grpc::exploration::search::handle_search_explorations;
 use crate::state::AppState;
@@ -46,6 +46,10 @@ async fn verify_on_hit_downgrades_maps_without_corpus_support() {
     let mut config = ServerConfig::default();
     config.exploration.verify_on_hit = true;
     config.exploration.grounding_min_similarity = 0.95;
+    // Fire-and-forget: `Review` mode with `require_review = false` keeps
+    // non-admin maps `fresh` and surfacing (the new default `Quorum` holds
+    // them pending for the quorum worker).
+    config.exploration.validation_mode = ValidationMode::Review;
 
     let embedder_text = "pipeline de pagamento com idempotencia por chave";
     let state = AppState::with_vector_stores(

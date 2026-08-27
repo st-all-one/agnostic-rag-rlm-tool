@@ -85,6 +85,15 @@ pub struct ServerConfig {
     #[serde(default)]
     pub rlm: RlmConfig,
 
+    /// Quorum / security (Cluster B keystone, issue `agnostic-rlm-rs-a5d7`):
+    /// fan-out of volunteer jobs, cosine-similarity agreement threshold, the
+    /// fusion strategy used to merge agreeing candidates, and the strikes
+    /// budget before a volunteer is deprioritized/banned. The actual decision
+    /// logic lives in later issues (`6d97`/`64af`); here only the data model,
+    /// config and the candidate-submission storage API are wired.
+    #[serde(default)]
+    pub quorum: QuorumConfig,
+
     /// Explorations dataset (plan 022): confidence + feedback knobs.
     #[serde(default)]
     pub exploration: ExplorationConfig,
@@ -98,6 +107,26 @@ pub struct ServerConfig {
 
 fn default_chunk_retention_days() -> u64 {
     7
+}
+
+/// How a non-admin exploration persist is validated before it can surface.
+///
+/// - `Quorum` (default): a non-admin submitter's map is held non-surfaced and a
+///   `candidate` submission is recorded. The actual accept/reject decision is
+///   made later by the cosine quorum worker (issues `6d97`/`64af`); until then
+///   the map stays gated out of search exactly like a `pending_review` map.
+/// - `Review`: preserves the original plan-023 gate — when
+///   `require_review` is also set, non-admin maps land as `pending_review` and
+///   surface only after an admin approves. When `require_review` is `false`,
+///   `Review` mode is fire-and-forget (no gating, no submission).
+///
+/// Admins auto-approve (maps stay `fresh`) in both modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValidationMode {
+    #[default]
+    Quorum,
+    Review,
 }
 
 /// Exploration dataset knobs (plan 022).
@@ -136,8 +165,17 @@ pub struct ExplorationConfig {
     /// Review gate (plan 023, borrowed from the RLM quality gate): maps from
     /// non-admin submitters land as `pending_review` and never surface in
     /// search until an admin approves them. `false` keeps fire-and-forget.
+    ///
+    /// Only honored when `validation_mode == Review`; in `Quorum` mode non-admin
+    /// persists take the quorum candidate path regardless of this flag.
     #[serde(default)]
     pub require_review: bool,
+
+    /// Non-admin validation strategy (see [`ValidationMode`]). Defaults to
+    /// `Quorum` (candidate submission + non-surfaced until the quorum worker
+    /// decides). `Review` preserves the original admin-approval gate.
+    #[serde(default)]
+    pub validation_mode: ValidationMode,
 }
 
 fn default_grounding_min() -> f32 {
@@ -155,6 +193,7 @@ impl Default for ExplorationConfig {
             verify_on_hit: false,
             grounding_min_similarity: default_grounding_min(),
             require_review: false,
+            validation_mode: ValidationMode::default(),
         }
     }
 }
@@ -484,6 +523,63 @@ impl Default for HistoryConfig {
     }
 }
 
+/// How to fuse agreeing candidate submissions into the accepted answer
+/// (issue `agnostic-rlm-rs-a5d7`). The selection of *which* candidates agree is
+/// decided by the quorum cosine-similarity threshold (`quorum_sim_threshold`,
+/// implemented in later issues `6d97`/`64af`); this enum only picks the merge
+/// strategy once a quorum exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FusionStrategy {
+    /// Take the single candidate closest to the consensus embedding.
+    #[default]
+    Consensus,
+    /// Embedding average of the agreeing candidates (then nearest text).
+    Average,
+    /// The longest candidate text among the agreeing set.
+    Longest,
+}
+
+/// Quorum / security configuration (Cluster B, issue `agnostic-rlm-rs-a5d7`).
+///
+/// Drives the volunteer fan-out and candidate-submission decision pipeline.
+/// The decision algorithm itself lives in later issues (`6d97`/`64af`); this
+/// struct only carries the tunables.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct QuorumConfig {
+    /// Number of volunteers a job is fanned out to.
+    pub n: usize,
+    /// Cosine similarity threshold above which two candidates are "in
+    /// agreement".
+    pub quorum_sim_threshold: f64,
+    /// How to fuse agreeing candidates into the accepted answer.
+    pub fusion_strategy: FusionStrategy,
+    /// Strikes a volunteer accumulates before being deprioritized/banned.
+    pub strikes_limit: u32,
+}
+
+fn default_quorum_n() -> usize {
+    3
+}
+fn default_quorum_sim_threshold() -> f64 {
+    0.85
+}
+fn default_quorum_strikes_limit() -> u32 {
+    3
+}
+
+impl Default for QuorumConfig {
+    fn default() -> Self {
+        Self {
+            n: default_quorum_n(),
+            quorum_sim_threshold: default_quorum_sim_threshold(),
+            fusion_strategy: FusionStrategy::default(),
+            strikes_limit: default_quorum_strikes_limit(),
+        }
+    }
+}
+
 impl ServerConfig {
     /// Load configuration from the server config file.
     ///
@@ -637,6 +733,7 @@ impl Default for ServerConfig {
             history: HistoryConfig::default(),
             exploration: ExplorationConfig::default(),
             rlm: RlmConfig::default(),
+            quorum: QuorumConfig::default(),
             chunk_retention_days: default_chunk_retention_days(),
         }
     }

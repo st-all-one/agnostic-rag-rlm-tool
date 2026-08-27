@@ -110,6 +110,16 @@ impl ExplorationVectorStore {
     pub fn persist(&self) -> Result<()> {
         self.0.persist()
     }
+
+    /// Drop every vector and rebuild an empty index (bootstrap rebuild,
+    /// `agnostic-rlm-rs-620d`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fresh index cannot be created or saved.
+    pub fn clear(&self) -> Result<()> {
+        self.0.clear()
+    }
 }
 
 impl FlushableVectorSpace for ExplorationVectorStore {

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tonic::Request;
 use tonic::metadata::{MetadataMap, MetadataValue};
 
-use crate::config::ServerConfig;
+use crate::config::{ExplorationConfig, ServerConfig, ValidationMode};
 use crate::grpc::exploration::handle_persist_exploration;
 use crate::grpc::exploration::search::handle_search_explorations;
 use crate::state::AppState;
@@ -40,6 +40,10 @@ impl Drop for Fixture {
 }
 
 pub(crate) fn fixture() -> Fixture {
+    fixture_with(ServerConfig::default())
+}
+
+pub(crate) fn fixture_with(config: ServerConfig) -> Fixture {
     let dir = tempfile::tempdir().expect("tempdir");
     let storage = Storage::open(dir.path()).expect("open storage");
     seed_project(&storage, "proj", 1);
@@ -74,15 +78,9 @@ pub(crate) fn fixture() -> Fixture {
         arags_storage::tokens::create_session(&storage, &user_refresh).expect("user session");
 
     let vectors = Arc::new(ExplorationVectorStore::open(dir.path(), 384).expect("vector store"));
-    let state = AppState::with_vector_stores(
-        storage.clone(),
-        ServerConfig::default(),
-        None,
-        None,
-        None,
-        Some(vectors),
-    )
-    .expect("app state");
+    let state =
+        AppState::with_vector_stores(storage.clone(), config, None, None, None, Some(vectors))
+            .expect("app state");
     std::mem::forget(dir); // lives as long as the test process slice
     Fixture {
         state,
@@ -204,7 +202,10 @@ async fn search_hides_broken_anchor_maps_until_include_stale() {
 
     let persisted = handle_persist_exploration(
         &fx.state,
-        persist_request(&fx.user_session, vec!["src/a.rs".into(), "src/b.rs".into()]),
+        persist_request(
+            &fx.admin_session,
+            vec!["src/a.rs".into(), "src/b.rs".into()],
+        ),
     )
     .await
     .unwrap()
@@ -260,4 +261,130 @@ async fn search_hides_broken_anchor_maps_until_include_stale() {
         .expect("stale hit present when requested");
     assert_eq!(stale_hit.status, "stale");
     assert_eq!(stale_hit.stale_reason, vec!["src/a.rs".to_string()]);
+}
+
+fn config_with(mode: ValidationMode, require_review: bool) -> ServerConfig {
+    ServerConfig {
+        exploration: ExplorationConfig {
+            validation_mode: mode,
+            require_review,
+            ..ExplorationConfig::default()
+        },
+        ..ServerConfig::default()
+    }
+}
+
+#[tokio::test]
+async fn exploration_admin_auto_approves_in_quorum_mode() {
+    let fx = fixture_with(config_with(ValidationMode::Quorum, true));
+
+    let resp = handle_persist_exploration(
+        &fx.state,
+        persist_request(&fx.admin_session, vec!["src/a.rs".into()]),
+    )
+    .await
+    .unwrap()
+    .into_inner();
+    assert!(resp.accepted);
+    assert!(resp.reason.is_empty(), "admin has no review note");
+
+    let row = fx
+        .storage
+        .get_exploration_by_uuid(&resp.exploration_id)
+        .unwrap()
+        .expect("row exists");
+    assert_eq!(row.status, "fresh");
+
+    // No candidate submission is recorded for the auto-approved admin map.
+    let pending = fx
+        .storage
+        .list_pending("proj", "exploration", &resp.exploration_id)
+        .unwrap();
+    assert!(
+        pending.is_empty(),
+        "admin quorum persist creates no submission"
+    );
+}
+
+#[tokio::test]
+async fn exploration_nonadmin_quorum_creates_submission_candidate() {
+    let fx = fixture_with(config_with(ValidationMode::Quorum, false));
+
+    let resp = handle_persist_exploration(
+        &fx.state,
+        persist_request(&fx.user_session, vec!["src/a.rs".into()]),
+    )
+    .await
+    .unwrap()
+    .into_inner();
+    assert!(resp.accepted);
+    assert_eq!(resp.reason, "pending quorum validation");
+
+    let row = fx
+        .storage
+        .get_exploration_by_uuid(&resp.exploration_id)
+        .unwrap()
+        .expect("row exists");
+    // Quorum non-admin maps are held non-surfaced (the `pending_review` gate
+    // reuses the existing search gating, so no search-logic change is needed).
+    assert_eq!(row.status, "pending_review");
+
+    // A `candidate` submission was recorded for the future quorum worker.
+    let pending = fx
+        .storage
+        .list_pending("proj", "exploration", &resp.exploration_id)
+        .unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].status, "candidate");
+    assert_eq!(pending[0].candidate_by, "dev1");
+    assert_eq!(pending[0].candidate_text, "resumo denso da conexão");
+
+    // Because the map is non-surfaced, it must not appear in search results.
+    let query_text = "anexos compartilhados\nresumo denso da conexão";
+    let mut search_req = Request::new(SearchExplorationsRequest {
+        project: "proj".into(),
+        query: query_text.into(),
+        limit: 5,
+        include_stale: true,
+        as_of_epoch: 0,
+    });
+    *search_req.metadata_mut() = bearer(&fx.user_session);
+    let hits = handle_search_explorations(&fx.state, search_req)
+        .await
+        .unwrap()
+        .into_inner()
+        .hits;
+    assert!(
+        hits.iter().all(|h| h.exploration_id != resp.exploration_id),
+        "quorum candidate must not surface until decided"
+    );
+}
+
+#[tokio::test]
+async fn exploration_nonadmin_review_mode_goes_to_pending_review() {
+    let fx = fixture_with(config_with(ValidationMode::Review, true));
+
+    let resp = handle_persist_exploration(
+        &fx.state,
+        persist_request(&fx.user_session, vec!["src/a.rs".into()]),
+    )
+    .await
+    .unwrap()
+    .into_inner();
+    assert!(resp.accepted);
+    assert_eq!(resp.reason, "pending admin review");
+
+    let row = fx
+        .storage
+        .get_exploration_by_uuid(&resp.exploration_id)
+        .unwrap()
+        .expect("row exists");
+    assert_eq!(row.status, "pending_review");
+
+    // `Review` mode records no quorum submission candidate.
+    let pending = fx
+        .storage
+        .list_pending("proj", "exploration", &resp.exploration_id)
+        .unwrap();
+    assert!(pending.is_empty(), "review mode creates no submission");
 }

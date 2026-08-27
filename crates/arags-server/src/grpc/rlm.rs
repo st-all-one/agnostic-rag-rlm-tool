@@ -111,7 +111,7 @@ pub(crate) async fn handle_complete_rlm_job(
         project: job.project.clone(),
         level: job.level,
         subject: job.subject.clone(),
-        summary_text,
+        summary_text: summary_text.clone(),
         source_hashes: hashes,
         model,
         volunteer_username: Some(ctx.username.clone()),
@@ -120,6 +120,99 @@ pub(crate) async fn handle_complete_rlm_job(
         token_count,
     };
 
+    // Quorum fan-out path: when a subject is fanned out to N volunteers, each
+    // completion only stages a candidate submission; the cosine quorum decides
+    // the published node once N candidates are in. We never publish a fresh node
+    // here for N>1 (the quorum is the authority).
+    let quorum_n = state.config.quorum.n.max(1);
+    if quorum_n > 1 {
+        let subject_key =
+            arags_storage::sqlite::rlm::rlm_job_key(&job.project, job.level, &job.subject);
+        let completed = {
+            let storage = state.storage.clone();
+            let username = ctx.username.clone();
+            store::blocking(move || storage.complete_rlm_job(job_id, &username, generation))
+                .await
+                .map_err(internal)?
+        };
+        if !completed {
+            return Ok(Response::new(CompleteRlmJobResponse {
+                accepted: false,
+                reason: "stale lease, wrong worker or cancelled generation".into(),
+                ..CompleteRlmJobResponse::default()
+            }));
+        }
+        store::blocking({
+            let storage = state.storage.clone();
+            let (p, k, t, by) = (
+                job.project.clone(),
+                subject_key.clone(),
+                summary_text.clone(),
+                ctx.username.clone(),
+            );
+            move || storage.insert_submission(&p, "rlm_node", &k, &t, &by)
+        })
+        .await
+        .map_err(internal)?;
+
+        // Immediate, idempotent decision: returns Pending until N candidates
+        // are staged, Accepted once a consensus is found, Rejected otherwise.
+        match crate::quorum::decide_rlm_quorum(state, &job.project, job.level, &job.subject).await {
+            Ok(crate::quorum::QuorumDecision::Accepted { .. }) => {
+                let node_id = store::blocking({
+                    let storage = state.storage.clone();
+                    let (p, l, s) = (job.project.clone(), job.level, job.subject.clone());
+                    move || {
+                        storage
+                            .get_rlm_node_by_subject(&p, l, &s)
+                            .map(|n| n.map(|x| x.node_id))
+                    }
+                })
+                .await
+                .map_err(internal)?
+                .unwrap_or_default();
+                tracing::info!(
+                    job_id,
+                    %node_id,
+                    level = job.level,
+                    volunteer = %ctx.username,
+                    "rlm quorum job completed (consensus)"
+                );
+                return Ok(Response::new(CompleteRlmJobResponse {
+                    accepted: true,
+                    reason: String::new(),
+                    node_id,
+                    auto_approved: false,
+                }));
+            }
+            Ok(crate::quorum::QuorumDecision::Rejected { .. }) => {
+                tracing::info!(job_id, level = job.level, volunteer = %ctx.username, "rlm quorum rejected (no consensus)");
+                return Ok(Response::new(CompleteRlmJobResponse {
+                    accepted: false,
+                    reason: "quorum rejected: no consensus among volunteers".into(),
+                    ..CompleteRlmJobResponse::default()
+                }));
+            }
+            Ok(crate::quorum::QuorumDecision::Pending) => {
+                return Ok(Response::new(CompleteRlmJobResponse {
+                    accepted: false,
+                    reason: "quorum pending: awaiting more volunteers".into(),
+                    ..CompleteRlmJobResponse::default()
+                }));
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, job_id, "rlm quorum decision failed");
+                return Ok(Response::new(CompleteRlmJobResponse {
+                    accepted: false,
+                    reason: "quorum decision error".into(),
+                    ..CompleteRlmJobResponse::default()
+                }));
+            }
+        }
+    }
+
+    // Single-volunteer path (N == 1): persist the node atomically and gate it
+    // through the admin review queue.
     // Atomic completion: lease/generation validation, node upsert and job
     // flip to `done` share one transaction — a failure cannot strand a done
     // job without its node (the claim stays retryable instead).
@@ -227,6 +320,7 @@ pub(crate) async fn handle_complete_rlm_job(
                 level,
                 &subject,
                 tolerance,
+                quorum_n,
             )
         })
         .await

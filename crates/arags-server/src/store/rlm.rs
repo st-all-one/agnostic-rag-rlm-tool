@@ -40,6 +40,10 @@ fn payload_json(payload: &RlmJobPayload) -> Result<String> {
 /// `(new_jobs, reset_jobs)` where resets are jobs whose source changed while
 /// pending/claimed (generation bump = cooperative cancellation signal).
 ///
+/// `quorum_n` is the fan-out degree: each subject is enqueued as `quorum_n`
+/// independent claimable slots sharing a `generation_group_id` (issue
+/// `agnostic-rlm-rs-6d97`). `1` keeps the classic single-volunteer behaviour.
+///
 /// # Errors
 ///
 /// Returns an error if any storage operation fails.
@@ -48,6 +52,7 @@ pub fn enqueue_rlm_l1_work(
     buffer_id: i64,
     project: &str,
     affected_files: &[String],
+    quorum_n: usize,
 ) -> Result<(usize, usize)> {
     let mut new_jobs = 0;
     let mut reset_jobs = 0;
@@ -88,6 +93,7 @@ pub fn enqueue_rlm_l1_work(
             subject: file.clone(),
             payload,
             priority: PRIORITY_FRESH,
+            quorum_slots: quorum_n,
         };
         let (_, generation) = storage.enqueue_rlm_job(&job)?;
         if generation > 0 {
@@ -106,6 +112,9 @@ pub fn enqueue_rlm_l1_work(
 ///
 /// Returns whether parent work was enqueued.
 ///
+/// `quorum_n` is the fan-out degree applied to the enqueued parent job (issue
+/// `agnostic-rlm-rs-6d97`); `1` keeps the single-volunteer behaviour.
+///
 /// # Errors
 ///
 /// Returns an error if any storage operation fails.
@@ -116,6 +125,7 @@ pub fn cascade_rlm(
     child_level: i64,
     child_subject: &str,
     tolerance: f64,
+    quorum_n: usize,
 ) -> Result<bool> {
     let (parent_level, parent_subject) = match child_level {
         1 => (2, theme_of(child_subject)),
@@ -208,6 +218,7 @@ pub fn cascade_rlm(
         subject: parent_subject,
         payload,
         priority: PRIORITY_CASCADE, // cascades outrank fresh L1 work but not cancellations
+        quorum_slots: quorum_n,
     })?;
     Ok(true)
 }

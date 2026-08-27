@@ -26,6 +26,8 @@ use arags_core::exploration::ConfidenceConfig;
 use arags_proto::proto::PersistExplorationRequest;
 use tonic::{Request, Response, Status};
 
+use crate::config::ValidationMode;
+
 use crate::grpc::error::{internal, invalid_arg, not_found};
 use crate::state::AppState;
 use crate::store;
@@ -123,17 +125,65 @@ pub(crate) async fn handle_persist_exploration(
         .await
         .map_err(internal)?;
 
-    // Review gate (plan 023, borrowed from the RLM quality gate): when
-    // `[exploration] require_review` is set, non-admin submitters land in
-    // `pending_review` and never surface in search until an admin approves.
+    // Validation gate (issue `agnostic-rlm-rs-e89e`): route non-admin persists
+    // per `[exploration] validation_mode`. Admins auto-approve (maps stay
+    // `fresh`) in both modes. Non-admins in `Review` mode keep the original
+    // admin-approval gate when `require_review` is set; non-admins in `Quorum`
+    // mode (the default) land non-surfaced as a `candidate` submission for the
+    // future cosine quorum worker (`6d97`/`64af`) to decide.
     let mut review_note = String::new();
-    if state.config.exploration.require_review && !ctx.is_admin() {
+    let mode = state.config.exploration.validation_mode;
+    if ctx.is_admin() {
+        tracing::debug!(
+            phase = "exploration_persist",
+            path = "admin_auto_approve",
+            "admin persist auto-approved"
+        );
+    } else if mode == ValidationMode::Review && state.config.exploration.require_review {
         let storage = state.storage.clone();
         let rowid = stored.id;
         match store::blocking(move || storage.mark_exploration_pending(rowid)).await {
             Ok(true) => review_note = "pending admin review".into(),
             Ok(false) => {}
             Err(e) => tracing::warn!(error = %e, "failed to mark exploration pending"),
+        }
+    } else if mode == ValidationMode::Quorum && !ctx.is_admin() {
+        // Hold the map non-surfaced (reuse the existing `pending` gating so no
+        // search-logic change is needed) and record a candidate submission for
+        // the quorum worker to later accept/reject.
+        let storage = state.storage.clone();
+        let rowid = stored.id;
+        if let Err(e) = store::blocking(move || storage.mark_exploration_pending(rowid)).await {
+            tracing::warn!(error = %e, "failed to mark quorum exploration pending");
+        }
+        let storage = state.storage.clone();
+        let project = req.project.clone();
+        let subject_key = stored.exploration_id.clone();
+        let subject_key_log = subject_key.clone();
+        let candidate_text = req.summary.clone();
+        let candidate_by = ctx.username.clone();
+        match store::blocking(move || {
+            storage.insert_submission(
+                &project,
+                "exploration",
+                &subject_key,
+                &candidate_text,
+                &candidate_by,
+            )
+        })
+        .await
+        {
+            Ok(sub_id) => {
+                review_note = "pending quorum validation".into();
+                tracing::info!(
+                    phase = "exploration_persist",
+                    path = "quorum_candidate",
+                    submission_id = sub_id,
+                    exploration_id = %subject_key_log,
+                    "exploration candidate submitted for quorum"
+                );
+            }
+            Err(e) => tracing::warn!(error = %e, "failed to record quorum submission"),
         }
     }
 
