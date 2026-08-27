@@ -851,7 +851,7 @@ mod tests {
             priority: 5,
             quorum_slots: 1,
         };
-        let (job_id, _gen) = storage.enqueue_rlm_job(&job).unwrap();
+        let (job_id, _gen) = storage.enqueue_rlm_job(&job, &[]).unwrap();
         assert!(job_id > 0, "pending rlm job must be seeded");
 
         // Stream yields Init + one File then the sender is dropped (simulated
@@ -870,7 +870,7 @@ mod tests {
         // The claim must SUCCEED (Ok(Some(job))), proving no held
         // connection/transaction from the aborted index leaks into the RLM
         // claim path. An `Err` here reproduces the original bug.
-        let claimed = storage.claim_rlm_job("worker", DEFAULT_RLM_LEASE_MS, None);
+        let claimed = storage.claim_rlm_job("worker", DEFAULT_RLM_LEASE_MS, None, 3);
         assert!(
             claimed.is_ok(),
             "rlm claim must not error after disconnect: {:?}",

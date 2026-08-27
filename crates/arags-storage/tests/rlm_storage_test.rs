@@ -20,6 +20,7 @@ use arags_storage::sqlite::rlm::{
     rlm_job_key,
 };
 use arags_storage::sqlite::tokens::now_ms;
+use rusqlite::params;
 
 fn temp_storage() -> Storage {
     let dir = tempfile::tempdir().unwrap();
@@ -194,14 +195,14 @@ fn staleness_marks_affected_nodes_with_hashes() {
 #[test]
 fn enqueue_is_idempotent_for_pending_and_resets_finished() {
     let storage = temp_storage();
-    let (id1, gen1) = storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
+    let (id1, gen1) = storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     assert_eq!(gen1, 0);
-    let (id2, _) = storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
+    let (id2, _) = storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     assert_eq!(id1, id2);
 
     // Claim then finish; a new enqueue bumps generation and re-opens it.
     let claimed = storage
-        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
         .unwrap()
         .unwrap();
     assert_eq!(claimed.subject, "a.rs");
@@ -212,7 +213,7 @@ fn enqueue_is_idempotent_for_pending_and_resets_finished() {
     );
     assert_eq!(storage.count_rlm_jobs("p", "done").unwrap(), 1);
 
-    let (_, gen3) = storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
+    let (_, gen3) = storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     assert_eq!(gen3, 1);
     assert_eq!(storage.count_rlm_jobs("p", "pending").unwrap(), 1);
 }
@@ -220,16 +221,16 @@ fn enqueue_is_idempotent_for_pending_and_resets_finished() {
 #[test]
 fn claim_locks_work_unit_until_completion() {
     let storage = temp_storage();
-    storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
+    storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
 
     let first = storage
-        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
         .unwrap()
         .unwrap();
     // While the lease is live no other volunteer can claim the same unit.
     assert!(
         storage
-            .claim_rlm_job("carol", DEFAULT_RLM_LEASE_MS, None)
+            .claim_rlm_job("carol", DEFAULT_RLM_LEASE_MS, None, 3)
             .unwrap()
             .is_none()
     );
@@ -255,8 +256,11 @@ fn claim_locks_work_unit_until_completion() {
 #[test]
 fn expired_lease_requeues() {
     let storage = temp_storage();
-    storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
-    let _ = storage.claim_rlm_job("bob", 1_000, None).unwrap().unwrap();
+    storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
+    let _ = storage
+        .claim_rlm_job("bob", 1_000, None, 3)
+        .unwrap()
+        .unwrap();
     // Simulate lease expiry by backdating it to epoch.
     let conn = storage.connection().unwrap();
     conn.execute(|c| Ok(c.execute("UPDATE rlm_jobs SET lease_expires_at = 1", [])?))
@@ -270,9 +274,9 @@ fn expired_lease_requeues() {
 #[test]
 fn cancel_bumps_generation_and_elevates_priority() {
     let storage = temp_storage();
-    storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
+    storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     let claimed = storage
-        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
         .unwrap()
         .unwrap();
 
@@ -289,7 +293,7 @@ fn cancel_bumps_generation_and_elevates_priority() {
     );
     // Job is back at the front of the queue for reprocessing.
     let next = storage
-        .claim_rlm_job("carol", DEFAULT_RLM_LEASE_MS, None)
+        .claim_rlm_job("carol", DEFAULT_RLM_LEASE_MS, None, 3)
         .unwrap()
         .unwrap();
     assert_eq!(next.id, claimed.id);
@@ -299,9 +303,9 @@ fn cancel_bumps_generation_and_elevates_priority() {
 #[test]
 fn fail_returns_to_pending_then_parks_after_max_attempts() {
     let storage = temp_storage();
-    storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
+    storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     let j1 = storage
-        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
         .unwrap()
         .unwrap();
     storage
@@ -311,7 +315,7 @@ fn fail_returns_to_pending_then_parks_after_max_attempts() {
 
     for worker in ["c1", "c2"] {
         let j = storage
-            .claim_rlm_job(worker, DEFAULT_RLM_LEASE_MS, None)
+            .claim_rlm_job(worker, DEFAULT_RLM_LEASE_MS, None, 3)
             .unwrap()
             .unwrap();
         storage
@@ -324,17 +328,19 @@ fn fail_returns_to_pending_then_parks_after_max_attempts() {
 #[test]
 fn max_level_filter_limits_claims() {
     let storage = temp_storage();
-    storage.enqueue_rlm_job(&job("p", 3, "p-overview")).unwrap();
+    storage
+        .enqueue_rlm_job(&job("p", 3, "p-overview"), &[])
+        .unwrap();
     // Volunteer that only accepts L1/L2 gets nothing.
     assert!(
         storage
-            .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, Some(2))
+            .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, Some(2), 3)
             .unwrap()
             .is_none()
     );
     assert!(
         storage
-            .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, Some(3))
+            .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, Some(3), 3)
             .unwrap()
             .is_some()
     );
@@ -371,9 +377,9 @@ fn completion_input(subject: &str) -> NewRlmNode {
 #[test]
 fn complete_with_node_persists_both_atomically() {
     let storage = temp_storage();
-    storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
+    storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     let claimed = storage
-        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
         .unwrap()
         .unwrap();
 
@@ -399,9 +405,9 @@ fn complete_with_node_persists_both_atomically() {
 #[test]
 fn complete_with_node_persists_created_by_and_model() {
     let storage = temp_storage();
-    storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
+    storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     let claimed = storage
-        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
         .unwrap()
         .unwrap();
 
@@ -434,9 +440,9 @@ fn complete_with_node_persists_created_by_and_model() {
 #[test]
 fn complete_with_node_rejects_stale_generation_without_side_effects() {
     let storage = temp_storage();
-    storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
+    storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     let claimed = storage
-        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
         .unwrap()
         .unwrap();
 
@@ -474,9 +480,9 @@ fn complete_with_node_rejects_stale_generation_without_side_effects() {
 #[test]
 fn complete_with_node_rejects_wrong_worker_without_side_effects() {
     let storage = temp_storage();
-    storage.enqueue_rlm_job(&job("p", 1, "b.rs")).unwrap();
+    storage.enqueue_rlm_job(&job("p", 1, "b.rs"), &[]).unwrap();
     let claimed = storage
-        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
         .unwrap()
         .unwrap();
 
@@ -507,18 +513,21 @@ fn shared_payload_type_round_trips_through_job_queue() {
     };
     let json = serde_json::to_string(&payload).unwrap();
     storage
-        .enqueue_rlm_job(&NewRlmJob {
-            buffer_id: Some(1),
-            project: "p".into(),
-            level: 1,
-            subject: "a.rs".into(),
-            payload: json,
-            priority: 5,
-            quorum_slots: 1,
-        })
+        .enqueue_rlm_job(
+            &NewRlmJob {
+                buffer_id: Some(1),
+                project: "p".into(),
+                level: 1,
+                subject: "a.rs".into(),
+                payload: json,
+                priority: 5,
+                quorum_slots: 1,
+            },
+            &[],
+        )
         .unwrap();
     let claimed = storage
-        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
         .unwrap()
         .unwrap();
     let back: RlmJobPayload = serde_json::from_str(&claimed.payload).unwrap();
@@ -582,4 +591,124 @@ fn supersede_rlm_node_creates_new_active_row_and_history() {
     assert_eq!(history[1].id, id2);
     assert_eq!(history[2].id, id3);
     assert_eq!(history[2].summary_text, "third draft");
+}
+
+#[test]
+fn banned_volunteer_claim_is_rejected() {
+    let storage = temp_storage();
+    storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
+
+    // Push alice to the ban threshold (3 strikes).
+    storage.record_strike("alice").unwrap();
+    storage.record_strike("alice").unwrap();
+    storage.record_strike("alice").unwrap();
+    assert!(storage.is_banned("alice", 3).unwrap());
+
+    // A banned volunteer cannot claim the pending slot...
+    assert!(
+        storage
+            .claim_rlm_job("alice", DEFAULT_RLM_LEASE_MS, None, 3)
+            .unwrap()
+            .is_none(),
+        "banned volunteer must not claim"
+    );
+    // ...but an un-banned one can.
+    assert!(
+        storage
+            .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
+            .unwrap()
+            .is_some(),
+        "non-banned volunteer may claim"
+    );
+}
+
+#[test]
+fn diverger_is_excluded_from_reassigned_generation_group() {
+    let storage = temp_storage();
+    let spec = NewRlmJob {
+        buffer_id: Some(1),
+        project: "p".into(),
+        level: 1,
+        subject: "a.rs".into(),
+        payload: "{}".into(),
+        priority: 5,
+        quorum_slots: 2,
+    };
+
+    // Original fan-out (no exclusions).
+    let (_, gen0) = storage.enqueue_rlm_job(&spec, &[]).unwrap();
+
+    // Volunteers claim and finish both slots so the group is fully done.
+    let j1 = storage
+        .claim_rlm_job("w1", DEFAULT_RLM_LEASE_MS, None, 3)
+        .unwrap()
+        .unwrap();
+    let j2 = storage
+        .claim_rlm_job("w2", DEFAULT_RLM_LEASE_MS, None, 3)
+        .unwrap()
+        .unwrap();
+    assert!(
+        storage
+            .complete_rlm_job(j1.id, "w1", j1.generation)
+            .unwrap()
+    );
+    assert!(
+        storage
+            .complete_rlm_job(j2.id, "w2", j2.generation)
+            .unwrap()
+    );
+
+    // Re-fan-out after divergence, excluding two volunteers.
+    let (_, gen1) = storage
+        .enqueue_rlm_job(&spec, &["alice".into(), "bob".into()])
+        .unwrap();
+    assert!(gen1 > gen0, "re-fan-out advances the generation");
+
+    // The new slots belong to a fresh generation group that records the
+    // divergers as excluded.
+    let new_group: i64 = storage
+        .connection()
+        .unwrap()
+        .execute(|c| {
+            c.query_row(
+                "SELECT generation_group_id FROM rlm_jobs \
+                 WHERE project = 'p' AND level = 1 AND subject = 'a.rs' \
+                 ORDER BY id DESC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .context("read new group id")
+        })
+        .unwrap();
+    let excluded: Vec<String> = storage
+        .connection()
+        .unwrap()
+        .execute(|c| {
+            let mut stmt = c
+                .prepare(
+                    "SELECT volunteer FROM rlm_job_exclusions \
+                     WHERE generation_group_id = ?1",
+                )
+                .context("prepare exclusions")?;
+            let rows = stmt
+                .query_map(params![new_group], |r| r.get(0))
+                .context("query exclusions")?;
+            let mut out = Vec::new();
+            for r in rows {
+                out.push(r.context("map exclusion")?);
+            }
+            Ok(out)
+        })
+        .unwrap();
+    assert!(excluded.contains(&"alice".to_string()));
+    assert!(excluded.contains(&"bob".to_string()));
+
+    // An excluded diverger cannot claim the new slots.
+    assert!(
+        storage
+            .claim_rlm_job("alice", DEFAULT_RLM_LEASE_MS, None, 3)
+            .unwrap()
+            .is_none(),
+        "excluded diverger must not claim the new group"
+    );
 }

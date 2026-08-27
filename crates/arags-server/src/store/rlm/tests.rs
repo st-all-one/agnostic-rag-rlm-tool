@@ -20,19 +20,22 @@ fn l1_enqueue_then_cascade_to_l2_and_l3() {
     for name in ["a.rs", "b.rs"] {
         let path = f(name);
         storage
-            .enqueue_rlm_job(&NewRlmJob {
-                buffer_id: Some(1),
-                project: "p".into(),
-                level: 1,
-                subject: path.clone(),
-                payload: r#"{"hashes":["h"],"texts":["t"]}"#.into(),
-                priority: PRIORITY_FRESH,
-                quorum_slots: 1,
-            })
+            .enqueue_rlm_job(
+                &NewRlmJob {
+                    buffer_id: Some(1),
+                    project: "p".into(),
+                    level: 1,
+                    subject: path.clone(),
+                    payload: r#"{"hashes":["h"],"texts":["t"]}"#.into(),
+                    priority: PRIORITY_FRESH,
+                    quorum_slots: 1,
+                },
+                &[],
+            )
             .expect("seed job");
         // Volunteer claims + completes; store the node like the handler.
         let job = storage
-            .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+            .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
             .expect("claim")
             .expect("job");
         storage

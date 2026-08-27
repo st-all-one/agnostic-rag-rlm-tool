@@ -239,39 +239,128 @@ fn render_markdown_results(results: &[SearchResult]) -> String {
     crate::output::markdown::render_search_results(&items)
 }
 
+/// Routing decision for the `ask` entrypoint, independent of any gRPC
+/// transport so it can be unit-tested without a live server.
+pub(crate) enum AskAction {
+    /// Deterministic 1:1 answer lookup by stable cache id (no LLM invoked).
+    CacheLookup(String),
+    /// Digest the question via the user's local LLM (the default `ask` path).
+    Digest,
+}
+
+/// Resolve the `ask` action from the parsed `--cache-id`.
+///
+/// `# Errors` is not applicable; this is a pure decision function.
+pub(crate) fn resolve_ask_action(cache_id: Option<String>) -> AskAction {
+    match cache_id {
+        Some(id) if !id.is_empty() => AskAction::CacheLookup(id),
+        _ => AskAction::Digest,
+    }
+}
+
+/// Pure predicate: does `ask` invoke the user's LLM digest by default?
+///
+/// Returns `true` whenever no valid `--cache-id` was supplied, i.e. the
+/// default `ask` path digests via the local LLM.
+#[cfg(test)]
+pub(crate) fn ask_invokes_llm(cache_id: Option<&str>) -> bool {
+    matches!(
+        resolve_ask_action(cache_id.map(str::to_string)),
+        AskAction::Digest
+    )
+}
+
+/// `search` is objective retrieval and never invokes the client LLM digest.
+#[cfg(test)]
+pub(crate) const SEARCH_INVOKES_LLM: bool = false;
+
+/// `search --context` uses the server-side BuildContext RPC; no client LLM.
+#[cfg(test)]
+pub(crate) const SEARCH_CONTEXT_INVOKES_LLM: bool = false;
+
+/// Deprecation notice for the `query` alias (points users to `ask`).
+pub(crate) fn query_deprecation_message() -> &'static str {
+    "`arags query` is deprecated; use `arags ask` (LLM digest is now implicit). \
+     For the old no-LLM server-side context, use `arags search --context`."
+}
+
+/// `ask` entrypoint: deterministic lookup with `--cache-id`, otherwise digest
+/// via the user's local LLM by default.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn run_query(
+pub(crate) fn run_ask(
     rt: &Runtime,
     client: &mut AragsClient,
     project: &str,
     question: &str,
     cache_id: Option<String>,
-    qa: bool,
     backend: Option<&str>,
     model: Option<&str>,
     as_of_epoch: i64,
     format: Format,
 ) -> Result<()> {
-    let project_str = project.to_string();
-
-    if let Some(id) = cache_id {
-        return crate::commands::qa_cache::run_get(rt, client, &id, &project_str, format);
-    }
-    if qa {
-        return crate::commands::qa_cache::run_ask(
+    match resolve_ask_action(cache_id) {
+        AskAction::CacheLookup(id) => {
+            crate::commands::qa_cache::run_get(rt, client, &id, project, format)
+        }
+        AskAction::Digest => crate::commands::qa_cache::run_ask(
             rt,
             client,
             question,
             backend,
             model,
-            &project_str,
+            project,
             as_of_epoch,
             format,
-        );
+        ),
     }
+}
 
-    // Default: server-side context (no client LLM), deterministic. Mirrors the
-    // removed `context` command.
+/// Deprecated `query` alias: emit a deprecation warning, then route to the
+/// `ask` logic (LLM digest by default, or deterministic lookup with
+/// `--cache-id`). The `qa` flag is accepted for shape compat but ignored —
+/// digest is now implicit in `ask`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_query_deprecated(
+    rt: &Runtime,
+    client: &mut AragsClient,
+    project: &str,
+    question: &str,
+    cache_id: Option<String>,
+    _qa: bool,
+    backend: Option<&str>,
+    model: Option<&str>,
+    as_of_epoch: i64,
+    format: Format,
+) -> Result<()> {
+    let msg = query_deprecation_message();
+    tracing::warn!(msg, "deprecated `query` command invoked; routing to `ask`");
+    eprintln!("warning: {msg}");
+    run_ask(
+        rt,
+        client,
+        project,
+        question,
+        cache_id,
+        backend,
+        model,
+        as_of_epoch,
+        format,
+    )
+}
+
+/// `search --context`: server-side BuildContext (objective, NO client LLM).
+///
+/// Migration target for the old no-LLM `query` default path. Returns the
+/// server-built context deterministically.
+pub(crate) fn run_search_context(
+    rt: &Runtime,
+    client: &mut AragsClient,
+    project: &str,
+    question: &str,
+    _as_of_epoch: i64,
+    format: Format,
+) -> Result<()> {
+    let project_str = project.to_string();
     let request = Request::new(arags_proto::proto::ContextRequest {
         project: project_str.clone(),
         task: question.to_string(),
@@ -292,3 +381,6 @@ pub(crate) fn run_query(
     print!("{rendered}");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

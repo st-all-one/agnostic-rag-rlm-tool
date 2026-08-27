@@ -27,10 +27,16 @@ impl Storage {
     /// the classic single-row behaviour is preserved exactly (the `job_key`
     /// carries no slot suffix).
     ///
+    /// `exclude` lists volunteers that must NOT be able to claim this group's
+    /// slots (issue `agnostic-rlm-rs-f486`): it is written into
+    /// `rlm_job_exclusions` keyed by the new `generation_group_id`. When
+    /// non-empty, a brand-new generation group is always allocated (even for an
+    /// existing subject) so a re-fan-out after total divergence starts clean.
+    ///
     /// # Errors
     ///
     /// Returns an error if the insert fails.
-    pub fn enqueue_rlm_job(&self, job: &NewRlmJob) -> Result<(i64, i64)> {
+    pub fn enqueue_rlm_job(&self, job: &NewRlmJob, exclude: &[String]) -> Result<(i64, i64)> {
         let slots = job.quorum_slots.max(1);
         let logical = rlm_job_key(&job.project, job.level, &job.subject);
         let now = now_ms();
@@ -42,7 +48,7 @@ impl Storage {
                 let mut stmt = c
                     .prepare(
                         "SELECT id, status, generation, generation_group_id FROM rlm_jobs \
-                         WHERE project = ?1 AND level = ?2 AND subject = ?3",
+                          WHERE project = ?1 AND level = ?2 AND subject = ?3",
                     )
                     .context("prepare existing rlm_jobs probe")?;
                 let rows = stmt
@@ -71,13 +77,25 @@ impl Storage {
                 }
                 // All slots finished/cancelled: reset, bump generation, recreate.
                 let old_generation = existing[0].2;
-                let group_id = existing[0].3.unwrap_or_else(|| existing[0].0);
+                let group_id = if exclude.is_empty() {
+                    existing[0].3.unwrap_or_else(|| existing[0].0)
+                } else {
+                    // Re-fan-out after divergence: fresh group so exclusions
+                    // (and the generation counter used to cap rounds) advance.
+                    c.query_row(
+                        "SELECT COALESCE(MAX(generation_group_id), 0) + 1 FROM rlm_jobs",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .context("allocate rlm generation group")?
+                };
                 c.execute(
                     "DELETE FROM rlm_jobs WHERE project = ?1 AND level = ?2 AND subject = ?3",
                     params![job.project, job.level, job.subject],
                 )
                 .context("reset rlm_job group")?;
                 let new_generation = old_generation + 1;
+                insert_rlm_exclusions(c, group_id, exclude).context("record rlm exclusions")?;
                 let first =
                     insert_rlm_slots(c, job, slots, &logical, group_id, new_generation, now)
                         .context("recreate rlm_job slots")?;
@@ -91,9 +109,21 @@ impl Storage {
                     |r| r.get(0),
                 )
                 .context("allocate rlm generation group")?;
-            let first = insert_rlm_slots(c, job, slots, &logical, group_id, 0, now)
+            // A re-fan-out (exclude non-empty) advances the generation counter
+            // so the reassignment round can be capped by the caller.
+            let prior_gen: i64 = c
+                .query_row(
+                    "SELECT COALESCE(MAX(generation), 0) FROM rlm_jobs \
+                     WHERE project = ?1 AND level = ?2 AND subject = ?3",
+                    params![job.project, job.level, job.subject],
+                    |r| r.get(0),
+                )
+                .context("read prior rlm generation")?;
+            let generation = if exclude.is_empty() { 0 } else { prior_gen + 1 };
+            insert_rlm_exclusions(c, group_id, exclude).context("record rlm exclusions")?;
+            let first = insert_rlm_slots(c, job, slots, &logical, group_id, generation, now)
                 .context("create rlm_job slots")?;
-            Ok((first, 0))
+            Ok((first, generation))
         })
     }
 
@@ -340,4 +370,29 @@ fn insert_rlm_slots(
         }
     }
     Ok(first_id)
+}
+
+/// Write `exclude` volunteers into `rlm_job_exclusions` for `group_id` so they
+/// cannot claim the freshly fanned-out slots. Existing rows are ignored via
+/// `ON CONFLICT DO NOTHING` (a volunteer may be excluded by several rounds).
+///
+/// # Errors
+///
+/// Returns an error if any insert fails.
+fn insert_rlm_exclusions(
+    c: &rusqlite::Connection,
+    group_id: i64,
+    exclude: &[String],
+) -> rusqlite::Result<()> {
+    for vol in exclude {
+        if vol.is_empty() {
+            continue;
+        }
+        c.execute(
+            "INSERT INTO rlm_job_exclusions (generation_group_id, volunteer) \
+             VALUES (?1, ?2) ON CONFLICT(generation_group_id, volunteer) DO NOTHING",
+            params![group_id, vol],
+        )?;
+    }
+    Ok(())
 }

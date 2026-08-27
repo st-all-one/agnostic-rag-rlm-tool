@@ -7,6 +7,7 @@
 //! Cancellation is cooperative: if the server resets the job's generation
 //! while we process, our submission is rejected and we simply try again.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use std::fmt::Write as _;
@@ -16,6 +17,7 @@ use arags_core::rlm::{DEFAULT_RLM_LEASE_MS, RlmJobPayload};
 use arags_llm::trait_llm::LlmBackend;
 use arags_llm::types::{CompletionRequest, Message};
 use arags_proto::proto::CompleteRlmJobRequest;
+use parking_lot::Mutex;
 
 use crate::auth_client;
 use crate::backend::resolve_backend;
@@ -78,7 +80,7 @@ pub fn run(rt: &tokio::runtime::Runtime, cfg: &EffectiveUserConfig, once: bool) 
     let auth = cfg.auth().ok_or_else(|| {
         anyhow::anyhow!("volunteer requires [auth] refresh_token in ~/.arags/arags.toml")
     })?;
-    let mut client = auth_client::connect(rt, &client_config, auth)?;
+    let (mut client, session_token) = auth_client::connect(rt, &client_config, auth)?;
 
     tracing::info!(
         lease_secs = vol.lease_secs,
@@ -98,7 +100,16 @@ pub fn run(rt: &tokio::runtime::Runtime, cfg: &EffectiveUserConfig, once: bool) 
                 std::thread::sleep(Duration::from_secs(vol.poll_secs.max(1)));
             }
             Ok(Some(job)) => {
-                if let Err(e) = process(rt, &mut client, &backend, &model_name, vol, job, once) {
+                if let Err(e) = process(
+                    rt,
+                    &mut client,
+                    &backend,
+                    &model_name,
+                    vol,
+                    &session_token,
+                    job,
+                    once,
+                ) {
                     // `once` errors bubble up; loop errors are logged+retried.
                     if once {
                         return Err(e);
@@ -228,6 +239,7 @@ fn process(
     backend: &std::sync::Arc<dyn LlmBackend>,
     model_name: &str,
     vol: &VolunteerConfig,
+    session_token: &Arc<Mutex<String>>,
     job: ClaimedJob,
     _once: bool,
 ) -> Result<bool> {
@@ -255,6 +267,18 @@ fn process(
         anyhow::bail!("model produced an implausibly short summary; refusing to submit");
     }
 
+    // Attest the submission (issue `agnostic-rlm-rs-64af`): HMAC-SHA256 over the
+    // session token so the server can verify non-admin volunteers before counting
+    // the candidate toward the BFT quorum. A missing session yields an empty HMAC
+    // which the server rejects for quorum jobs.
+    let session = session_token.lock().clone();
+    let submission_hmac = arags_core::rlm_attestation::sign_rlm_submission(
+        &session,
+        job.id,
+        job.generation,
+        &summary,
+    );
+
     let resp = rt
         .block_on(client.complete_rlm_job(CompleteRlmJobRequest {
             job_id: job.id,
@@ -267,6 +291,7 @@ fn process(
                 payload.template_version.clone()
             },
             token_count: i64::from(response.usage.total_tokens),
+            submission_hmac,
         }))?
         .into_inner();
 

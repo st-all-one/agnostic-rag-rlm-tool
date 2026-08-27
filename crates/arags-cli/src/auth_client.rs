@@ -47,10 +47,13 @@ impl Interceptor for BearerInterceptor {
 
 /// Connect to the server, performing `AuthRefresh` (if a refresh token is
 /// configured) and returning a client that auto-attaches and renews the
-/// session token.
+/// session token, together with a shared handle to the **current** session token.
 ///
-/// When no `refresh_token` is configured the returned client sends no auth
-/// header (the server will reject privileged RPCs with `UNAUTHENTICATED`).
+/// The token handle is needed by callers that must *attest* their requests
+/// (e.g. RLM volunteer submissions sign an HMAC over the session token — see
+/// `arags_core::rlm_attestation`). When no `refresh_token` is configured the
+/// returned client sends no auth header (the server will reject privileged RPCs
+/// with `UNAUTHENTICATED`) and the token handle holds an empty string.
 ///
 /// # Errors
 ///
@@ -60,7 +63,7 @@ pub fn connect(
     rt: &Runtime,
     client_config: &ClientConfig,
     auth: &crate::user_config::AuthConfig,
-) -> Result<AragsClient> {
+) -> Result<(AragsClient, Arc<Mutex<String>>)> {
     let channel = rt
         .block_on(client::connect_channel(client_config))
         .context("failed to connect to arags-server")?;
@@ -103,9 +106,9 @@ pub fn connect(
         });
     }
 
-    let interceptor = BearerInterceptor { token };
-    Ok(AragsServiceClient::new(InterceptedService::new(
-        channel,
-        interceptor,
-    )))
+    let interceptor = BearerInterceptor {
+        token: token.clone(),
+    };
+    let client = AragsServiceClient::new(InterceptedService::new(channel, interceptor));
+    Ok((client, token))
 }

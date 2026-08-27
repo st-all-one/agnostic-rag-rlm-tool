@@ -17,6 +17,7 @@ pub mod exploration;
 pub mod logging;
 pub mod qa_cache;
 pub mod rlm;
+pub mod rlm_attestation;
 
 /// Dimensionality of the project's fixed embedding model
 /// (`all-MiniLM-L6-v2`). Single source of truth for sizing vector stores

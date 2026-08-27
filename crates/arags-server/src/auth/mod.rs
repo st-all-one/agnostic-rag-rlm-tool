@@ -69,7 +69,7 @@ pub fn require_admin(ctx: &AuthContext) -> Result<(), Status> {
     }
 }
 
-fn bearer(md: &MetadataMap) -> Result<String, Status> {
+pub(crate) fn bearer(md: &MetadataMap) -> Result<String, Status> {
     let value = md
         .get("authorization")
         .ok_or_else(|| Status::unauthenticated("missing authorization header"))?

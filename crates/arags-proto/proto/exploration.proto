@@ -12,14 +12,6 @@ import "query_cache.proto";
 // dedicated vector space and serves candidates with a composite confidence
 // score (similarity × epoch drift × age + feedback).
 
-// Direction of consumer feedback on a served map.
-enum FeedbackKind {
-  // Consumer verified the described mechanism in current code.
-  CONFIRM = 0;
-  // Consumer found evidence contradicting the map.
-  CONTRADICT = 1;
-}
-
 // Lifecycle states mirrored from storage (`fresh` | `stale` | `retired`).
 //
 // Persisted fire-and-forget: the full markdown contract document plus the
@@ -127,22 +119,6 @@ message GetExplorationByIdResponse {
   // Time-travel / provenance metadata (plan 021).
   int64 epoch = 16;
   int64 version = 17;
-}
-
-// Consumer feedback loop: the cheapest verifier is the agent that just used
-// the map. Accumulated contradictions auto-retire the map at the configured
-// limit.
-message FeedbackExplorationRequest {
-  string exploration_id = 1;
-  FeedbackKind kind = 2;
-}
-
-message FeedbackExplorationResponse {
-  bool applied = 1;
-  int64 confirmed = 2;
-  int64 contradicted = 3;
-  // Whether this contradiction crossed the limit and retired the map.
-  bool auto_retired = 4;
 }
 
 // Admin-gated invalidation (mirrors InvalidateCache semantics).

@@ -5,11 +5,13 @@
 //! server-side confidence score so every caller sees consistent rankings.
 //! The server is LLM-free: it validates the contract, anchors cited files
 //! with content hashes, embeds summaries into the dedicated vector space,
-//! rechecks anchors at read time and records consumer feedback.
+//! rechecks anchors at read time and serves the maps.
 //!
 //! Split by concern:
 //! - `search`: semantic search + single-map fetch (read-time trust pipeline)
-//! - `feedback`: consumer confirm/contradict + admin invalidation
+//! - `feedback`: admin invalidation + admin review gate (the public consumer
+//!   feedback RPC was HARD-REMOVED in issue `agnostic-rlm-rs-f5f3` — sybil
+//!   risk; internal `record_feedback` storage may still be exercised directly)
 
 pub mod feedback;
 pub(crate) mod grounding;
@@ -18,9 +20,9 @@ pub mod search;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
-mod tests_feedback;
-#[cfg(test)]
 mod tests_grounding;
+#[cfg(test)]
+mod tests_moderation;
 
 use arags_core::exploration::ConfidenceConfig;
 use arags_proto::proto::PersistExplorationRequest;

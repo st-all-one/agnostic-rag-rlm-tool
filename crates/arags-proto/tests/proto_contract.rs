@@ -82,18 +82,6 @@ fn test_exploration_messages_round_trip() {
         (hit.confidence + hit.similarity) > 1.0,
         "confidence != similarity"
     );
-    assert_eq!(FeedbackKind::Confirm as i32, 0);
-    assert_eq!(FeedbackKind::Contradict as i32, 1);
-
-    let fb = FeedbackExplorationRequest {
-        exploration_id: hit.exploration_id.clone(),
-        kind: FeedbackKind::Contradict as i32,
-    };
-    assert_eq!(
-        fb.kind,
-        FeedbackKind::Contradict as i32,
-        "contradiction drives auto-retire"
-    );
 }
 
 #[test]

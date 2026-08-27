@@ -39,10 +39,9 @@ use arags_proto::proto::{
     StoreAnswerResponse, TriggerMaintenanceRequest,
 };
 use arags_proto::proto::{
-    FeedbackExplorationRequest, FeedbackExplorationResponse, GetExplorationByIdRequest,
-    GetExplorationByIdResponse, InvalidateExplorationRequest, InvalidateExplorationResponse,
-    PersistExplorationRequest, PersistExplorationResponse, ReviewExplorationRequest,
-    ReviewExplorationResponse,
+    GetExplorationByIdRequest, GetExplorationByIdResponse, InvalidateExplorationRequest,
+    InvalidateExplorationResponse, PersistExplorationRequest, PersistExplorationResponse,
+    ReviewExplorationRequest, ReviewExplorationResponse,
 };
 
 /// gRPC service implementation for arags.
@@ -292,14 +291,6 @@ impl AragsService for AragsGrpcService {
     ) -> Result<Response<GetExplorationByIdResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.get_exploration_by_id");
         exploration::search::handle_get_exploration_by_id(&self.state, request).await
-    }
-
-    async fn feedback_exploration(
-        &self,
-        request: Request<FeedbackExplorationRequest>,
-    ) -> Result<Response<FeedbackExplorationResponse>, Status> {
-        let _timer = crate::timing::Timer::new("handler.feedback_exploration");
-        exploration::feedback::handle_feedback_exploration(&self.state, request).await
     }
 
     async fn invalidate_exploration(

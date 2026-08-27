@@ -1,12 +1,14 @@
-//! Consumer feedback + admin invalidation for explorations (plan 022).
+//! Admin invalidation + admin review gate for explorations (plan 022).
 //!
-//! The cheapest verifier of a map is the agent that just used it: confirms
-//! raise future rankings, contradictions lower confidence and auto-retire the
-//! map at the configured limit. Admin invalidation mirrors the qa-cache
-//! semantics (Stale keeps history, Delete hard-removes row + vector).
+//! NOTE: the public consumer feedback RPC (`FeedbackExploration`,
+//! `handle_feedback_exploration`) was HARD-REMOVED in issue
+//! `agnostic-rlm-rs-f5f3` to eliminate a sybil-by-AI risk: an attacker could
+//! flood confirm/contradict votes to manipulate map rankings. The internal
+//! storage layer still exposes `record_feedback`/`FeedbackKind`, but nothing in
+//! the public RPC surface writes it anymore. Admin invalidation mirrors the
+//! qa-cache semantics (Stale keeps history, Delete hard-removes row + vector).
 
 use arags_proto::proto::{
-    FeedbackExplorationRequest, FeedbackExplorationResponse, FeedbackKind,
     InvalidateExplorationRequest, InvalidateExplorationResponse, InvalidateMode,
     ReviewExplorationRequest, ReviewExplorationResponse,
 };
@@ -15,74 +17,6 @@ use tonic::{Request, Response, Status};
 use crate::grpc::error::{internal, invalid_arg};
 use crate::state::AppState;
 use crate::store;
-
-/// Record consumer feedback on a served map.
-pub(crate) async fn handle_feedback_exploration(
-    state: &AppState,
-    request: Request<FeedbackExplorationRequest>,
-) -> Result<Response<FeedbackExplorationResponse>, Status> {
-    let _timer = crate::timing::Timer::new("handler.feedback_exploration");
-    let ctx = crate::auth::authenticate(request.metadata(), &state.storage)?;
-    let req = request.into_inner();
-
-    if req.exploration_id.trim().is_empty() {
-        return Err(invalid_arg("exploration_id is required"));
-    }
-    let proto_kind = FeedbackKind::try_from(req.kind)
-        .map_err(|e| invalid_arg(&format!("unknown feedback kind: {e}")))?;
-    let kind = match proto_kind {
-        FeedbackKind::Confirm => arags_storage::explorations::FeedbackKind::Confirm,
-        FeedbackKind::Contradict => arags_storage::explorations::FeedbackKind::Contradict,
-    };
-    let limit = state.config.exploration.contradiction_limit;
-    let username = ctx.username.clone();
-
-    let storage = state.storage.clone();
-    let exploration_id_for_log = req.exploration_id.clone();
-    let outcome = store::blocking(move || {
-        storage
-            .record_feedback(&req.exploration_id, kind, limit)
-            .map_err(anyhow::Error::from)
-    })
-    .await
-    .map_err(internal)?
-    .ok_or_else(|| crate::grpc::error::not_found("unknown exploration_id"))?;
-
-    let auto_retired = matches!(
-        &outcome,
-        arags_storage::explorations::FeedbackOutcome::Contradicted {
-            auto_retired: true,
-            ..
-        }
-    );
-    tracing::info!(
-        exploration_id = %exploration_id_for_log,
-        confirmed_by = %username,
-        ?kind,
-        auto_retired,
-        "exploration feedback"
-    );
-
-    Ok(Response::new(match outcome {
-        arags_storage::explorations::FeedbackOutcome::Confirmed { confirmed } => {
-            FeedbackExplorationResponse {
-                applied: true,
-                confirmed,
-                contradicted: 0,
-                auto_retired: false,
-            }
-        }
-        arags_storage::explorations::FeedbackOutcome::Contradicted {
-            contradicted,
-            auto_retired,
-        } => FeedbackExplorationResponse {
-            applied: true,
-            confirmed: 0,
-            contradicted,
-            auto_retired,
-        },
-    }))
-}
 
 /// Admin-gated invalidation. `Stale` keeps the map as auditable history;
 /// `Delete` hard-removes the row and its vector.

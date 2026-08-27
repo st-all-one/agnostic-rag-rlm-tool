@@ -56,10 +56,10 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
   (validação de contrato/caps, resolução path→hash, embed best-effort),
   `SearchExplorations` com pipeline read-time (vetor → recheck de âncoras →
   `confidence_score` → gate `hit_low`/`include_stale`/retired) ordenado por
-  confiança; `GetExplorationById` com body/âncoras/metadata vivos;
-  `FeedbackExploration` com auto-retire no limite configurado;
+  confiança;   `GetExplorationById` com body/âncoras/metadata vivos;
   `InvalidateExploration` admin (Stale mantém história, Delete remove
-  linha+vetor).
+  linha+vetor). O RPC de feedback do consumidor (`FeedbackExploration`) foi
+  removido depois por risco sybil (ver `agnostic-rlm-rs-f5f3`).
 - **Hook pós-index (Phase 4.5)**: `bump_project_epoch` +
   `mark_stale_if_anchors_changed` por projeto indexado.
 - **Verify-on-hit (plan 022.8, opcional)**: `[exploration].verify_on_hit`

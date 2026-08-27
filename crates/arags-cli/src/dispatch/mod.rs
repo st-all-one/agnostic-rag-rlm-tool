@@ -40,7 +40,8 @@ pub(crate) fn connect(rt: &Runtime, cfg: &EffectiveUserConfig) -> Result<AragsCl
         tls_key: cfg.server.tls_key.clone(),
     };
     let auth = cfg.auth().cloned().unwrap_or_default();
-    crate::auth_client::connect(rt, &client_config, &auth)
+    let (client, _token) = crate::auth_client::connect(rt, &client_config, &auth)?;
+    Ok(client)
 }
 
 /// Map a textual tier (`fts`/`entity`/`vector`/`hybrid`/`summary`/`auto`)
@@ -71,7 +72,7 @@ pub fn dispatch(cli: Cli, rt: &Runtime) -> Result<()> {
 
     let is_content = matches!(
         cli.command,
-        Commands::Search { .. } | Commands::Query { .. }
+        Commands::Search { .. } | Commands::Query { .. } | Commands::Ask { .. }
     );
     let default = if is_content {
         Format::Text
@@ -100,8 +101,25 @@ fn run(
     rt: &Runtime,
 ) -> Result<()> {
     match cli.command {
-        Commands::Init { no_index, name, .. } => {
-            init::run_init(rt, &cfg, &project, name, format, !no_index)
+        Commands::Init {
+            name,
+            ignore,
+            server_addr,
+            register,
+            no_register,
+            no_index,
+            non_interactive,
+            ..
+        } => {
+            let flags = init::InitFlags {
+                name,
+                ignore,
+                server_addr,
+                register: register && !no_register,
+                do_index: !no_index,
+                non_interactive,
+            };
+            init::run_init(rt, &cfg, &project, &flags, format)
         }
         Commands::Volunteer { once } => crate::volunteer::run(rt, &cfg, once),
         Commands::Index {
@@ -143,6 +161,7 @@ fn run(
             tier,
             min_score,
             file_pattern,
+            context,
             as_of_epoch,
             as_of,
             ..
@@ -150,18 +169,22 @@ fn run(
             let canonical = user_config::resolve_canonical_name(&cfg)?;
             let mut client = connect(rt, &cfg)?;
             let epoch = crate::cli::commands::resolve_as_of_epoch(as_of_epoch, as_of)?;
-            search::run_search(
-                rt,
-                &mut client,
-                &canonical,
-                &query,
-                top_k,
-                &tier,
-                min_score,
-                file_pattern.as_deref(),
-                epoch,
-                format,
-            )
+            if context {
+                search::run_search_context(rt, &mut client, &canonical, &query, epoch, format)
+            } else {
+                search::run_search(
+                    rt,
+                    &mut client,
+                    &canonical,
+                    &query,
+                    top_k,
+                    &tier,
+                    min_score,
+                    file_pattern.as_deref(),
+                    epoch,
+                    format,
+                )
+            }
         }
         Commands::Query {
             question,
@@ -175,13 +198,36 @@ fn run(
             let canonical = user_config::resolve_canonical_name(&cfg)?;
             let mut client = connect(rt, &cfg)?;
             let epoch = crate::cli::commands::resolve_as_of_epoch(as_of_epoch, as_of)?;
-            search::run_query(
+            search::run_query_deprecated(
                 rt,
                 &mut client,
                 &canonical,
                 &question,
                 cache_id,
                 qa,
+                backend.as_deref(),
+                model.as_deref(),
+                epoch,
+                format,
+            )
+        }
+        Commands::Ask {
+            question,
+            cache_id,
+            backend,
+            model,
+            as_of_epoch,
+            as_of,
+        } => {
+            let canonical = user_config::resolve_canonical_name(&cfg)?;
+            let mut client = connect(rt, &cfg)?;
+            let epoch = crate::cli::commands::resolve_as_of_epoch(as_of_epoch, as_of)?;
+            search::run_ask(
+                rt,
+                &mut client,
+                &canonical,
+                &question,
+                cache_id,
                 backend.as_deref(),
                 model.as_deref(),
                 epoch,

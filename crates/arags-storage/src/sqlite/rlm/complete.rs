@@ -151,14 +151,22 @@ impl Storage {
     /// client-supplied (default 500s, `DEFAULT_RLM_LEASE_MS`); while the
     /// lease is valid no other volunteer can claim the same work unit.
     ///
+    /// `strikes_limit` is the quorum ban threshold: a volunteer at/above it
+    /// (`volunteer_trust.strikes >= strikes_limit`) is banned and their claim
+    /// is rejected (returns `None`). Volunteers excluded for a specific
+    /// generation group via `rlm_job_exclusions` (re-fan-out after divergence,
+    /// issue `agnostic-rlm-rs-f486`) are likewise skipped.
+    ///
     /// # Errors
     ///
     /// Returns an error if the transaction fails.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn claim_rlm_job(
         &self,
         volunteer: &str,
         lease_ms: i64,
         max_level: Option<i64>,
+        strikes_limit: u32,
     ) -> Result<Option<ClaimedRlmJob>> {
         let now = now_ms();
         let expires = now.saturating_add(lease_ms.max(1_000));
@@ -169,18 +177,31 @@ impl Storage {
             // accepts everything. A volunteer may hold at most one slot of any
             // generation group (so the N fanned-out slots go to N distinct
             // volunteers); the correlated `NOT EXISTS` excludes pending jobs
-            // whose group already has a slot claimed by this volunteer.
+            // whose group already has a slot claimed by this volunteer. Banned
+            // volunteers (>= strikes_limit) and per-group exclusions are also
+            // filtered out so they can never claim.
             let sql = "SELECT id FROM rlm_jobs \
                  WHERE status = 'pending' AND level <= ?1 \
                    AND NOT EXISTS ( \
                      SELECT 1 FROM rlm_jobs s \
                      WHERE s.generation_group_id = rlm_jobs.generation_group_id \
                        AND s.claimed_by = ?2) \
+                   AND NOT EXISTS ( \
+                     SELECT 1 FROM volunteer_trust vt \
+                     WHERE vt.username = ?2 AND vt.strikes >= ?3) \
+                   AND NOT EXISTS ( \
+                     SELECT 1 FROM rlm_job_exclusions e \
+                     WHERE e.generation_group_id = rlm_jobs.generation_group_id \
+                       AND e.volunteer = ?2) \
                  ORDER BY priority ASC, level ASC, created_at ASC LIMIT 1";
             let job_id: Option<i64> = tx
                 .query_row(
                     sql,
-                    params![max_level.unwrap_or(i64::MAX), volunteer],
+                    params![
+                        max_level.unwrap_or(i64::MAX),
+                        volunteer,
+                        strikes_limit as i64
+                    ],
                     |r| r.get(0),
                 )
                 .optional()

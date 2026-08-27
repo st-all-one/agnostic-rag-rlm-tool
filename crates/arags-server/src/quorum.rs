@@ -21,14 +21,17 @@
 //! outside the lock on the capped pool. The decision is idempotent: a subject
 //! that already has an `accepted` submission is never re-decided.
 
+use std::collections::HashMap;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
+use rusqlite::OptionalExtension;
+use rusqlite::params;
 use tracing::{info, instrument, warn};
 
 use arags_embedding::embedder::Embedding;
 use arags_search::qa_cache::cosine_similarity;
-use arags_storage::sqlite::rlm::rlm_job_key;
+use arags_storage::sqlite::rlm::{PRIORITY_RETRY, rlm_job_key};
 
 use crate::config::{FusionStrategy, QuorumConfig};
 use crate::state::AppState;
@@ -152,6 +155,15 @@ pub async fn decide_rlm_quorum(
         })
         .collect();
 
+    // Byzantine bound (issue `agnostic-rlm-rs-64af`): tolerate up to
+    // `f = floor((n - 1) / 3)` malicious volunteers; a valid quorum needs at
+    // least `2f + 1` mutually-agreeing candidates. With `n >= 3f + 1` and at
+    // most `f` byzantine, an honest majority yields a unique accepted value.
+    let f = (n.saturating_sub(1)) / 3;
+    let min_clique = 2usize
+        .checked_mul(f)
+        .map_or(usize::MAX, |v| v.saturating_add(1));
+
     // Largest agreeing clique (every pairwise >= threshold). A single
     // candidate is only a quorum when n == 1.
     let agreeing = if n == 1 {
@@ -162,9 +174,12 @@ pub async fn decide_rlm_quorum(
 
     let elapsed_ms = start.elapsed().as_millis() as u64;
 
-    if agreeing.is_empty() {
+    // No quorum if the agreeing set is empty OR smaller than the 2f+1 bound:
+    // reject every candidate and strike each author.
+    if agreeing.is_empty() || agreeing.len() < min_clique {
         // No consensus: reject every candidate and strike each author.
         let mut rejected_ids = Vec::new();
+        let mut divergers: Vec<String> = Vec::new();
         for sub in &pending {
             if let Err(e) = store::blocking({
                 let storage = state.storage.clone();
@@ -181,6 +196,9 @@ pub async fn decide_rlm_quorum(
                 warn!(error = %e, subject, "rlm quorum reject/strike failed");
             } else {
                 rejected_ids.push(sub.id);
+                if !divergers.contains(&sub.candidate_by) {
+                    divergers.push(sub.candidate_by.clone());
+                }
             }
         }
         info!(
@@ -190,20 +208,72 @@ pub async fn decide_rlm_quorum(
             rejected = rejected_ids.len(),
             "quorum rejected: no consensus"
         );
+
+        // Total divergence: auto re-fan-out to a NEW generation group, excluding
+        // the volunteers that just diverged so the same answers are not repeated.
+        // Capped at `strikes_limit` rounds (preventing infinite loops); when
+        // exhausted the subject is left for human review.
+        reassign_rlm_on_divergence(state, project, level, subject, &divergers, n, elapsed_ms).await;
+
         return Ok(QuorumDecision::Rejected {
             rejected_submission_ids: rejected_ids,
         });
     }
 
-    // Fuse the agreeing set into the accepted summary text.
-    let fused = fuse_agreement(&state.config.quorum, &agreeing, &pending, &vectors);
+    // Trust-weighted fusion (issue `agnostic-rlm-rs-64af`): weight the published
+    // choice by each agreeing candidate's `volunteer_trust.trust_score` so a
+    // higher-trust volunteer's answer is preferred when several agree. All DB
+    // reads stay inside `store::blocking`.
+    let trust_scores: HashMap<String, f64> = store::blocking({
+        let storage = state.storage.clone();
+        let vols: Vec<String> = pending.iter().map(|s| s.candidate_by.clone()).collect();
+        move || -> anyhow::Result<HashMap<String, f64>> {
+            let mut m = HashMap::new();
+            for v in &vols {
+                let (_, t) = storage.read_trust(v)?;
+                m.insert(v.clone(), t);
+            }
+            Ok(m)
+        }
+    })
+    .await
+    .context("read volunteer trust for quorum fusion")?;
 
-    // Publish the node (approved — the quorum is the quality gate).
+    // Choose the published candidate index: highest trust, tie-broken by closeness
+    // to the consensus centroid. With `n >= 3f + 1` and at most `f` byzantine
+    // volunteers, an honest majority guarantees a unique accepted value.
+    let published_idx = choose_published(
+        &state.config.quorum,
+        &agreeing,
+        &pending,
+        &vectors,
+        &trust_scores,
+    );
+    let fused = pending[published_idx].candidate_text.clone();
+    let published_by = pending[published_idx].candidate_by.clone();
+
+    // Publish the node (approved — the quorum is the quality gate), attributed to
+    // the highest-trust agreeing volunteer.
     let (rowid, node_id) = store::blocking({
         let storage = state.storage.clone();
-        let (p, s, f) = (project.to_string(), subject.to_string(), fused.clone());
+        let (p, s, f, by) = (
+            project.to_string(),
+            subject.to_string(),
+            fused.clone(),
+            published_by.clone(),
+        );
         move || {
-            storage.publish_rlm_node_for_subject(&p, level, &s, &f, &[], None, None, None, "quorum")
+            storage.publish_rlm_node_for_subject(
+                &p,
+                level,
+                &s,
+                &f,
+                &[],
+                Some(&by),
+                None,
+                None,
+                "quorum",
+            )
         }
     })
     .await
@@ -220,7 +290,13 @@ pub async fn decide_rlm_quorum(
             if let Err(e) = store::blocking({
                 let storage = state.storage.clone();
                 let id = sub.id;
-                move || storage.accept_submission(id, "quorum", Some(f64::from(sim)))
+                let by = sub.candidate_by.clone();
+                move || -> anyhow::Result<()> {
+                    storage.accept_submission(id, "quorum", Some(f64::from(sim)))?;
+                    // An accepted candidate lifts its author's trust.
+                    storage.bump_trust_on_accept(&by)?;
+                    Ok(())
+                }
             })
             .await
             {
@@ -344,6 +420,174 @@ async fn embed_candidates(state: &AppState, texts: &[String]) -> Result<Vec<Embe
     .map_err(|e| anyhow::anyhow!("rlm quorum embedding failed: {e}"))
 }
 
+/// After a total-divergence rejection, re-fan the subject out to a fresh
+/// generation group of `n` slots while excluding the volunteers that just
+/// diverged (issue `agnostic-rlm-rs-f486`). Re-fan-outs are capped at
+/// `quorum.strikes_limit` rounds: once the subject's generation reaches that
+/// ceiling (or every known volunteer is banned/excluded) the subject is left
+/// for human review and a `phase = "rlm_quorum_reassign", status = "exhausted"`
+/// event is emitted with `elapsed_ms`. All DB work runs inside
+/// `store::blocking`.
+#[instrument(skip_all, fields(phase = "rlm_quorum_reassign", subject))]
+async fn reassign_rlm_on_divergence(
+    state: &AppState,
+    project: &str,
+    level: i64,
+    subject: &str,
+    divergers: &[String],
+    n: usize,
+    elapsed_ms: u64,
+) {
+    let strikes_limit = state.config.quorum.strikes_limit;
+    let p = project.to_string();
+    let s = subject.to_string();
+
+    // Current generation of this subject; used both to cap rounds and to detect
+    // whether any non-banned volunteer remains to do the work.
+    let (current_generation, known_volunteers, banned_volunteers): (i64, Vec<String>, Vec<String>) = {
+        let storage = state.storage.clone();
+        let (pp, ss) = (p.clone(), s.clone());
+        store::blocking(move || {
+            let max_gen: i64 = storage
+                .connection()
+                .context("acquire connection")?
+                .execute(|c| {
+                    c.query_row(
+                        "SELECT COALESCE(MAX(generation), 0) FROM rlm_jobs \
+                         WHERE project = ?1 AND level = ?2 AND subject = ?3",
+                        params![pp, level, ss],
+                        |r| r.get(0),
+                    )
+                    .context("read rlm_job generation")
+                })?;
+            // Known volunteer roster (from volunteer_trust) and how many are
+            // already banned, to decide whether reassignment is still possible.
+            let rows: Vec<(String, i64)> = storage
+                .connection()
+                .context("acquire connection")?
+                .execute(|c| {
+                    let mut stmt = c
+                        .prepare("SELECT username, strikes FROM volunteer_trust")
+                        .context("prepare volunteer roster")?;
+                    let rows = stmt
+                        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+                        .context("query volunteer roster")?;
+                    let mut out = Vec::new();
+                    for r in rows {
+                        out.push(r.context("map volunteer roster")?);
+                    }
+                    Ok(out)
+                })?;
+            let known: Vec<String> = rows.iter().map(|(u, _)| u.clone()).collect();
+            let banned: Vec<String> = rows
+                .into_iter()
+                .filter(|(_, st)| {
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        (*st) as u32 >= strikes_limit
+                    }
+                })
+                .map(|(u, _)| u)
+                .collect();
+            Ok((max_gen, known, banned))
+        })
+        .await
+        .unwrap_or((0, Vec::new(), Vec::new()))
+    };
+
+    // Cap 1: generation ceiling reached -> no further re-fan-outs.
+    #[allow(clippy::cast_possible_truncation)]
+    if current_generation as u32 >= strikes_limit {
+        info!(
+            phase = "rlm_quorum_reassign",
+            status = "exhausted",
+            subject,
+            elapsed_ms,
+            generation = current_generation,
+            strikes_limit,
+            "rlm quorum re-fan-out capped: leaving for human review"
+        );
+        return;
+    }
+
+    // Cap 2: no non-banned, non-diverging volunteer remains -> human review.
+    let available: usize = known_volunteers
+        .iter()
+        .filter(|v| !banned_volunteers.contains(v) && !divergers.contains(v))
+        .count();
+    if !divergers.is_empty() && known_volunteers.len() >= n && available == 0 {
+        info!(
+            phase = "rlm_quorum_reassign",
+            status = "exhausted",
+            subject,
+            elapsed_ms,
+            available,
+            "rlm quorum re-fan-out exhausted: no non-banned volunteers"
+        );
+        return;
+    }
+
+    // Reuse the subject's last job payload/buffer so the new slots carry the
+    // same inputs; fall back to empty if no prior job exists.
+    let (buffer_id, payload) = {
+        let storage = state.storage.clone();
+        let (pp, ss) = (p.clone(), s.clone());
+        store::blocking(move || {
+            let conn = storage.connection().context("acquire connection")?;
+            let row: Option<(Option<i64>, String)> = conn.execute(|c| {
+                c.query_row(
+                    "SELECT buffer_id, payload FROM rlm_jobs \
+                         WHERE project = ?1 AND level = ?2 AND subject = ?3 \
+                         ORDER BY id DESC LIMIT 1",
+                    params![pp, level, ss],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()
+                .context("read rlm_job payload")
+            })?;
+            Ok(match row {
+                Some((b, pld)) => (b, pld),
+                None => (None, "{}".to_string()),
+            })
+        })
+        .await
+        .unwrap_or((None, "{}".to_string()))
+    };
+
+    let job = arags_storage::sqlite::rlm::NewRlmJob {
+        buffer_id,
+        project: p.clone(),
+        level,
+        subject: s.clone(),
+        payload,
+        priority: PRIORITY_RETRY,
+        quorum_slots: n,
+    };
+    match store::blocking({
+        let storage = state.storage.clone();
+        let exclude = divergers.to_vec();
+        move || storage.enqueue_rlm_job(&job, &exclude)
+    })
+    .await
+    {
+        Ok((first_id, new_generation)) => info!(
+            phase = "rlm_quorum_reassign",
+            status = "reassigned",
+            subject,
+            elapsed_ms,
+            new_generation,
+            new_job_id = first_id,
+            excluded = divergers.len(),
+            "rlm quorum re-fanned out to a new generation group excluding divergers"
+        ),
+        Err(e) => warn!(
+            error = %e,
+            subject,
+            "rlm quorum re-fan-out enqueue failed"
+        ),
+    }
+}
+
 /// Find the largest subset of candidates where every pairwise cosine similarity
 /// is `>= threshold`. Ties on size are broken by the higher minimum in-clique
 /// similarity (denser agreement wins).
@@ -396,30 +640,50 @@ fn centroid(agreeing: &[usize], vectors: &[Embedding]) -> Embedding {
     acc
 }
 
-/// Fuse the agreeing candidates into the accepted summary text per `strategy`.
-fn fuse_agreement(
+/// Pick which agreeing candidate becomes the published RLM node.
+///
+/// Ranks the agreeing members by a trust-weighted score — `trust_score` is the
+/// primary bias (the BFT guarantee of `agnostic-rlm-rs-64af` prefers reputable
+/// volunteers), with the similarity to the consensus centroid (or text length
+/// for the `Longest` strategy) as the base. Returns the index into `pending`.
+///
+/// With `n >= 3f + 1` and at most `f` byzantine volunteers, the honest majority
+/// forms a unique agreeing set, so this choice is well-defined and stable.
+fn choose_published(
     cfg: &QuorumConfig,
     agreeing: &[usize],
     pending: &[arags_storage::sqlite::submissions::Submission],
     vectors: &[Embedding],
-) -> String {
-    match cfg.fusion_strategy {
-        FusionStrategy::Longest => agreeing
-            .iter()
-            .map(|&i| pending[i].candidate_text.as_str())
-            .max_by_key(|t| t.len())
-            .unwrap_or("")
-            .to_string(),
-        FusionStrategy::Consensus | FusionStrategy::Average => {
-            let center = centroid(agreeing, vectors);
-            agreeing
-                .iter()
-                .map(|&i| (i, cosine_similarity(&center, &vectors[i])))
-                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-                .map(|(i, _)| pending[i].candidate_text.clone())
-                .unwrap_or_default()
+    trust: &HashMap<String, f64>,
+) -> usize {
+    if agreeing.is_empty() {
+        return 0;
+    }
+    let center = centroid(agreeing, vectors);
+    let mut best = agreeing[0];
+    let mut best_score = f64::NEG_INFINITY;
+    for &i in agreeing {
+        let base = match cfg.fusion_strategy {
+            FusionStrategy::Longest => {
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    pending[i].candidate_text.len() as f64
+                }
+            }
+            FusionStrategy::Consensus | FusionStrategy::Average => {
+                f64::from(cosine_similarity(&center, &vectors[i]))
+            }
+        };
+        // Trust-weight: a higher `trust_score` biases the published answer toward
+        // reputable volunteers (clamped so a trust of 0 still contributes half).
+        let t = trust.get(&pending[i].candidate_by).copied().unwrap_or(1.0);
+        let score = base * (0.5 + 0.5 * t.max(0.0));
+        if score > best_score {
+            best_score = score;
+            best = i;
         }
     }
+    best
 }
 
 #[cfg(test)]

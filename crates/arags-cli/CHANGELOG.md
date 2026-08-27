@@ -18,8 +18,9 @@
   localmente (`parse_contract`: header goal/files obrigatórios + seções
   Mapa/Conexões/Evidências/Limitações; summary derivado do primeiro parágrafo
   do Mapa), dedup de `--paths` extras, stdin suportado.
-- **`explore feedback <id> --confirm|--contradict`**: loop de verificação do
-  consumidor; imprime contadores e aposentadoria automática.
+- **`explore`**: subcomando de feedback do consumidor removido depois
+  (risco sybil por IA; ver `agnostic-rlm-rs-f5f3`) — permaneceram apenas
+  `search`/`persist`.
 - 5 testes novos (parser happy/rejeições/tolerante + rendering).
 
 ### Changed (plan 021 — split do dispatch e upload comprimido)

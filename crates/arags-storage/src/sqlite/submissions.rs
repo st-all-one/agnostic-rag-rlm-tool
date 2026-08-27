@@ -208,14 +208,16 @@ impl Storage {
         })
     }
 
-    /// Record a strike against a volunteer, returning the new strike count. The
-    /// `volunteer_trust` row is created on first contact with `strikes = 0`.
+    /// Record a strike against a volunteer, returning the new `(strikes,
+    /// trust_score)` pair. Each strike both increments the strike counter and
+    /// decays `trust_score` by `0.2` (clamped at `0.0`). The `volunteer_trust`
+    /// row is created on first contact with `strikes = 0, trust_score = 1.0`.
     ///
     /// # Errors
     ///
     /// Returns an error if the upsert or increment fails.
     #[allow(clippy::cast_possible_truncation)]
-    pub fn record_strike(&self, volunteer: &str) -> Result<u32> {
+    pub fn record_strike(&self, volunteer: &str) -> Result<(u32, f64)> {
         let conn = self.connection().context("acquire connection")?;
         conn.execute(|c| {
             c.execute(
@@ -225,19 +227,136 @@ impl Storage {
             )
             .context("seed volunteer trust")?;
             c.execute(
-                "UPDATE volunteer_trust SET strikes = strikes + 1 WHERE username = ?1",
+                "UPDATE volunteer_trust SET strikes = strikes + 1, \
+                    trust_score = MAX(0.0, trust_score - 0.2) WHERE username = ?1",
                 params![volunteer],
             )
             .context("increment volunteer strike")?;
-            let strikes: i64 = c
+            let row: (i64, f64) = c
+                .query_row(
+                    "SELECT strikes, trust_score FROM volunteer_trust WHERE username = ?1",
+                    params![volunteer],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .context("read volunteer trust")?;
+            #[allow(clippy::cast_sign_loss)]
+            Ok((row.0 as u32, row.1))
+        })
+    }
+
+    /// Nudge a volunteer's trust up after one of their candidates was accepted
+    /// by the quorum. `trust_score` is raised by `0.1` (clamped at `1.0`) and a
+    /// single prior strike is forgiven (decremented, never below `0`) so steady
+    /// good behaviour recovers from an occasional divergence.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the upsert or update fails.
+    pub fn bump_trust_on_accept(&self, volunteer: &str) -> Result<()> {
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            c.execute(
+                "INSERT INTO volunteer_trust (username, strikes, trust_score) \
+                 VALUES (?1, 0, 1.0) ON CONFLICT(username) DO NOTHING",
+                params![volunteer],
+            )
+            .context("seed volunteer trust")?;
+            c.execute(
+                "UPDATE volunteer_trust \
+                    SET trust_score = MIN(1.0, trust_score + 0.1), \
+                        strikes = MAX(0, strikes - 1) \
+                  WHERE username = ?1",
+                params![volunteer],
+            )
+            .context("bump volunteer trust")?;
+            Ok(())
+        })
+    }
+
+    /// Whether a volunteer has reached the ban threshold (`strikes >=
+    /// strikes_limit`). An unseen volunteer is never banned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn is_banned(&self, volunteer: &str, strikes_limit: u32) -> Result<bool> {
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let strikes: Option<i64> = c
                 .query_row(
                     "SELECT strikes FROM volunteer_trust WHERE username = ?1",
                     params![volunteer],
                     |r| r.get(0),
                 )
+                .optional()
                 .context("read volunteer strikes")?;
             #[allow(clippy::cast_sign_loss)]
-            Ok(strikes as u32)
+            let strikes = strikes.unwrap_or(0) as u32;
+            Ok(strikes >= strikes_limit)
+        })
+    }
+
+    /// Read a volunteer's current `(strikes, trust_score)` (`(0, 1.0)` if never
+    /// seen). Reused by later consumers (`64af`) that need both counters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn read_trust(&self, volunteer: &str) -> Result<(u32, f64)> {
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let row: Option<(i64, f64)> = c
+                .query_row(
+                    "SELECT strikes, trust_score FROM volunteer_trust WHERE username = ?1",
+                    params![volunteer],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()
+                .context("read volunteer trust")?;
+            #[allow(clippy::cast_sign_loss)]
+            Ok(match row {
+                Some((s, t)) => (s as u32, t),
+                None => (0, 1.0),
+            })
+        })
+    }
+
+    /// Rank volunteers by trust for claimer selection / observability:
+    /// `(username, trust_score, strikes)` ordered by `trust_score DESC,
+    /// strikes ASC`, limited to `limit` rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn list_volunteers_by_trust(&self, limit: u32) -> Result<Vec<(String, f64, u32)>> {
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let mut stmt = c
+                .prepare(
+                    "SELECT username, trust_score, strikes FROM volunteer_trust \
+                     ORDER BY trust_score DESC, strikes ASC LIMIT ?1",
+                )
+                .context("prepare volunteer ranking")?;
+            let rows = stmt
+                .query_map(params![limit as i64], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, f64>(1)?,
+                        #[allow(clippy::cast_sign_loss)]
+                        {
+                            r.get::<_, i64>(2)? as u32
+                        },
+                    ))
+                })
+                .context("query volunteer ranking")?;
+            let mut out = Vec::new();
+            for r in rows {
+                out.push(r.context("map volunteer ranking row")?);
+            }
+            Ok(out)
         })
     }
 
@@ -349,12 +468,12 @@ mod tests {
         storage.reject_submission(id, "mod", Some(0.1)).unwrap();
 
         // Rejecting records a strike against the candidate author.
-        let strikes = storage.record_strike("mallory").unwrap();
+        let (strikes, _trust) = storage.record_strike("mallory").unwrap();
         assert_eq!(strikes, 1);
         assert_eq!(storage.volunteer_strikes("mallory").unwrap(), 1);
 
         // A second strike accumulates.
-        let strikes = storage.record_strike("mallory").unwrap();
+        let (strikes, _trust) = storage.record_strike("mallory").unwrap();
         assert_eq!(strikes, 2);
         assert_eq!(storage.volunteer_strikes("mallory").unwrap(), 2);
 
@@ -378,5 +497,54 @@ mod tests {
         let pending = storage.list_pending("proj", "qa", "q1").unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].candidate_text, "a1");
+    }
+
+    #[test]
+    fn trust_score_decreases_on_strike_and_increases_on_accept() {
+        let (_dir, storage) = open();
+        // Fresh volunteer starts at trust 1.0.
+        let (_, trust0) = storage.read_trust("alice").unwrap();
+        assert_eq!(trust0, 1.0);
+
+        // A strike decays trust by 0.2.
+        let (_, trust1) = storage.record_strike("alice").unwrap();
+        assert!((trust1 - 0.8).abs() < f64::EPSILON);
+        let (_, trust2) = storage.record_strike("alice").unwrap();
+        assert!((trust2 - 0.6).abs() < f64::EPSILON);
+
+        // An accepted candidate nudges trust back up by 0.1.
+        storage.bump_trust_on_accept("alice").unwrap();
+        let (_, trust3) = storage.read_trust("alice").unwrap();
+        assert!((trust3 - 0.7).abs() < f64::EPSILON);
+
+        // trust_score is clamped at 1.0 on repeated accepts.
+        for _ in 0..20 {
+            storage.bump_trust_on_accept("alice").unwrap();
+        }
+        let (_, trust_max) = storage.read_trust("alice").unwrap();
+        assert!((trust_max - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn list_volunteers_by_trust_ranks_correctly() {
+        let (_dir, storage) = open();
+        // alice stays clean (trust 1.0); bob takes two strikes (0.6); carol one
+        // (0.8). Ties on trust break by fewer strikes first.
+        storage.bump_trust_on_accept("alice").unwrap();
+        storage.record_strike("bob").unwrap();
+        storage.record_strike("bob").unwrap();
+        storage.record_strike("carol").unwrap();
+
+        let ranked = storage.list_volunteers_by_trust(10).unwrap();
+        assert_eq!(ranked.len(), 3);
+        // Highest trust first.
+        assert_eq!(ranked[0].0, "alice");
+        assert!((ranked[0].1 - 1.0).abs() < f64::EPSILON);
+        // carol (0.8) outranks bob (0.6).
+        assert_eq!(ranked[1].0, "carol");
+        assert_eq!(ranked[2].0, "bob");
+
+        // Limit is honoured.
+        assert_eq!(storage.list_volunteers_by_trust(1).unwrap().len(), 1);
     }
 }

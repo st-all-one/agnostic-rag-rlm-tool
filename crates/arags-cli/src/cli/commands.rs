@@ -4,21 +4,44 @@ use clap::Subcommand;
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Prepare the repository: create `.arags.toml` and (by default) index it.
+    /// Prepare the repository: create `.arags.toml` (a real bootstrap utility)
+    /// and optionally register a watch daemon / index.
     Init {
         /// Canonical project name (knowledge entity). Required: the project is
         /// a conceptual entity shared across worktrees, NOT derived from the
-        /// path. If omitted on a TTY you will be prompted; otherwise an error.
+        /// path. If omitted on a TTY you will be prompted; in `--non-interactive`
+        /// mode it is required and an error is raised when absent.
         #[arg(long)]
         name: Option<String>,
 
-        /// Run `arags index` after creating the config (default: true).
+        /// Ignore patterns (glob). Can be specified multiple times. When
+        /// omitted, patterns are seeded from `.gitignore` (or existing config).
+        #[arg(long = "ignore", action = clap::ArgAction::Append)]
+        ignore: Vec<String>,
+
+        /// Local server-address override written to `.arags.toml` `[server]`.
+        #[arg(long = "server-addr")]
+        server_addr: Option<String>,
+
+        /// Register the background watch daemon now (like `index --register`).
+        #[arg(long)]
+        register: bool,
+
+        /// Do NOT register the background watch daemon (default).
+        #[arg(long, conflicts_with = "register")]
+        no_register: bool,
+
+        /// Run `arags index` after writing the config (default: true).
         #[arg(long)]
         index: bool,
 
-        /// Skip running `arags index` after creating the config.
+        /// Skip running `arags index` after writing the config.
         #[arg(long, conflicts_with = "index")]
         no_index: bool,
+
+        /// Never prompt; fail if any required value (e.g. `--name`) is missing.
+        #[arg(long)]
+        non_interactive: bool,
     },
 
     /// Index a project directory (client streams raw file text to the server).
@@ -49,7 +72,13 @@ pub enum Commands {
         unregister: bool,
     },
 
-    /// Search project with hybrid BM25 + semantic (server-side).
+    /// Search project with hybrid BM25 + semantic (server-side, OBJECTIVE).
+    ///
+    /// Pure retrieval over chunks. When RLM Summaries / Exploration Maps are
+    /// sufficiently close in vector space they are returned too (the "unified
+    /// query" behavior). This command NEVER invokes the user's LLM — it is a
+    /// pure data-plane retrieve. For the no-LLM server-side context builder
+    /// (the old `query` default), use `--context`.
     Search {
         /// Search query.
         query: String,
@@ -78,6 +107,12 @@ pub enum Commands {
         #[arg(long, default_value_t = 8000)]
         max_tokens: usize,
 
+        /// Return server-side context (BuildContext RPC) instead of the search
+        /// results. Objective-only: NO client LLM is invoked. This is the
+        /// migration target for the old no-LLM `query` default path.
+        #[arg(long)]
+        context: bool,
+
         /// Time-travel (plan 021): return only knowledge revisions active at
         /// this unix-second epoch. 0 / unset = live state.
         #[arg(long)]
@@ -104,8 +139,12 @@ pub enum Commands {
         once: bool,
     },
 
-    /// Query with on-demand QA: `-qa` digests via the user's LLM; `--cache-id`
-    /// does a deterministic 1:1 lookup.
+    /// [DEPRECATED] Use `arags ask` instead.
+    ///
+    /// This alias prints a deprecation warning and routes to the same `ask`
+    /// logic (LLM digest is now implicit by default; `--cache-id` does a
+    /// deterministic 1:1 lookup). The old no-LLM default context path has
+    /// moved to `arags search --context`. Kept for ONE release for compat.
     Query {
         /// Question to analyze.
         question: String,
@@ -123,10 +162,45 @@ pub enum Commands {
         #[arg(long)]
         cache_id: Option<String>,
 
-        /// Use the semantic query-answer cache (QueryWithCache + client
-        /// digest-once via the user's LLM).
+        /// Ignored (retained for shape compat). LLM digest is now implicit in
+        /// `ask`; this flag is accepted but no longer required.
         #[arg(long)]
         qa: bool,
+
+        /// Time-travel (plan 021): serve the cached answer revision active at
+        /// this unix-second epoch. 0 / unset = live state.
+        #[arg(long)]
+        as_of_epoch: Option<i64>,
+
+        /// Time-travel alias for `--as-of-epoch`: an RFC3339 timestamp converted
+        /// to seconds before sending. Conflicts with `--as-of-epoch`.
+        #[arg(long, conflicts_with = "as_of_epoch")]
+        as_of: Option<String>,
+    },
+
+    /// Ask the user's local LLM to digest a question over the index.
+    ///
+    /// The LLM digest is IMPLICIT — every `ask` digests via the user's local
+    /// LLM by default (this replaces the old `query -qa`). Deterministic
+    /// lookup stays available: `--cache-id <id>` returns the cached answer
+    /// with NO LLM call. Objective, LLM-free retrieval lives in `search`.
+    Ask {
+        /// Question to analyze.
+        question: String,
+
+        /// LLM backend name (overrides config).
+        #[arg(long)]
+        backend: Option<String>,
+
+        /// Model name (overrides config).
+        #[arg(long)]
+        model: Option<String>,
+
+        /// Direct lookup of a previously served answer by stable cache id
+        /// (plan 017, anti-drift; no re-digest, no re-index). Overrides the
+        /// LLM digest path and returns the cached answer deterministically.
+        #[arg(long)]
+        cache_id: Option<String>,
 
         /// Time-travel (plan 021): serve the cached answer revision active at
         /// this unix-second epoch. 0 / unset = live state.
@@ -217,20 +291,6 @@ pub enum ExploreCmd {
         /// Extra cited paths appended to the contract's `files:` header.
         #[arg(long = "paths", value_delimiter = ',')]
         paths: Vec<String>,
-    },
-
-    /// Report whether a served map held up in current code.
-    Feedback {
-        /// The `exploration_id` returned by `explore search`.
-        exploration_id: String,
-
-        /// You verified the described mechanism in code.
-        #[arg(long, conflicts_with = "contradict")]
-        confirm: bool,
-
-        /// You found evidence contradicting the map.
-        #[arg(long, conflicts_with = "confirm")]
-        contradict: bool,
     },
 }
 

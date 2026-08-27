@@ -51,7 +51,7 @@ src/
 │   ├── persist.rs         # wiki/*.md via LLM do usuário
 │   └── qa_cache.rs        # plan 017: run_ask/run_get/run_invalidate
 ├── dispatch/
-│   └── exploration.rs     # plan 022: arags explore (search/persist/feedback)
+│   └── exploration.rs     # plan 022: arags explore (search/persist)
 ├── volunteer.rs           # `arags volunteer`: worker RLM com o LLM local
 └── output/
     ├── mod.rs             # Format enum

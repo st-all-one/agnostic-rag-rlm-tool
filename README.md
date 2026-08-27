@@ -41,9 +41,9 @@ Documentação de uso e operação em [`wiki/`](wiki/README.md):
                             │ gRPC (protobuf, TLS opcional)
 ┌───────────────────────────┴──────────────────────────┐
 │  arags-cli  (thin gRPC client)                           │
-│  init / index / search / query / memory /              │
+│  init / index / search / ask / memory /               │
 │  persist / history / server                            │
-│  usa LLM local do usuário só em query -qa / persist    │
+│  usa LLM local do usuário só em ask / persist          │
 └───────────────────────────────────────────────────────┘
 ```
 
@@ -62,9 +62,9 @@ Documentação de uso e operação em [`wiki/`](wiki/README.md):
   aditivos no proto; clientes antigos ignoram as novas seções.
 - **Auth (plan 018):** refresh-tokens + sessões de curta duração com roles
   `Admin`/`NonAdmin`; RPCs mutantes exigem `Bearer` válido.
-- **Sem LLM no servidor** para qualquer operação (index/search/query/memory/
-  history). O LLM é usado **apenas no cliente**, para `query -qa` (digest) e
-  `persist` (summarize), via `arags-llm`.
+- **Sem LLM no servidor** para qualquer operação (index/search/ask/memory/
+  history). O LLM é usado **apenas no cliente**, para `ask` (digest implícito)
+  e `persist` (summarize), via `arags-llm`. `search` é objetivo e não invoca LLM.
 - Manutenção (consolidate/decay) do servidor é feita por **cron + RPC admin**
   `TriggerMaintenance` (e `arags-server admin consolidate`), não por comandos de
   CLI do usuário.
@@ -98,9 +98,11 @@ arags index ./meu-projeto
 # Buscar no projeto (híbrida BM25 + semântica, server-side)
 arags search "auth middleware"
 
-# Pergunta on-demand; -qa digere via LLM local do usuário; emite cache_id
-arags query "como funciona o login?" -qa
-arags query --cache-id <id>             # lookup determinístico 1:1
+# Pergunta on-demand; `ask` digere via LLM local do usuário (implícito); emite cache_id
+arags ask "como funciona o login?"
+arags ask --cache-id <id>             # lookup determinístico 1:1 (sem LLM)
+# `query` ainda funciona como alias DEPRECATED de `ask` (avisos) por 1 release
+arags query "como funciona o login?"
 
 # Persistir uma resposta como wiki page (usa LLM local do usuário)
 arags persist <response_id>
@@ -129,7 +131,7 @@ arags-server up                        # escuta conforme server.toml
 # 2) O cliente CLI conecta por gRPC (endereço via user config)
 arags index ./meu-projeto
 arags search "auth middleware"
-arags query "como funciona o login?" -qa
+arags ask "como funciona o login?"
 ```
 
 O endereço do servidor é resolvido por `.arags.toml` local (`[server].addr`,
@@ -145,8 +147,9 @@ override por projeto) → `~/.arags/arags.toml` (`[server].addr`) → env
 | `arags index <dir>` | Faz stream do texto bruto; servidor chunk+embed. Dot-paths (`.env`, `.git/`, ...) e regras de `.gitignore` (raiz e aninhados, com `!` de negação) são ignorados |
 | `arags index <dir> --register` | Indexa + registra o projeto para **auto-atualização** (daemon background no client; ver [Auto-atualização](#auto-atualização-watch-daemon)) |
 | `arags index <dir> --unregister` | Para o daemon e remove o registro (`[watch] enabled = false`) |
-| `arags search <query>` | Busca híbrida BM25 + semântica (server-side) |
-| `arags query <question>` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
+| `arags search <query>` | Busca híbrida BM25 + semântica (server-side, **objetiva** — não invoca LLM); `search --context` devolve contexto server-side sem LLM |
+| `arags ask <question>` | QA on-demand; digere via LLM do usuário **implicitamente**; `--cache-id` faz lookup determinístico 1:1 sem LLM; emite `cache_id` |
+| `arags query <question>` | **DEPRECATED** (alias de `ask` por 1 release); imprime aviso e roteia para `ask` |
 | `arags maintenance list\|get\|invalidate\|cleanup` | Manutenção do servidor (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
 | `arags volunteer [--once]` | Roda como **voluntário RLM**: reclama jobs de sumarização e sintetiza com seu LLM local (config em `~/.arags/arags.toml`) |
 | `arags explore {search,persist,feedback}` | Mapas de exploração (plan 022): busca semântica, persistência com contrato validado e feedback confirm/contradict — ver `EXPLORATIONS.md` |
@@ -290,7 +293,7 @@ arags search "como funciona o login?"
 - Campos **aditivos** no proto (`summaries`, `explorations`) — clientes antigos
   simplesmente ignoram.
 
-### `arags search`
+### `arags search` (objetivo — NÃO invoca LLM)
 
 | Flag | Descrição | Default |
 |------|-----------|---------|
@@ -298,13 +301,18 @@ arags search "como funciona o login?"
 | `--file-pattern <pat>` | Filtro por nome de arquivo | — |
 | `--min-score <f>` | Score mínimo | — |
 | `--tier <t>` | `fts`, `entity`, `vector`, `hybrid`, **`summary`** (busca só nos sumários RLM aprovados) ou `auto` | auto |
+| `--context` | Devolve o contexto server-side (`BuildContext`) sem chamar o LLM do usuário | off |
 
-### `arags query`
+### `arags ask` (LLM digest implícito)
 
 | Flag | Descrição | Default |
 |------|-----------|---------|
-| `-qa` | Digere a resposta via LLM local do usuário (emite `cache_id`) | off |
 | `--cache-id <id>` | Lookup determinístico 1:1 (sem chamar LLM) | — |
+| `--backend <b>` / `--model <m>` | Override do backend/modelo LLM do usuário | config |
+
+### `arags query` (DEPRECATED — alias de `ask` por 1 release)
+
+Imprime aviso de deprecation e roteia para `arags ask`. Use `ask`.
 
 ## Formatos de Saída
 

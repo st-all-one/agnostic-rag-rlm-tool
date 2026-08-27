@@ -22,8 +22,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   (contrato completo; resposta traz `unresolved_paths`),
   `SearchExplorations*` com `ExplorationHit` (confidence/similarity/status/
   stale_reason/epoch_drift/feedback), `GetExplorationById*` (body completo +
-  âncoras), `FeedbackExploration*` e `InvalidateExploration*` reusando
-  `InvalidateMode`.
+  âncoras), `InvalidateExploration*` reusando `InvalidateMode`. O
+  `FeedbackExploration*` (feedback do consumidor) foi removido depois por
+  risco sybil (ver `agnostic-rlm-rs-f5f3`).
 - Cinco novos RPCs registrados no `service.proto`; import no `build.rs`.
 - Testes de contrato: mensagens round-trip e reuso do modo de invalidação.
 

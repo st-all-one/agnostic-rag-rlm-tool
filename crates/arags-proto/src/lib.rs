@@ -26,3 +26,20 @@ pub mod proto {
 }
 
 pub use proto::*;
+
+/// Regression guard for issue `agnostic-rlm-rs-f5f3`: the public "explore
+/// feedback" surface (the `FeedbackExploration` RPC, the `FeedbackKind` enum
+/// and the `FeedbackExploration{Request,Response}` messages) was HARD-REMOVED
+/// to eliminate a sybil-by-AI risk. If any of these types are re-introduced to
+/// the `.proto` schema, this compile-fail doctest fails and blocks `cargo
+/// test --doc`, proving the public surface stays closed.
+///
+/// ```compile_fail
+/// // These identifiers MUST NOT exist after `f5f3`. Re-adding them must break
+/// // the build (and this doctest), so the regression is caught in CI.
+/// use arags_proto::proto::{FeedbackKind, FeedbackExplorationRequest, FeedbackExplorationResponse};
+/// let _ = FeedbackKind::Confirm;
+/// let _req = FeedbackExplorationRequest::default();
+/// let _resp = FeedbackExplorationResponse::default();
+/// ```
+pub mod exploration_public_feedback_surface_removed {}

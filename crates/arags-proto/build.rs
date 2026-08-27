@@ -17,6 +17,11 @@ fn main() -> Result<()> {
         format!("{proto_root}/service.proto"),
     ];
 
+    // Regenerate whenever any proto file changes.
+    for f in &proto_files {
+        println!("cargo:rerun-if-changed={f}");
+    }
+
     // Generated code is external (prost/tonic output); the `proto` module in
     // lib.rs carries `#![allow(...)]` so workspace pedantic lints stay clean.
     let cfg = tonic_build::configure()

@@ -2,7 +2,7 @@
 
 > O `arags` é um **gRPC client puro e otimizado** para o `arags-server`.
 > Não existe modo local: todo comando de dados conversa com o servidor; o LLM
-> (o **seu**, configurado em `[llm]`) só é acionado em `query -qa` (digest),
+> (o **seu**, configurado em `[llm]`) só é acionado em `ask` (digest implícito),
 > `persist` (summarize) e `volunteer` (síntese RLM).
 > Fonte da verdade: `crates/arags-cli/src/cli/{root,commands}.rs`.
 
@@ -46,7 +46,7 @@ Aplicam-se a qualquer subcomando (`global = true` no clap):
 Visão geral:
 
 ```
-arags init      index       search       query
+arags init      index       search       ask
 arags maintenance  persist     history      explore
 arags volunteer [watch-daemon (oculto)]
 ```
@@ -131,6 +131,11 @@ arags search <QUERY> [flags]
 | `-a, --all` | off | Busca em **todos** os projetos indexados |
 | `--tier <t>` | `auto` | `fts` · `entity` · `vector` · `summary` (só sumários RLM aprovados) · `auto` |
 | `--max-tokens <N>` | 8000 | Orçamento de tokens do contexto retornado (0 = ilimitado) |
+| `--context` | off | Devolve o contexto server-side (`BuildContext`) sem chamar o LLM do usuário |
+
+> **`search` é objetivo**: NUNCA invoca o LLM do usuário. Retorna chunks +
+> RLM Summaries + Exploration Maps quando próximos no espaço vetorial (unified
+> query). Para contexto server-side sem LLM, use `--context`.
 
 Resposta tripla (plan 023): **Results** (chunks) + **RLM Summaries** (até
 `[search].summary_ratio` do budget) + **Exploration Maps** (com confidence).
@@ -139,36 +144,49 @@ Resposta tripla (plan 023): **Results** (chunks) + **RLM Summaries** (até
 arags search "auth middleware" --top-k 5 --format text
 arags search "fluxo pagamento" --tier summary          # só sínteses RLM
 arags search "schema" -a                               # multi-projeto
+arags search "como autenticar?" --context              # contexto server-side, sem LLM
 ```
 
 ---
 
-### `arags query` — QA on-demand com QA-Cache
+### `arags ask` — QA on-demand com QA-Cache (LLM digest IMPLÍCITO)
 
 ```
-arags query <QUESTION> [flags]
+arags ask <QUESTION> [flags]
 ```
 
 | Flag | Default | Descrição |
 |------|---------|-----------|
 | `<QUESTION>` | — | Pergunta |
-| `--qa` | off | Digest da resposta via **seu** LLM local; emite `cache_id` estável |
 | `--cache-id <id>` | — | Lookup determinístico 1:1 de resposta anterior (sem LLM, sem re-index) |
 | `--backend <name>` | config | Backend LLM para o digest |
 | `--model <name>` | config | Modelo para o digest |
 
 Comportamento:
 
-- **Sem flags:** devolve os chunks crus relevantes (sem chamada de LLM).
-- **`-qa`:** servidor decide hit/miss no espaço B → MISS devolve top-K chunks,
-  o cliente digesta com seu LLM e dispara `StoreAnswer`; HIT devolve a resposta
+- **Sem `--cache-id`:** o digest via **seu** LLM local é **implícito** (o antigo
+  `-qa`). O servidor decide hit/miss no espaço B → MISS devolve top-K chunks, o
+  cliente digesta com seu LLM e dispara `StoreAnswer`; HIT devolve a resposta
   cacheada (0 custo). Em ambos os casos há `cache_id`.
-- **`--cache-id <id>`:** replay exato (resposta + provenance) — anti-drift para
-  sub-agentes.
+- **`--cache-id <id>`:** replay exato (resposta + provenance), sem chamar o LLM
+  — anti-drift para sub-agentes.
 
 ```bash
-arags query "como funciona o login?" -qa
-arags query --cache-id 018f3c...        # lookup determinístico
+arags ask "como funciona o login?"
+arags ask --cache-id 018f3c...        # lookup determinístico (sem LLM)
+```
+
+---
+
+### `arags query` — [DEPRECATED] alias de `ask` (1 release)
+
+`arags query` ainda existe como **alias deprecado**: imprime um aviso de
+deprecação apontando para `arags ask` e roteia para a mesma lógica (digest
+implícito; `--cache-id` faz lookup determinístico). O antigo comportamento
+"sem flags" (apenas chunks crus, sem LLM) migrou para `arags search --context`.
+
+```bash
+arags query "como funciona o login?"   # DEPRECATED → roteia para ask
 ```
 
 ---
@@ -194,15 +212,15 @@ arags maintenance cleanup --dry-run
 ### `arags persist` — wiki page a partir de resposta
 
 Escreve `wiki/<yyyymmddhhmm>_<title>.md` no projeto; o resumo usa **seu LLM**
-(`summarize`). Requer o `response_id` emitido por `query -qa`.
+(`summarize`). Requer o `response_id` emitido por `ask`.
 
 | Arg/Flag | Descrição |
 |----------|-----------|
-| `<RESPONSE_ID>` | `cache_id` retornado pelo `query -qa` |
+| `<RESPONSE_ID>` | `cache_id` retornado pelo `ask` |
 | `--title <t>` | Título opcional (default: slug da resposta) |
 
 ```bash
-ID=$(arags query "padrão de erros do projeto" -qa --format full_json | jq -r .cache_id)
+ID=$(arags ask "padrão de erros do projeto" --format full_json | jq -r .cache_id)
 arags persist "$ID" --title "padroes-de-erro"
 ```
 

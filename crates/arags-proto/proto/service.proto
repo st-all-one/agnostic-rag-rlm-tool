@@ -83,8 +83,6 @@ service AragsService {
   rpc SearchExplorations(SearchExplorationsRequest) returns (SearchExplorationsResponse);
   // Fetch one map with its full body and provenance metadata.
   rpc GetExplorationById(GetExplorationByIdRequest) returns (GetExplorationByIdResponse);
-  // Consumer feedback: confirm/contradict; contradictions auto-retire at limit.
-  rpc FeedbackExploration(FeedbackExplorationRequest) returns (FeedbackExplorationResponse);
   // Admin invalidation reusing InvalidateMode (Stale keeps history, Delete purges).
   rpc InvalidateExploration(InvalidateExplorationRequest) returns (InvalidateExplorationResponse);
 

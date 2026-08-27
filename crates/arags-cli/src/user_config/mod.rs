@@ -18,7 +18,7 @@
 //! are NOT read. Only `~/.arags/arags.toml` and `.arags.toml` are consulted.
 
 use anyhow::{Result, bail};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use arags_llm::LlmConfig;
 
@@ -39,7 +39,7 @@ pub struct AuthConfig {
 ///
 /// TLS fields (plan 020): `tls_ca` trusts a custom CA; `tls_cert`/`tls_key`
 /// present a client certificate (mTLS, matching the server's `mtls_ca`).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ServerSection {
     /// gRPC server address (e.g. `127.0.0.1:50051` or `https://host:443`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,7 +59,7 @@ pub struct ServerSection {
 }
 
 /// Project metadata section (local `.arags.toml`).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ProjectSection {
     /// Human-readable project name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -72,7 +72,7 @@ pub struct ProjectSection {
 
 /// Watch registration (`[watch]` in the local `.arags.toml`), written by
 /// `arags index --register`.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct WatchSection {
     /// Whether background auto-update watching is enabled.
     #[serde(default)]

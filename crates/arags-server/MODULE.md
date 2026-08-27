@@ -73,10 +73,10 @@ ocorre no cliente (`arags-cli`) via o LLM do usuário.
     Imports explícitos do proto (sem globs).
   - `grpc/exploration/` — **plan 022:** RPCs do dataset de explorações
     (`mod.rs` persist+validação, `search.rs` pipeline read-time,
-    `feedback.rs` confirm/contradict + invalidação admin); hook pós-index
+    `feedback.rs` invalidação admin + review gate); hook pós-index
     bumpa `project_epochs` e marca mapas stale por âncora. Knobs em
     `[exploration]`; testes em `grpc/exploration/tests.rs` +
-    `tests_feedback.rs`. **plan 023:** review gate —
+    `tests_moderation.rs`. **plan 023:** review gate —
     `[exploration].require_review` manda persist de não-admin para
     `pending_review`; busca nunca superficia pendentes; RPC admin-gated
     `ReviewExploration` aprova (fresh) ou rejeita (retired);

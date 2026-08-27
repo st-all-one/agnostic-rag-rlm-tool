@@ -6,7 +6,7 @@ configuração do usuário (**2 escopos**: `~/.arags/arags.toml` global +
 `.arags.toml` local, com merge granular por campo) e roteia cada subcomando para
 um `arags-server` remoto via gRPC. É um **cliente gRPC puro**: não há modo local
 (plan 020 removeu o subcomando `serve`/MCP e o data plane local). Usa o **LLM local do usuário** (`arags-llm`) apenas para *digest*
-(`query -qa`) e *summarize* (`persist`). O servidor é um plano de dados puro
+(`ask`) e *summarize* (`persist`). `search` é objetivo (não invoca LLM). O servidor é um plano de dados puro
 (LLM-free). Renderiza saídas em 4 formatos (`json`, `tree`, `markdown`, `prompt`)
 com logs estruturados (`tracing`). Também hospeda o **watch daemon** de
 auto-atualização do índice (`arags index --register`), o único processo de
@@ -26,14 +26,14 @@ dotfile e do registro em `.arags.toml`.
   comparação por componente, sem `format!` no hot loop),
   `projects.rs` (--register/--unregister), `watch_daemon.rs`
   (`__watch`: quiet-window re-index com fingerprint mtime+size e
-  `WATCH_UPLOAD_PARALLELISM = 2`), `search.rs` (search/query + render multi-formato),
-  `memory_history.rs` (memória/cache admin + histórico) e `init.rs`
-  (scaffold `.arags.toml`, seed do `.gitignore`). Não há modo local — todo
-  comando vai para o servidor. Testes por módulo em `<name>/tests.rs`.
+  `WATCH_UPLOAD_PARALLELISM = 2`), `search.rs` (search objetivo/ask + render
+  multi-formato), `memory_history.rs` (memória/cache admin + histórico) e
+  `init.rs` (scaffold `.arags.toml`, seed do `.gitignore`). Não há modo local —
+  todo comando vai para o servidor. Testes por módulo em `<name>/tests.rs`.
 - `src/auth_client.rs` — `AragsClient` autenticado (`AuthRefresh` + interceptor
   Bearer com renovação em background).
 - `src/backend.rs` — resolve o backend LLM do usuário a partir de
-  `[[llm.backends]]` (usado por `query -qa` e `persist`).
+  `[[llm.backends]]` (usado por `ask` e `persist`).
 - `src/client.rs` — `ClientConfig` + `connect_channel` (retry/backoff, validação
   de endereço, TLS automático em `https://` e mTLS via `[server].tls_ca`/
   `tls_cert`/`tls_key`).
@@ -60,15 +60,18 @@ dotfile e do registro em `.arags.toml`.
     RPCs `QueryWithCache`/`GetAnswerById`/`InvalidateCache`; a digestão LLM roda
     localmente via `arags-llm`/`user_config` e o `StoreAnswer` é fire-and-forget),
   - `persist` (escreve `wiki/*.md` via LLM do usuário).
-  - `index`, `search`, `query`, `memory` (admin), `history` vivem nos módulos
+  - `index`, `search`, `ask`, `memory` (admin), `history` vivem nos módulos
     de `dispatch/` (plan 021): `index.rs` (streaming de arquivos comprimidos),
-    `search.rs`, `memory_history.rs` e `init.rs`; o watch daemon está em
-    `watch_daemon.rs` e o registro em `projects.rs`.
+    `search.rs` (search objetivo + ask LLM-digest + search --context),
+    `memory_history.rs` e `init.rs`; o watch daemon está em
+    `watch_daemon.rs` e o registro em `projects.rs`. `Query` é um alias
+    DEPRECATED de `ask` (1 release) que imprime aviso e roteia para `ask`.
     **plan 023:** `search.rs` renderiza as seções aditivas da unified query —
     "RLM Summaries" (`summaries`) e "Exploration Maps" (`explorations`) — nos
     quatro formatos de saída.
-- `src/cli/commands.rs` — `Commands` enum (inclui `Query` estendido com
-  `cache_id`/`qa` e o subcomando `Memory`).
+- `src/cli/commands.rs` — `Commands` enum (`Search` objetivo + `--context`,
+  `Ask` LLM-digest implícito + `cache_id`, `Query` DEPRECATED alias de `Ask`,
+  e o subcomando `Memory`).
 - `src/output/` — `mod` (`Format`), `json`, `tree`, `markdown`, `prompt`.
 - `tests/` — testes de integração (um arquivo por módulo); sem `#[cfg(test)]`
   em `src/`.
@@ -85,8 +88,8 @@ dotfile e do registro em `.arags.toml`.
   `zstd` (compressão do upload de indexação, plan 021).
 
 ## Módulos RLM do cliente
-- `src/dispatch/exploration.rs` — **plan 022:** `arags explore {search,persist,
-  feedback}`; parser puro do contrato EXPLORATIONS.md (`parse_contract`) com
+- `src/dispatch/exploration.rs` — **plan 022:** `arags explore {search,persist}`;
+  parser puro do contrato EXPLORATIONS.md (`parse_contract`) com
   testes em `dispatch/exploration/tests.rs`.
 - `src/volunteer.rs` — **worker voluntário (`arags volunteer`)**: loop claim →
   síntese com o LLM local → submit. Helpers puras testáveis: `parse_inputs`
@@ -127,8 +130,9 @@ cargo fmt -p arags-cli -- --check
 - Padrão de produção: `dispatch::dispatch(cli, &rt)` carrega a user_config e
   roteia tudo para o servidor gRPC; nenhum comando abre Storage local.
 - O CLI é um **cliente gRPC puro**: todos os comandos (`init`, `index`,
-  `search`, `query`, `memory`, `persist`, `history`, `server`) vão para o
-  `arags-server` (plano de dados, LLM-free).
+  `search`, `ask`, `memory`, `persist`, `history`, `server`) vão para o
+  `arags-server` (plano de dados, LLM-free). `search` é objetivo; `ask`
+  digere via LLM local do usuário (implicitamente).
 - `--llm` NÃO existe no CLI: o LLM do usuário é usado implicitamente em
   `query -qa` (digest) e `persist` (summarize) via `arags-llm`.
 - A config do usuário é 2-escopos (`user_config.rs`): `~/.arags/arags.toml`

@@ -9,9 +9,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use arags_proto::proto::{
-    FeedbackExplorationRequest, FeedbackKind, PersistExplorationRequest, SearchExplorationsRequest,
-};
+use arags_proto::proto::{PersistExplorationRequest, SearchExplorationsRequest};
 use tokio::runtime::Runtime;
 use tonic::Request;
 
@@ -150,20 +148,6 @@ pub(crate) fn run_explore(
         ExploreCmd::Persist { map, paths } => {
             run_explore_persist(rt, client, project, &map, &paths)
         }
-        ExploreCmd::Feedback {
-            exploration_id,
-            confirm,
-            contradict,
-        } => {
-            let kind = if confirm {
-                FeedbackKind::Confirm
-            } else if contradict {
-                FeedbackKind::Contradict
-            } else {
-                anyhow::bail!("choose --confirm or --contradict");
-            };
-            run_explore_feedback(rt, client, &exploration_id, kind)
-        }
     }
 }
 
@@ -240,41 +224,6 @@ fn run_explore_persist(
     for path in &resp.unresolved_paths {
         println!("warning: path not in index (not anchored): {path}");
     }
-    Ok(())
-}
-
-fn run_explore_feedback(
-    rt: &Runtime,
-    client: &mut AragsClient,
-    exploration_id: &str,
-    kind: FeedbackKind,
-) -> Result<()> {
-    let request = Request::new(FeedbackExplorationRequest {
-        exploration_id: exploration_id.to_string(),
-        kind: kind as i32,
-    });
-    let resp = rt
-        .block_on(client.feedback_exploration(request))
-        .context("feedback failed")?
-        .into_inner();
-    if !resp.applied {
-        anyhow::bail!("feedback not applied (unknown id?)");
-    }
-    println!(
-        "recorded {}: confirmed={} contradicted={}{}",
-        if kind == FeedbackKind::Confirm {
-            "confirm"
-        } else {
-            "contradict"
-        },
-        resp.confirmed,
-        resp.contradicted,
-        if resp.auto_retired {
-            " [map retired]"
-        } else {
-            ""
-        },
-    );
     Ok(())
 }
 

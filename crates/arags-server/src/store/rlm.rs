@@ -95,7 +95,7 @@ pub fn enqueue_rlm_l1_work(
             priority: PRIORITY_FRESH,
             quorum_slots: quorum_n,
         };
-        let (_, generation) = storage.enqueue_rlm_job(&job)?;
+        let (_, generation) = storage.enqueue_rlm_job(&job, &[])?;
         if generation > 0 {
             reset_jobs += 1;
         } else {
@@ -211,15 +211,18 @@ pub fn cascade_rlm(
         storage.update_rlm_job_payload(project, parent_level, &parent_subject, &payload)?;
         return Ok(true);
     }
-    storage.enqueue_rlm_job(&NewRlmJob {
-        buffer_id: Some(buffer_id),
-        project: project.to_string(),
-        level: parent_level,
-        subject: parent_subject,
-        payload,
-        priority: PRIORITY_CASCADE, // cascades outrank fresh L1 work but not cancellations
-        quorum_slots: quorum_n,
-    })?;
+    storage.enqueue_rlm_job(
+        &NewRlmJob {
+            buffer_id: Some(buffer_id),
+            project: project.to_string(),
+            level: parent_level,
+            subject: parent_subject,
+            payload,
+            priority: PRIORITY_CASCADE, // cascades outrank fresh L1 work but not cancellations
+            quorum_slots: quorum_n,
+        },
+        &[],
+    )?;
     Ok(true)
 }
 

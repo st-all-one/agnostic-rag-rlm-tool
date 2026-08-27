@@ -7,7 +7,10 @@
 //! is recorded on every node; admin submitters are auto-approved (quality
 //! gate), everyone else lands in the review queue.
 
+use std::time::Instant;
+
 use arags_storage::sqlite::rlm::{DEFAULT_RLM_LEASE_MS, RlmJobPayload};
+use subtle::ConstantTimeEq;
 use tonic::{Request, Response, Status};
 
 use crate::grpc::error::{internal, invalid_arg};
@@ -45,12 +48,15 @@ pub(crate) async fn handle_claim_rlm_job(
 
     let storage = state.storage.clone();
     let username = ctx.username.clone();
-    let claimed = store::blocking(move || storage.claim_rlm_job(&username, lease_ms, max_level))
-        .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "claim_rlm_job failed");
-            internal(e)
-        })?;
+    let strikes_limit = state.config.quorum.strikes_limit;
+    let claimed = store::blocking(move || {
+        storage.claim_rlm_job(&username, lease_ms, max_level, strikes_limit)
+    })
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "claim_rlm_job failed");
+        internal(e)
+    })?;
 
     Ok(Response::new(match claimed {
         Some(job) => ClaimRlmJobResponse {
@@ -80,6 +86,10 @@ pub(crate) async fn handle_complete_rlm_job(
     request: Request<CompleteRlmJobRequest>,
 ) -> Result<Response<CompleteRlmJobResponse>, Status> {
     let ctx = crate::auth::authenticate(request.metadata(), &state.storage)?;
+    let start = Instant::now();
+    // Re-extract the RAW session token the interceptor placed in the
+    // `Authorization` header so we can verify the submission attestation.
+    let raw_token = crate::auth::bearer(request.metadata())?;
     let req = request.into_inner();
 
     if req.summary_text.trim().is_empty() {
@@ -126,6 +136,39 @@ pub(crate) async fn handle_complete_rlm_job(
     // here for N>1 (the quorum is the authority).
     let quorum_n = state.config.quorum.n.max(1);
     if quorum_n > 1 {
+        // Attestation gate (issue `agnostic-rlm-rs-64af`): every non-admin
+        // volunteer submission is HMAC-signed (session-bound). Verify it before
+        // counting the candidate toward the BFT quorum; a mismatch is rejected at
+        // the edge and is NEVER staged.
+        let verify_elapsed_ms = start.elapsed().as_millis() as u64;
+        let expected_hmac = arags_core::rlm_attestation::sign_rlm_submission(
+            &raw_token,
+            job_id,
+            generation,
+            &summary_text,
+        );
+        let provided_hmac = req.submission_hmac.clone();
+        let hmac_ok = bool::from(expected_hmac.as_bytes().ct_eq(provided_hmac.as_bytes()));
+        if !hmac_ok {
+            tracing::warn!(
+                phase = "rlm_submission_verify",
+                elapsed_ms = verify_elapsed_ms,
+                job_id,
+                volunteer = %ctx.username,
+                "rlm submission HMAC mismatch: rejecting before staging"
+            );
+            return Err(Status::unauthenticated(
+                "submission attestation failed: invalid or missing HMAC",
+            ));
+        }
+        tracing::info!(
+            phase = "rlm_submission_verify",
+            elapsed_ms = verify_elapsed_ms,
+            job_id,
+            volunteer = %ctx.username,
+            "rlm submission HMAC verified"
+        );
+
         let subject_key =
             arags_storage::sqlite::rlm::rlm_job_key(&job.project, job.level, &job.subject);
         let completed = {

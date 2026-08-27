@@ -22,19 +22,22 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::{ReceiverStream, TcpListenerStream};
 use tonic::Request;
 use tonic::metadata::MetadataValue;
-use tonic::transport::Server;
+use tonic::transport::{Channel, Server};
 
 use arags_proto::proto::arags_service_client::AragsServiceClient;
 use arags_proto::proto::arags_service_server::AragsServiceServer;
 use arags_proto::proto::{
-    AuthRefreshRequest, ClaimRlmJobRequest, IndexChunk, IndexFile, IndexInit, index_chunk,
+    AuthRefreshRequest, ClaimRlmJobRequest, CompleteRlmJobRequest, IndexChunk, IndexFile,
+    IndexInit, index_chunk,
 };
 use arags_server::grpc::AragsGrpcService;
 use arags_server::state::AppState;
 use arags_storage::Role;
 use arags_storage::Storage;
-use arags_storage::sqlite::rlm::{DEFAULT_RLM_LEASE_MS, NewRlmJob};
+use arags_storage::sqlite::rlm::{DEFAULT_RLM_LEASE_MS, NewRlmJob, rlm_job_key};
 use arags_storage::tokens::{NewToken, create_token};
+
+use arags_core::rlm_attestation::sign_rlm_submission;
 
 use arags_server::config::ServerConfig;
 
@@ -178,7 +181,10 @@ async fn grpc_index_project_persists_chunks_end_to_end() {
         priority: 5,
         quorum_slots: 1,
     };
-    let (job_id, _gen) = server.storage.enqueue_rlm_job(&job).expect("seed rlm job");
+    let (job_id, _gen) = server
+        .storage
+        .enqueue_rlm_job(&job, &[])
+        .expect("seed rlm job");
     assert!(job_id > 0);
 
     let mut claim_req = Request::new(ClaimRlmJobRequest {
@@ -195,6 +201,146 @@ async fn grpc_index_project_persists_chunks_end_to_end() {
         claim.into_inner().available,
         "pending rlm job must be claimable over gRPC"
     );
+
+    server.handle.abort();
+}
+
+/// Connect a fresh gRPC client to a running harness.
+async fn connect_client(
+    addr: std::net::SocketAddr,
+) -> arags_proto::proto::arags_service_client::AragsServiceClient<tonic::transport::Channel> {
+    AragsServiceClient::connect(format!("http://{addr}"))
+        .await
+        .expect("connect client")
+}
+
+/// Seed a quorum (n=3) RLM job, claim it as the session's volunteer, and return
+/// `(job_id, generation)` so the caller can complete it.
+async fn seed_and_claim_rlm_job(server: &TestServer, session: &str) -> (i64, i64) {
+    let job = NewRlmJob {
+        buffer_id: Some(1),
+        project: "itest".to_string(),
+        level: 1,
+        subject: "src/main.rs".to_string(),
+        payload: "{}".to_string(),
+        priority: 5,
+        quorum_slots: 3,
+    };
+    let (job_id, _gen) = server
+        .storage
+        .enqueue_rlm_job(&job, &[])
+        .expect("seed rlm job");
+    assert!(job_id > 0);
+
+    let mut client = connect_client(server.addr).await;
+    let mut claim_req = Request::new(ClaimRlmJobRequest {
+        lease_ms: DEFAULT_RLM_LEASE_MS,
+        max_level: 0,
+    });
+    let bearer = MetadataValue::from_str(&format!("Bearer {session}")).expect("bearer");
+    claim_req.metadata_mut().insert("authorization", bearer);
+    let claimed = client
+        .claim_rlm_job(claim_req)
+        .await
+        .expect("claim_rlm_job Ok")
+        .into_inner();
+    assert!(claimed.available, "seeded job must be claimable");
+    (job_id, claimed.generation)
+}
+
+#[tokio::test]
+async fn rlm_submission_valid_hmac_accepted() {
+    let server = start_harness().await;
+    let mut client = connect_client(server.addr).await;
+
+    let auth = client
+        .auth_refresh(AuthRefreshRequest {
+            refresh_token: server.refresh_token.clone(),
+        })
+        .await
+        .expect("auth_refresh");
+    let session = auth.into_inner().session_token;
+
+    let (job_id, generation) = seed_and_claim_rlm_job(&server, &session).await;
+    let summary = "The module parses JSON configuration files and exposes a typed API.";
+
+    // Correctly-signed submission (issue `agnostic-rlm-rs-64af`).
+    let hmac = sign_rlm_submission(&session, job_id, generation, summary);
+
+    let mut req = Request::new(CompleteRlmJobRequest {
+        job_id,
+        generation,
+        summary_text: summary.to_string(),
+        model: "llama3.2".to_string(),
+        template_version: "arlm-v1".to_string(),
+        token_count: 10,
+        submission_hmac: hmac,
+    });
+    let bearer = MetadataValue::from_str(&format!("Bearer {session}")).expect("bearer");
+    req.metadata_mut().insert("authorization", bearer);
+
+    let _resp = client
+        .complete_rlm_job(req)
+        .await
+        .expect("valid HMAC accepted (Ok)");
+    // The handler returns Ok even when the quorum is still pending; the real
+    // assertion is that the submission below was staged (not rejected at the edge).
+
+    let key = rlm_job_key("itest", 1, "src/main.rs");
+    let staged = server
+        .storage
+        .list_pending("itest", "rlm_node", &key)
+        .expect("list pending");
+    assert_eq!(staged.len(), 1, "valid HMAC submission must be staged");
+    assert_eq!(staged[0].candidate_text, summary);
+
+    server.handle.abort();
+}
+
+#[tokio::test]
+async fn rlm_submission_invalid_hmac_rejected() {
+    let server = start_harness().await;
+    let mut client = connect_client(server.addr).await;
+
+    let auth = client
+        .auth_refresh(AuthRefreshRequest {
+            refresh_token: server.refresh_token.clone(),
+        })
+        .await
+        .expect("auth_refresh");
+    let session = auth.into_inner().session_token;
+
+    let (job_id, generation) = seed_and_claim_rlm_job(&server, &session).await;
+    let summary = "The module renders pixel shaders for the GPU compute pipeline.";
+
+    // Tampered / missing HMAC: the server must reject the submission at the edge.
+    let bad_hmac = "deadbeef".to_string();
+
+    let mut req = Request::new(CompleteRlmJobRequest {
+        job_id,
+        generation,
+        summary_text: summary.to_string(),
+        model: "llama3.2".to_string(),
+        template_version: "arlm-v1".to_string(),
+        token_count: 10,
+        submission_hmac: bad_hmac,
+    });
+    let bearer = MetadataValue::from_str(&format!("Bearer {session}")).expect("bearer");
+    req.metadata_mut().insert("authorization", bearer);
+
+    let result = client.complete_rlm_job(req).await;
+    assert!(
+        result.is_err(),
+        "invalid HMAC must reject the submission (handler errors)"
+    );
+
+    // Nothing was staged.
+    let key = rlm_job_key("itest", 1, "src/main.rs");
+    let staged = server
+        .storage
+        .list_pending("itest", "rlm_node", &key)
+        .expect("list pending");
+    assert!(staged.is_empty(), "rejected submission must NOT be staged");
 
     server.handle.abort();
 }
@@ -226,7 +372,10 @@ async fn grpc_disconnect_after_init_keeps_rlm_claim_working() {
         priority: 5,
         quorum_slots: 1,
     };
-    let (job_id, _gen) = server.storage.enqueue_rlm_job(&job).expect("seed rlm job");
+    let (job_id, _gen) = server
+        .storage
+        .enqueue_rlm_job(&job, &[])
+        .expect("seed rlm job");
     assert!(job_id > 0);
 
     // Stream sends Init then ENDS (simulated client disconnect right after Init).
