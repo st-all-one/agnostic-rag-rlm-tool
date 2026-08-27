@@ -168,7 +168,7 @@ se os chunks mudaram, o hit vira MISS sozinho (`provenance_intact`).
 - Após refatorações grandes que quebram respostas antigas propositalmente:
 
 ```bash
-arags memory invalidate --cache-id <id> --radius 0.2 --reason "API mudou"
+arags maintenance invalidate --cache-id <id> --radius 0.2 --reason "API mudou"
 ```
 
   (raio cosseno limpa o *cluster* de perguntas vizinhas contaminadas.)

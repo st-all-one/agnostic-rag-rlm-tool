@@ -176,11 +176,33 @@ pub(crate) async fn handle_complete_rlm_job(
                 #[allow(clippy::cast_possible_truncation)] // rowids fit u64 here
                 let key = u64::try_from(rowid).unwrap_or(u64::MAX);
                 if let Err(e) = vectors.insert(key, &vec) {
-                    tracing::warn!(error = %e, node_id = %node_id, "rlm vector insert failed");
+                    tracing::warn!(error = %e, node_id = %node_id, "rlm vector insert failed; marking node pending_vector");
+                    if let Err(m) = state
+                        .storage
+                        .mark_rlm_nodes_pending_vector(job.buffer_id.unwrap_or(0), &[rowid])
+                    {
+                        tracing::warn!(error = %m, "failed to mark rlm node pending_vector");
+                    }
                 }
             }
-            Ok(Err(e)) => tracing::warn!(error = %e, node_id = %node_id, "rlm embedding failed"),
-            Err(e) => tracing::warn!(error = %e, node_id = %node_id, "rlm embedding task panicked"),
+            Ok(Err(e)) => {
+                tracing::warn!(error = %e, node_id = %node_id, "rlm embedding failed; marking node pending_vector");
+                if let Err(m) = state
+                    .storage
+                    .mark_rlm_nodes_pending_vector(job.buffer_id.unwrap_or(0), &[rowid])
+                {
+                    tracing::warn!(error = %m, "failed to mark rlm node pending_vector");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, node_id = %node_id, "rlm embedding task panicked; marking node pending_vector");
+                if let Err(m) = state
+                    .storage
+                    .mark_rlm_nodes_pending_vector(job.buffer_id.unwrap_or(0), &[rowid])
+                {
+                    tracing::warn!(error = %m, "failed to mark rlm node pending_vector");
+                }
+            }
         }
     }
 

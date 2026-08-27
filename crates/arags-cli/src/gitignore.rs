@@ -71,7 +71,10 @@ pub fn load_gitignores(root: &Path) -> Vec<IgnoreRule> {
         // with root-relative paths, and an absolute base would never strip
         // (making every nested rule either leak project-wide or never apply).
         let abs_base = path.parent().unwrap_or(root).to_path_buf();
-        let base = abs_base.strip_prefix(root).unwrap_or(Path::new(".")).to_path_buf();
+        let base = abs_base
+            .strip_prefix(root)
+            .unwrap_or(Path::new("."))
+            .to_path_buf();
         let depth = abs_base.components().count();
         if let Ok(content) = std::fs::read_to_string(&path) {
             for line in content.lines() {

@@ -1,8 +1,10 @@
 //! File discovery, glob matching, content hashing and zstd compression.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use sha2::{Digest, Sha256};
+use tracing::{debug, info};
 use zstd::stream::encode_all;
 
 use crate::embedder::EmbeddingResult;
@@ -29,6 +31,9 @@ pub fn compute_hash(text: &str) -> String {
 /// # Arguments
 ///
 /// * `root` - Root directory to search.
+/// * `default_ignores` - Default ignore patterns applied to every project
+///   (see [`default_index_ignores`]). Pass an empty slice to clear the built-in
+///   defaults (e.g. when a project wants to opt back into indexing them).
 /// * `extra_ignores` - Additional glob patterns to ignore (e.g., `["*.log", "dist/"]`).
 /// * `force_include` - Glob patterns that bypass every ignore rule above. A file
 ///   (or any of its ancestor directories) matching one of these patterns is
@@ -36,26 +41,50 @@ pub fn compute_hash(text: &str) -> String {
 ///   sensitive/ignored paths (`.env`, `.github`, `vendor`, …) can be explicitly
 ///   opted into indexing via `--force-include`.
 ///
+/// Patterns are matched **as path segments or prefixes** anywhere in the path
+/// (see [`path_is_ignored`]): `vendor` skips `vendor/foo/bar.rs`, `Seeds` skips
+/// `any/path/Seeds/x.rs`, and the multi-component `storage/logs` skips
+/// `storage/logs/run.log` and every file beneath it.
+///
 /// # Errors
 ///
 /// Returns an error if the directory cannot be read.
 pub fn discover_files(
     root: &Path,
+    default_ignores: &[String],
     extra_ignores: &[String],
     force_include: &[String],
 ) -> EmbeddingResult<Vec<PathBuf>> {
     let _timer = crate::Timer::new("discover_files");
     let mut files = Vec::with_capacity(256);
-    discover_files_recursive(root, root, extra_ignores, force_include, &mut files)?;
+    let skipped = AtomicUsize::new(0);
+    discover_files_recursive(
+        root,
+        root,
+        default_ignores,
+        extra_ignores,
+        force_include,
+        &skipped,
+        &mut files,
+    )?;
+
+    info!(
+        discovered = files.len(),
+        ignored = skipped.load(Ordering::Relaxed),
+        root = %root.display(),
+        "discover_files complete"
+    );
     Ok(files)
 }
 
 /// Default ignore patterns applied to all projects.
 ///
 /// These cover sensitive dot-directories/files (`.env`, `.vscode`, `.github`,
-/// `.gitlab`, `.zed`, …) and vendored / build trees (`vendor`, `node_modules`,
-/// `target`, …) so they are never sent to the server unless explicitly forced
-/// in via `force_include`.
+/// `.gitlab`, `.zed`, …), vendored / build trees (`vendor`, `node_modules`,
+/// `target`, …) and noisy corpus-diluting directories that hurt NL search
+/// relevance (`Seeds`, `.seeds`, `REFERENCE`, `_Exemplos`, and any
+/// `storage/logs` tree). They are never sent to the server unless explicitly
+/// forced in via `force_include` or cleared by passing an empty default list.
 const DEFAULT_IGNORES: &[&str] = &[
     ".env",
     ".env.*",
@@ -82,13 +111,31 @@ const DEFAULT_IGNORES: &[&str] = &[
     ".next",
     ".turbo",
     "bower_components",
+    // Noisy corpus-diluting paths (issue agnostic-rlm-rs-a884).
+    "Seeds",
+    ".seeds",
+    "storage/logs",
+    "REFERENCE",
+    "_Exemplos",
 ];
+
+/// Return the built-in default index ignore patterns as owned strings.
+///
+/// Use this to seed a config-driven ignore list; pass the (possibly edited)
+/// result back into [`discover_files`] so project configuration can extend or
+/// clear the defaults.
+#[must_use]
+pub fn default_index_ignores() -> Vec<String> {
+    DEFAULT_IGNORES.iter().map(|s| (*s).to_string()).collect()
+}
 
 fn discover_files_recursive(
     root: &Path,
     dir: &Path,
+    default_ignores: &[String],
     extra_ignores: &[String],
     force_include: &[String],
+    skipped: &AtomicUsize,
     files: &mut Vec<PathBuf>,
 ) -> EmbeddingResult<()> {
     if !dir.is_dir() {
@@ -100,50 +147,84 @@ fn discover_files_recursive(
     for entry in &entries {
         let path = entry.path();
 
-        // Force-included paths bypass every ignore rule below.
-        if !force_include.is_empty() {
-            if let Some(rel) = path.strip_prefix(root).ok().and_then(|p| p.to_str()) {
-                if path_force_matches(force_include, rel) {
-                    if path.is_dir() {
-                        discover_files_recursive(root, &path, extra_ignores, force_include, files)?;
-                    } else {
-                        files.push(path);
-                    }
-                    continue;
-                }
+        // Relative path (used for force-include and ignore matching).
+        let rel = match path.strip_prefix(root).ok().and_then(|p| p.to_str()) {
+            Some(r) => r.to_string(),
+            None => {
+                // Outside root: skip to be safe.
+                continue;
             }
+        };
+
+        // Force-included paths bypass every ignore rule below.
+        if !force_include.is_empty() && path_force_matches(force_include, &rel) {
+            if path.is_dir() {
+                discover_files_recursive(
+                    root,
+                    &path,
+                    default_ignores,
+                    extra_ignores,
+                    force_include,
+                    skipped,
+                    files,
+                )?;
+            } else {
+                files.push(path);
+            }
+            continue;
         }
 
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if name.starts_with('.')
-                || name == "node_modules"
-                || name == "target"
-                || name == "vendor"
-                || name == "__pycache__"
-                || name == ".git"
-            {
-                continue;
-            }
-
-            let dominated = DEFAULT_IGNORES.iter().any(|pat| glob_match(pat, name));
-            if dominated {
-                continue;
-            }
-
-            let dominated = extra_ignores.iter().any(|pat| glob_match(pat, name));
-            if dominated {
-                continue;
-            }
+        if path_is_ignored(default_ignores, &rel) || path_is_ignored(extra_ignores, &rel) {
+            skipped.fetch_add(1, Ordering::Relaxed);
+            debug!(path = %rel, "skipped by ignore rule");
+            continue;
         }
 
         if path.is_dir() {
-            discover_files_recursive(root, &path, extra_ignores, force_include, files)?;
+            discover_files_recursive(
+                root,
+                &path,
+                default_ignores,
+                extra_ignores,
+                force_include,
+                skipped,
+                files,
+            )?;
         } else if path.is_file() && is_text_file(&path) {
             files.push(path);
         }
     }
 
     Ok(())
+}
+
+/// Returns `true` if `rel` (a `/`-separated relative path) is matched by any of
+/// `patterns`.
+///
+/// Matching is "anywhere in the path": a single-component pattern (e.g. `vendor`,
+/// `*.pem`, `Seeds`) matches if any `/`-separated segment of `rel` matches the
+/// pattern (wildcards allowed), while a multi-component pattern (e.g.
+/// `storage/logs`) matches only as a path **prefix** of `rel`.
+#[must_use]
+pub fn path_is_ignored(patterns: &[String], rel: &str) -> bool {
+    let rcomp: Vec<&str> = rel.split('/').filter(|s| !s.is_empty()).collect();
+    patterns.iter().any(|p| {
+        let pcomp: Vec<&str> = p.split('/').filter(|s| !s.is_empty()).collect();
+        if pcomp.is_empty() {
+            return false;
+        }
+        if pcomp.len() == 1 {
+            rcomp.iter().any(|seg| wildcard_component(pcomp[0], seg))
+        } else {
+            if rcomp.len() < pcomp.len() {
+                return false;
+            }
+            pcomp
+                .iter()
+                .enumerate()
+                .all(|(i, pc)| wildcard_component(pc, rcomp[i]))
+        }
+    })
 }
 
 /// Returns `true` if `rel` (a `/`-separated relative path) or any of its

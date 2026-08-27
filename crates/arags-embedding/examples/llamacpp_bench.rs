@@ -1,11 +1,18 @@
+#![cfg_attr(not(feature = "llamacpp"), allow(dead_code))]
+
 use std::path::Path;
 use std::time::Instant;
 
-use arags_embedding::embedder::llama_cpp::LlamaCppEmbedder;
 use arags_embedding::embedder::Embedder;
 
+#[cfg(feature = "llamacpp")]
+use arags_embedding::embedder::llama_cpp::LlamaCppEmbedder;
+
+#[cfg(feature = "llamacpp")]
 fn main() {
-    let model = std::env::args().nth(1).expect("usage: llamacpp_bench <gguf> [gpu_layers]");
+    let model = std::env::args()
+        .nth(1)
+        .expect("usage: llamacpp_bench <gguf> [gpu_layers]");
     let gpu: u32 = std::env::args()
         .nth(2)
         .and_then(|s| s.parse().ok())
@@ -44,4 +51,9 @@ fn main() {
         total as f64 / dt,
         dt * 1000.0 / total as f64
     );
+}
+
+#[cfg(not(feature = "llamacpp"))]
+fn main() {
+    eprintln!("llamacpp_bench requires the `llamacpp` feature");
 }

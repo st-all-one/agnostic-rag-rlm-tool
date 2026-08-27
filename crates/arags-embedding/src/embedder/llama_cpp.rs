@@ -14,7 +14,7 @@ use llama_cpp_4::llama_batch::LlamaBatch;
 use llama_cpp_4::model::params::LlamaModelParams;
 use llama_cpp_4::model::{AddBos, LlamaModel};
 
-use crate::embedder::{Embedding, EmbeddingError, EmbeddingResult, Embedder};
+use crate::embedder::{Embedder, Embedding, EmbeddingError, EmbeddingResult};
 
 /// Embedder backed by a local GGUF model loaded through `llama.cpp`.
 pub struct LlamaCppEmbedder {
@@ -34,8 +34,7 @@ impl LlamaCppEmbedder {
     /// Returns [`EmbeddingError::LlamaCpp`] if the backend fails to initialise
     /// or the GGUF model cannot be loaded.
     pub fn new(model_path: &Path, n_gpu_layers: u32, n_ctx: u32) -> EmbeddingResult<Self> {
-        let backend =
-            LlamaBackend::init().map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?;
+        let backend = LlamaBackend::init().map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?;
         let params = LlamaModelParams::default().with_n_gpu_layers(n_gpu_layers);
         let params = std::pin::pin!(params);
         let model = LlamaModel::load_from_file(&backend, model_path, &params)
@@ -137,8 +136,7 @@ mod tests {
     #[test]
     fn llamacpp_loads_and_embeds() {
         let path = gguf_path();
-        let embedder =
-            LlamaCppEmbedder::new(&path, 0, 512).expect("load gguf (cpu, gpu_layers=0)");
+        let embedder = LlamaCppEmbedder::new(&path, 0, 512).expect("load gguf (cpu, gpu_layers=0)");
         assert_eq!(embedder.dimensions(), 384, "all-MiniLM-L6-v2 is 384-dim");
 
         let batch = embedder

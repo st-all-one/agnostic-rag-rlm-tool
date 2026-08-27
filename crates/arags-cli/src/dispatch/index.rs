@@ -23,21 +23,22 @@ const UPLOAD_ZSTD_LEVEL: i32 = 3;
 pub(crate) fn run_index(
     rt: &Runtime,
     client: &mut AragsClient,
-    project: &Path,
-    path: &Path,
+    project_path: &Path,
+    canonical_name: &str,
     ignore_patterns: &[String],
     force_include: &[String],
     format: Format,
 ) -> Result<()> {
-    let absolute = std::fs::canonicalize(path)
-        .with_context(|| format!("failed to resolve path: {}", path.display()))?;
-    let project_str = project.to_string_lossy().to_string();
+    let absolute = std::fs::canonicalize(project_path)
+        .with_context(|| format!("failed to resolve path: {}", project_path.display()))?;
+    let project_str = canonical_name.to_string();
 
-    // Combine CLI ignore patterns with the project's `.arags.toml` ignore list.
+    // Combine CLI ignore patterns with the project's `.arags.toml` ignore list
+    // (and the `ARAGS_INDEX_IGNORE` env var).
     let mut ignore = ignore_patterns.to_vec();
     ignore.extend(
         crate::user_config::load()
-            .map(|c| c.ignore_patterns())
+            .map(|c| c.index_ignore_patterns())
             .unwrap_or_default(),
     );
 

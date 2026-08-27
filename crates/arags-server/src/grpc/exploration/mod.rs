@@ -146,7 +146,13 @@ pub(crate) async fn handle_persist_exploration(
             #[allow(clippy::cast_possible_truncation)] // rowids fit u64 here
             let key = u64::try_from(stored.id).unwrap_or(u64::MAX);
             if let Err(e) = vectors.insert(key, &vec) {
-                tracing::warn!(error = %e, exploration_id = %stored.exploration_id, "exploration vector insert failed");
+                tracing::warn!(error = %e, exploration_id = %stored.exploration_id, "exploration vector insert failed; marking exploration pending_vector");
+                if let Err(m) = state
+                    .storage
+                    .mark_explorations_pending_vector(buffer_id, &[stored.id])
+                {
+                    tracing::warn!(error = %m, "failed to mark exploration pending_vector");
+                }
             }
         }
     }

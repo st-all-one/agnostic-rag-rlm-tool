@@ -67,7 +67,7 @@ tests/                     # testes de integração (user_config, init, output, 
 | `arags index` | Faz stream do texto bruto; o servidor chunk+embed |
 | `arags search` | Busca híbrida BM25 + semântica (server-side) |
 | `arags query` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
-| `arags memory list\|get\|invalidate\|cleanup` | Memória (admin, via RPC) |
+| `arags maintenance list\|get\|invalidate\|cleanup` | Manutenção do servidor (admin, via RPC) |
 | `arags persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
 | `arags history [--limit] [--user]` | Histórico de consultas por usuário |
 

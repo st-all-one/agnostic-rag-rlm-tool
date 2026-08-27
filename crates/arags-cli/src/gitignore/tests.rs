@@ -118,7 +118,10 @@ fn nested_unanchored_star_never_leaks_outside_base() {
 
     let keep = parse_line("!.gitkeep", Path::new("bootstrap/cache")).expect("rule");
     assert!(keep.matches("bootstrap/cache/.gitkeep", false));
-    assert!(!keep.matches(".gitkeep", false), "negation is also base-scoped");
+    assert!(
+        !keep.matches(".gitkeep", false),
+        "negation is also base-scoped"
+    );
 }
 
 #[test]

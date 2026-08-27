@@ -75,7 +75,15 @@ pub(crate) async fn hybrid_search(
 
     // Embedding inference is synchronous CPU work and would block the async
     // worker, so run it on a blocking task. Falls back to BM25-only when the
-    // embed fails.
+    // embed fails. The query embed runs on the **global** rayon pool (not the
+    // capped index pool), so a concurrent `arags index` cannot starve it (issue
+    // `agnostic-rlm-rs-6690`). We surface contention for observability only.
+    if state.index_embed_in_flight() > 0 {
+        tracing::debug!(
+            active_index_embeds = state.index_embed_in_flight(),
+            "query embed shares cores with an active index embed; served on global pool"
+        );
+    }
     let fts_query_owned = fts_query.to_string();
     let embedder = state.embedder.clone();
     let query_vector = tokio::task::spawn_blocking(move || embedder.embed(&fts_query_owned))
@@ -196,6 +204,15 @@ pub(crate) async fn summary_search(
     if let Some(vectors) = state.rlm_vector_store.as_ref() {
         let embedder = state.embedder.clone();
         let q = fts_query.to_string();
+        // Query embed runs on the global rayon pool; the capped index pool keeps
+        // it from being starved during a concurrent `arags index` (issue
+        // `agnostic-rlm-rs-6690`).
+        if state.index_embed_in_flight() > 0 {
+            tracing::debug!(
+                active_index_embeds = state.index_embed_in_flight(),
+                "rlm summary query embed contends with active index embed; served on global pool"
+            );
+        }
         let query_vector = tokio::task::spawn_blocking(move || embedder.embed(&q))
             .await
             .ok()

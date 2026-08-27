@@ -17,6 +17,7 @@
 //! Break total: the legacy `~/.arags/config.toml` / `.arags/config.toml` files
 //! are NOT read. Only `~/.arags/arags.toml` and `.arags.toml` are consulted.
 
+use anyhow::{Result, bail};
 use serde::Deserialize;
 
 use arags_llm::LlmConfig;
@@ -212,6 +213,71 @@ impl EffectiveUserConfig {
     #[must_use]
     pub fn ignore_patterns(&self) -> Vec<String> {
         self.project.ignore.clone().unwrap_or_default()
+    }
+
+    /// Effective index ignore patterns: the project `[project] ignore` list
+    /// (local over global) merged with the `ARAGS_INDEX_IGNORE` env var
+    /// (comma-separated). Defaults are applied at discovery time and can be
+    /// extended here (issue agnostic-rlm-rs-a884).
+    #[must_use]
+    pub fn index_ignore_patterns(&self) -> Vec<String> {
+        let mut out = self.ignore_patterns();
+        if let Ok(env) = std::env::var("ARAGS_INDEX_IGNORE") {
+            for p in env.split(',') {
+                let p = p.trim().to_string();
+                if !p.is_empty() && !out.contains(&p) {
+                    out.push(p);
+                }
+            }
+        }
+        out
+    }
+}
+
+/// A canonical project name is a **logical** identifier for the knowledge
+/// entity, not a filesystem path (issue `agnostic-rlm-rs-f5db`). Worktrees of
+/// the same repo share one canonical name; the on-disk root is tracked
+/// separately by the server.
+///
+/// Valid names are non-empty and must not be a path: `.`, `..`, or an absolute
+/// path (Unix `/…`, Windows `C:\…`). These are rejected because they are the
+/// legacy buffer keys the issue forbids; a logical name keeps indexing
+/// idempotent across worktrees.
+#[must_use]
+pub fn is_valid_canonical_name(name: &str) -> bool {
+    if name.trim().is_empty() {
+        return false;
+    }
+    if name == "." || name == ".." {
+        return false;
+    }
+    // Reject absolute paths (legacy buffer keys). `Path::is_absolute` catches
+    // both Unix (`/abs`) and Windows (`C:\abs`, `C:/abs`).
+    if std::path::Path::new(name).is_absolute() {
+        return false;
+    }
+    true
+}
+
+/// Resolve the canonical project name from the effective config.
+///
+/// # Errors
+///
+/// Returns an error if `[project].name` is unset (the operator must provide it
+/// via `arags init --name`) or if it is set to an invalid legacy key (`.`,
+/// `..`, or an absolute path).
+pub fn resolve_canonical_name(cfg: &EffectiveUserConfig) -> Result<String> {
+    match cfg.project.name.as_deref() {
+        Some(name) if is_valid_canonical_name(name) => Ok(name.to_string()),
+        Some(name) => bail!(
+            "configured [project].name {name:?} is invalid: the canonical name must be a logical \
+             identifier (e.g. `my-service`), not a filesystem path or `.`. Edit `.arags.toml` \
+             and set a valid [project].name."
+        ),
+        None => bail!(
+            "no canonical project name set. Run `arags init --name <NAME>` to define the \
+             project's knowledge-entity name (required; not derived from the path)."
+        ),
     }
 }
 

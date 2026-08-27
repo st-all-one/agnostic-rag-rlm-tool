@@ -1,5 +1,6 @@
 //! `arags init`: scaffold the local `.arags.toml` and optionally index.
 
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -15,6 +16,7 @@ pub(crate) fn run_init(
     rt: &Runtime,
     cfg: &EffectiveUserConfig,
     project: &Path,
+    name: Option<String>,
     format: Format,
     do_index: bool,
 ) -> Result<()> {
@@ -30,7 +32,11 @@ pub(crate) fn run_init(
         }
     }
 
-    let name = project_name(project);
+    // The canonical project name is a CONCEPTUAL entity, not a filesystem path
+    // (issue `agnostic-rlm-rs-f5db`). It must be provided manually so that
+    // worktrees of the same repo index into one shared knowledge buffer.
+    let name = resolve_init_name(name, project)?;
+
     let local_path = std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join(".arags.toml");
@@ -65,11 +71,66 @@ pub(crate) fn run_init(
 
     if do_index {
         let mut client = connect(rt, cfg)?;
-        run_index(rt, &mut client, project, project, &[], &[], format)?;
+        run_index(rt, &mut client, project, &name, &[], &[], format)?;
     } else {
         println!("Skipping index (--no-index). Run `arags index` to ingest.");
     }
     Ok(())
+}
+
+/// Resolve the canonical project name for `arags init`.
+///
+/// Priority: explicit `--name` flag → interactive prompt (TTY only, prefilled
+/// with a suggestion) → hard error (non-interactive with no flag, since a name
+/// must never be silently derived from the path).
+fn resolve_init_name(name: Option<String>, project: &Path) -> Result<String> {
+    let suggestion = suggest_project_name(project);
+    let chosen = match name {
+        Some(n) => n,
+        None => {
+            if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+                prompt_canonical_name(&suggestion)?
+            } else {
+                bail!(
+                    "canonical project name required. Pass `--name <NAME>` (the project is a \
+                     conceptual knowledge entity, not a path). Suggestion: {suggestion}"
+                );
+            }
+        }
+    };
+    let trimmed = chosen.trim().to_string();
+    if !crate::user_config::is_valid_canonical_name(&trimmed) {
+        bail!(
+            "invalid canonical project name {trimmed:?}: must be a logical identifier (e.g. \
+             `my-service`), not `.`, `..`, or an absolute path."
+        );
+    }
+    Ok(trimmed)
+}
+
+/// Prompt for the canonical project name on a TTY, offering `suggestion` as a
+/// hint. Re-prompts on empty input; never silently falls back to the suggestion.
+fn prompt_canonical_name(suggestion: &str) -> Result<String> {
+    use std::io::Write as _;
+    loop {
+        print!("Project name (knowledge entity) [{suggestion}]: ");
+        std::io::stdout()
+            .flush()
+            .context("failed to flush stdout")?;
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_line(&mut buf)
+            .context("failed to read project name from stdin")?;
+        let input = buf.trim();
+        if !input.is_empty() {
+            return Ok(input.to_string());
+        }
+        // Empty input: re-prompt rather than accept the suggestion silently.
+        print!("A project name is required (not derived from the path): ");
+        std::io::stdout()
+            .flush()
+            .context("failed to flush stdout")?;
+    }
 }
 
 /// Local `.arags.toml` shape written by `arags init`.
@@ -85,9 +146,11 @@ struct LocalProject {
     ignore: Option<Vec<String>>,
 }
 
-/// Best-effort project name: git remote, else directory basename.
+/// Best-effort project name *suggestion*: git remote, else directory basename.
+/// Used only to prefill the interactive prompt — never applied as the value
+/// (issue `agnostic-rlm-rs-f5db`).
 #[must_use]
-pub(crate) fn project_name(project: &Path) -> String {
+pub(crate) fn suggest_project_name(project: &Path) -> String {
     if let Ok(output) = std::process::Command::new("git")
         .args(["remote", "get-url", "origin"])
         .current_dir(project)

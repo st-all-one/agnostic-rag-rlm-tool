@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use arags_embedding::embedder::fallback::FallbackEmbedder;
-use arags_embedding::pipeline::{IngestOptions, IngestionPipeline, discover_files};
+use arags_embedding::pipeline::{
+    IngestOptions, IngestionPipeline, default_index_ignores, discover_files,
+};
 use criterion::{Criterion, criterion_group, criterion_main};
 
 fn bench_ingestion(c: &mut Criterion) {
@@ -25,7 +27,8 @@ fn bench_ingestion(c: &mut Criterion) {
 
     group.bench_function("ingest_20_files", |b| {
         b.iter(|| {
-            let files = discover_files(tmp.path(), &[], &[]).expect("discover");
+            let files =
+                discover_files(tmp.path(), &default_index_ignores(), &[], &[]).expect("discover");
             pipeline.ingest(&files, &options).expect("ingest")
         });
     });

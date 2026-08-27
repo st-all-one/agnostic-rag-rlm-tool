@@ -26,7 +26,7 @@ pub(crate) fn run_watch_daemon(rt: &Runtime, cfg: &EffectiveUserConfig, root: &P
         .watch
         .and_then(|w| w.project)
         .unwrap_or_else(|| root.to_string_lossy().to_string());
-    let mut ignore = cfg.ignore_patterns();
+    let mut ignore = cfg.index_ignore_patterns();
     if let Some(local_ignore) = local.project.and_then(|p| p.ignore) {
         ignore.extend(local_ignore);
     }

@@ -556,4 +556,61 @@ impl Storage {
         }
         Ok(n)
     }
+
+    /// Mark the given QA cache rows as awaiting vector re-derivation.
+    ///
+    /// Sets `vector_status = 'pending_vector'` for every id in `cache_ids`. The
+    /// canonical question text is preserved, so a reconcile worker
+    /// (issue `agnostic-rlm-rs-36ae`) can re-embed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update fails.
+    pub fn mark_qa_cache_pending_vector(&self, cache_ids: &[i64]) -> Result<()> {
+        if cache_ids.is_empty() {
+            return Ok(());
+        }
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let placeholders: Vec<String> = cache_ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 1))
+                .collect();
+            let sql = format!(
+                "UPDATE qa_cache SET vector_status = 'pending_vector' WHERE id IN ({})",
+                placeholders.join(", ")
+            );
+            let params: Vec<&dyn rusqlite::ToSql> = cache_ids.iter().map(|id| id as _).collect();
+            c.execute(&sql, rusqlite::params_from_iter(params.iter()))
+                .context("mark_qa_cache_pending_vector")?;
+            Ok(())
+        })
+    }
+
+    /// Return the IDs of QA cache rows in `project` awaiting vector
+    /// re-derivation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn qa_cache_pending_vector(&self, project: &str) -> Result<Vec<i64>> {
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let mut stmt = c
+                .prepare(
+                    "SELECT id FROM qa_cache \
+                     WHERE project = ?1 AND vector_status = 'pending_vector'",
+                )
+                .context("prepare qa_cache_pending_vector")?;
+            let rows = stmt
+                .query_map(params![project], |row| row.get::<_, i64>(0))
+                .context("query qa_cache_pending_vector")?;
+            let mut ids = Vec::new();
+            for row in rows {
+                ids.push(row.context("read qa cache id")?);
+            }
+            Ok(ids)
+        })
+    }
 }

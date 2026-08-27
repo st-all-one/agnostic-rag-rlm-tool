@@ -108,11 +108,11 @@ arags persist <response_id>
 # Histórico de consultas do usuário (escopado por refresh token)
 arags history --limit 20
 
-# Memória (admin): listar / obter / invalidar / manutenção
-arags memory list
-arags memory get <cache_id>
-arags memory invalidate <cache_id>
-arags memory cleanup
+# Manutenção do servidor (admin): listar / obter / invalidar / limpeza
+arags maintenance list
+arags maintenance get <cache_id>
+arags maintenance invalidate <cache_id>
+arags maintenance cleanup
 ```
 
 ## Modo Servidor (gRPC)
@@ -147,7 +147,7 @@ override por projeto) → `~/.arags/arags.toml` (`[server].addr`) → env
 | `arags index <dir> --unregister` | Para o daemon e remove o registro (`[watch] enabled = false`) |
 | `arags search <query>` | Busca híbrida BM25 + semântica (server-side) |
 | `arags query <question>` | QA on-demand; `-qa` digere via LLM do usuário; `--cache-id` lookup; emite `cache_id` |
-| `arags memory list\|get\|invalidate\|cleanup` | Memória (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
+| `arags maintenance list\|get\|invalidate\|cleanup` | Manutenção do servidor (admin, via ListMemory/GetCache/InvalidateCache/TriggerMaintenance) |
 | `arags volunteer [--once]` | Roda como **voluntário RLM**: reclama jobs de sumarização e sintetiza com seu LLM local (config em `~/.arags/arags.toml`) |
 | `arags explore {search,persist,feedback}` | Mapas de exploração (plan 022): busca semântica, persistência com contrato validado e feedback confirm/contradict — ver `EXPLORATIONS.md` |
 | `arags persist <response_id>` | Escreve `wiki/<yyyymmddhhmm>_<title>.md` (summarize via LLM do usuário) |
@@ -176,6 +176,13 @@ Regras de ignore aplicadas na descoberta de arquivos:
 2. **`.gitignore`**: regras da raiz e de subdiretórios (comentários, dir-only
    `logs/`, âncora `/dist`, globs `* ? **`, negação `!` com *last-match-wins*);
 3. Padrões default + `--ignore` do `[project]`/CLI.
+
+Os **padrões default** (issue `agnostic-rlm-rs-a884`) excluem caminhos ruidosos
+que diluem a relevância da busca em NL — correspondem como *segmento* ou
+*prefixo* em qualquer parte do caminho: `vendor/`, `Seeds/`, `.seeds/`,
+`REFERENCE/`, `_Exemplos/` e qualquer `storage/logs/`. Eles são mesclados com o
+`[project] ignore` do `.arags.toml` e com a env `ARAGS_INDEX_IGNORE`
+(virgula-separada). Para indexar um desses caminhos, use `--force-include`.
 
 > O chunking e os embeddings ocorrem **no servidor**. O cliente apenas faz
 > stream do texto bruto dos arquivos (client-streaming gRPC `IndexProject`).

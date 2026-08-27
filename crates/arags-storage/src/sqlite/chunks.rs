@@ -186,6 +186,20 @@ impl Storage {
         Ok(rows)
     }
 
+    /// Count every chunk across all buffers (used by integration tests to
+    /// assert end-to-end indexing persisted data without knowing the buffer id).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn count_all_chunks(&self) -> Result<i64> {
+        let conn = self.conn();
+        let conn = conn.lock();
+
+        conn.query_row("SELECT COUNT(*) FROM chunks", [], |row| row.get(0))
+            .context("failed to count all chunks")
+    }
+
     /// Count chunks for a buffer.
     ///
     /// # Errors
@@ -458,5 +472,64 @@ impl Storage {
             map.insert(id, ts);
         }
         Ok(map)
+    }
+
+    /// Mark the given chunks as awaiting vector re-derivation.
+    ///
+    /// Sets `status = 'pending_vector'` for every chunk in `chunk_ids` that
+    /// belongs to `buffer_id`. The canonical text is preserved, so a reconcile
+    /// worker (issue `agnostic-rlm-rs-36ae`) can re-embed later.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update fails.
+    pub fn mark_chunks_pending_vector(&self, buffer_id: i64, chunk_ids: &[i64]) -> Result<()> {
+        if chunk_ids.is_empty() {
+            return Ok(());
+        }
+        let conn = self.conn();
+        let conn = conn.lock();
+
+        let placeholders: Vec<String> = chunk_ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 2))
+            .collect();
+        let sql = format!(
+            "UPDATE chunks SET status = 'pending_vector' WHERE buffer_id = ?1 AND id IN ({})",
+            placeholders.join(", ")
+        );
+
+        let mut params: Vec<&dyn rusqlite::ToSql> = vec![&buffer_id];
+        for id in chunk_ids {
+            params.push(id);
+        }
+
+        conn.execute(&sql, params_from_iter(params.iter()))
+            .context("failed to mark chunks pending_vector")?;
+        Ok(())
+    }
+
+    /// Return the IDs of chunks in `buffer_id` awaiting vector re-derivation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn chunks_pending_vector(&self, buffer_id: i64) -> Result<Vec<i64>> {
+        let conn = self.conn();
+        let conn = conn.lock();
+
+        let mut stmt = conn
+            .prepare("SELECT id FROM chunks WHERE buffer_id = ?1 AND status = 'pending_vector'")
+            .context("failed to prepare chunks_pending_vector query")?;
+        let rows = stmt
+            .query_map(params![buffer_id], |row| row.get::<_, i64>(0))
+            .context("failed to query chunks_pending_vector")?;
+
+        let mut ids = Vec::new();
+        for row in rows {
+            ids.push(row.context("failed to read pending_vector chunk id")?);
+        }
+        Ok(ids)
     }
 }

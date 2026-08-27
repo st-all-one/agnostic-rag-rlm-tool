@@ -6,6 +6,12 @@ use clap::Subcommand;
 pub enum Commands {
     /// Prepare the repository: create `.arags.toml` and (by default) index it.
     Init {
+        /// Canonical project name (knowledge entity). Required: the project is
+        /// a conceptual entity shared across worktrees, NOT derived from the
+        /// path. If omitted on a TTY you will be prompted; otherwise an error.
+        #[arg(long)]
+        name: Option<String>,
+
         /// Run `arags index` after creating the config (default: true).
         #[arg(long)]
         index: bool,
@@ -113,9 +119,10 @@ pub enum Commands {
         qa: bool,
     },
 
-    /// Memory administration (admin-gated on the server): list / get / invalidate /
-    /// cleanup cached query-answer memory.
-    Memory {
+    /// Server maintenance administration (admin-gated on the server): list /
+    /// get / invalidate / cleanup cached query-answer memory.
+    #[command(name = "maintenance")]
+    Maintenance {
         #[command(subcommand)]
         cmd: MemoryCmd,
     },
@@ -156,9 +163,10 @@ pub enum ExploreCmd {
         /// Free-text query (what are you about to investigate?).
         query: String,
 
-        /// Project scope (defaults to the current project).
+        /// Project scope — the canonical project name (defaults to the
+        /// current project's `[project].name`).
         #[arg(long)]
-        project: Option<PathBuf>,
+        project: Option<String>,
 
         /// Maximum number of maps.
         #[arg(long, default_value_t = 5)]
@@ -195,7 +203,7 @@ pub enum ExploreCmd {
     },
 }
 
-/// Subcommands of `arags memory` (plan 019).
+/// Subcommands of `arags maintenance` (plan 019).
 #[derive(Subcommand, Debug)]
 pub enum MemoryCmd {
     /// List cached query/answer memory for a project.

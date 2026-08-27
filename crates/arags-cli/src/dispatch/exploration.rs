@@ -6,7 +6,7 @@
 //! functions; all I/O stays in [`run_explore_persist`].
 
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use arags_proto::proto::{
@@ -121,7 +121,7 @@ pub(crate) fn parse_contract(content: &str) -> std::result::Result<Contract, Str
 pub(crate) fn run_explore(
     rt: &Runtime,
     client: &mut AragsClient,
-    project: &Path,
+    project: &str,
     cmd: ExploreCmd,
     format: Format,
 ) -> Result<()> {
@@ -132,7 +132,7 @@ pub(crate) fn run_explore(
             limit,
             include_stale,
         } => {
-            let scope = explicit.unwrap_or_else(|| project.to_path_buf());
+            let scope = explicit.unwrap_or_else(|| project.to_string());
             run_explore_search(rt, client, &scope, &query, limit, include_stale, format)
         }
         ExploreCmd::Persist { map, paths } => {
@@ -158,14 +158,14 @@ pub(crate) fn run_explore(
 fn run_explore_search(
     rt: &Runtime,
     client: &mut AragsClient,
-    project: &Path,
+    project: &str,
     query: &str,
     limit: i32,
     include_stale: bool,
     format: Format,
 ) -> Result<()> {
     let request = Request::new(SearchExplorationsRequest {
-        project: project.to_string_lossy().to_string(),
+        project: project.to_string(),
         query: query.to_string(),
         limit,
         include_stale,
@@ -183,7 +183,7 @@ fn run_explore_search(
 fn run_explore_persist(
     rt: &Runtime,
     client: &mut AragsClient,
-    project: &Path,
+    project: &str,
     map: &PathBuf,
     extra_paths: &[String],
 ) -> Result<()> {
@@ -207,7 +207,7 @@ fn run_explore_persist(
     }
 
     let request = Request::new(PersistExplorationRequest {
-        project: project.to_string_lossy().to_string(),
+        project: project.to_string(),
         goal: contract.goal,
         summary: contract.summary,
         body_markdown: contract.body_markdown,

@@ -41,6 +41,15 @@ pub struct ServerConfig {
     #[serde(default = "default_pool_size")]
     pub pool_size: u32,
 
+    /// Dedicated rayon thread count for **index (Phase-2) embedding** (issue
+    /// `agnostic-rlm-rs-6690`). The index embedder runs inside a *capped* rayon
+    /// pool so a large `arags index` cannot saturate every core and starve a
+    /// concurrent `arags search --tier auto`. Defaults to `num_cpus - 2`
+    /// (minimum 1), deliberately leaving at least 2 cores (or 1 when only 1–2
+    /// exist) free for query serving. Override with `ARAGS_INDEX_EMBED_THREADS`.
+    #[serde(default = "default_index_embed_threads")]
+    pub index_embed_threads: usize,
+
     /// Interval for the background WAL flush (`PRAGMA wal_checkpoint
     /// (PASSIVE)`), in milliseconds. `0` disables the flusher.
     #[serde(default = "default_flush_interval_ms")]
@@ -204,6 +213,10 @@ fn default_listen_addr() -> String {
 
 fn default_pool_size() -> u32 {
     4
+}
+
+fn default_index_embed_threads() -> usize {
+    num_cpus::get().saturating_sub(2).max(1)
 }
 
 fn default_flush_interval_ms() -> u64 {
@@ -502,7 +515,8 @@ impl ServerConfig {
     /// `ARAGS_EMBEDDER_LLAMACPP_MODEL` / `ARAGS_EMBEDDER_LLAMACPP_GPU_LAYERS`
     /// environment overrides (plan 020 keeps them as ops escape hatches over
     /// the file; the model dir one lets container images bake or mount
-    /// checkpoints without a config file).
+    /// checkpoints without a config file). `ARAGS_INDEX_EMBED_THREADS` caps the
+    /// index-embed rayon pool (issue `agnostic-rlm-rs-6690`).
     #[must_use]
     pub fn with_env_overrides(self) -> Self {
         let addr = std::env::var("ARAGS_SERVER_ADDR").ok();
@@ -511,9 +525,18 @@ impl ServerConfig {
         let kind = std::env::var("ARAGS_EMBEDDER_KIND").ok();
         let ollama_url = std::env::var("ARAGS_EMBEDDER_OLLAMA_URL").ok();
         let ollama_model = std::env::var("ARAGS_EMBEDDER_OLLAMA_MODEL").ok();
+        let index_embed_threads = std::env::var("ARAGS_INDEX_EMBED_THREADS").ok();
         let llama_cpp_model = std::env::var("ARAGS_EMBEDDER_LLAMACPP_MODEL").ok();
         let llama_cpp_gpu_layers = std::env::var("ARAGS_EMBEDDER_LLAMACPP_GPU_LAYERS").ok();
-        let mut s = self.with_overrides(addr, data_dir, model_dir, kind, ollama_url, ollama_model);
+        let mut s = self.with_overrides(
+            addr,
+            data_dir,
+            model_dir,
+            kind,
+            ollama_url,
+            ollama_model,
+            index_embed_threads,
+        );
         if let Some(m) = llama_cpp_model {
             s.embedder.llama_cpp_model = Some(PathBuf::from(m));
         }
@@ -536,6 +559,7 @@ impl ServerConfig {
         kind: Option<String>,
         ollama_url: Option<String>,
         ollama_model: Option<String>,
+        index_embed_threads: Option<String>,
     ) -> Self {
         if let Some(addr) = addr {
             self.listen_addr = addr;
@@ -554,6 +578,13 @@ impl ServerConfig {
         }
         if let Some(model) = ollama_model {
             self.embedder.ollama_model = Some(model);
+        }
+        if let Some(threads) = index_embed_threads {
+            if let Ok(n) = threads.parse::<usize>() {
+                if n >= 1 {
+                    self.index_embed_threads = n;
+                }
+            }
         }
         self
     }
@@ -586,6 +617,7 @@ impl Default for ServerConfig {
             tls_key: None,
             mtls_ca: None,
             pool_size: default_pool_size(),
+            index_embed_threads: default_index_embed_threads(),
             flush_interval_ms: default_flush_interval_ms(),
             max_batch_size: default_max_batch_size(),
             embedder: EmbedderConfig::default(),

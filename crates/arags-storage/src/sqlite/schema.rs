@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use rusqlite::Connection;
+use tracing::debug;
 
 const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/001_initial.sql"),
@@ -17,6 +18,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/018_add_rlm.sql"),
     include_str!("../../migrations/019_add_explorations.sql"),
     include_str!("../../migrations/020_add_exploration_review.sql"),
+    include_str!("../../migrations/021_temporal_metadata.sql"),
+    include_str!("../../migrations/022_vector_status.sql"),
 ];
 
 /// Total number of migrations in [`MIGRATIONS`].
@@ -67,6 +70,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     // Run ANALYZE after migrations for accurate query planning stats
     conn.execute_batch("ANALYZE;")
         .context("failed to run ANALYZE")?;
+
+    debug!(
+        version = current_version,
+        applied = MIGRATIONS.len(),
+        "schema migrations applied"
+    );
 
     Ok(())
 }

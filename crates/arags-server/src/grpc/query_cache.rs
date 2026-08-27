@@ -36,7 +36,17 @@ const QUESTION_PREFIX: &str = "search_query: ";
 const NEAR_HIT_CANDIDATES: usize = 10;
 
 /// Embed a question in the dedicated question space (blocking).
+///
+/// Runs on the **global** rayon pool (not the capped index pool), so a
+/// concurrent `arags index` cannot starve QA-cache lookups (issue
+/// `agnostic-rlm-rs-6690`).
 async fn embed_query(state: &AppState, question: &str) -> Option<Vec<f32>> {
+    if state.index_embed_in_flight() > 0 {
+        tracing::debug!(
+            active_index_embeds = state.index_embed_in_flight(),
+            "qa query embed contends with active index embed; served on global pool"
+        );
+    }
     let embedder = state.embedder.clone();
     let text = format!("{QUESTION_PREFIX}{question}");
     tokio::task::spawn_blocking(move || embedder.embed(&text))
@@ -324,7 +334,10 @@ pub async fn handle_store_answer(
     if let Some(vec) = embed_query(state, &req.question).await {
         if let Some(qv_store) = state.question_vector_store.as_ref() {
             if let Err(e) = qv_store.insert(stored.id as u64, &vec) {
-                tracing::warn!(error = %e, "failed to persist question vector");
+                tracing::warn!(error = %e, cache_id = %stored.cache_id, "failed to persist question vector; marking qa_cache pending_vector");
+                if let Err(m) = state.storage.mark_qa_cache_pending_vector(&[stored.id]) {
+                    tracing::warn!(error = %m, "failed to mark qa_cache pending_vector");
+                }
             }
         }
     }

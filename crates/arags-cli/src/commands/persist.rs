@@ -5,13 +5,13 @@
 //! (same backend used by `query -qa`), and write it under `wiki/` in the
 //! project. No git operations are performed.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
 use tokio::runtime::Runtime;
 
-use arags_llm::{CompletionRequest, Message, Role};
+use arags_llm::{CompletionRequest, LlmBackend, Message, Role};
 use chrono::Utc;
 
 use arags_proto::proto::GetAnswerByIdRequest;
@@ -62,19 +62,54 @@ pub fn run_persist(
         .context("failed to build LLM backend for summarization")?;
 
     let provenance = build_provenance(&source_chunk_ids, &source_hashes);
-    let prompt = format!(
-        "You are a technical writer maintaining a project knowledge base. \
-         Below is an answer previously produced by a query-answer system, along \
-         with its provenance (source chunk ids and content hashes).\n\n\
-         ANSWER:\n{answer_text}\n\nPROVENANCE:\n{provenance}\n\n\
-         Rewrite this into a clean, structured knowledge-base article. \
-         Use exactly these top-level sections, in this order, with no extra \
-         preamble:\n## Summary\n## Key Findings / Artifacts\n## Related\n"
+    let project_name = project.to_string_lossy();
+    let summary = generate_summary(
+        rt,
+        backend.as_ref(),
+        &project_name,
+        &answer_text,
+        &provenance,
+        &model,
+    )?;
+
+    let _path = write_wiki(
+        project,
+        response_id,
+        &model,
+        &provenance,
+        &summary,
+        title,
+        format,
+    )?;
+    Ok(())
+}
+
+/// Build the summary completion request from the served answer + provenance,
+/// call the user's LLM, strip any leaked chain-of-thought, and return the
+/// cleaned summary text.
+///
+/// Extracted from [`run_persist`] so the client-side summarize path is
+/// unit-testable without a live gRPC server or real LLM. Timing of the LLM call
+/// is recorded via `tracing::debug!` (`elapsed_ms` + `model`).
+pub(crate) fn generate_summary(
+    rt: &Runtime,
+    backend: &dyn LlmBackend,
+    project_name: &str,
+    answer_text: &str,
+    provenance: &str,
+    model: &str,
+) -> Result<String> {
+    let prompt = crate::prompts::build_summarize_prompt(
+        crate::prompts::SummarizeScope::Project,
+        project_name,
+        answer_text,
+        Some(provenance),
     );
 
-    let summary = rt
+    let start = std::time::Instant::now();
+    let response = rt
         .block_on(backend.complete(CompletionRequest {
-            model: model.clone(),
+            model: model.to_string(),
             messages: vec![Message {
                 role: Role::User,
                 content: prompt,
@@ -85,22 +120,49 @@ pub fn run_persist(
             seed: None,
             tools: None,
         }))
-        .context("LLM summarization failed")?
-        .content;
+        .context("LLM summarization failed")?;
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    tracing::debug!(elapsed_ms, model, "llm summarize call complete");
 
+    let summary = response.content;
+    let stripped = crate::llm_post::strip_cot(&summary);
+    if stripped.len() != summary.len() {
+        tracing::debug!(
+            chars_removed = summary.len().saturating_sub(stripped.len()),
+            "stripped chain-of-thought from summary"
+        );
+    }
+    Ok(stripped)
+}
+
+/// Render and persist a wiki page under `<project>/wiki/`.
+///
+/// Renders the fixed-structure document via [`render_wiki`], writes it to a
+/// timestamped `.md` file, prints the resulting path (JSON when `format ==
+/// FullJson`), and returns the written path. Extracted from [`run_persist`] so
+/// the storage side is unit-testable without a live gRPC server.
+pub(crate) fn write_wiki(
+    project: &Path,
+    response_id: &str,
+    model: &str,
+    provenance: &str,
+    summary: &str,
+    title: Option<&str>,
+    format: Format,
+) -> Result<PathBuf> {
     let generated = render_wiki(
         response_id,
-        &model,
+        model,
         &project_name(project),
-        &provenance,
-        &summary,
+        provenance,
+        summary,
         title,
     );
 
     let wiki_dir = project.join("wiki");
     std::fs::create_dir_all(&wiki_dir)
         .with_context(|| format!("failed to create {}", wiki_dir.display()))?;
-    let slug = slugify(title.or(Some(summary.as_str())));
+    let slug = slugify(title.or(Some(summary)));
     let filename = format!("{}_{}.md", Utc::now().format("%Y%m%d%H%M"), slug);
     let path = wiki_dir.join(&filename);
     std::fs::write(&path, generated)
@@ -121,11 +183,11 @@ pub fn run_persist(
             println!("Persisted to: {}", path.display());
         }
     }
-    Ok(())
+    Ok(path)
 }
 
 /// Render the fixed-structure wiki document.
-fn render_wiki(
+pub(crate) fn render_wiki(
     response_id: &str,
     model: &str,
     project: &str,
@@ -191,5 +253,114 @@ fn slugify(input: Option<&str>) -> String {
         "untitled".to_string()
     } else {
         trimmed
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+    use crate::commands::test_helpers::{MockLlmBackend, clean_summary_reply, cot_leak_reply};
+    use tempfile::TempDir;
+
+    fn test_rt() -> Runtime {
+        Runtime::new().expect("failed to build tokio runtime for test")
+    }
+
+    #[test]
+    fn generate_summary_strips_cot_and_has_sections() {
+        let rt = test_rt();
+        let backend = MockLlmBackend::new(cot_leak_reply());
+        let summary = generate_summary(
+            &rt,
+            &backend,
+            "proj",
+            "The answer text from the server.",
+            "chunk_ids: c1\nhashes: h1",
+            "mock",
+        )
+        .expect("generate_summary should succeed");
+
+        assert!(
+            !summary.contains("<think>"),
+            "leaked chain-of-thought must be stripped"
+        );
+        assert!(
+            !summary.contains("leaked reasoning"),
+            "CoT content must not survive stripping"
+        );
+        assert!(
+            summary.contains("## Summary"),
+            "prompt mandates a ## Summary section; got:\n{summary}"
+        );
+    }
+
+    #[test]
+    fn render_wiki_includes_summary() {
+        let summary = "## Summary\n\nA concise summary.\n\n## Key Findings / Artifacts\n\n- x";
+        let rendered = render_wiki("resp-1", "mock", "proj", "chunk_ids: c1", summary, None);
+        assert!(rendered.contains(summary), "wiki must embed the summary");
+        assert!(rendered.contains("resp-1"));
+        assert!(rendered.contains("proj"));
+    }
+
+    #[test]
+    fn write_wiki_creates_md_file_under_wiki_dir() {
+        let rt = test_rt();
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+
+        let summary = generate_summary(
+            &rt,
+            &MockLlmBackend::new(clean_summary_reply()),
+            "proj",
+            "answer",
+            "chunk_ids: c1",
+            "mock",
+        )
+        .unwrap();
+
+        let path = write_wiki(
+            project,
+            "resp-9",
+            "mock",
+            "chunk_ids: c1",
+            &summary,
+            Some("My Title"),
+            Format::Markdown,
+        )
+        .expect("write_wiki should succeed");
+
+        assert_eq!(path.extension().and_then(|e| e.to_str()), Some("md"));
+        assert_eq!(path.parent(), Some(project.join("wiki").as_path()));
+        let written = std::fs::read_to_string(&path).expect("file should be readable");
+        assert!(written.contains(&summary), "file must contain the summary");
+        assert!(written.contains("resp-9"));
+    }
+
+    #[test]
+    fn write_wiki_fulljson_prints_path() {
+        let rt = test_rt();
+        let tmp = TempDir::new().unwrap();
+        let summary = generate_summary(
+            &rt,
+            &MockLlmBackend::new(clean_summary_reply()),
+            "proj",
+            "answer",
+            "chunk_ids: c1",
+            "mock",
+        )
+        .unwrap();
+        let path = write_wiki(
+            tmp.path(),
+            "resp-json",
+            "mock",
+            "chunk_ids: c1",
+            &summary,
+            None,
+            Format::FullJson,
+        )
+        .unwrap();
+        assert!(path.exists());
     }
 }

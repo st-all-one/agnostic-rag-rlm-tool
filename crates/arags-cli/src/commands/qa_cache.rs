@@ -10,10 +10,12 @@
 use anyhow::{Context, Result};
 use std::fmt::Write as _;
 
+use arags_llm::{CompletionRequest, LlmBackend, Message, Role};
 use arags_proto::proto::{
     GetAnswerByIdRequest, InvalidateCacheRequest, InvalidateMode, QueryWithCacheRequest,
     SearchResult, StoreAnswerRequest,
 };
+use tokio::runtime::Runtime;
 
 use crate::auth_client::AragsClient;
 use crate::output::Format;
@@ -57,26 +59,13 @@ pub fn run_ask(
     for c in &resp.candidates {
         let _ = write!(context, "# {}\n```\n{}\n```\n", c.file_path, c.text);
     }
-    let prompt = format!(
-        "Based on the following project context, answer this question concisely and with provenance:\n\nQuestion: {question}\n\nContext:\n{context}"
-    );
+    let prompt = crate::prompts::build_digest_prompt(question, &context);
 
-    let resolved_model = model.map(str::to_string).or_else(|| llm.default_model());
-    let answer = rt
-        .block_on(llm.complete(arags_llm::CompletionRequest {
-            model: resolved_model.unwrap_or_else(|| "llama3".to_string()),
-            messages: vec![arags_llm::Message {
-                role: arags_llm::Role::User,
-                content: prompt,
-            }],
-            temperature: Some(0.3),
-            max_tokens: Some(2048),
-            stop: None,
-            seed: None,
-            tools: None,
-        }))
-        .context("LLM digest failed")?
-        .content;
+    let resolved_model = model
+        .map(str::to_string)
+        .or_else(|| llm.default_model())
+        .unwrap_or_else(|| "llama3".to_string());
+    let answer = digest_chunks(rt, llm.as_ref(), &prompt, &resolved_model)?;
 
     // Print immediately (UX), then fire-and-forget the store.
     print_answer(&answer, &resp.candidates, &resp.cache_id, format, true);
@@ -107,6 +96,48 @@ pub fn run_ask(
         tracing::warn!(error = %e, "StoreAnswer failed (answer already shown to user)");
     }
     Ok(())
+}
+
+/// Build the digest completion request, call the user's LLM, strip any leaked
+/// chain-of-thought, and return the cleaned digest text.
+///
+/// Extracted from [`run_ask`] so the client-side digest path is unit-testable
+/// without a live gRPC server or real LLM. `model` is the already-resolved
+/// model name (caller decides the fallback). Timing of the LLM call is recorded
+/// via `tracing::debug!` (`elapsed_ms` + `model`).
+pub(crate) fn digest_chunks(
+    rt: &Runtime,
+    backend: &dyn LlmBackend,
+    prompt: &str,
+    model: &str,
+) -> Result<String> {
+    let start = std::time::Instant::now();
+    let response = rt
+        .block_on(backend.complete(CompletionRequest {
+            model: model.to_string(),
+            messages: vec![Message {
+                role: Role::User,
+                content: prompt.to_string(),
+            }],
+            temperature: Some(0.3),
+            max_tokens: Some(2048),
+            stop: None,
+            seed: None,
+            tools: None,
+        }))
+        .context("LLM digest failed")?;
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    tracing::debug!(elapsed_ms, model, "llm digest call complete");
+
+    let answer = response.content;
+    let stripped = crate::llm_post::strip_cot(&answer);
+    if stripped.len() != answer.len() {
+        tracing::debug!(
+            chars_removed = answer.len().saturating_sub(stripped.len()),
+            "stripped chain-of-thought from digest"
+        );
+    }
+    Ok(stripped)
 }
 
 /// Direct, deterministic lookup of a served answer by stable id (anti-drift).
@@ -194,5 +225,62 @@ fn print_answer(
         _ => {
             println!("{answer}");
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+    use crate::commands::test_helpers::{
+        MockLlmBackend, clean_digest_reply, cot_leak_digest_reply,
+    };
+    use tempfile::TempDir;
+
+    fn test_rt() -> Runtime {
+        Runtime::new().expect("failed to build tokio runtime for test")
+    }
+
+    #[test]
+    fn digest_chunks_clean_passthrough() {
+        let rt = test_rt();
+        let backend = MockLlmBackend::new(clean_digest_reply());
+        let out = digest_chunks(
+            &rt,
+            &backend,
+            "Question: x\n\nContext:\n# f\n```\ncode\n```",
+            "mock",
+        )
+        .expect("digest_chunks should succeed");
+        assert!(!out.contains("<think>"), "no CoT expected in clean reply");
+        assert_eq!(out, "The answer is 42, per the source chunks.");
+    }
+
+    #[test]
+    fn digest_chunks_strips_cot() {
+        let rt = test_rt();
+        let backend = MockLlmBackend::new(cot_leak_digest_reply());
+        let out = digest_chunks(&rt, &backend, "Question: x\n\nContext:\n", "mock")
+            .expect("digest_chunks should succeed");
+        assert!(
+            !out.contains("<think>"),
+            "leaked chain-of-thought must be stripped"
+        );
+        assert!(
+            !out.contains("internal monologue"),
+            "CoT content must not survive stripping"
+        );
+        assert_eq!(out, "The answer is 42, per the source chunks.");
+    }
+
+    #[test]
+    fn digest_chunks_timing_event_compiles() {
+        // The debug! event is emitted in digest_chunks; we only assert the call
+        // returns (the event is captured by a tracing subscriber if present).
+        let rt = test_rt();
+        let backend = MockLlmBackend::new(clean_digest_reply());
+        let out = digest_chunks(&rt, &backend, "q", "mock").expect("ok");
+        assert!(!out.is_empty());
+        let _ = TempDir::new().unwrap();
     }
 }

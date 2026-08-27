@@ -75,12 +75,14 @@ impl OllamaEmbedder {
 impl Embedder for OllamaEmbedder {
     fn embed(&self, text: &str) -> EmbeddingResult<Embedding> {
         self.embed_batch(&[text]).and_then(|mut v| {
-            v.pop().ok_or_else(|| EmbeddingError::ModelNotLoaded("ollama empty".into()))
+            v.pop()
+                .ok_or_else(|| EmbeddingError::ModelNotLoaded("ollama empty".into()))
         })
     }
 
     fn embed_batch(&self, texts: &[&str]) -> EmbeddingResult<Vec<Embedding>> {
-        self.post_embed(texts).map_err(|e| EmbeddingError::Candle(e.to_string()))
+        self.post_embed(texts)
+            .map_err(|e| EmbeddingError::Candle(e.to_string()))
     }
 
     fn dimensions(&self) -> usize {
@@ -154,9 +156,18 @@ mod tests {
 
     #[test]
     fn test_parse_base_default_port() {
-        assert_eq!(parse_base("http://localhost:11434").unwrap(), ("localhost".into(), 11_434));
-        assert_eq!(parse_base("localhost").unwrap(), ("localhost".into(), 11_434));
-        assert_eq!(parse_base("http://ollama:9988/").unwrap(), ("ollama".into(), 9988));
+        assert_eq!(
+            parse_base("http://localhost:11434").unwrap(),
+            ("localhost".into(), 11_434)
+        );
+        assert_eq!(
+            parse_base("localhost").unwrap(),
+            ("localhost".into(), 11_434)
+        );
+        assert_eq!(
+            parse_base("http://ollama:9988/").unwrap(),
+            ("ollama".into(), 9988)
+        );
     }
 
     #[test]

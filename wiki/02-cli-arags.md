@@ -47,7 +47,7 @@ Visão geral:
 
 ```
 arags init      index       search       query
-arags memory    persist     history      explore
+arags maintenance  persist     history      explore
 arags volunteer [watch-daemon (oculto)]
 ```
 
@@ -173,20 +173,20 @@ arags query --cache-id 018f3c...        # lookup determinístico
 
 ---
 
-### `arags memory` — administração da memória (admin no servidor)
+### `arags maintenance` — administração da manutenção do servidor (admin)
 
 | Subcomando | Flags | Descrição |
 |-----------|-------|-----------|
-| `memory list` | `--project <nome>`, `--limit <N>=50`, `--include-entities` | Lista memória QA cacheada do projeto |
-| `memory get <CACHE_ID>` | — | Busca uma resposta cacheada por id (debug/admin) |
-| `memory invalidate` | `--cache-id <id>` (vazio = purge do legacy result-cache), `--project <nome>`, `--delete` (hard vs soft-stale), `--radius <f32>` (invalida vizinhança cosseno), `--reason <txt>` (auditoria) | Invalida respostas cacheadas (**exige Admin**) |
-| `memory cleanup` | `--dry-run`, `--project <nome>` | Cleanup/decay/consolidação sob demanda (relatório sem mudar nada com `--dry-run`) |
+| `maintenance list` | `--project <nome>`, `--limit <N>=50`, `--include-entities` | Lista memória QA cacheada do projeto |
+| `maintenance get <CACHE_ID>` | — | Busca uma resposta cacheada por id (debug/admin) |
+| `maintenance invalidate` | `--cache-id <id>` (vazio = purge do legacy result-cache), `--project <nome>`, `--delete` (hard vs soft-stale), `--radius <f32>` (invalida vizinhança cosseno), `--reason <txt>` (auditoria) | Invalida respostas cacheadas (**exige Admin**) |
+| `maintenance cleanup` | `--dry-run`, `--project <nome>` | Cleanup/decay/consolidação sob demanda (relatório sem mudar nada com `--dry-run`) |
 
 ```bash
-arags memory list --limit 20
-arags memory get 018f3c...
-arags memory invalidate --cache-id 018f3c... --reason "refatorou auth" --radius 0.15
-arags memory cleanup --dry-run
+arags maintenance list --limit 20
+arags maintenance get 018f3c...
+arags maintenance invalidate --cache-id 018f3c... --reason "refatorou auth" --radius 0.15
+arags maintenance cleanup --dry-run
 ```
 
 ---

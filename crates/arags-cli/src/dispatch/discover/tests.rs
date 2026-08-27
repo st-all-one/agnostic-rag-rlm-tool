@@ -78,3 +78,43 @@ fn test_default_ignores_dirs_and_extensions() {
     assert!(is_default_ignored("Cargo.lock", false));
     assert!(!is_default_ignored("main.rs", false));
 }
+
+#[test]
+fn test_default_ignores_noisy_corpus_paths() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let root = tmp.path();
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(root.join("src/main.rs"), "fn main() {}").unwrap();
+    for d in ["Seeds", ".seeds", "REFERENCE", "_Exemplos", "vendor"] {
+        std::fs::create_dir_all(root.join(d)).unwrap();
+        std::fs::write(root.join(d).join("x.rs"), "noise").unwrap();
+    }
+    std::fs::create_dir_all(root.join("storage/logs")).unwrap();
+    std::fs::write(root.join("storage/logs/run.log"), "log").unwrap();
+
+    let files = discover_files(root, &[], &[]).unwrap();
+    let rels: Vec<String> = files
+        .iter()
+        .map(|p| p.strip_prefix(root).unwrap().to_string_lossy().to_string())
+        .collect();
+
+    assert_eq!(rels, vec!["src/main.rs".to_string()]);
+}
+
+#[test]
+fn test_index_ignore_env_override() {
+    use crate::user_config::EffectiveUserConfig;
+    // SAFETY: tests run single-threaded for this module's env mutation; the var
+    // is restored immediately after and never read concurrently here.
+    unsafe {
+        std::env::set_var("ARAGS_INDEX_IGNORE", "docs, build/");
+    }
+    let cfg = EffectiveUserConfig::default();
+    let pats = cfg.index_ignore_patterns();
+    assert!(pats.contains(&"docs".to_string()));
+    assert!(pats.contains(&"build/".to_string()));
+    // SAFETY: see above — restore env state.
+    unsafe {
+        std::env::remove_var("ARAGS_INDEX_IGNORE");
+    }
+}

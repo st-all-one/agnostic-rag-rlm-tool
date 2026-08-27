@@ -3,7 +3,8 @@
 pub mod files;
 
 pub use files::{
-    compress_text, compute_hash, discover_files, glob_match, is_text_file, path_force_matches,
+    compress_text, compute_hash, default_index_ignores, discover_files, glob_match, is_text_file,
+    path_force_matches, path_is_ignored,
 };
 
 use std::path::PathBuf;

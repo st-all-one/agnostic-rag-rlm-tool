@@ -86,6 +86,7 @@ impl MemoryEngine {
         // Discover files
         let files = discover_files(
             &options.dir_path,
+            &arags_embedding::pipeline::default_index_ignores(),
             &options.ignore_patterns,
             &options.force_include,
         )

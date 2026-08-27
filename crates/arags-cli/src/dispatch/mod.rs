@@ -100,7 +100,9 @@ fn run(
     rt: &Runtime,
 ) -> Result<()> {
     match cli.command {
-        Commands::Init { no_index, .. } => init::run_init(rt, &cfg, &project, format, !no_index),
+        Commands::Init { no_index, name, .. } => {
+            init::run_init(rt, &cfg, &project, name, format, !no_index)
+        }
         Commands::Volunteer { once } => crate::volunteer::run(rt, &cfg, once),
         Commands::Index {
             path,
@@ -112,20 +114,21 @@ fn run(
             if unregister {
                 return projects::run_unregister(&path);
             }
+            let canonical = user_config::resolve_canonical_name(&cfg)?;
             let absolute = std::fs::canonicalize(&path)
                 .with_context(|| format!("failed to resolve path: {}", path.display()))?;
             let mut client = connect(rt, &cfg)?;
             let result = index::run_index(
                 rt,
                 &mut client,
-                &project,
                 &path,
+                &canonical,
                 &ignore_patterns,
                 &force_include,
                 format,
             );
             if result.is_ok() && register {
-                projects::run_register(&absolute, &project)?;
+                projects::run_register(&absolute, &canonical)?;
             }
             result
         }
@@ -142,11 +145,12 @@ fn run(
             file_pattern,
             ..
         } => {
+            let canonical = user_config::resolve_canonical_name(&cfg)?;
             let mut client = connect(rt, &cfg)?;
             search::run_search(
                 rt,
                 &mut client,
-                &project,
+                &canonical,
                 &query,
                 top_k,
                 &tier,
@@ -162,11 +166,12 @@ fn run(
             backend,
             model,
         } => {
+            let canonical = user_config::resolve_canonical_name(&cfg)?;
             let mut client = connect(rt, &cfg)?;
             search::run_query(
                 rt,
                 &mut client,
-                &project,
+                &canonical,
                 &question,
                 cache_id,
                 qa,
@@ -176,10 +181,11 @@ fn run(
             )
         }
         Commands::Explore { cmd } => {
+            let canonical = user_config::resolve_canonical_name(&cfg)?;
             let mut client = connect(rt, &cfg)?;
-            exploration::run_explore(rt, &mut client, &project, cmd, format)
+            exploration::run_explore(rt, &mut client, &canonical, cmd, format)
         }
-        Commands::Memory { cmd } => {
+        Commands::Maintenance { cmd } => {
             let mut client = connect(rt, &cfg)?;
             memory_history::run_memory(rt, &mut client, cmd, &project, format)
         }

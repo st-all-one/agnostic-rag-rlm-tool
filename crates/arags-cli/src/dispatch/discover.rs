@@ -83,7 +83,17 @@ const DEFAULT_IGNORED_DIRS: &[&str] = &[
     "build",
     ".next",
     ".terraform",
+    // Noisy corpus-diluting paths (issue agnostic-rlm-rs-a884).
+    "Seeds",
+    ".seeds",
+    "REFERENCE",
+    "_Exemplos",
 ];
+
+/// Multi-component default-ignore path prefixes (matched as a `/`-separated
+/// prefix, anywhere in the path). e.g. `storage/logs` skips
+/// `storage/logs/run.log` and every file beneath it.
+const DEFAULT_IGNORED_PATH_PREFIXES: &[&str] = &["storage/logs"];
 
 /// File extensions ignored by default (binaries, media, lockfiles).
 const DEFAULT_IGNORED_EXTS: &[&str] = &[
@@ -96,6 +106,9 @@ const DEFAULT_IGNORED_EXTS: &[&str] = &[
 fn is_default_ignored(rel: &str, is_dir: bool) -> bool {
     if is_dir {
         DEFAULT_IGNORED_DIRS.iter().any(|d| has_component(rel, d))
+            || DEFAULT_IGNORED_PATH_PREFIXES
+                .iter()
+                .any(|p| rel == *p || rel.starts_with(&format!("{p}/")))
     } else {
         let rel_lc = rel.to_ascii_lowercase();
         DEFAULT_IGNORED_EXTS.iter().any(|ext| rel_lc.ends_with(ext))

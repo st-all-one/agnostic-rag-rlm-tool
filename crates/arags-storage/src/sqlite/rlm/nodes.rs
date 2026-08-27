@@ -239,4 +239,65 @@ impl Storage {
             .context("rlm_subject_of")
         })
     }
+
+    /// Mark the given RLM nodes as awaiting vector re-derivation.
+    ///
+    /// Sets `vector_status = 'pending_vector'` for every node in `node_ids`
+    /// that belongs to `buffer_id`. The canonical summary text is preserved,
+    /// so a reconcile worker (issue `agnostic-rlm-rs-36ae`) can re-embed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update fails.
+    pub fn mark_rlm_nodes_pending_vector(&self, buffer_id: i64, node_ids: &[i64]) -> Result<()> {
+        if node_ids.is_empty() {
+            return Ok(());
+        }
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let placeholders: Vec<String> = node_ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 2))
+                .collect();
+            let sql = format!(
+                "UPDATE rlm_nodes SET vector_status = 'pending_vector' \
+                 WHERE buffer_id = ?1 AND id IN ({})",
+                placeholders.join(", ")
+            );
+            let mut params: Vec<&dyn rusqlite::ToSql> = vec![&buffer_id];
+            for id in node_ids {
+                params.push(id);
+            }
+            c.execute(&sql, rusqlite::params_from_iter(params.iter()))
+                .context("mark_rlm_nodes_pending_vector")?;
+            Ok(())
+        })
+    }
+
+    /// Return the IDs of RLM nodes in `buffer_id` awaiting vector
+    /// re-derivation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn rlm_nodes_pending_vector(&self, buffer_id: i64) -> Result<Vec<i64>> {
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let mut stmt = c
+                .prepare(
+                    "SELECT id FROM rlm_nodes \
+                     WHERE buffer_id = ?1 AND vector_status = 'pending_vector'",
+                )
+                .context("prepare rlm_nodes_pending_vector")?;
+            let rows = stmt
+                .query_map(params![buffer_id], |row| row.get::<_, i64>(0))
+                .context("query rlm_nodes_pending_vector")?;
+            let mut ids = Vec::new();
+            for row in rows {
+                ids.push(row.context("read rlm node id")?);
+            }
+            Ok(ids)
+        })
+    }
 }

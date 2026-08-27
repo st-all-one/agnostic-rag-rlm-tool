@@ -1,7 +1,5 @@
 //! `search`/`query` RPCs and their multi-format rendering.
 
-use std::path::Path;
-
 use anyhow::Result;
 use tokio::runtime::Runtime;
 use tonic::Request;
@@ -17,7 +15,7 @@ use super::map_search_tier;
 pub(crate) fn run_search(
     rt: &Runtime,
     client: &mut AragsClient,
-    project: &Path,
+    project: &str,
     query: &str,
     top_k: usize,
     tier: &str,
@@ -25,7 +23,7 @@ pub(crate) fn run_search(
     file_pattern: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let project_str = project.to_string_lossy().to_string();
+    let project_str = project.to_string();
     let request = Request::new(SearchRequest {
         project: project_str,
         query: query.to_string(),
@@ -189,7 +187,7 @@ fn render_markdown_results(results: &[SearchResult]) -> String {
 pub(crate) fn run_query(
     rt: &Runtime,
     client: &mut AragsClient,
-    project: &Path,
+    project: &str,
     question: &str,
     cache_id: Option<String>,
     qa: bool,
@@ -197,7 +195,7 @@ pub(crate) fn run_query(
     model: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let project_str = project.to_string_lossy().to_string();
+    let project_str = project.to_string();
 
     if let Some(id) = cache_id {
         return crate::commands::qa_cache::run_get(rt, client, &id, &project_str, format);

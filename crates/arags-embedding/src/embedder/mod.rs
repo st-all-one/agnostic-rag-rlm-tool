@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use memmap2::Mmap;
 use thiserror::Error;
 
+pub mod ab_metrics;
 pub mod batch;
 pub mod cache;
 pub mod common;

@@ -1,12 +1,15 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 
+use anyhow::Context;
 use anyhow::Result;
 use arags_embedding::embedder::{Embedder, MinilmEmbedder, fallback};
 use arags_storage::QuestionVectorStore;
 use arags_storage::RlmVectorStore;
 use arags_storage::Storage;
 use arags_storage::VectorStore;
+use rayon::ThreadPool;
 
 use crate::config::{QaCacheConfig, ServerConfig};
 
@@ -34,6 +37,16 @@ pub struct AppState {
     pub embedder: Arc<dyn Embedder + Send + Sync>,
     /// Semantic query-answer cache tunables (plan 017).
     pub qa_config: QaCacheConfig,
+    /// Dedicated (capped) rayon pool for **index (Phase-2) embedding** (issue
+    /// `agnostic-rlm-rs-6690`). Running the embed inside `pool.install(...)`
+    /// keeps candle's internal `rayon::join` matmul off the global rayon pool,
+    /// so concurrent query embeds (which run on the global pool) keep serving
+    /// while a large `arags index` is in flight.
+    pub index_embed_pool: Arc<ThreadPool>,
+    /// Number of index embed batches currently in flight. Read by the query
+    /// path to surface contention (debug) and to gate backpressure so a query
+    /// never hangs behind a saturating index (issue `agnostic-rlm-rs-6690`).
+    pub active_index_embeds: Arc<AtomicUsize>,
     started_at: std::time::Instant,
 }
 
@@ -182,6 +195,29 @@ pub fn embedder_dimension() -> usize {
     arags_embedding::embedder::minilm::HIDDEN_SIZE
 }
 
+/// Build the **capped** rayon pool used for index (Phase-2) embedding (issue
+/// `agnostic-rlm-rs-6690`).
+///
+/// candle's internal matmul uses `rayon::join`, which runs on the *currently
+/// installed* rayon pool. By spawning index embeds inside
+/// `pool.install(|| embedder.embed_batch(...))`, the index work is confined to
+/// `config.index_embed_threads` cores, leaving the global rayon pool (full core
+/// count) free for concurrent query embedding — so a large `arags index` can no
+/// longer saturate every core and starve `arags search`.
+///
+/// # Errors
+///
+/// Returns an error if the rayon pool cannot be built.
+fn build_index_embed_pool(cfg: &ServerConfig) -> anyhow::Result<Arc<ThreadPool>> {
+    let threads = cfg.index_embed_threads.max(1);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .thread_name(|i| format!("idx-embed-{i}"))
+        .build()
+        .context("failed to build capped index-embed rayon pool")?;
+    Ok(Arc::new(pool))
+}
+
 /// Wrap the embedder with the SQLite content-hash cache when
 /// `server.toml [embedder] cache = true` (plan 020). Cache failures degrade
 /// to the uncached embedder so indexing never stops because of the cache.
@@ -238,11 +274,13 @@ impl AppState {
     }
 
     /// Full constructor including the optional RLM and exploration vector
-    /// stores (plans 018/022).
+    /// stores (plans 018/022). The embedder is built from the `[embedder]`
+    /// section (candle `Minilm`, Ollama, llama.cpp or hash fallback).
     ///
     /// # Errors
     ///
-    /// Returns an error if the embedder cannot be built.
+    /// Returns an error if the embedder cannot be built or the capped index
+    /// embed pool cannot be created.
     pub fn with_vector_stores(
         storage: Storage,
         config: ServerConfig,
@@ -253,6 +291,34 @@ impl AppState {
     ) -> Result<Self> {
         let embedder = load_embedder(&config.embedder);
         let embedder = wrap_with_cache(embedder, &config);
+        Self::with_embedder(
+            storage,
+            config,
+            embedder,
+            vector_store,
+            question_vector_store,
+            rlm_vector_store,
+            exploration_vector_store,
+        )
+    }
+
+    /// Constructor with an explicit embedder (used by tests and by callers that
+    /// want to inject a non-default embedder, e.g. the lightweight fixture).
+    /// Builds the capped index-embed rayon pool (issue `agnostic-rlm-rs-6690`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the capped index embed pool cannot be created.
+    pub fn with_embedder(
+        storage: Storage,
+        config: ServerConfig,
+        embedder: Arc<dyn Embedder + Send + Sync>,
+        vector_store: Option<Arc<VectorStore>>,
+        question_vector_store: Option<Arc<QuestionVectorStore>>,
+        rlm_vector_store: Option<Arc<RlmVectorStore>>,
+        exploration_vector_store: Option<Arc<ExplorationVectorStore>>,
+    ) -> Result<Self> {
+        let index_embed_pool = build_index_embed_pool(&config)?;
         let qa_config = config.qa_cache.clone();
 
         let state = Self {
@@ -264,11 +330,33 @@ impl AppState {
             exploration_vector_store,
             embedder,
             qa_config: qa_config.clone(),
+            index_embed_pool,
+            active_index_embeds: Arc::new(AtomicUsize::new(0)),
             started_at: std::time::Instant::now(),
         };
 
+        tracing::info!(
+            index_embed_threads = state.index_embed_pool.current_num_threads(),
+            total_cpus = num_cpus::get(),
+            "built capped index-embed rayon pool (reserves cores for query serving)"
+        );
+
         spawn_eviction_worker(storage, qa_config);
         Ok(state)
+    }
+
+    /// The reserved thread count of the capped index-embed rayon pool.
+    #[must_use]
+    pub fn index_embed_threads(&self) -> usize {
+        self.index_embed_pool.current_num_threads()
+    }
+
+    /// Whether an index embedding batch is currently in flight (used by the
+    /// query path for backpressure/observability, issue `agnostic-rlm-rs-6690`).
+    #[must_use]
+    pub fn index_embed_in_flight(&self) -> usize {
+        self.active_index_embeds
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Seconds since the server started.

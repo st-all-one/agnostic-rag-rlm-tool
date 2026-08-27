@@ -95,8 +95,13 @@ impl KnowledgeEngine {
             .context("failed to find project")?
             .context("project not found")?;
 
-        let files = discover_files(dir_path, &options.ignore_patterns, &options.force_include)
-            .context("failed to discover files")?;
+        let files = discover_files(
+            dir_path,
+            &arags_embedding::pipeline::default_index_ignores(),
+            &options.ignore_patterns,
+            &options.force_include,
+        )
+        .context("failed to discover files")?;
 
         let mut files_processed: u64 = 0;
         let mut chunks_created: u64 = 0;

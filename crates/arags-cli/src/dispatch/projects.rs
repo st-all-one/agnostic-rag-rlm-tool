@@ -6,16 +6,12 @@ use anyhow::{Context, Result};
 
 /// Persist the registration and start the detached watcher daemon
 /// (`arags index --register`).
-pub(crate) fn run_register(root: &Path, project_name: &Path) -> Result<()> {
+pub(crate) fn run_register(root: &Path, project_name: &str) -> Result<()> {
     if crate::watcher::is_running(root) {
         println!("Watcher already running for {}", root.display());
         return Ok(());
     }
-    crate::user_config::set_watch_enabled(
-        &root.join(".arags.toml"),
-        true,
-        &project_name.to_string_lossy(),
-    )?;
+    crate::user_config::set_watch_enabled(&root.join(".arags.toml"), true, project_name)?;
     crate::watcher::spawn_daemon(root)?;
     println!(
         "Registered {} for background auto-update (re-index after 1 min of quiet). Stop with `arags index --unregister`.",

@@ -42,6 +42,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         assert_eq!(cfg.listen_addr, "0.0.0.0:9998");
@@ -92,6 +93,45 @@ mod tests {
         let cfg = ServerConfig::load_from_path(&path).unwrap();
         assert_eq!(cfg.search.top_k, 42);
         assert_eq!(cfg.mtls_ca(), Some(&PathBuf::from("/etc/arags/tls/ca.crt")));
+    }
+
+    #[test]
+    fn test_server_config_index_embed_threads_reserves_cores() {
+        // Default must leave at least 1 core for serving, and reserve cores
+        // when the host has >= 3 (issue `agnostic-rlm-rs-6690`).
+        let cfg = ServerConfig::default();
+        assert!(cfg.index_embed_threads >= 1, "must leave at least 1 core");
+        let total = num_cpus::get();
+        if total >= 3 {
+            assert!(
+                cfg.index_embed_threads < total,
+                "must reserve cores for query serving when >=3 cores"
+            );
+        }
+
+        // Env-style override via the testable `with_overrides` core.
+        let cfg = ServerConfig::default().with_overrides(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("2".to_owned()),
+        );
+        assert_eq!(cfg.index_embed_threads, 2);
+
+        // Invalid / zero override is ignored (falls back to previous value).
+        let cfg = ServerConfig::default().with_overrides(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("0".to_owned()),
+        );
+        assert!(cfg.index_embed_threads >= 1);
     }
 }
 
