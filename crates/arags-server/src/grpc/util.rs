@@ -33,6 +33,10 @@ pub fn to_proto_results(results: &[arags_search::SearchResult]) -> Vec<SearchRes
             file_path: r.file_path.clone(),
             start_line: line(r.line_start),
             end_line: line(r.line_end),
+            epoch: r.epoch,
+            created_by: r.created_by.clone().unwrap_or_default(),
+            model: r.model.clone().unwrap_or_default(),
+            version: r.version,
         })
         .collect()
 }

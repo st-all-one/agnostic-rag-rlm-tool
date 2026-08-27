@@ -143,10 +143,13 @@ fn run(
             tier,
             min_score,
             file_pattern,
+            as_of_epoch,
+            as_of,
             ..
         } => {
             let canonical = user_config::resolve_canonical_name(&cfg)?;
             let mut client = connect(rt, &cfg)?;
+            let epoch = crate::cli::commands::resolve_as_of_epoch(as_of_epoch, as_of)?;
             search::run_search(
                 rt,
                 &mut client,
@@ -156,6 +159,7 @@ fn run(
                 &tier,
                 min_score,
                 file_pattern.as_deref(),
+                epoch,
                 format,
             )
         }
@@ -165,9 +169,12 @@ fn run(
             qa,
             backend,
             model,
+            as_of_epoch,
+            as_of,
         } => {
             let canonical = user_config::resolve_canonical_name(&cfg)?;
             let mut client = connect(rt, &cfg)?;
+            let epoch = crate::cli::commands::resolve_as_of_epoch(as_of_epoch, as_of)?;
             search::run_query(
                 rt,
                 &mut client,
@@ -177,6 +184,7 @@ fn run(
                 qa,
                 backend.as_deref(),
                 model.as_deref(),
+                epoch,
                 format,
             )
         }

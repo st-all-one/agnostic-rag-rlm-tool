@@ -46,6 +46,9 @@ message QueryWithCacheRequest {
   string question = 2;
   // Optional explicit buffer id (scoping). When 0 the server resolves by name.
   int64 buffer_id = 3;
+  // Time-travel (plan 021): when > 0, serve the cached answer revision active
+  // at this unix-second epoch; 0 = live state.
+  int64 as_of_epoch = 4;
 }
 
 message QueryWithCacheResponse {
@@ -67,6 +70,11 @@ message QueryWithCacheResponse {
   int32 digest_k = 8;
   // Number of provenance chunks to return with the answer.
   int32 provenance_k = 9;
+  // Time-travel / provenance metadata of the served answer (plan 021).
+  int64 answer_epoch = 10;
+  string answer_created_by = 11;
+  string answer_model = 12;
+  int64 answer_version = 13;
 }
 
 // Store a digested answer (client-synthesized). Idempotent per

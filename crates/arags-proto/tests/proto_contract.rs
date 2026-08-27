@@ -19,6 +19,8 @@ fn test_search_request_with_hybrid_tier() {
         query: "find auth".into(),
         max_results: 10,
         tier: SearchTier::TierHybrid as i32,
+        as_of_epoch: 0,
+        as_of_timestamp: String::new(),
     };
 
     assert_eq!(req.tier, SearchTier::TierHybrid as i32);

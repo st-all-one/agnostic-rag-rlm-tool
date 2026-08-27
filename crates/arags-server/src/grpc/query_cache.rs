@@ -17,7 +17,7 @@ use arags_storage::qa_cache::StoreAnswerInput;
 use tonic::{Request, Response, Status};
 
 use crate::grpc::error::{internal, invalid_arg};
-use crate::grpc::search::{buffer_id_for, hybrid_search};
+use crate::grpc::search::{apply_chunk_as_of, buffer_id_for, hybrid_search};
 use crate::grpc::util::{sanitize_fts, to_proto_results};
 use crate::state::AppState;
 use crate::store;
@@ -141,13 +141,23 @@ pub async fn handle_query_with_cache(
     let buffer_id = resolve_buffer(state, &project, req.buffer_id).await;
     let qh = qa_store::question_hash(&req.question);
     let th = thresholds(state);
+    let as_of = req.as_of_epoch;
 
-    // 1) Exact hit (same question, same project).
+    // 1) Exact hit (same question, same project). With time-travel
+    // (`as_of_epoch`), serve the revision that was active at that epoch.
     let qh_owned = qh.clone();
     let project_owned = project.clone();
     if let Some(row) = store::blocking({
         let storage = state.storage.clone();
-        move || storage.get_cached_answer(&project_owned, &qh_owned)
+        let p = project_owned.clone();
+        let q = qh_owned.clone();
+        move || {
+            if as_of > 0 {
+                storage.get_cached_answer_as_of(&p, &q, buffer_id, as_of)
+            } else {
+                storage.get_cached_answer(&p, &q)
+            }
+        }
     })
     .await
     .map_err(internal)?
@@ -161,7 +171,7 @@ pub async fn handle_query_with_cache(
             let storage = state.storage.clone();
             let _ = store::blocking(move || storage.touch_qa(id)).await;
             let provenance =
-                provenance_chunks(&state, &row.source_chunk_ids, th.provenance_k).await;
+                provenance_chunks(&state, &row.source_chunk_ids, th.provenance_k, as_of).await;
             return Ok(Response::new(QueryWithCacheResponse {
                 cache_id,
                 hit: true,
@@ -172,6 +182,10 @@ pub async fn handle_query_with_cache(
                 candidates: Vec::new(),
                 digest_k: 0,
                 provenance_k: th.provenance_k as i32,
+                answer_epoch: row.epoch,
+                answer_created_by: row.created_by.clone().unwrap_or_default(),
+                answer_model: row.model.clone().unwrap_or_default(),
+                answer_version: row.version,
             }));
         }
     }
@@ -203,22 +217,53 @@ pub async fn handle_query_with_cache(
                                     &req.question,
                                     &th,
                                     best_sim,
+                                    as_of,
                                 )
                                 .await;
                             }
+                            // Time-travel (plan 021): serve the revision active
+                            // at `as_of_epoch` for this subject.
+                            let answer_row = if as_of > 0 {
+                                let s = state.storage.clone();
+                                store::blocking(move || {
+                                    s.get_cached_answer_as_of(
+                                        &cand.project,
+                                        &cand.question_hash,
+                                        cand.buffer_id,
+                                        as_of,
+                                    )
+                                })
+                                .await
+                                .map_err(internal)?
+                            } else {
+                                Some(cand.clone())
+                            };
+                            let Some(answer_row) = answer_row else {
+                                return miss_response(
+                                    state,
+                                    buffer_id,
+                                    &req.question,
+                                    &th,
+                                    best_sim,
+                                    as_of,
+                                )
+                                .await;
+                            };
                             // New query's top-K chunk ids for the Jaccard check.
                             let new_ids =
                                 top_chunk_ids(state, &project, &req.question, th.novel_k).await;
-                            let jac = jaccard_similarity(&new_ids, &cand.source_chunk_ids);
+                            let jac = jaccard_similarity(&new_ids, &answer_row.source_chunk_ids);
                             let plan = resolve_plan(best.similarity, jac, &th);
                             if !plan.is_miss {
-                                let cid = cand.cache_id.clone();
+                                let cid = answer_row.cache_id.clone();
                                 let storage = state.storage.clone();
-                                let _ = store::blocking(move || storage.touch_qa(cand.id)).await;
+                                let _ =
+                                    store::blocking(move || storage.touch_qa(answer_row.id)).await;
                                 let provenance = provenance_chunks(
                                     state,
-                                    &cand.source_chunk_ids,
+                                    &answer_row.source_chunk_ids,
                                     th.provenance_k,
+                                    as_of,
                                 )
                                 .await;
                                 return Ok(Response::new(QueryWithCacheResponse {
@@ -226,11 +271,18 @@ pub async fn handle_query_with_cache(
                                     hit: true,
                                     tier: plan.tier,
                                     similarity: best.similarity,
-                                    answer_text: cand.answer_text,
+                                    answer_text: answer_row.answer_text,
                                     provenance,
                                     candidates: Vec::new(),
                                     digest_k: plan.digest_k as i32,
                                     provenance_k: plan.provenance_k as i32,
+                                    answer_epoch: answer_row.epoch,
+                                    answer_created_by: answer_row
+                                        .created_by
+                                        .clone()
+                                        .unwrap_or_default(),
+                                    answer_model: answer_row.model.clone().unwrap_or_default(),
+                                    answer_version: answer_row.version,
                                 }));
                             }
                         }
@@ -241,16 +293,18 @@ pub async fn handle_query_with_cache(
     }
 
     // 3) Miss: return top-K raw chunks to digest client-side.
-    miss_response(state, buffer_id, &req.question, &th, best_sim).await
+    miss_response(state, buffer_id, &req.question, &th, best_sim, as_of).await
 }
 
-/// Build the MISS response: top-K raw chunks for the client-side digest.
+/// Build the MISS response: top-K raw chunks for the client-side digest. When
+/// `as_of_epoch > 0` (plan 021) the candidate chunks are time-traveled.
 async fn miss_response(
     state: &AppState,
     buffer_id: Option<i64>,
     question: &str,
     th: &QaThresholds,
     best_sim: f32,
+    as_of_epoch: i64,
 ) -> Result<Response<QueryWithCacheResponse>, Status> {
     let candidates = hybrid_search(
         state,
@@ -262,6 +316,14 @@ async fn miss_response(
     .await
     .map_err(internal)?;
 
+    let candidates = if as_of_epoch > 0 {
+        apply_chunk_as_of(state, as_of_epoch, candidates)
+            .await
+            .map_err(internal)?
+    } else {
+        candidates
+    };
+
     Ok(Response::new(QueryWithCacheResponse {
         cache_id: String::new(),
         hit: false,
@@ -272,6 +334,10 @@ async fn miss_response(
         candidates: to_proto_results(&candidates),
         digest_k: th.novel_k as i32,
         provenance_k: th.provenance_k as i32,
+        answer_epoch: 0,
+        answer_created_by: String::new(),
+        answer_model: String::new(),
+        answer_version: 0,
     }))
 }
 
@@ -533,18 +599,41 @@ async fn invalidate_qa_entry(
     }))
 }
 
-/// Fetch provenance chunks for a cached answer (top `k` by stored order).
-async fn provenance_chunks(state: &AppState, ids: &[String], k: usize) -> Vec<SearchResult> {
+/// Fetch provenance chunks for a cached answer (top `k` by stored order). When
+/// `as_of_epoch > 0` (plan 021) each chunk is time-traveled to the revision
+/// active at that epoch.
+async fn provenance_chunks(
+    state: &AppState,
+    ids: &[String],
+    k: usize,
+    as_of_epoch: i64,
+) -> Vec<SearchResult> {
     let ids: Vec<i64> = ids.iter().filter_map(|s| s.parse::<i64>().ok()).collect();
     if ids.is_empty() {
         return Vec::new();
     }
     let taken: Vec<i64> = ids.iter().copied().take(k.max(1)).collect();
     let storage = state.storage.clone();
-    let chunks = store::blocking(move || storage.get_chunks_with_content(&taken))
-        .await
-        .ok()
-        .unwrap_or_default();
+    let chunks = store::blocking(move || {
+        let mut out: Vec<(arags_storage::sqlite::chunks::Chunk, Option<String>)> =
+            Vec::with_capacity(taken.len());
+        for id in &taken {
+            if as_of_epoch > 0 {
+                if let Some(ch) = storage.get_chunk_as_of(*id, as_of_epoch)? {
+                    let content = storage.get_chunk_content(ch.id)?.unwrap_or_default();
+                    out.push((ch, Some(content)));
+                }
+            } else if let Some((c, content)) =
+                storage.get_chunks_with_content(&[*id])?.into_iter().next()
+            {
+                out.push((c, content));
+            }
+        }
+        Ok::<_, anyhow::Error>(out)
+    })
+    .await
+    .ok()
+    .unwrap_or_default();
     chunks
         .into_iter()
         .map(|(c, content)| SearchResult {
@@ -554,6 +643,10 @@ async fn provenance_chunks(state: &AppState, ids: &[String], k: usize) -> Vec<Se
             file_path: c.file_path,
             start_line: c.line_start as i32,
             end_line: c.line_end as i32,
+            epoch: c.epoch,
+            created_by: c.created_by.clone().unwrap_or_default(),
+            model: c.model.clone().unwrap_or_default(),
+            version: c.version,
         })
         .collect()
 }

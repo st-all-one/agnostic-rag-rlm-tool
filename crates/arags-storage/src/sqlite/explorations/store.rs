@@ -19,7 +19,7 @@ use super::parse_stale_reason;
 const EXPLORATION_COLS: &str = "id, exploration_id, project, buffer_id, goal, body, summary, \
      created_by, model, template_version, epoch_created, status, stale_reason, confirmed, \
       contradicted, access_count, token_count, created_at, updated_at, last_accessed_at, \
-      is_active, superseded_by";
+      is_active, superseded_by, version";
 
 fn exploration_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<ExplorationRow> {
     Ok(ExplorationRow {
@@ -47,6 +47,7 @@ fn exploration_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<ExplorationRow>
         last_accessed_at: r.get(19)?,
         is_active: r.get::<_, i64>(20)? != 0,
         superseded_by: r.get(21)?,
+        version: r.get(22)?,
     })
 }
 
@@ -196,6 +197,78 @@ impl Storage {
             c.query_row(&sql, params![id], exploration_mapper)
                 .optional()
                 .context("failed to get exploration by rowid")
+        })
+    }
+
+    /// Time-travel: return the exploration map for `(project, goal)` that was
+    /// **active** at `as_of_epoch` (compared against `epoch_created`). The active
+    /// revision at time T is the one with the greatest `epoch_created <= T` among
+    /// every revision sharing that subject. If no revision predates T, `None` is
+    /// returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_exploration_as_of(
+        &self,
+        project: &str,
+        goal: &str,
+        as_of_epoch: i64,
+    ) -> Result<Option<ExplorationRow>> {
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let sql = format!(
+                "SELECT {EXPLORATION_COLS} FROM explorations \
+                 WHERE project = ?1 AND goal = ?2 AND epoch_created <= ?3 \
+                 ORDER BY epoch_created DESC, id DESC LIMIT 1"
+            );
+            c.query_row(
+                &sql,
+                params![project, goal, as_of_epoch],
+                exploration_mapper,
+            )
+            .optional()
+            .context("failed to get exploration as_of")
+        })
+    }
+
+    /// Time-travel variant of [`Self::get_exploration_by_uuid`]: resolve the
+    /// map's `(project, goal)` from its stable id, then return the revision that
+    /// was active at `as_of_epoch`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_exploration_as_of_by_id(
+        &self,
+        exploration_id: &str,
+        as_of_epoch: i64,
+    ) -> Result<Option<ExplorationRow>> {
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let current: Option<(String, String)> = c
+                .query_row(
+                    "SELECT project, goal FROM explorations WHERE exploration_id = ?1 LIMIT 1",
+                    params![exploration_id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()
+                .context("failed to resolve exploration subject")?;
+            let Some((project, goal)) = current else {
+                return Ok(None);
+            };
+            let sql = format!(
+                "SELECT {EXPLORATION_COLS} FROM explorations \
+                 WHERE project = ?1 AND goal = ?2 AND epoch_created <= ?3 \
+                 ORDER BY epoch_created DESC, id DESC LIMIT 1"
+            );
+            c.query_row(
+                &sql,
+                params![project, goal, as_of_epoch],
+                exploration_mapper,
+            )
+            .optional()
+            .context("failed to get exploration as_of by id")
         })
     }
 

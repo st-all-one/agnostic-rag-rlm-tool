@@ -50,6 +50,14 @@ pub struct SearchResult {
     pub line_end: i64,
     pub content: String,
     pub language: Option<String>,
+    /// Project epoch at write time (drift / time-travel, plan 021).
+    pub epoch: i64,
+    /// Agent username that produced the chunk (audit/provenance).
+    pub created_by: Option<String>,
+    /// LLM model that produced the chunk (metadata).
+    pub model: Option<String>,
+    /// Revision counter (plan 021).
+    pub version: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +84,14 @@ pub struct ChunkWithText {
     pub line_end: i64,
     pub content: String,
     pub language: Option<String>,
+    /// Project epoch at write time (drift / time-travel, plan 021).
+    pub epoch: i64,
+    /// Agent username that produced the chunk (audit/provenance).
+    pub created_by: Option<String>,
+    /// LLM model that produced the chunk (metadata).
+    pub model: Option<String>,
+    /// Revision counter (plan 021).
+    pub version: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

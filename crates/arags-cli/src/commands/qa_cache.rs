@@ -23,6 +23,8 @@ use crate::output::Format;
 /// Run a query through the semantic cache (hit → zero LLM; miss → digest-once).
 ///
 /// `client` is the authenticated gRPC client; `rt` drives the async calls.
+/// `as_of_epoch` (plan 021) requests a time-travel snapshot of the served
+/// answer when > 0.
 pub fn run_ask(
     rt: &tokio::runtime::Runtime,
     client: &mut AragsClient,
@@ -30,12 +32,14 @@ pub fn run_ask(
     backend: Option<&str>,
     model: Option<&str>,
     project: &str,
+    as_of_epoch: i64,
     format: Format,
 ) -> Result<()> {
     let req = QueryWithCacheRequest {
         project: project.to_string(),
         question: question.to_string(),
         buffer_id: 0,
+        as_of_epoch,
     };
     let resp = rt.block_on(client.query_with_cache(req))?.into_inner();
 
@@ -46,6 +50,7 @@ pub fn run_ask(
             &resp.cache_id,
             format,
             false,
+            as_of_epoch,
         );
         return Ok(());
     }
@@ -68,7 +73,14 @@ pub fn run_ask(
     let answer = digest_chunks(rt, llm.as_ref(), &prompt, &resolved_model)?;
 
     // Print immediately (UX), then fire-and-forget the store.
-    print_answer(&answer, &resp.candidates, &resp.cache_id, format, true);
+    print_answer(
+        &answer,
+        &resp.candidates,
+        &resp.cache_id,
+        format,
+        true,
+        as_of_epoch,
+    );
 
     let source_chunk_ids: Vec<String> = resp
         .candidates
@@ -158,7 +170,7 @@ pub fn run_get(
         eprintln!("answer {cache_id} not found for project {project}");
         return Ok(());
     }
-    print_answer(&resp.answer_text, &[], &resp.cache_id, format, false);
+    print_answer(&resp.answer_text, &[], &resp.cache_id, format, false, 0);
     Ok(())
 }
 
@@ -198,6 +210,7 @@ fn print_answer(
     cache_id: &str,
     format: Format,
     miss: bool,
+    as_of_epoch: i64,
 ) {
     let prov: Vec<(String, String)> = provenance
         .iter()
@@ -208,21 +221,38 @@ fn print_answer(
             let json = serde_json::json!({
                 "cache_id": cache_id,
                 "hit": !miss,
+                "as_of_epoch": if as_of_epoch > 0 { Some(as_of_epoch) } else { None },
                 "answer": answer,
                 "provenance": prov,
             });
             println!("{}", serde_json::to_string(&json).unwrap_or_default());
         }
         Format::Jsonl => {
-            println!(
-                "{}",
-                crate::output::jsonl::render_content_jsonl("cache_id", cache_id, &prov)
+            let mut obj = serde_json::Map::new();
+            obj.insert(
+                "cache_id".into(),
+                serde_json::Value::String(cache_id.to_string()),
             );
+            if as_of_epoch > 0 {
+                obj.insert("as_of_epoch".into(), serde_json::json!(as_of_epoch));
+            }
+            let items: Vec<serde_json::Value> = prov
+                .iter()
+                .map(|(file, text)| serde_json::json!({ "file": file, "text": text }))
+                .collect();
+            obj.insert("results".into(), serde_json::Value::Array(items));
+            println!("{}", serde_json::to_string(&obj).unwrap_or_default());
         }
         Format::Markdown => {
+            if as_of_epoch > 0 {
+                println!("> **Time-travel snapshot** at epoch `{as_of_epoch}`\n");
+            }
             println!("## {cache_id}\n\n{answer}");
         }
         _ => {
+            if as_of_epoch > 0 {
+                println!("// TIME-TRAVEL SNAPSHOT @ epoch {as_of_epoch}");
+            }
             println!("{answer}");
         }
     }

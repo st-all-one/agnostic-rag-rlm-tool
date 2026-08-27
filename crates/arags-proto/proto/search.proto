@@ -9,6 +9,12 @@ message SearchRequest {
   int32 max_results = 3;
   SearchTier tier = 4;
   reserved 5, 6; // removed: include_summaries, include_raw (plan 019/020: no summaries layer)
+  // Time-travel (plan 021): when > 0, return only entity revisions active at
+  // this unix-second epoch (chunks + RLM summaries). 0 = live state.
+  int64 as_of_epoch = 7;
+  // Human-readable alias for `as_of_epoch` (RFC3339); the client converts it to
+  // seconds before sending. Ignored when `as_of_epoch` is set.
+  string as_of_timestamp = 8;
 }
 
 enum SearchTier {
@@ -31,6 +37,11 @@ message SearchResult {
   string file_path = 4;
   int32 start_line = 5;
   int32 end_line = 6;
+  // Time-travel / provenance metadata (plan 021).
+  int64 epoch = 7;
+  string created_by = 8;
+  string model = 9;
+  int64 version = 10;
 }
 
 // Approved RLM summary surfaced alongside chunk results (plan 023 unified
@@ -43,6 +54,11 @@ message SummaryHit {
   string summary_text = 5;
   // Normalised fusion score in [0, 1].
   float score = 6;
+  // Time-travel / provenance metadata (plan 021).
+  int64 epoch = 7;
+  string created_by = 8;
+  string model = 9;
+  int64 version = 10;
 }
 
 // Compact exploration-map reference for unified query responses (the full

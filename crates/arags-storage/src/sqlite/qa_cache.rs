@@ -65,6 +65,12 @@ pub struct QaCacheRow {
     /// Rowid of the newer revision that superseded this one (`is_active = 0`
     /// rows only); `None` for the live row (issue `agnostic-rlm-rs-e210`).
     pub superseded_by: Option<i64>,
+    /// Project epoch at write time (drift / time-travel, plan 021).
+    pub epoch: i64,
+    /// Agent username that stored the answer (audit/provenance).
+    pub created_by: Option<String>,
+    /// Revision counter; starts at 1, bumped on supersede (plan 021).
+    pub version: i64,
 }
 
 /// Input for [`Storage::store_answer`].
@@ -275,16 +281,20 @@ fn row_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<QaCacheRow> {
         invalidated_reason: r.get(19)?,
         is_active: r.get::<_, i64>(20)? != 0,
         superseded_by: r.get(21)?,
+        epoch: r.get(22)?,
+        created_by: r.get(23)?,
+        version: r.get(24)?,
     })
 }
 
 /// Projection shared by all `qa_cache` row queries (order fixed; see
-/// [`row_mapper`]). The trailing `is_active` / `superseded_by` are what the
-/// supersede chain walks (issue `agnostic-rlm-rs-e210`).
+/// [`row_mapper`]). The trailing `is_active` / `superseded_by` / `epoch` /
+/// `created_by` / `version` are what the supersede chain walks for time-travel
+/// (issue `agnostic-rlm-rs-e210` / plan 021).
 const QA_COLS: &str = "id, cache_id, buffer_id, project, question_text, question_hash, \
      answer_text, source_chunk_ids, source_hashes, model, confidence, tier_snapshot, \
      token_count, access_count, created_at, last_accessed_at, stale, invalidated_at, \
-     invalidated_by, invalidated_reason, is_active, superseded_by";
+     invalidated_by, invalidated_reason, is_active, superseded_by, epoch, created_by, version";
 
 impl Storage {
     /// Store a digested answer, returning its stable `cache_id` and rowid.
@@ -355,6 +365,39 @@ impl Storage {
             )
             .optional()
             .context("failed to get cached answer")
+        })
+    }
+
+    /// Time-travel: return the cached answer for `(project, question_hash,
+    /// buffer_id)` that was **active** at `as_of_epoch`. The active revision at
+    /// time T is the one with the greatest `epoch <= T` among every revision
+    /// sharing that subject (newest → oldest). Staleness is ignored: an answer
+    /// later marked stale was still the live answer at T, so it is the correct
+    /// time-travel result. If no revision predates T, `None` is returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_cached_answer_as_of(
+        &self,
+        project: &str,
+        question_hash: &str,
+        buffer_id: Option<i64>,
+        as_of_epoch: i64,
+    ) -> Result<Option<QaCacheRow>> {
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            c.query_row(
+                &format!(
+                    "SELECT {QA_COLS} FROM qa_cache \
+                          WHERE project = ?1 AND buffer_id IS ?2 AND question_hash = ?3 \
+                            AND epoch <= ?4 ORDER BY epoch DESC, id DESC LIMIT 1"
+                ),
+                params![project, buffer_id, question_hash, as_of_epoch],
+                row_mapper,
+            )
+            .optional()
+            .context("failed to get cached answer as_of")
         })
     }
 

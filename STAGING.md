@@ -15,8 +15,8 @@
 - **P1 summarizer:** `110e` (`strip_cot` remove `<think>`), `b020` (caminho cliente E2E testável: `digest_chunks`/`generate_summary`/`write_wiki` + mock LLM).
 - **P2 qualidade:** `a884` (ignores de índice), `6d44` (harness A/B de relevância), `5904` (prompts homogeneizados), `35a3` (`arags memory`→`arags maintenance`), `1119` (integração gRPC in-process).
 - **Fundação dos epics server (desbloqueadores):** `b1a0` (migração 021: colunas temporais + índices parciais em 4 tabelas), `50ed` (`pending_vector` marcado em falha de embed em todos os 4 espaços).
-
-**Entregue nesta sessão (orquestração 2026-08-27):** `8dcc` (chunks imutáveis/supersede), `786a` (autoria created_by/model), `e210` (superseding de derivados) — todos com gates verdes (clippy/fmt/test) e testes dedicados; `1564` (time-travel) ficou como próximo da fila mas **não foi iniciado** (subagente não executou, revertido para `open`). **O que FALTA (seção 2):** 23 issues em aberto (3 fechadas) — consistência temporal/vetorial (`36ae`/`620d`/`c7b1`/`1564`/`49d6`), quorum/segurança RLM (`a5d7`/`6d97`/`64af`/`f486`/`f5f3`/`e89e`/`d172`), CLI/UX (`e5d8`/`7aa8`), GPU/build/CI (`241c`/`2ff6`/`1957`/`d607`/`0fc4`), e integração/revisão (`9527`/`e9e3`/`27dc`/`7222`). Cada um detalhado com os padrões da seção 1.
+- **Entregue nesta sessão (orquestração 2026-08-27, 2ª rodada):** `1564` (time-travel completo nos 4 espaços) — gates verdes (clippy/fmt/test) + testes dedicados.
+**Entregue nesta sessão (orquestração 2026-08-27):** `8dcc` (chunks imutáveis/supersede), `786a` (autoria created_by/model), `e210` (superseding de derivados) — todos com gates verdes (clippy/fmt/test) e testes dedicados; `1564` (time-travel) **entregue na 2ª rodada** (gates verdes, ver seção 7). **O que FALTA (seção 2):** 22 issues em aberto (4 fechadas) — consistência temporal/vetorial (`36ae`/`620d`/`c7b1`/`49d6`), quorum/segurança RLM (`a5d7`/`6d97`/`64af`/`f486`/`f5f3`/`e89e`/`d172`), CLI/UX (`e5d8`/`7aa8`), GPU/build/CI (`241c`/`2ff6`/`1957`/`d607`/`0fc4`), e integração/revisão (`9527`/`e9e3`/`27dc`/`7222`). Cada um detalhado com os padrões da seção 1.
 
 ---
 
@@ -63,7 +63,7 @@ Toda issue nova/continuada DEVE obedecer isto. Violações bloqueiam o fechament
 
 ---
 
-## 2. O que falta — 23 issues em aberto (ordenadas por cluster)
+## 2. O que falta — 22 issues em aberto (ordenadas por cluster)
 
 > `⛔` = bloqueada por outra issue (ver `sd show`). `f5db` está `IN PROGRESS` (CLI pronta; partes server nas issues abaixo) e não entra nesta lista de "open".
 
@@ -76,7 +76,7 @@ Toda issue nova/continuada DEVE obedecer isto. Violações bloqueiam o fechament
 - **`agnostic-rlm-rs-c7b1`** (High, epic, ⛔ blocked) — *Evolução temporal*: epochs/soft-versioning + metadados de autoria nas 4 frentes. **Bloqueado por** `8dcc`+`786a`+`e210`+`1564`.
 - **`agnostic-rlm-rs-786a`** ✅ **DONE** (Medium, task) — *Propagar autoria*: `created_by` (username da sessão autenticada) + `model` preenchidos em toda escrita server-side (chunks via `index_stream_loop`/`insert_chunks_batched` com `state.embedder.name()`, QA `store_answer`, RLM `complete`, explorations). Testes: `insert_chunks_batched_populates_created_by_and_model`, `store_answer_populates_created_by`, `complete_with_node_persists_created_by_and_model`. Padrões §1.2/§1.5/§1.4.
 - **`agnostic-rlm-rs-e210`** ✅ **DONE** (Medium, feature) — *Superseding de derivados*: nova resposta/nó/mapa = novo registro que supersede o anterior (`is_active=0` + `superseded_by`); leituras filtram `is_active=1`; getters históricos (`get_answer_history`/`get_node_history`/`get_exploration_history`) seguem a cadeia. Migração `024_supersede_derived.sql` (índices únicos parciais por subject ativo). Testes: `supersede_*_creates_new_active_row_and_history` (qa_cache/rlm/explorations). Padrões §1.5/§1.4.
-- **`agnostic-rlm-rs-1564`** (Low, feature) — *Time-travel*: `as_of_epoch` + metadados (username/model/timestamp) consultáveis nos 4 espaços. **Próximo da fila (Cluster A)** após os 3 anteriores; **não iniciado nesta sessão**. Padrões §1.5/§1.4.
+- **`agnostic-rlm-rs-1564`** ✅ **DONE** (Low, feature) — *Time-travel*: `as_of_epoch`/`as_of_timestamp` (proto: search/query_cache/exploration) + getters `*_as_of` nos 4 espaços (chunks `get_chunk_as_of`, qa_cache `get_cached_answer_as_of`, rlm `get_rlm_node_as_of`, explorations `get_exploration_as_of`/`_by_id`) retornando a revisão ativa naquele epoch (cadeia superseded_by/`epoch <= as_of`). Handlers aplicam filtro as-of; CLI `--as-of-epoch`/`--as-of` com `resolve_as_of_epoch`; renderização marca snapshot time-travel em text/jsonl/full_json. Sem nova migration (epoch/created_by/model já em 021/024). Testes: `time_travel_search_returns_version_active_at_epoch`, `time_travel_query_returns_superseded_answer_as_of`, `time_travel_rlm_summary_as_of`, `time_travel_exploration_as_of` (arquivo `crates/arags-storage/tests/temporal_as_of_test.rs`). Padrões §1.5/§1.4.
 
 ### Cluster B — RLM: quorum / segurança / multi-voluntário
 
@@ -190,8 +190,8 @@ Orquestrador executou **1 subagente por issue** (padrão §1.7), na ordem do pla
 | `8dcc` | ✅ closed | sim (general) | clippy/fmt/test verdes | `reindex_supersedes_old_chunk_history_retained`, `purge_inactive_chunks_respects_retention_window`, `retire_chunk_drops_fts_marks_inactive_links_superseder`; regressão `reindex_replaces_chunks_without_duplication` mantida |
 | `786a` | ✅ closed | sim (general) | clippy/fmt/test verdes | `insert_chunks_batched_populates_created_by_and_model`, `store_answer_populates_created_by`, `complete_with_node_persists_created_by_and_model` |
 | `e210` | ✅ closed | sim (general) | clippy/fmt/test verdes | `supersede_qa_creates_new_active_row_and_history`, `supersede_rlm_node_creates_new_active_row_and_history`, `supersede_exploration_creates_new_active_row_and_history` |
-| `1564` | ⏸️ open | — | — | marcada `in_progress` no sd, mas o subagente **não executou**; revertida para `open` |
+| `1564` | ✅ closed | sim (general) | clippy/fmt/test verdes | `time_travel_search_returns_version_active_at_epoch`, `time_travel_query_returns_superseded_answer_as_of`, `time_travel_rlm_summary_as_of`, `time_travel_exploration_as_of` (arquivo `crates/arags-storage/tests/temporal_as_of_test.rs`) |
 
-**Migrations novas nesta sessão:** `023_inactive_retention.sql` (8dcc), `024_supersede_derived.sql` (e210).
+**Migrations novas nesta sessão:** `023_inactive_retention.sql` (8dcc), `024_supersede_derived.sql` (e210). Nenhuma migration para `1564` (epoch/created_by/model já em 021/024).
 
-**Próximo passo ao retomar:** `1564` (time-travel) → `36ae` + `620d` (plano `pl-783b`, desbloqueiam `49d6`) → `c7b1` (epic, desbloqueia após `1564`) → Cluster B (`a5d7`→`6d97`/`64af`/`f486`/`f5f3`/`e89e`/`d172`). Manter a verificação independente do orquestrador (clippy/fmt + testes nomeados) antes de fechar cada seed.
+**Próximo passo ao retomar (escopo confirmado pelo usuário como "SÓ 1564"):** Cluster A prossegue com `36ae` + `620d` (plano `pl-783b`, desbloqueiam `49d6`) → `c7b1` (epic, desbloqueia após `1564`) → Cluster B (`a5d7`→`6d97`/`64af`/`f486`/`f5f3`/`e89e`/`d172`). **Atenção:** a decisão pendente do §3 (não automatizar Cluster A amplo sem confirmação) continua válida — reconfirmar escopo com o usuário antes de seguir além de `1564`. Manter a verificação independente do orquestrador (clippy/fmt + testes nomeados) antes de fechar cada seed.

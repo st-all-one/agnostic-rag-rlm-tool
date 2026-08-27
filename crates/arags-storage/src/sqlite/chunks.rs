@@ -20,6 +20,52 @@ pub struct Chunk {
     pub status: String,
     pub created_at: i64,
     pub last_accessed_at: i64,
+    /// Project epoch at write time (drift / time-travel, plan 021).
+    pub epoch: i64,
+    /// Agent username that produced the chunk (audit/provenance).
+    pub created_by: Option<String>,
+    /// LLM model that produced the chunk (metadata).
+    pub model: Option<String>,
+    /// Revision counter; starts at 1, bumped on supersede (plan 021).
+    pub version: i64,
+    /// Whether this is the live revision (plan 021).
+    pub is_active: bool,
+    /// Rowid of the newer revision that superseded this one (`is_active = 0`
+    /// rows only); `None` for the live row (plan 021).
+    pub superseded_by: Option<i64>,
+}
+
+/// Column projection shared by all chunk row queries (order fixed; see
+/// [`chunk_mapper`]). The trailing temporal columns let callers surface
+/// authorship and walk the supersede chain for time-travel (plan 021).
+const CHUNK_COLS: &str = "id, buffer_id, file_path, offset_start, offset_end, line_start, \
+     line_end, hash, language, chunk_type, token_count, status, created_at, \
+     last_accessed_at, epoch, created_by, model, version, is_active, superseded_by";
+
+/// Map a chunk row into [`Chunk`] (column order matches [`CHUNK_COLS`]).
+fn chunk_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<Chunk> {
+    Ok(Chunk {
+        id: r.get(0)?,
+        buffer_id: r.get(1)?,
+        file_path: r.get(2)?,
+        offset_start: r.get(3)?,
+        offset_end: r.get(4)?,
+        line_start: r.get(5)?,
+        line_end: r.get(6)?,
+        hash: r.get(7)?,
+        language: r.get(8)?,
+        chunk_type: r.get(9)?,
+        token_count: r.get(10)?,
+        status: r.get(11)?,
+        created_at: r.get(12)?,
+        last_accessed_at: r.get(13)?,
+        epoch: r.get(14)?,
+        created_by: r.get(15)?,
+        model: r.get(16)?,
+        version: r.get(17)?,
+        is_active: r.get::<_, i64>(18)? != 0,
+        superseded_by: r.get(19)?,
+    })
 }
 
 /// New chunk to insert.
@@ -81,32 +127,56 @@ impl Storage {
         let conn = conn.lock();
 
         let mut stmt = conn
-            .prepare(
-                "SELECT id, buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count, status, created_at, last_accessed_at
-                 FROM chunks WHERE id = ?1",
-            )
+            .prepare(&format!("SELECT {CHUNK_COLS} FROM chunks WHERE id = ?1"))
             .context("failed to prepare get_chunk query")?;
 
-        let mut rows = stmt.query_map(params![id], |row| {
-            Ok(Chunk {
-                id: row.get(0)?,
-                buffer_id: row.get(1)?,
-                file_path: row.get(2)?,
-                offset_start: row.get(3)?,
-                offset_end: row.get(4)?,
-                line_start: row.get(5)?,
-                line_end: row.get(6)?,
-                hash: row.get(7)?,
-                language: row.get(8)?,
-                chunk_type: row.get(9)?,
-                token_count: row.get(10)?,
-                status: row.get(11)?,
-                created_at: row.get(12)?,
-                last_accessed_at: row.get(13)?,
-            })
-        })?;
+        let mut rows = stmt.query_map(params![id], chunk_mapper)?;
 
         rows.next().transpose().context("failed to get chunk")
+    }
+
+    /// Time-travel: return the chunk revision that was **active** at `as_of_epoch`
+    /// (a unix-second epoch), starting from `chunk_id` (normally the current live
+    /// revision returned by search). The active revision at time T is the one with
+    /// the greatest `epoch <= T` among `chunk_id`'s supersede family (the chain of
+    /// rows linked by `superseded_by`). If every revision has `epoch > T` the
+    /// chunk did not yet exist, so `None` is returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any query fails.
+    pub fn get_chunk_as_of(&self, chunk_id: i64, as_of_epoch: i64) -> Result<Option<Chunk>> {
+        // Collect every revision in the supersede family by walking backward via
+        // `superseded_by` (each row points to the NEWER revision it was replaced
+        // by), newest → oldest.
+        let mut family: Vec<Chunk> = Vec::new();
+        let mut current = chunk_id;
+        loop {
+            let Some(chunk) = self.get_chunk(current)? else {
+                break;
+            };
+            family.push(chunk);
+            let predecessor: Option<i64> = {
+                let conn = self.conn();
+                let conn = conn.lock();
+                conn.query_row(
+                    "SELECT id FROM chunks WHERE superseded_by = ?1",
+                    params![current],
+                    |r| r.get(0),
+                )
+                .optional()
+                .context("failed to read chunk supersede predecessor")?
+            };
+            match predecessor {
+                Some(id) if id != current => current = id,
+                _ => break,
+            }
+        }
+
+        Ok(family
+            .into_iter()
+            .filter(|c| c.epoch <= as_of_epoch)
+            .max_by(|a, b| a.epoch.cmp(&b.epoch).then_with(|| a.id.cmp(&b.id))))
     }
 
     /// Get chunk content by ID.
@@ -155,31 +225,13 @@ impl Storage {
         let conn = conn.lock();
 
         let mut stmt = conn
-            .prepare(
-                "SELECT id, buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count, status, created_at, last_accessed_at
-                 FROM chunks WHERE buffer_id = ?1 ORDER BY id",
-            )
+            .prepare(&format!(
+                "SELECT {CHUNK_COLS} FROM chunks WHERE buffer_id = ?1 ORDER BY id"
+            ))
             .context("failed to prepare list_chunks query")?;
 
         let rows = stmt
-            .query_map(params![buffer_id], |row| {
-                Ok(Chunk {
-                    id: row.get(0)?,
-                    buffer_id: row.get(1)?,
-                    file_path: row.get(2)?,
-                    offset_start: row.get(3)?,
-                    offset_end: row.get(4)?,
-                    line_start: row.get(5)?,
-                    line_end: row.get(6)?,
-                    hash: row.get(7)?,
-                    language: row.get(8)?,
-                    chunk_type: row.get(9)?,
-                    token_count: row.get(10)?,
-                    status: row.get(11)?,
-                    created_at: row.get(12)?,
-                    last_accessed_at: row.get(13)?,
-                })
-            })?
+            .query_map(params![buffer_id], chunk_mapper)?
             .filter_map(std::result::Result::ok)
             .collect();
 
@@ -345,34 +397,13 @@ impl Storage {
         }
         let conn = self.connection().context("failed to acquire connection")?;
         conn.execute(|c| {
-            let mut stmt = c.prepare(
-                "SELECT id, buffer_id, file_path, offset_start, offset_end, line_start, \
-                 line_end, hash, language, chunk_type, token_count, status, created_at, \
-                 last_accessed_at FROM chunks WHERE id = ?1",
-            )?;
+            let mut stmt = c.prepare(&format!("SELECT {CHUNK_COLS} FROM chunks WHERE id = ?1"))?;
             let mut content_stmt = c
                 .prepare("SELECT content FROM chunk_texts WHERE chunk_id = ?1")
                 .context("prepare chunk content lookup")?;
             let mut out = Vec::with_capacity(ids.len());
             for id in ids {
-                if let Ok(chunk) = stmt.query_row(params![id], |r| {
-                    Ok(Chunk {
-                        id: r.get(0)?,
-                        buffer_id: r.get(1)?,
-                        file_path: r.get(2)?,
-                        offset_start: r.get(3)?,
-                        offset_end: r.get(4)?,
-                        line_start: r.get(5)?,
-                        line_end: r.get(6)?,
-                        hash: r.get(7)?,
-                        language: r.get(8)?,
-                        chunk_type: r.get(9)?,
-                        token_count: r.get(10)?,
-                        status: r.get(11)?,
-                        created_at: r.get(12)?,
-                        last_accessed_at: r.get(13)?,
-                    })
-                }) {
+                if let Ok(chunk) = stmt.query_row(params![id], chunk_mapper) {
                     // Content is fetched through the ALREADY-LOCKED connection:
                     // routing via `get_chunk_content` would re-lock the same
                     // non-reentrant mutex and deadlock (Single mode).

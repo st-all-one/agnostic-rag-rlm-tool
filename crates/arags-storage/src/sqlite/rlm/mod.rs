@@ -81,6 +81,10 @@ pub struct RlmNode {
     /// Rowid of the newer revision that superseded this one (`is_active = 0`
     /// rows only); `None` for the live row (issue `agnostic-rlm-rs-e210`).
     pub superseded_by: Option<i64>,
+    /// Project epoch at write time (drift / time-travel, plan 021).
+    pub epoch: i64,
+    /// Revision counter; starts at 1, bumped on supersede (plan 021).
+    pub version: i64,
 }
 
 /// Input for storing (upserting) a summary node.
@@ -171,7 +175,7 @@ pub(super) fn parse_json_array(text: Option<String>) -> Vec<String> {
 pub(super) const NODE_COLS: &str = "id, node_id, buffer_id, project, level, subject, \
      summary_text, source_hashes, model, volunteer_username, template_version, token_count, \
      confidence, review_status, reviewed_by, reviewed_at, access_count, created_at, \
-     updated_at, last_accessed_at, stale, created_by, is_active, superseded_by";
+     updated_at, last_accessed_at, stale, created_by, is_active, superseded_by, epoch, version";
 
 pub(super) fn node_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<RlmNode> {
     Ok(RlmNode {
@@ -199,6 +203,8 @@ pub(super) fn node_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<RlmNode> {
         created_by: r.get(21)?,
         is_active: r.get::<_, i64>(22)? != 0,
         superseded_by: r.get(23)?,
+        epoch: r.get(24)?,
+        version: r.get(25)?,
     })
 }
 

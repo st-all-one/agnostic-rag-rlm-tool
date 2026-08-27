@@ -91,6 +91,10 @@ pub fn build_search_results(
                     line_end: c.line_end,
                     content: c.content.clone(),
                     language: c.language.clone(),
+                    epoch: c.epoch,
+                    created_by: c.created_by.clone(),
+                    model: c.model.clone(),
+                    version: c.version,
                 })
         })
         .collect();
@@ -131,6 +135,10 @@ pub fn load_chunks(storage: &Storage, results: &[HybridResult]) -> Result<Vec<Ch
                 line_end: c.line_end,
                 content: content.unwrap_or_default(),
                 language: c.language,
+                epoch: c.epoch,
+                created_by: c.created_by,
+                model: c.model,
+                version: c.version,
             });
         }
     }

@@ -131,9 +131,21 @@ pub(crate) fn run_explore(
             project: explicit,
             limit,
             include_stale,
+            as_of_epoch,
+            as_of,
         } => {
             let scope = explicit.unwrap_or_else(|| project.to_string());
-            run_explore_search(rt, client, &scope, &query, limit, include_stale, format)
+            let epoch = crate::cli::commands::resolve_as_of_epoch(as_of_epoch, as_of)?;
+            run_explore_search(
+                rt,
+                client,
+                &scope,
+                &query,
+                limit,
+                include_stale,
+                epoch,
+                format,
+            )
         }
         ExploreCmd::Persist { map, paths } => {
             run_explore_persist(rt, client, project, &map, &paths)
@@ -162,6 +174,7 @@ fn run_explore_search(
     query: &str,
     limit: i32,
     include_stale: bool,
+    as_of_epoch: i64,
     format: Format,
 ) -> Result<()> {
     let request = Request::new(SearchExplorationsRequest {
@@ -169,13 +182,14 @@ fn run_explore_search(
         query: query.to_string(),
         limit,
         include_stale,
+        as_of_epoch,
     });
     let response = rt
         .block_on(client.search_explorations(request))
         .context("search explorations failed")?
         .into_inner();
 
-    let rendered = render_hits(&response.hits, query, format);
+    let rendered = render_hits(&response.hits, query, as_of_epoch, format);
     print!("{rendered}");
     Ok(())
 }
@@ -264,7 +278,12 @@ fn run_explore_feedback(
     Ok(())
 }
 
-fn render_hits(hits: &[arags_proto::proto::ExplorationHit], query: &str, format: Format) -> String {
+fn render_hits(
+    hits: &[arags_proto::proto::ExplorationHit],
+    query: &str,
+    as_of_epoch: i64,
+    format: Format,
+) -> String {
     if format == Format::FullJson {
         let items: Vec<serde_json::Value> = hits
             .iter()
@@ -285,13 +304,21 @@ fn render_hits(hits: &[arags_proto::proto::ExplorationHit], query: &str, format:
                 })
             })
             .collect();
-        return serde_json::to_string_pretty(&items).unwrap_or_else(|_| "[]".into());
+        return serde_json::to_string_pretty(&serde_json::json!({
+            "query": query,
+            "as_of_epoch": if as_of_epoch > 0 { Some(as_of_epoch) } else { None },
+            "hits": items,
+        }))
+        .unwrap_or_else(|_| "[]".into());
     }
 
     if hits.is_empty() {
         return format!("no exploration maps for \"{query}\"\n");
     }
     let mut out = String::new();
+    if as_of_epoch > 0 {
+        let _ = writeln!(out, "> **Time-travel snapshot** at epoch `{as_of_epoch}`\n");
+    }
     for h in hits {
         let _ = writeln!(
             out,

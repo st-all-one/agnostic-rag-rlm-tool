@@ -193,6 +193,7 @@ async fn query_store_answer_hit_get_invalidate() {
         project: "p1".into(),
         question: "How do we hash passwords?".into(),
         buffer_id: 0,
+        as_of_epoch: 0,
     });
     *q.metadata_mut() = auth.clone();
     let hit = handle_query_with_cache(&state, q)
@@ -246,6 +247,7 @@ async fn query_store_answer_hit_get_invalidate() {
         project: "p1".into(),
         question: "How do we hash passwords?".into(),
         buffer_id: 0,
+        as_of_epoch: 0,
     });
     *q2.metadata_mut() = auth.clone();
     let miss = handle_query_with_cache(&state, q2)

@@ -1,6 +1,7 @@
 //! `search`/`query` RPCs and their multi-format rendering.
 
 use anyhow::Result;
+use std::fmt::Write as _;
 use tokio::runtime::Runtime;
 use tonic::Request;
 
@@ -21,6 +22,7 @@ pub(crate) fn run_search(
     tier: &str,
     min_score: Option<f32>,
     file_pattern: Option<&str>,
+    as_of_epoch: i64,
     format: Format,
 ) -> Result<()> {
     let project_str = project.to_string();
@@ -29,6 +31,8 @@ pub(crate) fn run_search(
         query: query.to_string(),
         max_results: top_k as i32,
         tier: map_search_tier(tier) as i32,
+        as_of_epoch,
+        ..Default::default()
     });
     let response = rt.block_on(client.search(request))?;
     let inner = response.into_inner();
@@ -46,6 +50,7 @@ pub(crate) fn run_search(
         &inner.summaries,
         &inner.explorations,
         query,
+        as_of_epoch,
         format,
     );
     print!("{rendered}");
@@ -57,10 +62,16 @@ fn render_search(
     summaries: &[arags_proto::proto::SummaryHit],
     explorations: &[arags_proto::proto::ExplorationRef],
     query: &str,
+    as_of_epoch: i64,
     format: Format,
 ) -> String {
     match format {
         Format::FullJson => {
+            let as_of = if as_of_epoch > 0 {
+                Some(as_of_epoch)
+            } else {
+                None
+            };
             let items: Vec<serde_json::Value> = results
                 .iter()
                 .map(|r| {
@@ -69,12 +80,17 @@ fn render_search(
                         "file": r.file_path,
                         "score": r.score,
                         "text": r.text,
+                        "epoch": r.epoch,
+                        "created_by": r.created_by,
+                        "model": r.model,
+                        "version": r.version,
                     })
                 })
                 .collect();
             crate::output::json::JsonOutput::ok()
                 .with_data(serde_json::json!({
                     "query": query,
+                    "as_of_epoch": as_of,
                     "results": items,
                     "count": results.len(),
                     "summaries": summaries.iter().map(|s| serde_json::json!({
@@ -107,9 +123,39 @@ fn render_search(
             for e in explorations {
                 pairs.push((format!("[map] {}", e.exploration_id), e.summary.clone()));
             }
-            crate::output::jsonl::render_content_jsonl("query", query, &pairs)
+            let mut obj = serde_json::Map::new();
+            obj.insert("query".into(), serde_json::Value::String(query.to_string()));
+            if as_of_epoch > 0 {
+                obj.insert("as_of_epoch".into(), serde_json::json!(as_of_epoch));
+            }
+            let items: Vec<serde_json::Value> = pairs
+                .iter()
+                .map(|(file, text)| serde_json::json!({ "file": file, "text": text }))
+                .collect();
+            // Attach per-chunk temporal metadata (plan 021) keyed by result
+            // index so agents can read username/model/epoch/version alongside
+            // `text`.
+            let meta: Vec<serde_json::Value> = results
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "chunk_id": r.chunk_id,
+                        "epoch": r.epoch,
+                        "created_by": r.created_by,
+                        "model": r.model,
+                        "version": r.version,
+                    })
+                })
+                .collect();
+            obj.insert("result_meta".into(), serde_json::Value::Array(meta));
+            obj.insert("results".into(), serde_json::Value::Array(items));
+            serde_json::to_string(&obj).unwrap_or_default()
         }
         Format::Path => {
+            let mut out = String::new();
+            if as_of_epoch > 0 {
+                let _ = writeln!(out, "// time-travel snapshot @ epoch {as_of_epoch}");
+            }
             let items: Vec<crate::output::tree::SearchResultItem> = results
                 .iter()
                 .map(|r| crate::output::tree::SearchResultItem {
@@ -119,10 +165,18 @@ fn render_search(
                     score: r.score,
                 })
                 .collect();
-            crate::output::tree::render_search_results(&items)
+            out.push_str(&crate::output::tree::render_search_results(&items));
+            out
         }
         Format::Markdown => {
-            let mut out = render_markdown_results(results);
+            let mut out = String::new();
+            if as_of_epoch > 0 {
+                let _ = write!(
+                    out,
+                    "> **Time-travel snapshot** at epoch `{as_of_epoch}`\n\n"
+                );
+            }
+            out.push_str(&render_markdown_results(results));
             if !summaries.is_empty() {
                 out.push_str("## RLM Summaries\n\n");
                 let items: Vec<crate::output::markdown::SuperItem> = summaries
@@ -156,16 +210,18 @@ fn render_search(
             out
         }
         Format::Text => {
-            let items: Vec<crate::output::prompt::PromptItem> = results
-                .iter()
-                .map(|r| crate::output::prompt::PromptItem {
-                    file_path: r.file_path.clone(),
-                    score: r.score,
-                    content: r.text.clone(),
-                    language: None,
-                })
-                .collect();
-            crate::output::prompt::render_search_context(&items)
+            let mut out = String::new();
+            if as_of_epoch > 0 {
+                let _ = writeln!(out, "// TIME-TRAVEL SNAPSHOT @ epoch {as_of_epoch}");
+            }
+            for r in results {
+                let _ = write!(
+                    out,
+                    "// {} (epoch {}, by {}, via {}, v{}) score={:.2}\n{}\n",
+                    r.file_path, r.epoch, r.created_by, r.model, r.version, r.score, r.text
+                );
+            }
+            out
         }
     }
 }
@@ -193,6 +249,7 @@ pub(crate) fn run_query(
     qa: bool,
     backend: Option<&str>,
     model: Option<&str>,
+    as_of_epoch: i64,
     format: Format,
 ) -> Result<()> {
     let project_str = project.to_string();
@@ -208,6 +265,7 @@ pub(crate) fn run_query(
             backend,
             model,
             &project_str,
+            as_of_epoch,
             format,
         );
     }

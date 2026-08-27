@@ -63,6 +63,7 @@ async fn feedback_contradictions_auto_retire_and_hide_from_search() {
     let get_req = || {
         let mut r = Request::new(arags_proto::proto::GetExplorationByIdRequest {
             exploration_id: persisted.exploration_id.clone(),
+            as_of_epoch: 0,
         });
         *r.metadata_mut() = bearer(&fx.user_session);
         r
@@ -184,6 +185,7 @@ async fn review_gate_holds_non_admin_maps_until_approved() {
             query: "anexos compartilhados\nresumo denso da conexão".into(),
             limit: 5,
             include_stale: true,
+            as_of_epoch: 0,
         });
         *r.metadata_mut() = bearer(&fx.user_session);
         r

@@ -78,6 +78,8 @@ fn hit_from(cand: &Candidate, confidence: f32, epoch: i64) -> ExplorationHit {
         contradicted: cand.row.contradicted,
         created_by: cand.row.created_by.clone(),
         model: cand.row.model.clone().unwrap_or_default(),
+        epoch: cand.row.epoch_created,
+        version: cand.row.version,
     }
 }
 
@@ -101,8 +103,15 @@ pub(crate) async fn handle_search_explorations(
     })
     .unwrap_or(1);
 
-    let response =
-        search_explorations_core(state, req.project, req.query, limit, req.include_stale).await?;
+    let response = search_explorations_core(
+        state,
+        req.project,
+        req.query,
+        limit,
+        req.include_stale,
+        req.as_of_epoch,
+    )
+    .await?;
     Ok(Response::new(response))
 }
 
@@ -110,13 +119,16 @@ pub(crate) async fn handle_search_explorations(
 /// pipeline (plan 023): embed query → top-k in the dedicated space → anchor
 /// recheck at read time → composite confidence → threshold gate.
 ///
-/// The caller is responsible for authentication and argument validation.
+/// The caller is responsible for authentication and argument validation. When
+/// `as_of_epoch > 0` (plan 021) each hit is time-traveled to the revision of
+/// its `(project, goal)` map active at that epoch.
 pub(crate) async fn search_explorations_core(
     state: &AppState,
     project: String,
     query: String,
     limit: usize,
     include_stale: bool,
+    as_of_epoch: i64,
 ) -> Result<SearchExplorationsResponse, Status> {
     if limit == 0 {
         return Ok(SearchExplorationsResponse { hits: Vec::new() });
@@ -146,10 +158,20 @@ pub(crate) async fn search_explorations_core(
         #[allow(clippy::cast_possible_wrap)] // rowids fit i64 here
         let rowid = i64::try_from(cand.id).unwrap_or(i64::MAX);
         let storage = state.storage.clone();
-        let Some(row) = store::blocking(move || storage.get_exploration_by_rowid(rowid))
-            .await
-            .map_err(internal)?
-        else {
+        let as_of = as_of_epoch;
+        let resolved = store::blocking(move || -> Result<Option<arags_storage::explorations::ExplorationRow>, anyhow::Error> {
+            let Some(row) = storage.get_exploration_by_rowid(rowid)? else {
+                return Ok(None);
+            };
+            if as_of > 0 {
+                // Time-travel (plan 021): pick the revision active at T.
+                return storage.get_exploration_as_of(&row.project, &row.goal, as_of);
+            }
+            Ok(Some(row))
+        })
+        .await
+        .map_err(internal)?;
+        let Some(row) = resolved else {
             tracing::debug!(rowid, "exploration vanished mid-search; skipping");
             continue;
         };
@@ -262,9 +284,21 @@ pub(crate) async fn handle_get_exploration_by_id(
 
     let storage = state.storage.clone();
     let id = req.exploration_id.clone();
-    let Some(row) = store::blocking(move || storage.get_exploration_by_uuid(&id))
-        .await
-        .map_err(internal)?
+    let as_of = req.as_of_epoch;
+    let Some(row) = store::blocking(
+        move || -> Result<Option<arags_storage::explorations::ExplorationRow>, anyhow::Error> {
+            let Some(row) = storage.get_exploration_by_uuid(&id)? else {
+                return Ok(None);
+            };
+            if as_of > 0 {
+                // Time-travel (plan 021): resolve the revision active at T.
+                return storage.get_exploration_as_of_by_id(&id, as_of);
+            }
+            Ok(Some(row))
+        },
+    )
+    .await
+    .map_err(internal)?
     else {
         return Err(crate::grpc::error::not_found("unknown exploration_id"));
     };
@@ -322,5 +356,7 @@ pub(crate) async fn handle_get_exploration_by_id(
             .into_iter()
             .map(|(buf, path, hash)| format!("{path}@{hash} [buffer:{buf}]"))
             .collect(),
+        epoch: row.epoch_created,
+        version: row.version,
     }))
 }

@@ -73,17 +73,17 @@ fn render_hits_text_and_json_shapes() {
         ..ExplorationHit::default()
     }];
 
-    let text = render_hits(&hits, "q", Format::Markdown);
+    let text = render_hits(&hits, "q", 0, Format::Markdown);
     assert!(text.contains("# g [stale]"));
     assert!(text.contains("confidence=0.90"));
     assert!(text.contains("stale: src/a.rs"));
     assert!(text.contains("id: e1"));
 
-    let json = render_hits(&hits, "q", Format::FullJson);
+    let json = render_hits(&hits, "q", 0, Format::FullJson);
     assert!(json.contains("\"exploration_id\": \"e1\""));
 
     assert_eq!(
-        render_hits(&[], "q", Format::Markdown),
+        render_hits(&[], "q", 0, Format::Markdown),
         "no exploration maps for \"q\"\n"
     );
 }

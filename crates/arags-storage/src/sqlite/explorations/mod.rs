@@ -76,6 +76,8 @@ pub struct ExplorationRow {
     /// Rowid of the newer revision that superseded this one (`is_active = 0`
     /// rows only); `None` for the live row (issue `agnostic-rlm-rs-e210`).
     pub superseded_by: Option<i64>,
+    /// Revision counter; starts at 1, bumped on supersede (plan 021).
+    pub version: i64,
 }
 
 /// One resolved anchor: a cited/context file with its content hash at persist

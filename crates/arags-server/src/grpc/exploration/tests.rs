@@ -218,6 +218,7 @@ async fn search_hides_broken_anchor_maps_until_include_stale() {
             query: query_text.into(),
             limit: 5,
             include_stale,
+            as_of_epoch: 0,
         });
         *r.metadata_mut() = bearer(session);
         r

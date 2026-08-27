@@ -99,6 +99,7 @@ l
             query: "q".into(),
             limit: 10,
             include_stale,
+            as_of_epoch: 0,
         });
         *r.metadata_mut() = bearer(&session);
         r

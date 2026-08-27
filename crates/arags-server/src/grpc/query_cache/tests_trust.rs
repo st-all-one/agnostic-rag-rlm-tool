@@ -68,6 +68,7 @@ async fn near_hit_from_other_project_is_not_served() {
         project: "p1".into(),
         question: "How do we hash passwords?".into(),
         buffer_id: 0,
+        as_of_epoch: 0,
     });
     *q.metadata_mut() = auth;
     let resp = handle_query_with_cache(&state, q)
@@ -136,6 +137,7 @@ async fn exact_hit_with_drifted_provenance_serves_miss() {
             project: "p1".into(),
             question: "How do we hash passwords?".into(),
             buffer_id: 0,
+            as_of_epoch: 0,
         });
         *q.metadata_mut() = bearer(&session);
         q

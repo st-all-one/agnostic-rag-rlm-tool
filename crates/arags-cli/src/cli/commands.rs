@@ -77,6 +77,16 @@ pub enum Commands {
         /// Maximum tokens in output (0 = unlimited).
         #[arg(long, default_value_t = 8000)]
         max_tokens: usize,
+
+        /// Time-travel (plan 021): return only knowledge revisions active at
+        /// this unix-second epoch. 0 / unset = live state.
+        #[arg(long)]
+        as_of_epoch: Option<i64>,
+
+        /// Time-travel alias for `--as-of-epoch`: an RFC3339 timestamp converted
+        /// to seconds before sending. Conflicts with `--as-of-epoch`.
+        #[arg(long, conflicts_with = "as_of_epoch")]
+        as_of: Option<String>,
     },
 
     /// (hidden) Background watch daemon; spawned by `index --register`.
@@ -117,6 +127,16 @@ pub enum Commands {
         /// digest-once via the user's LLM).
         #[arg(long)]
         qa: bool,
+
+        /// Time-travel (plan 021): serve the cached answer revision active at
+        /// this unix-second epoch. 0 / unset = live state.
+        #[arg(long)]
+        as_of_epoch: Option<i64>,
+
+        /// Time-travel alias for `--as-of-epoch`: an RFC3339 timestamp converted
+        /// to seconds before sending. Conflicts with `--as-of-epoch`.
+        #[arg(long, conflicts_with = "as_of_epoch")]
+        as_of: Option<String>,
     },
 
     /// Server maintenance administration (admin-gated on the server): list /
@@ -175,6 +195,17 @@ pub enum ExploreCmd {
         /// Include stale maps (useful as history/archaeology).
         #[arg(long)]
         include_stale: bool,
+
+        /// Time-travel (plan 021): surface the exploration revision active at
+        /// this unix-second epoch (compared against epoch_created). 0 / unset =
+        /// live state.
+        #[arg(long)]
+        as_of_epoch: Option<i64>,
+
+        /// Time-travel alias for `--as-of-epoch`: an RFC3339 timestamp converted
+        /// to seconds before sending. Conflicts with `--as-of-epoch`.
+        #[arg(long, conflicts_with = "as_of_epoch")]
+        as_of: Option<String>,
     },
 
     /// Persist an exploration map following the EXPLORATIONS.md contract.
@@ -257,4 +288,24 @@ pub enum MemoryCmd {
         #[arg(long)]
         project: Option<String>,
     },
+}
+
+/// Resolve a time-travel request into a unix-second epoch.
+///
+/// Precedence: an explicit `--as-of-epoch` wins; otherwise an RFC3339
+/// `--as-of` timestamp is parsed; otherwise `0` (live state).
+///
+/// # Errors
+///
+/// Returns an error if `--as-of` is present but not a valid RFC3339 timestamp.
+pub fn resolve_as_of_epoch(as_of_epoch: Option<i64>, as_of: Option<String>) -> anyhow::Result<i64> {
+    if let Some(epoch) = as_of_epoch {
+        return Ok(epoch);
+    }
+    if let Some(ts) = as_of {
+        let dt = chrono::DateTime::parse_from_rfc3339(&ts)
+            .map_err(|e| anyhow::anyhow!("invalid --as-of timestamp {ts:?}: {e}"))?;
+        return Ok(dt.timestamp());
+    }
+    Ok(0)
 }

@@ -89,6 +89,38 @@ impl Storage {
         })
     }
 
+    /// Time-travel: return the RLM summary node for `(project, level, subject)`
+    /// that was **active** at `as_of_epoch`. The active revision at time T is the
+    /// one with the greatest `epoch <= T` among every revision sharing that
+    /// subject. If no revision predates T, `None` is returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_rlm_node_as_of(
+        &self,
+        project: &str,
+        level: i64,
+        subject: &str,
+        as_of_epoch: i64,
+    ) -> Result<Option<RlmNode>> {
+        let sql = format!(
+            "SELECT {NODE_COLS} FROM rlm_nodes \
+             WHERE project = ?1 AND level = ?2 AND subject = ?3 AND epoch <= ?4 \
+             ORDER BY epoch DESC, id DESC LIMIT 1"
+        );
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            c.query_row(
+                sql.as_str(),
+                params![project, level, subject, as_of_epoch],
+                node_mapper,
+            )
+            .optional()
+            .context("get_rlm_node_as_of")
+        })
+    }
+
     /// List nodes for a project, optionally filtered by level and staleness.
     /// Only `approved` nodes are returned unless `include_pending` is set
     /// (admin review queue).

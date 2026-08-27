@@ -155,6 +155,10 @@ fn normalize_scores(results: &mut [arags_search::SearchResult]) {
     }
 }
 
+/// Time-travel metadata captured for an RLM summary revision: `(summary_text,
+/// subject, epoch, created_by, model, version)`.
+type RlmAsOf = (String, String, i64, Option<String>, Option<String>, i64);
+
 /// A hydrated RLM summary candidate with its fused score.
 #[derive(Debug, Clone)]
 pub(crate) struct SummaryCandidate {
@@ -164,6 +168,10 @@ pub(crate) struct SummaryCandidate {
     pub subject: String,
     pub text: String,
     pub score: f32,
+    pub epoch: i64,
+    pub created_by: Option<String>,
+    pub model: Option<String>,
+    pub version: i64,
 }
 
 /// Search the RLM recursive summary dataset. Lexical candidates come from
@@ -173,8 +181,10 @@ pub(crate) struct SummaryCandidate {
 pub(crate) async fn summary_search(
     state: &AppState,
     buffer_id: i64,
+    project: &str,
     fts_query: &str,
     top_k: usize,
+    as_of_epoch: i64,
 ) -> anyhow::Result<Vec<SummaryCandidate>> {
     const RRF_K: f32 = 60.0;
     let start = std::time::Instant::now();
@@ -265,9 +275,64 @@ pub(crate) async fn summary_search(
                 subject: n.subject.clone(),
                 text: n.summary_text.clone(),
                 score,
+                epoch: n.epoch,
+                created_by: n.created_by.clone(),
+                model: n.model.clone(),
+                version: n.version,
             })
         })
         .collect();
+
+    // Time-travel (plan 021): for each summary candidate, serve the revision of
+    // its `(project, level, subject)` node that was active at `as_of_epoch`.
+    if as_of_epoch > 0 {
+        let storage = state.storage.clone();
+        let project_owned = project.to_string();
+        let keys: Vec<(i64, i64, String)> = fused
+            .iter()
+            .map(|s| (s.rowid, s.level, s.subject.clone()))
+            .collect();
+        match store::blocking(move || {
+            let mut revised: std::collections::HashMap<i64, RlmAsOf> =
+                std::collections::HashMap::with_capacity(keys.len());
+            for (rowid, level, subject) in keys {
+                if let Some(node) =
+                    storage.get_rlm_node_as_of(&project_owned, level, &subject, as_of_epoch)?
+                {
+                    revised.insert(
+                        rowid,
+                        (
+                            node.summary_text.clone(),
+                            node.subject.clone(),
+                            node.epoch,
+                            node.created_by.clone(),
+                            node.model.clone(),
+                            node.version,
+                        ),
+                    );
+                }
+            }
+            Ok::<_, anyhow::Error>(revised)
+        })
+        .await
+        {
+            Ok(revised) => {
+                for s in &mut fused {
+                    if let Some((text, subject, epoch, created_by, model, version)) =
+                        revised.get(&s.rowid)
+                    {
+                        s.text = text.clone();
+                        s.subject = subject.clone();
+                        s.epoch = *epoch;
+                        s.created_by = created_by.clone();
+                        s.model = model.clone();
+                        s.version = *version;
+                    }
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "summary as_of rewrite failed; serving live"),
+        }
+    }
 
     // Deterministic order: score desc, then rowid asc (RRF ties).
     fused.sort_by(|a, b| {
@@ -312,6 +377,47 @@ fn normalize_summaries(summaries: &mut [SummaryCandidate]) {
     for s in summaries.iter_mut() {
         s.score = (s.score - min) / (max - min);
     }
+}
+
+/// Time-travel (plan 021): rewrite each chunk candidate to the revision active
+/// at `as_of_epoch`. A candidate whose live revision did not yet exist at T is
+/// dropped; a candidate superseded before T is replaced by the text of its
+/// prior (pre-supersede) revision. Scores are preserved from the original hit.
+pub(crate) async fn apply_chunk_as_of(
+    state: &AppState,
+    as_of_epoch: i64,
+    candidates: Vec<arags_search::SearchResult>,
+) -> anyhow::Result<Vec<arags_search::SearchResult>> {
+    if as_of_epoch <= 0 {
+        return Ok(candidates);
+    }
+    let storage = state.storage.clone();
+    let ids: Vec<i64> = candidates.iter().map(|c| c.chunk_id).collect();
+    let scores: std::collections::HashMap<i64, f32> =
+        candidates.iter().map(|c| (c.chunk_id, c.score)).collect();
+    store::blocking(move || {
+        let mut out: Vec<arags_search::SearchResult> = Vec::with_capacity(ids.len());
+        for id in ids {
+            if let Some(ch) = storage.get_chunk_as_of(id, as_of_epoch)? {
+                let content = storage.get_chunk_content(ch.id)?.unwrap_or_default();
+                out.push(arags_search::SearchResult {
+                    chunk_id: ch.id,
+                    score: scores.get(&id).copied().unwrap_or(0.0),
+                    file_path: ch.file_path,
+                    line_start: ch.line_start,
+                    line_end: ch.line_end,
+                    content,
+                    language: ch.language,
+                    epoch: ch.epoch,
+                    created_by: ch.created_by.clone(),
+                    model: ch.model.clone(),
+                    version: ch.version,
+                });
+            }
+        }
+        Ok(out)
+    })
+    .await
 }
 
 /// Render hydrated chunks into the markdown-style LLM context with a token
@@ -372,9 +478,16 @@ pub(crate) async fn handle_search(
     // searches only the approved RLM summary dataset.
     if matches!(SearchTier::try_from(req.tier), Ok(SearchTier::TierSummary)) {
         let fts_query = sanitize_fts(&query);
-        let summaries = summary_search(state, buffer_id, &fts_query, max_results)
-            .await
-            .map_err(internal)?;
+        let summaries = summary_search(
+            state,
+            buffer_id,
+            &project,
+            &fts_query,
+            max_results,
+            req.as_of_epoch,
+        )
+        .await
+        .map_err(internal)?;
         let results = summaries_to_results(&summaries);
         let total_count = i32::try_from(results.len()).unwrap_or(i32::MAX);
         return Ok(Response::new(SearchResponse {
@@ -402,6 +515,17 @@ pub(crate) async fn handle_search(
     let candidates = hybrid_search(state, buffer_id, &fts_query, tier, max_results)
         .await
         .map_err(internal)?;
+
+    // Time-travel (plan 021): narrow chunk candidates to the revision active at
+    // `as_of_epoch`. A chunk created after T is dropped; a chunk superseded
+    // before T is replaced by the text of its prior (pre-supersede) revision.
+    let candidates = if req.as_of_epoch > 0 {
+        apply_chunk_as_of(state, req.as_of_epoch, candidates)
+            .await
+            .map_err(internal)?
+    } else {
+        candidates
+    };
 
     // Unified query (plan 023): fuse approved RLM summaries into the answer
     // budget and attach relevant exploration maps. Both are additive fields —
@@ -443,6 +567,10 @@ fn summaries_to_results(summaries: &[SummaryCandidate]) -> Vec<SearchResult> {
             ),
             start_line: 0,
             end_line: 0,
+            epoch: s.epoch,
+            created_by: s.created_by.clone().unwrap_or_default(),
+            model: s.model.clone().unwrap_or_default(),
+            version: s.version,
         })
         .collect()
 }
@@ -455,6 +583,10 @@ fn summary_hit_from(s: &SummaryCandidate) -> arags_proto::proto::SummaryHit {
         subject: s.subject.clone(),
         summary_text: s.text.clone(),
         score: s.score,
+        epoch: s.epoch,
+        created_by: s.created_by.clone().unwrap_or_default(),
+        model: s.model.clone().unwrap_or_default(),
+        version: s.version,
     }
 }
 
@@ -487,7 +619,7 @@ async fn unify_query(
     let mut summary_hits: Vec<arags_proto::proto::SummaryHit> = Vec::new();
     let ratio = cfg.summary_ratio.clamp(0.0, 1.0);
     if ratio > 0.0 && max_results > 1 {
-        match summary_search(state, buffer_id, fts_query, max_results).await {
+        match summary_search(state, buffer_id, project, fts_query, max_results, 0).await {
             Ok(all) => {
                 let qualifying: Vec<SummaryCandidate> = all
                     .into_iter()
@@ -513,6 +645,7 @@ async fn unify_query(
             raw_query.to_string(),
             cfg.exploration_limit,
             false,
+            0,
         )
         .await
         {
