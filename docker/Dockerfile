@@ -67,7 +67,9 @@ RUN mkdir -p crates/arags-proto/src crates/arags-core/src crates/arags-storage/s
 
 # musl is crt-static by default; link libstdc++ statically for the C++ runtime
 # (usearch/cxx). Do NOT enable +crt-static globally: it breaks proc-macros.
-ENV RUSTFLAGS="-C link-arg=-static-libstdc++"
+# Baseline x86-64-v2: portable across commodity CI runners and most machines
+# (native -C target-cpu=native is LOCAL-ONLY and never committed here).
+ENV RUSTFLAGS="-C target-cpu=x86-64-v2 -C link-arg=-static-libstdc++"
 RUN if [ ! -f /out/arags-server ]; then cargo build --release -p arags-server; fi
 
 COPY crates/ crates/

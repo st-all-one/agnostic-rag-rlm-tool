@@ -7,7 +7,10 @@
 use super::tests::{authed_state, bearer, temp_storage};
 use super::*;
 use crate::config::ServerConfig;
+use crate::state::AppState;
+use arags_proto::proto::{QueryWithCacheRequest, StoreAnswerRequest};
 use arags_storage::{tokens::NewToken, tokens::Role};
+use tonic::Request;
 
 /// Regression (agnostic-rlm-rs-3c84): the question-vector space is global, so
 /// a near-hit candidate from another project must never be served.

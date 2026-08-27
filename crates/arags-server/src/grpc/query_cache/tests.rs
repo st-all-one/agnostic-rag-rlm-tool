@@ -3,7 +3,13 @@
 use super::*;
 use std::str::FromStr;
 
+use tonic::Request;
 use tonic::metadata::{MetadataMap, MetadataValue};
+
+use arags_proto::proto::{
+    GetAnswerByIdRequest, InvalidateCacheRequest, InvalidateMode, QueryWithCacheRequest,
+    StoreAnswerRequest,
+};
 
 use crate::config::ServerConfig;
 use crate::state::AppState;

@@ -1,6 +1,6 @@
 //! Unit tests for the unified query budget split (plan 023).
 
-use super::split_summary_budget;
+use super::query::split_summary_budget;
 
 #[test]
 fn ratio_split_with_plenty_of_summaries() {

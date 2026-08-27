@@ -1,3 +1,4 @@
+use super::embedder::{default_batch_size, default_max_tokens};
 use super::*;
 use std::path::PathBuf;
 

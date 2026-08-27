@@ -8,16 +8,19 @@ MAX_LINES=300
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # allowlist: "path:justification" (tracked in seeds issue agnostic-rlm-rs-XXXX/021.9)
+# NOTE: the 9 files below were split into cohesive submodules (issue
+# agnostic-rlm-rs-0fc4) and removed from the allowlist once each production
+# surface dropped to <= 300 lines:
+#   crates/arags-llm/src/config.rs         -> config/{presets,llm_config}.rs
+#   crates/arags-llm/src/backend.rs        -> backend/family/{openai,anthropic,gemini,ollama}.rs
+#   crates/arags-server/src/grpc/query_cache.rs -> query_cache/{helpers,query,store,invalidate,pending}.rs
+#   crates/arags-server/src/grpc/rlm.rs    -> grpc/rlm/{mod,complete,quorum}.rs
+#   crates/arags-server/src/grpc/search.rs -> grpc/search/{hybrid,summary,context,query}.rs
+#   crates/arags-server/src/config.rs      -> config/{exploration,rlm,embedder,search,maintenance,quorum,qa_cache,server_impl}.rs
+#   crates/arags-storage/src/sqlite/chunks.rs     -> chunks/{basic,time_travel,access,content,vector}.rs
+#   crates/arags-storage/src/sqlite/conn.rs       -> conn/ops.rs
+#   crates/arags-storage/src/sqlite/qa_cache.rs  -> qa_cache/{types,row,store,mutate,evict,embed}.rs
 ALLOWLIST=(
-  "crates/arags-llm/src/config.rs:LlmConfig builder + per-family presets are one cohesive unit (021.9)"
-  "crates/arags-llm/src/backend.rs:family request builders/parsers to be split into backend/family/* (021.9)"
-  "crates/arags-server/src/grpc/query_cache.rs:plan-017 handler flow kept linear for auditability; helpers already extracted (021.9)"
-  "crates/arags-server/src/grpc/rlm.rs:RLM RPC handlers grouped per proto service surface (021.9)"
-  "crates/arags-server/src/grpc/search.rs:search+summary+context handlers share hybrid_search plumbing (021.9)"
-  "crates/arags-server/src/config.rs:server.toml schema sections belong together; tests already externalized (021.9)"
-  "crates/arags-storage/src/sqlite/chunks.rs:single table CRUD; splitting would fragment transactional seams (021.9)"
-  "crates/arags-storage/src/sqlite/conn.rs:pool+PRAGMAs must stay adjacent to guarantee init order (021.9)"
-  "crates/arags-storage/src/sqlite/qa_cache.rs:qa_cache lifecycle (store/hit/evict/invalidate) mirrors one SQLite dataset (021.9)"
 )
 
 violations=0
