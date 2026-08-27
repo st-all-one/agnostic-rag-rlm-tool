@@ -205,6 +205,61 @@ async fn grpc_index_project_persists_chunks_end_to_end() {
     server.handle.abort();
 }
 
+/// Issue `agnostic-rlm-rs-7222`: a mutating RPC must record an append-only
+/// audit-log entry attributed to the authenticated user. `index_project` is the
+/// simplest mutating path that needs no extra config; we drive a real gRPC
+/// round-trip and assert the storage reflects the audit row.
+#[tokio::test]
+async fn grpc_index_project_writes_audit_log() {
+    let server = start_harness().await;
+    let mut client = connect_client(server.addr).await;
+
+    let auth = client
+        .auth_refresh(AuthRefreshRequest {
+            refresh_token: server.refresh_token.clone(),
+        })
+        .await
+        .expect("auth_refresh");
+    let session = auth.into_inner().session_token;
+
+    let chunks = vec![
+        IndexChunk {
+            body: Some(index_chunk::Body::Init(IndexInit {
+                project: "itest".to_string(),
+                root_path: "/tmp/itest".to_string(),
+                force_include: vec![],
+                exclude_patterns: vec![],
+            })),
+        },
+        IndexChunk {
+            body: Some(index_chunk::Body::File(IndexFile {
+                rel_path: "src/main.rs".to_string(),
+                content: b"fn main() {}".to_vec(),
+                compressed: false,
+                size_bytes: 12,
+            })),
+        },
+    ];
+
+    let resp = client
+        .index_project(index_request(chunks, &session))
+        .await
+        .expect("index_project Ok");
+    assert!(resp.into_inner().chunks_created >= 1);
+
+    // The SAME storage must carry an audit row for user "itest", action "index".
+    let entries = server
+        .storage
+        .list_audit_log("", "itest", 100)
+        .expect("list audit log");
+    let idx: Vec<_> = entries.iter().filter(|e| e.action == "index").collect();
+    assert!(!idx.is_empty(), "index_project must write an audit entry");
+    assert_eq!(idx[0].username, "itest");
+    assert_eq!(idx[0].project, "itest");
+
+    server.handle.abort();
+}
+
 /// Connect a fresh gRPC client to a running harness.
 async fn connect_client(
     addr: std::net::SocketAddr,

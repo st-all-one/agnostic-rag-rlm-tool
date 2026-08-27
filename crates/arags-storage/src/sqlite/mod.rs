@@ -1,3 +1,4 @@
+pub mod audit;
 pub mod buffers;
 pub mod cache;
 pub mod chunks;
@@ -13,7 +14,6 @@ pub mod rlm;
 pub mod schema;
 pub mod submissions;
 pub mod tasks;
-pub mod audit;
 pub mod tokens;
 
 pub use conn::Storage;

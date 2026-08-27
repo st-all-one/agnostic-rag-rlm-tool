@@ -620,6 +620,13 @@ where
         "project indexed"
     );
 
+    // Audit the successful index (issue `agnostic-rlm-rs-7222`). `created_by`
+    // carries the authenticated username threaded from the gRPC layer; when it
+    // is absent (hermetic unit tests) the log is skipped. Best-effort.
+    if let Some(by) = &created_by {
+        state.audit(&project, by, "index", None, None);
+    }
+
     Ok(Response::new(IndexResponse {
         run_id: uuid::Uuid::now_v7().to_string(),
         files_indexed: i64::try_from(distinct_files).unwrap_or(i64::MAX),

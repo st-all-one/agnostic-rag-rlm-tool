@@ -21,6 +21,12 @@ pub(crate) async fn handle_complete_rlm_job(
     request: Request<CompleteRlmJobRequest>,
 ) -> Result<Response<CompleteRlmJobResponse>, Status> {
     let ctx = crate::auth::authenticate(request.metadata(), &state.storage)?;
+    // Per-user rate limit on this mutating RPC (issue `agnostic-rlm-rs-7222`).
+    // A denial must NOT be audited.
+    let now = crate::state::AppState::now_secs();
+    if !state.check_rate_limit(&ctx.username, now) {
+        return Err(Status::resource_exhausted("rate limit exceeded"));
+    }
     let start = Instant::now();
     // Re-extract the RAW session token the interceptor placed in the
     // `Authorization` header so we can verify the submission attestation.
@@ -216,6 +222,16 @@ pub(crate) async fn handle_complete_rlm_job(
         volunteer = %ctx.username,
         auto_approved,
         "rlm job completed"
+    );
+
+    // Audit the successful completion (issue `agnostic-rlm-rs-7222`).
+    // Best-effort: a logging failure must not fail the request.
+    state.audit(
+        &job.project,
+        &ctx.username,
+        "complete_rlm_job",
+        Some(&node_id),
+        None,
     );
 
     Ok(Response::new(CompleteRlmJobResponse {

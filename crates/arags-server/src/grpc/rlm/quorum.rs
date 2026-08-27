@@ -91,6 +91,16 @@ pub(crate) async fn decide_quorum_submission(
     .await
     .map_err(internal)?;
 
+    // Audit the candidate staging (issue `agnostic-rlm-rs-7222`). Best-effort:
+    // a logging failure must not fail the request.
+    state.audit(
+        &job.project,
+        ctx_username,
+        "submit_rlm_candidate",
+        Some(&subject_key),
+        None,
+    );
+
     // Immediate, idempotent decision: returns Pending until N candidates
     // are staged, Accepted once a consensus is found, Rejected otherwise.
     match crate::quorum::decide_rlm_quorum(state, &job.project, job.level, &job.subject).await {

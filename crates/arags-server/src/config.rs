@@ -114,6 +114,12 @@ pub struct ServerConfig {
     #[serde(default)]
     pub exploration: ExplorationConfig,
 
+    /// Per-user rate limiting on mutating RPCs (issue `agnostic-rlm-rs-7222`).
+    /// `enabled = false` makes every check a no-op pass. Missing section →
+    /// defaults.
+    #[serde(default)]
+    pub rate_limit: RateLimitConfig,
+
     /// Retired (`is_active = 0`) chunk history retention window in days (issue
     /// `agnostic-rlm-rs-8dcc`). The maintenance ticker permanently purges
     /// superseded chunks older than this many days; `0` keeps history forever.
@@ -154,6 +160,49 @@ fn dirs() -> Option<PathBuf> {
         .ok()
         .map(PathBuf::from)
         .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
+}
+
+/// Per-user rate-limiting configuration (issue `agnostic-rlm-rs-7222`).
+///
+/// A fixed-window limiter keyed by authenticated username gates every mutating
+/// RPC. When `enabled` is `false` the limiter is a no-op pass (the default
+/// config still constructs, but all checks return `true`).
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct RateLimitConfig {
+    /// Whether rate-limiting is enforced. `false` → always allow.
+    #[serde(default = "default_rl_enabled")]
+    pub enabled: bool,
+
+    /// Maximum number of allowed requests within a single window.
+    #[serde(default = "default_rl_max")]
+    pub max_requests_per_window: u32,
+
+    /// Window length in seconds. When a call arrives after the window has
+    /// elapsed, the per-user counter resets.
+    #[serde(default = "default_rl_window")]
+    pub window_secs: u64,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_rl_enabled(),
+            max_requests_per_window: default_rl_max(),
+            window_secs: default_rl_window(),
+        }
+    }
+}
+
+fn default_rl_enabled() -> bool {
+    true
+}
+
+fn default_rl_max() -> u32 {
+    60
+}
+
+fn default_rl_window() -> u64 {
+    60
 }
 
 #[cfg(test)]

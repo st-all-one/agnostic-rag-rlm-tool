@@ -49,6 +49,7 @@ pub mod indexing;
 pub mod lifecycle;
 pub mod maintenance;
 pub mod quorum;
+pub mod ratelimit;
 pub mod reconcile;
 pub mod state;
 pub mod store;

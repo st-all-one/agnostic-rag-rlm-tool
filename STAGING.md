@@ -63,7 +63,7 @@ Toda issue nova/continuada DEVE obedecer isto. Violações bloqueiam o fechament
 
 ---
 
-## 2. O que falta — 12 issues em aberto (ordenadas por cluster)
+## 2. O que falta — 1 issue em aberto (ordenadas por cluster)
 
 > `⛔` = bloqueada por outra issue (ver `sd show`). `f5db` está `IN PROGRESS` (CLI pronta; partes server nas issues abaixo) e não entra nesta lista de "open".
 
@@ -90,23 +90,23 @@ Toda issue nova/continuada DEVE obedecer isto. Violações bloqueiam o fechament
 
 ### Cluster C — CLI / UX / superfície
 
-- **`agnostic-rlm-rs-e5d8`** (High, feature) — *`arags init` completo*: wizard interativo (TTY) ou flags para todo o reconhecimento do projeto (estende o `init --name` de `f5db`). Padrões §1.3/§1.4.
-- **`agnostic-rlm-rs-7aa8`** (Medium, task) — *Repensar superfície*: `arags search` = busca objetiva (sem question); `arags query` → `arags ask` com `-qa` implícito. Padrões §1.3.
+- **`agnostic-rlm-rs-e5d8`** ✅ **DONE** (High, feature) — *`arags init` completo*: wizard interativo (TTY) com nome/ignore/server/register/health-check + diff-summary, e modo flags (`--name` obrigatório em `--non-interactive`, `--ignore` multi, `--server-addr`, `--register`/`--no-register`); idempotente (re-init abre edit); hook de conflito de identidade via `GetProject`. Testes: `init_requires_name_in_non_interactive_mode`, `init_writes_canonical_arags_toml`, `init_is_idempotent_opens_edit_with_current_values`, `init_reinit_preserves_existing_registration`, `init_ignore_patterns_seeded_from_gitignore`. Padrões §1.3/§1.4.
+- **`agnostic-rlm-rs-7aa8`** ✅ **DONE** (Medium, task) — *Repensar superfície*: `arags search` = busca objetiva (sem LLM); `arags query` → `arags ask` com `-qa` implícito (todo `ask` digere via LLM local; `ask --cache-id` = lookup determinístico); `query` mantido como alias deprecado (warn → `ask`); `BuildContext` no-LLM migrado para `search --context`. Testes: `query_alias_is_deprecated_and_maps_to_ask_variant`, `ask_without_cache_id_invokes_llm_digest`, `ask_with_cache_id_avoids_llm`, `search_is_objective_and_never_invokes_llm`. Padrões §1.3.
 
 ### Cluster D — GPU / build / CI
 
-- **`agnostic-rlm-rs-241c`** (Medium, task) — *Validar llama.cpp-Vulkan na iGPU real* (Radeon 680M): medir ms/chunk (~1 ms esperado). Exige hardware. Padrões §1.1/§1.4.
-- **`agnostic-rlm-rs-2ff6`** (Medium, task) — *Release artifact GPU*: build musl `--features llamacpp-vulkan` + tag Docker `-gpu`. Exige runner com Vulkan SDK. Padrões §1.1/§6.
-- **`agnostic-rlm-rs-1957`** (Medium, task) — *CI/CD matriz de targets* (Debian/musl/AlmaLinux/Windows Server), mac ARM-only, wiring `ARAGS_BIN_URL` no Docker. Padrões §1.1.
-- **`agnostic-rlm-rs-d607`** (Low, task) — *CI/release com baseline x86-64-v2*; `target-cpu=native` apenas local. Padrões §1.1.
-- **`agnostic-rlm-rs-0fc4`** (Medium, task) — *021.9: completar splits dos 9 arquivos em allowlist* (gate de linhas). Padrões §1.3.
+- **`agnostic-rlm-rs-241c`** (Medium, task, ⏸️ blocked por hardware) — *Validar llama.cpp-Vulkan na iGPU real* (Radeon 680M): medir ms/chunk (~1 ms esperado). Exige hardware — NÃO validável neste ambiente; o caminho `llamacpp-vulkan` (opt-in) + `docker/Dockerfile.gpu` (`2ff6`) já estão prontos para o runner.
+- **`agnostic-rlm-rs-2ff6`** ✅ **DONE** (Medium, task) — *Release artifact GPU*: `docker/Dockerfile.gpu` (musl + `--features llamacpp-vulkan`, Vulkan SDK isolado) + `scripts/release-gpu.sh` (tags `-gpu`). `llamacpp-vulkan` segue opt-in; default sem Vulkan. Build GPU não validado aqui (sem SDK). Padrões §1.1/§1.6.
+- **`agnostic-rlm-rs-1957`** ✅ **DONE** (Medium, task) — *CI/CD matriz de targets*: `.github/workflows/release.yml` (Debian gnu / musl static / AlmaLinux / Windows Server msvc / macOS ARM-only); `docker/Dockerfile` aceita `ARAGS_BIN_URL`/`ARAGS_LOCAL_TARBALL`. YAML válido; CI não validado aqui. Padrões §1.1.
+- **`agnostic-rlm-rs-d607`** ✅ **DONE** (Low, task) — *CI/release com baseline x86-64-v2*: `.cargo/config.toml` usa `target-cpu=x86-64-v2`; native apenas via `RUSTFLAGS` local. `docker/Dockerfile` aplica x86-64-v2. Padrões §1.1.
+- **`agnostic-rlm-rs-0fc4`** ✅ **DONE** (Medium, task) — *021.9: splits dos 9 arquivos da allowlist*: todos ≤300 linhas de produção; `ALLOWLIST` vazia. Submódulos extraídos (backend/family, config/*, grpc/rlm/{mod,complete,quorum}, grpc/search/*, grpc/query_cache/*, config/*, chunks/*, conn/ops, qa_cache/*). `scripts/check_file_length.sh` não aponta mais nenhum dos 9. Padrões §1.3.
 
 ### Cluster E — Integração / revisão / misc
 
-- **`agnostic-rlm-rs-9527`** (Low, feature) — *Integrar agente consumidor* (Tier 1: Continue/Cline/Tabby/Aider) ao output do arags. Padrões §1.3.
-- **`agnostic-rlm-rs-e9e3`** (Low, bug) — *VERIFICAR*: `explore search` retorna "no exploration maps" após persist (vetor de exploração ausente na busca semântica). Padrões §1.5/§1.3.
-- **`agnostic-rlm-rs-27dc`** (Backlog, epic) — *Revisão sistêmica pós-plan 023* (adiada). Pode fechar como documentação.
-- **`agnostic-rlm-rs-7222`** (Backlog, feature) — *Multi-user roadmap reescopado*: rate-limiting + audit log (auth já coberto pelo plan 018).
+- **`agnostic-rlm-rs-9527`** ✅ **DONE** (Low, feature) — *Integrar agente consumidor*: `docs/agent-integration.md` cobre Continue/Cline/Tabby/Aider (snippets copy-paste + workflow `init`+`index` → `search`/`ask`/`explore`); flags verificados em `commands.rs`. Ponteiro no README. Padrões §1.3.
+- **`agnostic-rlm-rs-e9e3`** ✅ **DONE** (Low, bug) — *Corrigido*: `explore search` retornava "no exploration maps" porque os 4 espaços vetoriais eram abertos com dim hardcodada 384; com embedder ≠ 384 o insert falhava silenciosamente. Agora dimensionados por `embedder.dimensions()`. Teste `explore_search_returns_persisted_map_in_semantic_results`. Padrões §1.5/§1.3.
+- **`agnostic-rlm-rs-27dc`** ✅ **DONE** (Backlog, epic) — *Revisão sistêmica pós-plan 023*: entregue como doc `plan/023-systemic-review.md` (garantias + gaps residuais + next steps). Fechada como documentação.
+- **`agnostic-rlm-rs-7222`** ✅ **DONE** (Backlog, feature) — *Multi-user roadmap*: audit log (`029_audit_log.sql`, `sqlite/audit.rs`) + rate-limiting por usuário (`config.rs` `RateLimitConfig`, `ratelimit/` em-memory) em 4 paths mutators (index/persist/complete_rlm/submit); deny → `resource_exhausted`; audit failure warn-only. Testes `audit_log_writes_and_lists_entries`, `rate_limit_allows_up_to_window_then_rejects`, `rate_limit_resets_after_window`, `rate_limit_disabled_is_always_pass`, `grpc_index_project_writes_audit_log`. Padrões §1.5/§1.4.
 
 ---
 
@@ -217,6 +217,23 @@ Orquestrador executou **1 subagente por issue** (padrão §1.7), na ordem do pla
 **Migrations novas (pós-incidente):** `028_rlm_exclusions.sql` (f486); nenhuma nova migration para f5f3/64af (campos de proto + tabela `rlm_job_exclusions` via 028).
 
 **Estado ao checkpoint (pós-recuperação):** Cluster A 100% concluído. Cluster B 100% concluído (`a5d7`+`e89e`+`6d97`+`f486`+`f5f3`+`64af`). Próximo da fila: Cluster C (`e5d8`,`7aa8`), D (GPU/CI, exige hardware), E (`9527`/`e9e3`/`27dc`/`7222`). Manter verificação independente do orquestrador antes de fechar cada seed.
+
+**Recuperação + continuação (2026-08-27, tarde):** após o incidente de arquivos apagados na janela 10:31–11:02, as 3 issues do Cluster B perdidas (`f486`/`f5f3`/`64af`) foram reimplementadas fielmente a partir do conversation em `CRITICAL_RECUPERATION/`, e em seguida TODO o restante do roadmap foi executado (1 subagente/issue, §1.7; gates verificados independentemente pelo orquestrador: `cargo clippy --workspace -- -D warnings` + `cargo fmt -- --check` + `cargo test --workspace` ok).
+
+| Issue | Status seed | Subagente | Gates | Testes-chave / notas |
+|---|---|---|---|---|
+| `e5d8` | ✅ closed | sim (general) | clippy/fmt/test verdes | `init_requires_name_in_non_interactive_mode`, `init_writes_canonical_arags_toml`, `init_is_idempotent_opens_edit_with_current_values`, `init_reinit_preserves_existing_registration`, `init_ignore_patterns_seeded_from_gitignore` |
+| `7aa8` | ✅ closed | sim (general) | clippy/fmt/test verdes | `query_alias_is_deprecated_and_maps_to_ask_variant`, `ask_without_cache_id_invokes_llm_digest`, `ask_with_cache_id_avoids_llm`, `search_is_objective_and_never_invokes_llm` |
+| `0fc4` | ✅ closed | sim (general) | clippy/fmt/test verdes | 9 arquivos da allowlist <=300 linhas; `ALLOWLIST` vazia (corrigiu build de testes quebrado de tentativa parcial) |
+| `d607` | ✅ closed | sim (general) | clippy/fmt/test verdes | baseline x86-64-v2 em `.cargo/config.toml` + `docker/Dockerfile`; native local-only |
+| `e9e3` | ✅ closed | sim (general) | clippy/fmt/test verdes (verificado) | `explore_search_returns_persisted_map_in_semantic_results`; causa raiz = dim hardcodada 384 nos 4 espaços |
+| `2ff6` | ✅ closed | sim (general) | clippy/fmt/test verdes (default) | `docker/Dockerfile.gpu` + `scripts/release-gpu.sh`; build GPU nao validado (sem Vulkan SDK) |
+| `1957` | ✅ closed | sim (general) | clippy/fmt/test verdes (default) | `.github/workflows/release.yml` matrix + `ARAGS_BIN_URL`; CI nao validado (sem runner) |
+| `27dc` | ✅ closed | sim (general) | clippy/fmt/test verdes (doc) | `plan/023-systemic-review.md` |
+| `9527` | ✅ closed | sim (general) | clippy/fmt/test verdes (doc) | `docs/agent-integration.md` (Continue/Cline/Tabby/Aider) |
+| `7222` | ✅ closed | sim (general) | clippy/fmt/test verdes | `029_audit_log.sql`; `sqlite/audit.rs`; `ratelimit/`; 4 paths auditados+limitados |
+
+**Estado final:** todos os clusters concluidos, EXCETO `241c` (bloqueado por hardware real — Radeon 680M — nao validavel neste ambiente; infra `llamacpp-vulkan`/`Dockerfile.gpu` ja pronta). `MIGRATION_COUNT = 29`.
 
 **Migrations novas (2ª rodada):** `025_pending_qa.sql` (d172), `026_submissions.sql` (a5d7). Nenhuma para 36ae/620d/1564 (colunas já em 021/024/050ed).
 

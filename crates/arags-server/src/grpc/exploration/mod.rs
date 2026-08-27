@@ -88,6 +88,12 @@ pub(crate) async fn handle_persist_exploration(
 ) -> Result<Response<arags_proto::proto::PersistExplorationResponse>, Status> {
     let _timer = crate::timing::Timer::new("handler.persist_exploration");
     let ctx = crate::auth::authenticate(request.metadata(), &state.storage)?;
+    // Per-user rate limit on this mutating RPC (issue `agnostic-rlm-rs-7222`).
+    // A denial must NOT be audited.
+    let now = crate::state::AppState::now_secs();
+    if !state.check_rate_limit(&ctx.username, now) {
+        return Err(Status::resource_exhausted("rate limit exceeded"));
+    }
     let mut req = request.into_inner();
 
     if !state.config.exploration.enabled {
@@ -216,6 +222,16 @@ pub(crate) async fn handle_persist_exploration(
         unresolved = unresolved_paths.len(),
         review = %review_note,
         "exploration persisted"
+    );
+
+    // Audit the successful persist (issue `agnostic-rlm-rs-7222`). Best-effort:
+    // a logging failure must not fail the request.
+    state.audit(
+        &req.project,
+        &ctx.username,
+        "persist_exploration",
+        Some(&stored.exploration_id),
+        None,
     );
 
     Ok(Response::new(

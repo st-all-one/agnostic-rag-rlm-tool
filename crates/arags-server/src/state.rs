@@ -12,6 +12,7 @@ use arags_storage::VectorStore;
 use rayon::ThreadPool;
 
 use crate::config::{QaCacheConfig, ServerConfig};
+use crate::ratelimit::RateLimiter;
 
 pub use arags_storage::ExplorationVectorStore;
 
@@ -47,6 +48,10 @@ pub struct AppState {
     /// path to surface contention (debug) and to gate backpressure so a query
     /// never hangs behind a saturating index (issue `agnostic-rlm-rs-6690`).
     pub active_index_embeds: Arc<AtomicUsize>,
+    /// Per-user fixed-window rate limiter for mutating RPCs (issue
+    /// `agnostic-rlm-rs-7222`). Always present; a disabled config is a no-op
+    /// pass via [`RateLimiter::check`].
+    pub rate_limiter: Arc<RateLimiter>,
     started_at: std::time::Instant,
 }
 
@@ -320,6 +325,7 @@ impl AppState {
     ) -> Result<Self> {
         let index_embed_pool = build_index_embed_pool(&config)?;
         let qa_config = config.qa_cache.clone();
+        let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit));
 
         let state = Self {
             storage: storage.clone(),
@@ -332,6 +338,7 @@ impl AppState {
             qa_config: qa_config.clone(),
             index_embed_pool,
             active_index_embeds: Arc::new(AtomicUsize::new(0)),
+            rate_limiter,
             started_at: std::time::Instant::now(),
         };
 
@@ -363,6 +370,47 @@ impl AppState {
     #[must_use]
     pub fn uptime_seconds(&self) -> u64 {
         u64::try_from(self.started_at.elapsed().as_secs()).unwrap_or(0)
+    }
+
+    /// Current Unix epoch seconds (used as the rate-limiter clock).
+    #[must_use]
+    pub fn now_secs() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    }
+
+    /// Check the per-user rate limit for a mutating RPC. Returns `true` if the
+    /// caller may proceed; `false` means the request must be rejected with
+    /// `RESOURCE_EXHAUSTED`.
+    #[must_use]
+    pub fn check_rate_limit(&self, username: &str, now: u64) -> bool {
+        self.rate_limiter.check(username, now)
+    }
+
+    /// Best-effort audit-log write (issue `agnostic-rlm-rs-7222`). A failure to
+    /// record the entry is warned and ignored — it MUST never fail the request
+    /// being audited.
+    pub fn audit(
+        &self,
+        project: &str,
+        username: &str,
+        action: &str,
+        target: Option<&str>,
+        detail: Option<&str>,
+    ) {
+        if let Err(e) = self
+            .storage
+            .write_audit_log(project, username, action, target, detail)
+        {
+            tracing::warn!(
+                error = %e,
+                action,
+                username,
+                "audit log write failed (request still succeeded)"
+            );
+        }
     }
 
     /// Force-flush any debounced vector-index mutations to disk (graceful

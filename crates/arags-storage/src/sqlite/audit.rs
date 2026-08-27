@@ -55,13 +55,7 @@ impl Storage {
             conn.execute(
                 "INSERT INTO audit_log (project, username, action, target, detail) \
                  VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![
-                    project,
-                    username,
-                    action,
-                    target,
-                    detail,
-                ],
+                params![project, username, action, target, detail,],
             )
             .with_context(|| format!("failed to insert audit_log entry for action {action}"))?;
             Ok(conn.last_insert_rowid())

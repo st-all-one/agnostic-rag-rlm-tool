@@ -95,6 +95,12 @@ impl AragsService for AragsGrpcService {
         // Authenticate up-front (issue `agnostic-rlm-rs-786a`): the session
         // username becomes the `created_by` on every chunk written below.
         let ctx = crate::auth::authenticate(request.metadata(), &self.state.storage)?;
+        // Per-user rate limit on the mutating `index_project` RPC (issue
+        // `agnostic-rlm-rs-7222`). A denial must NOT be audited.
+        let now = crate::state::AppState::now_secs();
+        if !self.state.check_rate_limit(&ctx.username, now) {
+            return Err(tonic::Status::resource_exhausted("rate limit exceeded"));
+        }
         let created_by = Some(ctx.username.clone());
         index::handle_index_project(&self.state, request, created_by).await
     }

@@ -166,6 +166,7 @@ impl Default for ServerConfig {
             maintenance: super::MaintenanceConfig::default(),
             history: super::HistoryConfig::default(),
             exploration: super::ExplorationConfig::default(),
+            rate_limit: super::RateLimitConfig::default(),
             rlm: super::RlmConfig::default(),
             quorum: super::QuorumConfig::default(),
             chunk_retention_days: default_chunk_retention_days(),
