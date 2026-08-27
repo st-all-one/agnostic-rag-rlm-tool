@@ -13,9 +13,11 @@
     clippy::float_cmp
 )]
 
+use anyhow::Context;
 use arags_storage::Storage;
 use arags_storage::sqlite::rlm::{
-    DEFAULT_RLM_LEASE_MS, NewRlmJob, NewRlmNode, REVIEW_PENDING, RlmJobPayload, rlm_job_key,
+    DEFAULT_RLM_LEASE_MS, NewRlmJob, NewRlmNode, REVIEW_APPROVED, REVIEW_PENDING, RlmJobPayload,
+    rlm_job_key,
 };
 use arags_storage::sqlite::tokens::now_ms;
 
@@ -34,6 +36,7 @@ fn node(project: &str, level: i64, subject: &str, hashes: &[&str]) -> NewRlmNode
         source_hashes: hashes.iter().map(|h| (*h).to_string()).collect(),
         model: Some("llama3.2".into()),
         volunteer_username: Some("alice".into()),
+        created_by: None,
         template_version: Some("v1".into()),
         token_count: 42,
     }
@@ -51,7 +54,7 @@ fn job(project: &str, level: i64, subject: &str) -> NewRlmJob {
 }
 
 #[test]
-fn store_node_upsert_resets_review_gate() {
+fn store_node_supersede_resets_review_gate() {
     let storage = temp_storage();
     let (id1, nid1) = storage
         .store_rlm_node(&node("p", 1, "src/main.rs", &["h1"]))
@@ -62,17 +65,32 @@ fn store_node_upsert_resets_review_gate() {
     assert_eq!(n.review_status, REVIEW_PENDING);
     assert_eq!(n.level, 1);
 
-    // Approve, then resubmit: review resets to pending, node_id stays stable.
+    // Approve, then resubmit: a NEW row supersedes the old one; its review gate
+    // resets to pending while the previous revision keeps its verdict.
     assert!(storage.review_rlm_node(&nid1, true, "admin", None).unwrap());
     let (id2, nid2) = storage
         .store_rlm_node(&node("p", 1, "src/main.rs", &["h2"]))
         .unwrap();
-    assert_eq!(id1, id2);
-    assert_eq!(nid1, nid2);
-    let n = storage.get_rlm_node(&nid1).unwrap().unwrap();
-    assert_eq!(n.review_status, REVIEW_PENDING);
-    assert_eq!(n.source_hashes, vec!["h2".to_string()]);
-    assert!(!n.stale);
+    assert_ne!(id1, id2);
+    assert_ne!(nid1, nid2);
+
+    // The active revision for the subject is the new row.
+    let active = storage
+        .get_rlm_node_by_subject("p", 1, "src/main.rs")
+        .unwrap()
+        .unwrap();
+    assert_eq!(active.id, id2);
+    assert_eq!(active.review_status, REVIEW_PENDING);
+    assert_eq!(active.source_hashes, vec!["h2".to_string()]);
+    assert!(!active.stale);
+
+    // The previous revision is retired and links forward to the new row, but
+    // retains its own (approved) review verdict.
+    let old = storage.get_rlm_node(&nid1).unwrap().unwrap();
+    assert_eq!(old.is_active, false);
+    assert_eq!(old.superseded_by, Some(id2));
+    assert_eq!(old.review_status, REVIEW_APPROVED);
+    assert_eq!(old.source_hashes, vec!["h1".to_string()]);
 }
 
 #[test]
@@ -343,6 +361,7 @@ fn completion_input(subject: &str) -> NewRlmNode {
         source_hashes: vec!["h1".into()],
         model: Some("llama3.2".into()),
         volunteer_username: Some("bob".into()),
+        created_by: None,
         template_version: None,
         token_count: 7,
     }
@@ -374,6 +393,41 @@ fn complete_with_node_persists_both_atomically() {
     assert_eq!(n.source_hashes, vec!["h1".to_string()]);
     // Review gate starts pending even on the atomic path.
     assert_eq!(n.review_status, REVIEW_PENDING);
+}
+
+#[test]
+fn complete_with_node_persists_created_by_and_model() {
+    let storage = temp_storage();
+    storage.enqueue_rlm_job(&job("p", 1, "a.rs")).unwrap();
+    let claimed = storage
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None)
+        .unwrap()
+        .unwrap();
+
+    let mut node = completion_input("a.rs");
+    node.created_by = Some("bob".into());
+    node.model = Some("llama3.2".into());
+
+    let (rowid, _node_id) = storage
+        .complete_rlm_job_with_node(claimed.id, "bob", claimed.generation, &node)
+        .unwrap()
+        .unwrap();
+    assert!(rowid > 0);
+
+    let (cb, m): (Option<String>, Option<String>) = storage
+        .connection()
+        .unwrap()
+        .execute(|conn| {
+            conn.query_row(
+                "SELECT created_by, model FROM rlm_nodes WHERE id = ?1",
+                rusqlite::params![rowid],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .context("read rlm_nodes authorship")
+        })
+        .unwrap();
+    assert_eq!(cb.as_deref(), Some("bob"), "created_by populated");
+    assert_eq!(m.as_deref(), Some("llama3.2"), "model populated");
 }
 
 #[test]
@@ -470,4 +524,60 @@ fn shared_payload_type_round_trips_through_job_queue() {
     assert_eq!(back.template_version, "v1");
     assert_eq!(back.subject_kind, "file");
     let _ = now_ms(); // keep import honest for future tests
+}
+
+#[test]
+fn supersede_rlm_node_creates_new_active_row_and_history() {
+    let storage = temp_storage();
+    let mut v1 = node("p", 1, "src/main.rs", &["h1"]);
+    v1.summary_text = "first draft".into();
+    let (id1, nid1) = storage.store_rlm_node(&v1).unwrap();
+
+    let mut v2 = node("p", 1, "src/main.rs", &["h2"]);
+    v2.summary_text = "second draft".into();
+    let (id2, nid2) = storage.store_rlm_node(&v2).unwrap();
+
+    let mut v3 = node("p", 1, "src/main.rs", &["h3"]);
+    v3.summary_text = "third draft".into();
+    let (id3, _nid3) = storage.store_rlm_node(&v3).unwrap();
+
+    // (a) exactly one ACTIVE node for the subject; the two earlier ones retired.
+    let active_count: i64 = storage
+        .connection()
+        .unwrap()
+        .execute(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM rlm_nodes WHERE project = 'p' AND level = 1 \
+                 AND subject = 'src/main.rs' AND is_active = 1",
+                [],
+                |r| r.get(0),
+            )
+            .context("count active rlm_nodes")
+        })
+        .unwrap();
+    assert_eq!(active_count, 1);
+
+    let old = storage.get_rlm_node(&nid1).unwrap().unwrap();
+    assert_eq!(old.is_active, false);
+    assert_eq!(old.superseded_by, Some(id2));
+    let mid = storage.get_rlm_node(&nid2).unwrap().unwrap();
+    assert_eq!(mid.is_active, false);
+    assert_eq!(mid.superseded_by, Some(id3));
+
+    // (b) the subject read returns only the latest active node.
+    let active = storage
+        .get_rlm_node_by_subject("p", 1, "src/main.rs")
+        .unwrap()
+        .unwrap();
+    assert_eq!(active.id, id3);
+    assert_eq!(active.summary_text, "third draft");
+
+    // (c) the history getter walks the full chain oldest -> newest.
+    let history = storage.get_node_history(id1).unwrap();
+    assert_eq!(history.len(), 3);
+    assert_eq!(history[0].id, id1);
+    assert_eq!(history[0].summary_text, "first draft");
+    assert_eq!(history[1].id, id2);
+    assert_eq!(history[2].id, id3);
+    assert_eq!(history[2].summary_text, "third draft");
 }

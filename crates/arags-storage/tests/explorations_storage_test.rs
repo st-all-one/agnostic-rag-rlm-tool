@@ -4,6 +4,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use anyhow::Context;
 use arags_storage::Storage;
 use arags_storage::explorations::{
     ExplorationAnchor, FeedbackKind, PersistExplorationInput, ROLE_CITED, ROLE_CONTEXT,
@@ -425,4 +426,56 @@ fn test_touch_and_count() {
             .access_count,
         2
     );
+}
+
+#[test]
+fn supersede_exploration_creates_new_active_row_and_history() {
+    let storage = temp_storage();
+    let v1 = storage
+        .persist_exploration(&input("p1", "mesmo objetivo", vec![]))
+        .unwrap();
+    let v2 = storage
+        .persist_exploration(&input("p1", "mesmo objetivo", vec![]))
+        .unwrap();
+    let v3 = storage
+        .persist_exploration(&input("p1", "mesmo objetivo", vec![]))
+        .unwrap();
+
+    // (a) exactly one ACTIVE map for the goal; the two earlier ones retired.
+    let active_count: i64 = storage
+        .connection()
+        .unwrap()
+        .execute(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM explorations WHERE project = 'p1' \
+                 AND goal = 'mesmo objetivo' AND is_active = 1",
+                [],
+                |r| r.get(0),
+            )
+            .context("count active explorations")
+        })
+        .unwrap();
+    assert_eq!(active_count, 1);
+
+    let old = storage.get_exploration_by_rowid(v1.id).unwrap().unwrap();
+    assert_eq!(old.is_active, false);
+    assert_eq!(old.superseded_by, Some(v2.id));
+    let mid = storage.get_exploration_by_rowid(v2.id).unwrap().unwrap();
+    assert_eq!(mid.is_active, false);
+    assert_eq!(mid.superseded_by, Some(v3.id));
+
+    // (b) the FTS read returns only the latest active map.
+    let hits = storage
+        .search_explorations_fts("p1", "mesmo objetivo", 10)
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].id, v3.id);
+
+    // (c) the history getter walks the full chain oldest -> newest.
+    let history = storage.get_exploration_history(v1.id).unwrap();
+    assert_eq!(history.len(), 3);
+    assert_eq!(history[0].id, v1.id);
+    assert_eq!(history[1].id, v2.id);
+    assert_eq!(history[2].id, v3.id);
+    assert_eq!(history[2].is_active, true);
 }

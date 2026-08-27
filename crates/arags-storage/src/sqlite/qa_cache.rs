@@ -60,6 +60,11 @@ pub struct QaCacheRow {
     pub invalidated_by: Option<String>,
     /// Why invalidated (audit).
     pub invalidated_reason: Option<String>,
+    /// Whether this is the live revision (issue `agnostic-rlm-rs-e210`).
+    pub is_active: bool,
+    /// Rowid of the newer revision that superseded this one (`is_active = 0`
+    /// rows only); `None` for the live row (issue `agnostic-rlm-rs-e210`).
+    pub superseded_by: Option<i64>,
 }
 
 /// Input for [`Storage::store_answer`].
@@ -85,6 +90,10 @@ pub struct StoreAnswerInput {
     pub tier_snapshot: Option<String>,
     /// Token cost.
     pub token_count: i64,
+    /// Authenticated session username that stored the answer (issue
+    /// `agnostic-rlm-rs-786a`). `None` when the store is used outside an
+    /// authenticated session (e.g. CLI hermetic paths).
+    pub created_by: Option<String>,
 }
 
 /// Result of storing an answer.
@@ -123,6 +132,117 @@ pub fn chunk_content_hash(content: &str) -> String {
     arags_core::qa_cache::chunk_content_hash(content)
 }
 
+/// Supersede-aware insert for a QA answer: retire any active row at
+/// `(project, buffer_id, question_hash)` and insert a fresh active revision
+/// (issue `agnostic-rlm-rs-e210`). Runs inside an open transaction so the
+/// retire/insert pair commits atomically.
+fn store_answer_inner(
+    c: &rusqlite::Connection,
+    input: &StoreAnswerInput,
+    now: i64,
+) -> Result<(String, i64)> {
+    let tx = c.unchecked_transaction().context("begin store_answer tx")?;
+
+    let existing: Option<(i64, i64)> = tx
+        .query_row(
+            "SELECT id, version FROM qa_cache \
+             WHERE project = ?1 AND buffer_id IS ?2 AND question_hash = ?3 \
+               AND is_active = 1 LIMIT 1",
+            params![input.project, input.buffer_id, input.question_hash],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
+        )
+        .optional()
+        .context("failed to probe existing qa_cache entry")?;
+
+    let cache_id = uuid::Uuid::now_v7().to_string();
+    let chunk_ids_json = serde_json::to_string(&input.source_chunk_ids)
+        .context("failed to serialize source_chunk_ids")?;
+    let hashes_json =
+        serde_json::to_string(&input.source_hashes).context("failed to serialize source_hashes")?;
+    let snapshot = input
+        .tier_snapshot
+        .clone()
+        .unwrap_or_else(|| "{}".to_string());
+
+    let new_id: i64 = match existing {
+        Some((old_id, old_version)) => {
+            // Retire the previous active row first so the partial unique index
+            // (one active per subject) is never violated by the insert.
+            tx.execute(
+                "UPDATE qa_cache SET is_active = 0 WHERE id = ?1 AND is_active = 1",
+                params![old_id],
+            )
+            .context("failed to retire superseded qa_cache row")?;
+            let rowid: i64 = tx
+                .query_row(
+                    "INSERT INTO qa_cache \
+                     (cache_id, buffer_id, project, question_text, question_hash, \
+                      answer_text, source_chunk_ids, source_hashes, model, created_by, \
+                      version, is_active, confidence, tier_snapshot, token_count, \
+                      access_count, created_at, last_accessed_at, stale) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1, 1.0, ?12, \
+                             ?13, 0, ?14, ?14, 0) \
+                     RETURNING id",
+                    params![
+                        cache_id,
+                        input.buffer_id,
+                        input.project,
+                        input.question_text,
+                        input.question_hash,
+                        input.answer_text,
+                        chunk_ids_json,
+                        hashes_json,
+                        input.model,
+                        input.created_by,
+                        old_version + 1,
+                        snapshot,
+                        input.token_count,
+                        now,
+                    ],
+                    |r| r.get(0),
+                )
+                .context("failed to insert superseding qa_cache row")?;
+            tx.execute(
+                "UPDATE qa_cache SET superseded_by = ?1 WHERE id = ?2",
+                params![rowid, old_id],
+            )
+            .context("failed to link superseded qa_cache row")?;
+            rowid
+        }
+        None => tx
+            .query_row(
+                "INSERT INTO qa_cache \
+                 (cache_id, buffer_id, project, question_text, question_hash, \
+                  answer_text, source_chunk_ids, source_hashes, model, created_by, \
+                  version, is_active, confidence, tier_snapshot, token_count, \
+                  access_count, created_at, last_accessed_at, stale) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, 1, 1.0, ?11, ?12, 0, \
+                         ?13, ?13, 0) \
+                 RETURNING id",
+                params![
+                    cache_id,
+                    input.buffer_id,
+                    input.project,
+                    input.question_text,
+                    input.question_hash,
+                    input.answer_text,
+                    chunk_ids_json,
+                    hashes_json,
+                    input.model,
+                    input.created_by,
+                    snapshot,
+                    input.token_count,
+                    now,
+                ],
+                |r| r.get(0),
+            )
+            .context("failed to insert qa_cache entry")?,
+    };
+
+    tx.commit().context("commit store_answer tx")?;
+    Ok((cache_id, new_id))
+}
+
 /// Parse a JSON array column into a `Vec<String>`.
 fn parse_json_array(text: Option<String>) -> Vec<String> {
     match text {
@@ -153,78 +273,55 @@ fn row_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<QaCacheRow> {
         invalidated_at: r.get(17)?,
         invalidated_by: r.get(18)?,
         invalidated_reason: r.get(19)?,
+        is_active: r.get::<_, i64>(20)? != 0,
+        superseded_by: r.get(21)?,
     })
 }
+
+/// Projection shared by all `qa_cache` row queries (order fixed; see
+/// [`row_mapper`]). The trailing `is_active` / `superseded_by` are what the
+/// supersede chain walks (issue `agnostic-rlm-rs-e210`).
+const QA_COLS: &str = "id, cache_id, buffer_id, project, question_text, question_hash, \
+     answer_text, source_chunk_ids, source_hashes, model, confidence, tier_snapshot, \
+     token_count, access_count, created_at, last_accessed_at, stale, invalidated_at, \
+     invalidated_by, invalidated_reason, is_active, superseded_by";
 
 impl Storage {
     /// Store a digested answer, returning its stable `cache_id` and rowid.
     ///
-    /// **Idempotent / reserve-lock:** if a non-stale entry already exists for
-    /// `(project, question_hash)`, its `cache_id`/`id` are returned without
-    /// inserting a duplicate (concurrent identical MISSes reuse one entry).
+    /// **Superseding (issue `agnostic-rlm-rs-e210`):** if an active row already
+    /// exists for `(project, buffer_id, question_hash)` a *new* row is inserted
+    /// (`version = old + 1`, `is_active = 1`) and the previous active row is
+    /// retired (`is_active = 0`, `superseded_by = new_id`). Reads therefore see
+    /// only the latest active revision, while the prior answer remains available
+    /// through [`Storage::get_answer_history`]. No active row → a brand-new
+    /// active row (`version = 1`) is inserted.
+    ///
+    /// The pre-existing staleness invalidation (`invalidate_stale_cache_for_buffer`
+    /// / `mark_stale_by_hashes`) is preserved: a stale active row is still the
+    /// "active" revision until superseded, so an exact-hit read treats it as a
+    /// MISS and forces re-digest.
     ///
     /// # Errors
     ///
-    /// Returns an error if the insert fails.
+    /// Returns an error if serialization or any statement fails.
     pub fn store_answer(&self, input: &StoreAnswerInput) -> Result<StoredAnswer> {
         let conn = self.connection().context("failed to acquire connection")?;
-
-        // Reserve-lock: reuse an existing non-stale entry for this question.
-        if let Some(existing) = conn.execute(|c| {
-            c.query_row(
-                "SELECT id, cache_id FROM qa_cache \
-                 WHERE project = ?1 AND question_hash = ?2 AND stale = 0 \
-                 LIMIT 1",
-                params![input.project, input.question_hash],
-                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
-            )
-            .optional()
-            .context("failed to probe existing qa_cache entry")
-        })? {
-            return Ok(StoredAnswer {
-                cache_id: existing.1,
-                id: existing.0,
-                created: false,
-            });
-        }
-
         let now = now_ms();
-        let cache_id = uuid::Uuid::now_v7().to_string();
-        let chunk_ids_json = serde_json::to_string(&input.source_chunk_ids)
-            .context("failed to serialize source_chunk_ids")?;
-        let hashes_json = serde_json::to_string(&input.source_hashes)
-            .context("failed to serialize source_hashes")?;
-        let snapshot = input
-            .tier_snapshot
-            .clone()
-            .unwrap_or_else(|| "{}".to_string());
-
-        let id: i64 = conn.execute(|c| {
-            c.query_row(
-                "INSERT INTO qa_cache \
-                 (cache_id, buffer_id, project, question_text, question_hash, answer_text, \
-                  source_chunk_ids, source_hashes, model, confidence, tier_snapshot, \
-                  token_count, access_count, created_at, last_accessed_at, stale) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1.0, ?10, ?11, 0, ?12, ?12, 0) \
-                 RETURNING id",
-                params![
-                    cache_id,
-                    input.buffer_id,
-                    input.project,
-                    input.question_text,
-                    input.question_hash,
-                    input.answer_text,
-                    chunk_ids_json,
-                    hashes_json,
-                    input.model,
-                    snapshot,
-                    input.token_count,
-                    now,
-                ],
-                |r| r.get::<_, i64>(0),
-            )
-            .context("failed to insert qa_cache entry")
-        })?;
+        let start = std::time::Instant::now();
+        let (cache_id, id) = conn
+            .execute(|c| store_answer_inner(c, input, now))
+            .context("store_answer tx")?;
+        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+        tracing::debug!(
+            phase = "store_answer",
+            rowid = id,
+            cache_id = %cache_id,
+            buffer_id = input.buffer_id.map_or(-1, |b| b),
+            project = %input.project,
+            elapsed_ms = format!("{elapsed_ms:.2}"),
+            "qa answer stored (superseding prior active revision)"
+        );
 
         Ok(StoredAnswer {
             cache_id,
@@ -235,7 +332,7 @@ impl Storage {
 
     /// Exact-hit lookup by `(project, question_hash)`. Returns `None` on miss
     /// or if the only match is stale (caller should treat stale as a MISS that
-    /// forces re-digest).
+    /// forces re-digest). Only the latest **active** revision is considered.
     ///
     /// # Errors
     ///
@@ -248,12 +345,11 @@ impl Storage {
         let conn = self.connection().context("failed to acquire connection")?;
         conn.execute(|c| {
             c.query_row(
-                "SELECT id, cache_id, buffer_id, project, question_text, question_hash, \
-                 answer_text, source_chunk_ids, source_hashes, model, confidence, \
-                 tier_snapshot, token_count, access_count, created_at, last_accessed_at, \
-                 stale, invalidated_at, invalidated_by, invalidated_reason \
-                 FROM qa_cache WHERE project = ?1 AND question_hash = ?2 AND stale = 0 \
-                 LIMIT 1",
+                &format!(
+                    "SELECT {QA_COLS} FROM qa_cache \
+                         WHERE project = ?1 AND question_hash = ?2 AND is_active = 1 \
+                           AND stale = 0 LIMIT 1"
+                ),
                 params![project, question_hash],
                 row_mapper,
             )
@@ -271,11 +367,9 @@ impl Storage {
         let conn = self.connection().context("failed to acquire connection")?;
         conn.execute(|c| {
             c.query_row(
-                "SELECT id, cache_id, buffer_id, project, question_text, question_hash, \
-                 answer_text, source_chunk_ids, source_hashes, model, confidence, \
-                 tier_snapshot, token_count, access_count, created_at, last_accessed_at, \
-                 stale, invalidated_at, invalidated_by, invalidated_reason \
-                 FROM qa_cache WHERE cache_id = ?1 AND project = ?2 LIMIT 1",
+                &format!(
+                    "SELECT {QA_COLS} FROM qa_cache WHERE cache_id = ?1 AND project = ?2 LIMIT 1"
+                ),
                 params![cache_id, project],
                 row_mapper,
             )
@@ -294,11 +388,7 @@ impl Storage {
         let conn = self.connection().context("failed to acquire connection")?;
         conn.execute(|c| {
             c.query_row(
-                "SELECT id, cache_id, buffer_id, project, question_text, question_hash, \
-                 answer_text, source_chunk_ids, source_hashes, model, confidence, \
-                 tier_snapshot, token_count, access_count, created_at, last_accessed_at, \
-                 stale, invalidated_at, invalidated_by, invalidated_reason \
-                 FROM qa_cache WHERE cache_id = ?1 LIMIT 1",
+                &format!("SELECT {QA_COLS} FROM qa_cache WHERE cache_id = ?1 LIMIT 1"),
                 params![cache_id],
                 row_mapper,
             )
@@ -316,16 +406,52 @@ impl Storage {
         let conn = self.connection().context("failed to acquire connection")?;
         conn.execute(|c| {
             c.query_row(
-                "SELECT id, cache_id, buffer_id, project, question_text, question_hash, \
-                 answer_text, source_chunk_ids, source_hashes, model, confidence, \
-                 tier_snapshot, token_count, access_count, created_at, last_accessed_at, \
-                 stale, invalidated_at, invalidated_by, invalidated_reason \
-                 FROM qa_cache WHERE id = ?1 LIMIT 1",
+                &format!("SELECT {QA_COLS} FROM qa_cache WHERE id = ?1 LIMIT 1"),
                 params![id],
                 row_mapper,
             )
             .optional()
             .context("failed to get qa_cache by rowid")
+        })
+    }
+
+    /// Walk the supersede chain starting from `id`, returning every revision in
+    /// oldest→newest order (issue `agnostic-rlm-rs-e210`). The starting row need
+    /// not be the oldest; only the forward chain reachable via `superseded_by`
+    /// is returned. Retired (`is_active = 0`) revisions are included so callers
+    /// can audit the full answer history.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any query fails.
+    pub fn get_answer_history(&self, id: i64) -> Result<Vec<QaCacheRow>> {
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let mut chain = Vec::new();
+            let mut current: Option<i64> = Some(id);
+            while let Some(cid) = current {
+                let Some(row) = c
+                    .query_row(
+                        &format!("SELECT {QA_COLS} FROM qa_cache WHERE id = ?1"),
+                        params![cid],
+                        row_mapper,
+                    )
+                    .optional()
+                    .context("failed to read qa_cache history row")?
+                else {
+                    break;
+                };
+                let next: Option<i64> = c
+                    .query_row(
+                        "SELECT superseded_by FROM qa_cache WHERE id = ?1",
+                        params![cid],
+                        |r| r.get(0),
+                    )
+                    .context("failed to read qa_cache superseded_by")?;
+                chain.push(row);
+                current = next;
+            }
+            Ok(chain)
         })
     }
 
@@ -425,7 +551,7 @@ impl Storage {
         let lambda = if lambda_ms <= 0 { 1 } else { lambda_ms };
         conn.execute(|c| {
             let count: i64 = c.query_row(
-                "SELECT COUNT(*) FROM qa_cache WHERE project = ?1",
+                "SELECT COUNT(*) FROM qa_cache WHERE project = ?1 AND is_active = 1",
                 params![project],
                 |r| r.get(0),
             )?;
@@ -435,7 +561,7 @@ impl Storage {
             // Score ascending; delete the excess lowest-scoring rows.
             let excess = count - i64::try_from(max_entries).unwrap_or(i64::MAX);
             let mut stmt = c.prepare(
-                "SELECT id FROM qa_cache WHERE project = ?1 \
+                "SELECT id FROM qa_cache WHERE project = ?1 AND is_active = 1 \
                  ORDER BY (access_count * 1.0) / (1.0 + ((?2 - last_accessed_at) * 1.0 / ?3)) ASC \
                  LIMIT ?4",
             )?;

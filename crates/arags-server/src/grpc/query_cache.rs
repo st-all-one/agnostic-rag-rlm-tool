@@ -317,6 +317,7 @@ pub async fn handle_store_answer(
         } else {
             Some(req.model)
         },
+        created_by: Some(ctx.username.clone()),
         tier_snapshot: Some(
             serde_json::to_string(&state.qa_config).unwrap_or_else(|_| "{}".into()),
         ),

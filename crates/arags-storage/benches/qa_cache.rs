@@ -29,6 +29,7 @@ fn make_input(project: &str, i: usize) -> StoreAnswerInput {
         model: Some("llama3".to_string()),
         tier_snapshot: Some("{}".to_string()),
         token_count: 12,
+        created_by: None,
     }
 }
 

@@ -71,6 +71,11 @@ pub struct ExplorationRow {
     pub created_at: i64,
     pub updated_at: i64,
     pub last_accessed_at: i64,
+    /// Whether this is the live revision (issue `agnostic-rlm-rs-e210`).
+    pub is_active: bool,
+    /// Rowid of the newer revision that superseded this one (`is_active = 0`
+    /// rows only); `None` for the live row (issue `agnostic-rlm-rs-e210`).
+    pub superseded_by: Option<i64>,
 }
 
 /// One resolved anchor: a cited/context file with its content hash at persist

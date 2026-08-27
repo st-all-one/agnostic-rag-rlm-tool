@@ -88,6 +88,16 @@ pub struct ServerConfig {
     /// Explorations dataset (plan 022): confidence + feedback knobs.
     #[serde(default)]
     pub exploration: ExplorationConfig,
+
+    /// Retired (`is_active = 0`) chunk history retention window in days (issue
+    /// `agnostic-rlm-rs-8dcc`). The maintenance ticker permanently purges
+    /// superseded chunks older than this many days; `0` keeps history forever.
+    #[serde(default = "default_chunk_retention_days")]
+    pub chunk_retention_days: u64,
+}
+
+fn default_chunk_retention_days() -> u64 {
+    7
 }
 
 /// Exploration dataset knobs (plan 022).
@@ -627,6 +637,7 @@ impl Default for ServerConfig {
             history: HistoryConfig::default(),
             exploration: ExplorationConfig::default(),
             rlm: RlmConfig::default(),
+            chunk_retention_days: default_chunk_retention_days(),
         }
     }
 }

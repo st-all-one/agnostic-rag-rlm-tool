@@ -115,6 +115,7 @@ pub(crate) async fn handle_complete_rlm_job(
         source_hashes: hashes,
         model,
         volunteer_username: Some(ctx.username.clone()),
+        created_by: Some(ctx.username.clone()),
         template_version,
         token_count,
     };

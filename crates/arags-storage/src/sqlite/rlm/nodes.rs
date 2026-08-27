@@ -20,6 +20,7 @@ impl Storage {
     /// Returns an error if the upsert fails or hashes cannot be serialized.
     pub fn store_rlm_node(&self, input: &NewRlmNode) -> Result<(i64, String)> {
         let now = now_ms();
+        let start = std::time::Instant::now();
         let node_id = uuid::Uuid::now_v7().to_string();
         let hashes_json =
             serde_json::to_string(&input.source_hashes).context("serialize source_hashes")?;
@@ -35,11 +36,16 @@ impl Storage {
                 )?)
             })
             .context("upsert rlm_node")?;
-        tracing::info!(
+        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+        tracing::debug!(
+            phase = "store_rlm_node",
+            rowid = id,
             node_id = %node_id,
             level = input.level,
             project = %input.project,
-            "stored rlm node"
+            subject = %input.subject,
+            elapsed_ms = format!("{elapsed_ms:.2}"),
+            "rlm node stored (superseding prior active revision)"
         );
         Ok((id, node_id))
     }
@@ -73,7 +79,7 @@ impl Storage {
     ) -> Result<Option<RlmNode>> {
         let sql = format!(
             "SELECT {NODE_COLS} FROM rlm_nodes \
-             WHERE project = ?1 AND level = ?2 AND subject = ?3"
+             WHERE project = ?1 AND level = ?2 AND subject = ?3 AND is_active = 1"
         );
         let conn = self.connection().context("acquire connection")?;
         conn.execute(|c| {
@@ -98,7 +104,7 @@ impl Storage {
     ) -> Result<Vec<RlmNode>> {
         let mut sql = format!(
             "SELECT {NODE_COLS} FROM rlm_nodes \
-             WHERE project = ?1 AND review_status != '{REVIEW_REJECTED}'"
+             WHERE project = ?1 AND is_active = 1 AND review_status != '{REVIEW_REJECTED}'"
         );
         if !include_pending {
             let _ = write!(sql, " AND review_status = '{REVIEW_APPROVED}'");
@@ -170,7 +176,8 @@ impl Storage {
             "SELECT {NODE_COLS} FROM rlm_nodes \
              WHERE rlm_nodes.rowid IN \
                (SELECT rowid FROM rlm_fts WHERE rlm_fts MATCH ?1 ORDER BY rank LIMIT ?3) \
-               AND buffer_id = ?2 AND stale = 0 AND review_status = '{REVIEW_APPROVED}'"
+               AND buffer_id = ?2 AND is_active = 1 AND stale = 0 \
+               AND review_status = '{REVIEW_APPROVED}'"
         );
         let conn = self.connection().context("acquire connection")?;
         conn.execute(|c| {
@@ -203,7 +210,8 @@ impl Storage {
         let sql = format!(
             "SELECT {NODE_COLS} FROM rlm_nodes \
              WHERE id IN (SELECT value FROM json_each(?1)) \
-               AND buffer_id = ?2 AND stale = 0 AND review_status = '{REVIEW_APPROVED}'"
+               AND buffer_id = ?2 AND is_active = 1 AND stale = 0 \
+               AND review_status = '{REVIEW_APPROVED}'"
         );
         let conn = self.connection().context("acquire connection")?;
         conn.execute(|c| {
@@ -237,6 +245,43 @@ impl Storage {
             )
             .optional()
             .context("rlm_subject_of")
+        })
+    }
+
+    /// Walk the supersede chain starting from `id`, returning every revision in
+    /// oldest→newest order (issue `agnostic-rlm-rs-e210`). The starting row need
+    /// not be the oldest; only the forward chain reachable via `superseded_by`
+    /// is returned. Retired (`is_active = 0`) revisions are included so callers
+    /// can audit the full node history.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any query fails.
+    pub fn get_node_history(&self, id: i64) -> Result<Vec<RlmNode>> {
+        let conn = self.connection().context("acquire connection")?;
+        conn.execute(|c| {
+            let mut chain = Vec::new();
+            let mut current: Option<i64> = Some(id);
+            while let Some(cid) = current {
+                let sql = format!("SELECT {NODE_COLS} FROM rlm_nodes WHERE id = ?1");
+                let Some(row) = c
+                    .query_row(sql.as_str(), params![cid], node_mapper)
+                    .optional()
+                    .context("failed to read rlm_node history row")?
+                else {
+                    break;
+                };
+                let next: Option<i64> = c
+                    .query_row(
+                        "SELECT superseded_by FROM rlm_nodes WHERE id = ?1",
+                        params![cid],
+                        |r| r.get(0),
+                    )
+                    .context("failed to read rlm_node superseded_by")?;
+                chain.push(row);
+                current = next;
+            }
+            Ok(chain)
         })
     }
 

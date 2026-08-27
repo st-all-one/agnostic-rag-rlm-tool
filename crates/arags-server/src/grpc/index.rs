@@ -7,6 +7,7 @@
 //! Removing server-side path knowledge closes the arbitrary-file-read footgun
 //! described in the security review.
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Instant;
 
@@ -107,8 +108,9 @@ fn decode_content(file: &IndexFile) -> Result<String, Status> {
 pub(crate) async fn handle_index_project(
     state: &AppState,
     request: Request<Streaming<IndexChunk>>,
+    created_by: Option<String>,
 ) -> Result<Response<IndexResponse>, Status> {
-    index_stream_loop(state, request.into_inner()).await
+    index_stream_loop(state, request.into_inner(), created_by).await
 }
 
 /// Core indexing loop, generic over the stream so it is unit-testable.
@@ -135,11 +137,18 @@ pub(crate) async fn handle_index_project(
 pub(crate) async fn index_stream_loop<S>(
     state: &AppState,
     mut stream: S,
+    created_by: Option<String>,
 ) -> Result<Response<IndexResponse>, Status>
 where
     S: futures::Stream<Item = Result<IndexChunk, Status>> + Unpin + Send,
 {
     let start = Instant::now();
+    // Authorship: the embedding model (chunks are produced by the embedder, not
+    // an LLM) and the authenticated session username threaded from the gRPC
+    // layer (issue `agnostic-rlm-rs-786a`). `None` only occurs in hermetic
+    // tests that bypass the auth wrapper.
+    let model_name = state.embedder.name();
+    let model: Option<&str> = Some(model_name);
 
     let mut project: Option<String> = None;
     let mut buffer_id: Option<i64> = None;
@@ -152,13 +161,29 @@ where
     // fixes the all-repo OOM that accumulated every file's bytes in `chunks`
     // for the whole stream (agnostic-rlm-rs-5124).
     let mut persisted_all: Vec<(i64, String)> = Vec::new();
-    let mut phase0: Option<(Vec<i64>, usize)> = None;
-    // Deferred destructive delete (issue `agnostic-rlm-rs-e5d0`): the re-index
-    // *replace* must not run until we actually have data to replace with. A
-    // client that disconnects right after `Init` (or never sends files) must
-    // NOT leave the buffer purged/empty — that broken state is what breaks RLM
-    // claims until restart (`agnostic-rlm-rs-ccc3`). So Phase 0 deletes only on
-    // the first `File` message.
+    // Immutable supersede (issue `agnostic-rlm-rs-8dcc`): a re-index no longer
+    // *deletes* the buffer's chunks — it snapshots the currently-active chunk
+    // keys on the first `File` message, then inserts NEW active rows and
+    // *retires* (is_active = 0) the previous version of each matching key as
+    // Phase 1 runs. Any active key still unmatched at end-of-stream is an
+    // orphan (file removed / chunk moved) and is retired then. `snapshot` maps
+    // `(file_path, line_start, line_end) -> chunk_id`; `remaining_active` is the
+    // set of snapshot keys not yet superseded, drained as Phase 1 confirms each
+    // key.
+    let mut snapshot: Option<HashMap<store::chunks::ChunkKey, i64>> = None;
+    let mut remaining_active: HashSet<store::chunks::ChunkKey> = HashSet::new();
+    // Accounting counters accumulated across the stream (replaces the old
+    // delete-based net math): how many new rows were inserted and how many
+    // previous versions were retired.
+    let mut pre_active: usize = 0;
+    let mut total_inserted: usize = 0;
+    let mut total_retired: usize = 0;
+    // Deferred snapshot (issue `agnostic-rlm-rs-e5d0`): nothing destructive may
+    // run until the stream actually delivers a `File`. A client that
+    // disconnects right after `Init` (or never sends files) must NOT leave the
+    // buffer touched — that broken state is what breaks RLM claims until
+    // restart (`agnostic-rlm-rs-ccc3`). So the supersede snapshot is taken only
+    // on the first `File` message.
     let mut phase0_done = false;
     // Live embed tasks. The guard aborts every handle still in the vec on drop,
     // so a disconnect/error mid-stream cannot leak a blocking task.
@@ -191,38 +216,31 @@ where
                 let bid = buffer_id
                     .ok_or_else(|| Status::invalid_argument("file message before init"))?;
 
-                // Phase 0 (stopgap for `agnostic-rlm-rs-20cd`): a re-index must
-                // *replace*, not *append*. Delete the buffer's existing chunks
-                // (cascade) and purge their vectors — but only once we know the
-                // stream is delivering real files (e5d0).
+                // Phase 0 (issue `agnostic-rlm-rs-8dcc`): supersede instead of
+                // delete. Snapshot the currently-active chunk keys so Phase 1
+                // can retire the previous version of each as it re-inserts, and
+                // so the end-of-stream orphan pass knows what was removed. This
+                // is still *deferred* to the first `File` (e5d0): a client that
+                // disconnects after `Init` leaves the buffer untouched.
                 if !phase0_done {
                     let t0 = Instant::now();
                     let storage = state.storage.clone();
-                    let (existing_ids, deleted_files) =
-                        store::blocking(move || store::delete_chunks_for_buffer(&storage, bid))
-                            .await
-                            .map_err(internal)?;
+                    let snap = store::blocking({
+                        let storage = storage.clone();
+                        move || store::chunks::snapshot_active_chunks(&storage, bid)
+                    })
+                    .await
+                    .map_err(internal)?;
+                    pre_active = snap.len();
+                    remaining_active = snap.keys().cloned().collect();
                     debug!(
-                        phase = "phase0_replace",
+                        phase = "phase0_supersede",
                         elapsed_ms = t0.elapsed().as_millis() as u64,
                         buffer_id = bid,
-                        removed = existing_ids.len(),
-                        "phase0 replaced existing chunks"
+                        active = pre_active,
+                        "phase0 snapshotted active chunks for supersede"
                     );
-                    if !existing_ids.is_empty() {
-                        if let Some(vs) = &state.vector_store {
-                            let ids_u64: Vec<u64> =
-                                existing_ids.iter().map(|i| *i as u64).collect();
-                            if let Err(e) = vs.delete_chunk_ids(&ids_u64).await {
-                                warn!(
-                                    error = ?e,
-                                    buffer_id = bid,
-                                    "failed to purge vectors on re-index; semantic results may be stale until rebuild"
-                                );
-                            }
-                        }
-                    }
-                    phase0 = Some((existing_ids, deleted_files));
+                    snapshot = Some(snap);
                     phase0_done = true;
                 }
 
@@ -251,12 +269,25 @@ where
                 // across loop iterations.
                 let rel_path = file.rel_path.clone();
                 let max_batch = state.config.max_batch_size.max(1);
-                let persisted = store::blocking({
+                let snap = snapshot
+                    .clone()
+                    .ok_or_else(|| internal("index snapshot missing despite phase0_done"))?;
+                let res = store::blocking({
                     let storage = state.storage.clone();
+                    let snap = snap.clone();
+                    let cb = created_by.clone();
                     move || {
                         let flat: Vec<(&str, &indexing::IndexedChunk)> =
                             chunk_list.iter().map(|c| (rel_path.as_str(), c)).collect();
-                        store::insert_chunks_batched(&storage, bid, &flat, max_batch)
+                        store::insert_chunks_batched(
+                            &storage,
+                            bid,
+                            &flat,
+                            max_batch,
+                            &snap,
+                            cb.as_deref(),
+                            model,
+                        )
                     }
                 })
                 .await
@@ -265,10 +296,33 @@ where
                     phase = "phase1_persist",
                     elapsed_ms = t1.elapsed().as_millis() as u64,
                     buffer_id = bid,
-                    chunk_count = persisted.len(),
+                    chunk_count = res.persisted.len(),
+                    created_by = created_by.as_deref(),
+                    model,
                     "phase1 persisted file chunks"
                 );
-                persisted_all.extend(persisted.iter().cloned());
+                persisted_all.extend(res.persisted.iter().cloned());
+                for key in &res.handled_keys {
+                    remaining_active.remove(key);
+                }
+                total_inserted += res.inserted;
+                total_retired += res.retired_ids.len();
+
+                // Retired (superseded) chunks must vanish from semantic search
+                // immediately: purge their usearch vectors (their FTS rows were
+                // already dropped by the retire helper inside the transaction).
+                if !res.retired_ids.is_empty() {
+                    if let Some(vs) = &state.vector_store {
+                        let ids_u64: Vec<u64> = res.retired_ids.iter().map(|i| *i as u64).collect();
+                        if let Err(e) = vs.delete_chunk_ids(&ids_u64).await {
+                            warn!(
+                                error = ?e,
+                                buffer_id = bid,
+                                "failed to purge superseded vectors; semantic results may be stale until rebuild"
+                            );
+                        }
+                    }
+                }
 
                 // Phase 2: embed + persist vectors, bounded to this file.
                 if let Some(vector_store) = &state.vector_store {
@@ -279,7 +333,7 @@ where
                     // so the blocking task can confine candle's matmul and
                     // report backpressure signal (issue `agnostic-rlm-rs-6690`).
                     let pool_threads = state.index_embed_pool.current_num_threads();
-                    for batch in persisted.chunks(embed_batch) {
+                    for batch in res.persisted.chunks(embed_batch) {
                         let owned_batch: Vec<(i64, String)> = batch.to_vec();
                         let batch_chunk_ids: Vec<i64> =
                             owned_batch.iter().map(|(cid, _)| *cid).collect();
@@ -398,21 +452,67 @@ where
         "index stream ended; pooled connections/tx released"
     );
 
+    // End-of-stream orphan pass (issue `agnostic-rlm-rs-8dcc`): any active chunk
+    // key snapshotted at Phase 0 that Phase 1 never re-inserted is now orphaned
+    // (file removed or chunk moved). Retire it softly so search never surfaces
+    // it, and purge its vector. Scoped inside `store::blocking` so no pooled
+    // connection is held across the await.
+    if let Some(snap) = &snapshot {
+        if !remaining_active.is_empty() {
+            let orphan_ids: Vec<i64> = remaining_active.iter().map(|k| snap[k]).collect();
+            let storage = state.storage.clone();
+            store::blocking({
+                let storage = storage.clone();
+                let ids = orphan_ids.clone();
+                move || -> anyhow::Result<()> {
+                    for id in &ids {
+                        store::chunks::retire_chunk(&storage, *id, None)?;
+                    }
+                    Ok(())
+                }
+            })
+            .await
+            .map_err(internal)?;
+            if let Some(vs) = &state.vector_store {
+                let ids_u64: Vec<u64> = orphan_ids.iter().map(|i| *i as u64).collect();
+                if let Err(e) = vs.delete_chunk_ids(&ids_u64).await {
+                    warn!(
+                        error = ?e,
+                        orphan_count = orphan_ids.len(),
+                        "failed to purge orphan vectors; semantic results may be stale until rebuild"
+                    );
+                }
+            }
+            info!(
+                buffer_id = buffer_id,
+                orphan_count = orphan_ids.len(),
+                "retired orphaned chunks (removed files / moved chunks)"
+            );
+        }
+    }
+
     let project = project
         .ok_or_else(|| Status::invalid_argument("index stream did not send an init message"))?;
     let buffer_id =
         buffer_id.ok_or_else(|| Status::invalid_argument("index stream missing init"))?;
-    let (existing_ids, deleted_files) = phase0.unwrap_or_default();
-    let removed = existing_ids.len();
-    let net_chunks = (total_chunks as i64).saturating_sub(removed as i64);
-    let net_files = (distinct_files as i64).saturating_sub(deleted_files as i64);
+    // Buffer-count delta under supersede: the final active count equals the
+    // start-of-stream active count minus orphaned keys plus truly-new rows
+    // (`inserted - retired`, since each retired version is matched by one new
+    // row). Re-indexing a disjoint file set thus keeps totals stable.
+    let orphan_count = remaining_active.len();
+    let net_chunks = (total_inserted as i64)
+        .saturating_sub(total_retired as i64)
+        .saturating_sub(orphan_count as i64);
+    let orphan_files: HashSet<&String> = remaining_active.iter().map(|(fp, _, _)| fp).collect();
+    let net_files = (distinct_files as i64).saturating_sub(orphan_files.len() as i64);
     info!(
         project = %project,
         buffer_id,
-        old_chunks = removed,
+        pre_active,
         net_chunks,
+        orphan_count,
         elapsed_ms = start.elapsed().as_millis(),
-        "purged buffer before re-index (stopgap agnostic-rlm-rs-20cd)"
+        "superseded buffer chunks on re-index (agnostic-rlm-rs-8dcc)"
     );
 
     // Phase 3: bump aggregate counts by this stream's *net* contribution so a
@@ -617,7 +717,7 @@ mod tests {
             .unwrap()
             .execute(|c| {
                 Ok(c.query_row(
-                    "SELECT COUNT(*) FROM chunks WHERE buffer_id = ?1",
+                    "SELECT COUNT(*) FROM chunks WHERE buffer_id = ?1 AND is_active = 1",
                     rusqlite::params![buffer_id],
                     |r| r.get(0),
                 )?)
@@ -628,7 +728,8 @@ mod tests {
     /// Return true if any chunk text for `buffer_id` contains `needle`.
     /// Used to prove a re-index *replaced* (not appended) content: the old
     /// run's marker must vanish from `chunk_texts`/`chunks_fts` after a
-    /// subsequent re-index (issue `agnostic-rlm-rs-20cd`).
+    /// subsequent re-index (issue `agnostic-rlm-rs-20cd`). Only active chunks
+    /// are considered (history is filtered out), mirroring live search.
     fn chunk_text_has(storage: &Storage, buffer_id: i64, needle: &str) -> bool {
         storage
             .connection()
@@ -636,7 +737,7 @@ mod tests {
             .execute(|c| {
                 let mut stmt = c.prepare(
                     "SELECT ct.content FROM chunk_texts ct \
-                     JOIN chunks c ON c.id = ct.chunk_id WHERE c.buffer_id = ?1",
+                     JOIN chunks c ON c.id = ct.chunk_id WHERE c.buffer_id = ?1 AND c.is_active = 1",
                 )?;
                 let mut rows =
                     stmt.query_map(rusqlite::params![buffer_id], |r| r.get::<_, String>(0))?;
@@ -685,7 +786,7 @@ mod tests {
         drop(tx);
         let stream = ReceiverStream::new(rx);
 
-        let resp = index_stream_loop(&state, stream).await;
+        let resp = index_stream_loop(&state, stream, None).await;
         assert!(resp.is_ok(), "handler must return cleanly on disconnect");
 
         // The deferred Phase-0 delete must NOT have run: the two pre-seeded
@@ -712,7 +813,7 @@ mod tests {
         drop(tx);
         let stream = ReceiverStream::new(rx);
 
-        let resp = index_stream_loop(&state, stream).await;
+        let resp = index_stream_loop(&state, stream, None).await;
         assert!(resp.is_ok(), "handler must return cleanly on disconnect");
 
         // A subsequent direct Storage operation must succeed — proving no
@@ -761,7 +862,7 @@ mod tests {
         drop(tx);
         let stream = ReceiverStream::new(rx);
 
-        let resp = index_stream_loop(&state, stream).await;
+        let resp = index_stream_loop(&state, stream, None).await;
         assert!(resp.is_ok(), "handler must return cleanly on disconnect");
 
         // The claim must SUCCEED (Ok(Some(job))), proving no held
@@ -844,7 +945,7 @@ mod tests {
         drop(tx);
         let stream = ReceiverStream::new(rx);
 
-        let resp = index_stream_loop(&state, stream).await;
+        let resp = index_stream_loop(&state, stream, None).await;
         assert!(
             resp.is_ok(),
             "index must succeed with capped pool + lightweight embedder"
@@ -910,7 +1011,7 @@ mod tests {
             }
             drop(tx);
             let stream = ReceiverStream::new(rx);
-            index_stream_loop(&bg_state, stream).await
+            index_stream_loop(&bg_state, stream, None).await
         });
 
         // Concurrently, hammer the global-pool query embed and assert each
@@ -958,7 +1059,7 @@ mod tests {
             .await
             .unwrap();
         drop(tx);
-        let resp = index_stream_loop(&state, ReceiverStream::new(rx)).await;
+        let resp = index_stream_loop(&state, ReceiverStream::new(rx), None).await;
         assert!(resp.is_ok(), "run1 must succeed");
 
         assert_eq!(
@@ -978,7 +1079,7 @@ mod tests {
             .await
             .unwrap();
         drop(tx);
-        let resp = index_stream_loop(&state, ReceiverStream::new(rx)).await;
+        let resp = index_stream_loop(&state, ReceiverStream::new(rx), None).await;
         assert!(resp.is_ok(), "run2 must succeed");
 
         assert_eq!(
@@ -1002,7 +1103,7 @@ mod tests {
             .await
             .unwrap();
         drop(tx);
-        let resp = index_stream_loop(&state, ReceiverStream::new(rx)).await;
+        let resp = index_stream_loop(&state, ReceiverStream::new(rx), None).await;
         assert!(resp.is_ok(), "run3 must succeed");
 
         assert_eq!(
@@ -1017,6 +1118,135 @@ mod tests {
         assert!(
             !chunk_text_has(&storage, 1, "beta_marker"),
             "run2 content gone after third re-index"
+        );
+    }
+
+    /// Issue `agnostic-rlm-rs-8dcc`: re-indexing supersedes the previous chunk
+    /// version (soft `is_active = 0`) rather than deleting it. The old content
+    /// must be retained as history (`is_active = 0`) but MUST NOT surface in
+    /// active counts nor in semantic search (its vector is purged at retire).
+    #[tokio::test]
+    async fn reindex_supersedes_old_chunk_history_retained() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::open(dir.path()).unwrap();
+        let vdir = tempfile::tempdir().unwrap();
+        let dims = arags_embedding::embedder::minilm::HIDDEN_SIZE;
+        let vector_store = Arc::new(
+            VectorStore::open_with_dims(vdir.path(), dims)
+                .await
+                .unwrap(),
+        );
+
+        let mut cfg = ServerConfig::default();
+        cfg.exploration.enabled = false;
+        cfg.rlm.enabled = false;
+        let embedder: Arc<dyn Embedder + Send + Sync> = Arc::new(LightweightEmbedder::new(dims));
+        let state = AppState::with_embedder(
+            storage.clone(),
+            cfg,
+            embedder,
+            Some(vector_store.clone()),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        // Run 1: index "src/a.rs" with a unique alpha marker (plus shared text).
+        let (tx, rx) = mpsc::channel::<Result<IndexChunk, tonic::Status>>(8);
+        tx.send(Ok(init_chunk("proj"))).await.unwrap();
+        tx.send(Ok(file_chunk(
+            "src/a.rs",
+            "fn alpha_marker() {}\nfn keep() {}\n",
+        )))
+        .await
+        .unwrap();
+        drop(tx);
+        assert!(
+            index_stream_loop(&state, ReceiverStream::new(rx), None)
+                .await
+                .is_ok(),
+            "run1 must succeed"
+        );
+
+        // Run 2: re-index the SAME file with different content (beta marker).
+        let (tx, rx) = mpsc::channel::<Result<IndexChunk, tonic::Status>>(8);
+        tx.send(Ok(init_chunk("proj"))).await.unwrap();
+        tx.send(Ok(file_chunk(
+            "src/a.rs",
+            "fn beta_marker() {}\nfn keep() {}\n",
+        )))
+        .await
+        .unwrap();
+        drop(tx);
+        assert!(
+            index_stream_loop(&state, ReceiverStream::new(rx), None)
+                .await
+                .is_ok(),
+            "run2 must succeed"
+        );
+
+        // Exactly one ACTIVE chunk (the new version).
+        assert_eq!(
+            chunk_count(&storage, 1),
+            1,
+            "exactly one active chunk after supersede"
+        );
+        // History retained: the superseded run-1 chunk is still present but
+        // inactive.
+        let retired: i64 = storage
+            .connection()
+            .unwrap()
+            .execute(|c| {
+                Ok(
+                    c.query_row("SELECT COUNT(*) FROM chunks WHERE is_active = 0", [], |r| {
+                        r.get(0)
+                    })?,
+                )
+            })
+            .unwrap();
+        assert!(retired > 0, "superseded chunk history must be retained");
+
+        // The vector store holds only the active chunk: the retired chunk's
+        // vector was purged at retire time.
+        assert_eq!(
+            vector_store.count().await,
+            1,
+            "only the active vector remains in the store"
+        );
+
+        // Fetch the retired chunk's id + text, embed it, and confirm semantic
+        // search never returns the retired id (its vector is gone).
+        let (retired_id, retired_text) = storage
+            .connection()
+            .unwrap()
+            .execute(|c| {
+                let mut stmt = c.prepare(
+                    "SELECT c.id, ct.content FROM chunks c \
+                     JOIN chunk_texts ct ON ct.chunk_id = c.id WHERE c.is_active = 0 LIMIT 1",
+                )?;
+                let row =
+                    stmt.query_row([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+                Ok(row)
+            })
+            .unwrap();
+
+        let q_vec = tokio::task::spawn_blocking({
+            let st = state.clone();
+            let t = retired_text.clone();
+            move || st.embedder.embed(&t)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+
+        let results = vector_store
+            .search_similar(&q_vec, Some(1), 10)
+            .await
+            .unwrap();
+        assert!(
+            !results.iter().any(|r| r.chunk_id == retired_id as u64),
+            "retired chunk must not surface in semantic search"
         );
     }
 

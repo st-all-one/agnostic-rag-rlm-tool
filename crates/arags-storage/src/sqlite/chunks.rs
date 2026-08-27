@@ -298,7 +298,7 @@ impl Storage {
             let mut stmt = c
                 .prepare(
                     "SELECT id, (unixepoch() - last_accessed_at) / 3600.0 \
-                     FROM chunks WHERE id IN (SELECT value FROM json_each(?1))",
+                     FROM chunks WHERE id IN (SELECT value FROM json_each(?1)) AND is_active = 1",
                 )
                 .context("prepare chunk_ages_hours")?;
             let ids_json = serde_json::to_string(ids).context("serialize chunk ids")?;

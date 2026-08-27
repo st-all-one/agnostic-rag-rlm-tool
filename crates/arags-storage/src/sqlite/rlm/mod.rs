@@ -19,6 +19,7 @@ pub mod graph;
 pub mod jobs;
 pub mod nodes;
 
+use rusqlite::OptionalExtension;
 use rusqlite::params;
 
 pub use arags_core::rlm::{
@@ -72,6 +73,14 @@ pub struct RlmNode {
     pub last_accessed_at: i64,
     /// Whether source data changed after this summary was written.
     pub stale: bool,
+    /// Authenticated session username that created the row (issue
+    /// `agnostic-rlm-rs-786a`).
+    pub created_by: Option<String>,
+    /// Whether this is the live revision (issue `agnostic-rlm-rs-e210`).
+    pub is_active: bool,
+    /// Rowid of the newer revision that superseded this one (`is_active = 0`
+    /// rows only); `None` for the live row (issue `agnostic-rlm-rs-e210`).
+    pub superseded_by: Option<i64>,
 }
 
 /// Input for storing (upserting) a summary node.
@@ -85,6 +94,7 @@ pub struct NewRlmNode {
     pub source_hashes: Vec<String>,
     pub model: Option<String>,
     pub volunteer_username: Option<String>,
+    pub created_by: Option<String>,
     pub template_version: Option<String>,
     pub token_count: i64,
 }
@@ -161,7 +171,7 @@ pub(super) fn parse_json_array(text: Option<String>) -> Vec<String> {
 pub(super) const NODE_COLS: &str = "id, node_id, buffer_id, project, level, subject, \
      summary_text, source_hashes, model, volunteer_username, template_version, token_count, \
      confidence, review_status, reviewed_by, reviewed_at, access_count, created_at, \
-     updated_at, last_accessed_at, stale";
+     updated_at, last_accessed_at, stale, created_by, is_active, superseded_by";
 
 pub(super) fn node_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<RlmNode> {
     Ok(RlmNode {
@@ -186,6 +196,9 @@ pub(super) fn node_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<RlmNode> {
         updated_at: r.get(18)?,
         last_accessed_at: r.get(19)?,
         stale: r.get::<_, i64>(20)? != 0,
+        created_by: r.get(21)?,
+        is_active: r.get::<_, i64>(22)? != 0,
+        superseded_by: r.get(23)?,
     })
 }
 
@@ -221,8 +234,16 @@ pub fn rlm_job_key(project: &str, level: i64, subject: &str) -> String {
     format!("L{level}:{project}:{subject}")
 }
 
-/// Shared `INSERT .. ON CONFLICT` upsert for summary nodes (review gate reset).
+/// Superseding insert for a summary node (issue `agnostic-rlm-rs-e210`).
+///
 /// Runs on any connection/transaction handle; returns `(rowid, node_id)`.
+///
+/// If an active node already exists for `(project, level, subject)` it is
+/// *retired* (`is_active = 0`) and a brand-new active row is inserted
+/// (`version = old + 1`, `is_active = 1`); the retired row's `superseded_by` is
+/// then linked to the new rowid. No active node → a fresh active row
+/// (`version = 1`) is inserted. The retire-before-insert ordering keeps the
+/// partial unique index (one active per subject) satisfied at all times.
 pub(super) fn upsert_node_stmt(
     conn: &rusqlite::Connection,
     node_id: &str,
@@ -230,27 +251,36 @@ pub(super) fn upsert_node_stmt(
     input: &NewRlmNode,
     now: i64,
 ) -> rusqlite::Result<(i64, String)> {
-    conn.query_row(
+    // Find the current active revision for this subject (if any).
+    let existing: Option<(i64, i64)> = conn
+        .query_row(
+            "SELECT id, version FROM rlm_nodes \
+             WHERE project = ?1 AND level = ?2 AND subject = ?3 AND is_active = 1 LIMIT 1",
+            params![input.project, input.level, input.subject],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
+        )
+        .optional()?;
+
+    // Retire the previous active row first so the partial unique index (one
+    // active per subject) is never violated by the insert below.
+    let old_id = if let Some((old_id, _)) = existing {
+        conn.execute(
+            "UPDATE rlm_nodes SET is_active = 0 WHERE id = ?1 AND is_active = 1",
+            params![old_id],
+        )?;
+        Some(old_id)
+    } else {
+        None
+    };
+
+    let new_id: i64 = conn.query_row(
         "INSERT INTO rlm_nodes \
-         (node_id, buffer_id, project, level, subject, summary_text, source_hashes, \
-          model, volunteer_username, template_version, token_count, confidence, \
-          review_status, created_at, updated_at, last_accessed_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1.0, 'pending', ?12, ?12, ?12) \
-         ON CONFLICT(project, level, subject) DO UPDATE SET \
-           summary_text = excluded.summary_text, \
-           source_hashes = excluded.source_hashes, \
-           model = excluded.model, \
-           volunteer_username = excluded.volunteer_username, \
-           template_version = excluded.template_version, \
-           token_count = excluded.token_count, \
-           confidence = 1.0, \
-           review_status = 'pending', \
-           reviewed_by = NULL, \
-           reviewed_at = NULL, \
-           updated_at = excluded.updated_at, \
-           last_accessed_at = excluded.last_accessed_at, \
-           stale = 0 \
-         RETURNING id, node_id",
+             (node_id, buffer_id, project, level, subject, summary_text, source_hashes, \
+              model, volunteer_username, created_by, template_version, token_count, confidence, \
+              review_status, version, is_active, created_at, updated_at, last_accessed_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 1.0, 'pending', ?13, 1, \
+                     ?14, ?14, ?14) \
+             RETURNING id",
         params![
             node_id,
             input.buffer_id,
@@ -261,10 +291,22 @@ pub(super) fn upsert_node_stmt(
             hashes_json,
             input.model,
             input.volunteer_username,
+            input.created_by,
             input.template_version,
             input.token_count,
+            existing.map_or(1, |(_, v)| v + 1),
             now,
         ],
-        |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
-    )
+        |r| r.get(0),
+    )?;
+
+    // Link the retired revision to the new one.
+    if let Some(old_id) = old_id {
+        conn.execute(
+            "UPDATE rlm_nodes SET superseded_by = ?1 WHERE id = ?2",
+            params![new_id, old_id],
+        )?;
+    }
+
+    Ok((new_id, node_id.to_string()))
 }

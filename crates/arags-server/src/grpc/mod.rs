@@ -92,8 +92,11 @@ impl AragsService for AragsGrpcService {
         request: Request<Streaming<IndexChunk>>,
     ) -> Result<Response<IndexResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.index_project");
-        crate::auth::authenticate(request.metadata(), &self.state.storage)?;
-        index::handle_index_project(&self.state, request).await
+        // Authenticate up-front (issue `agnostic-rlm-rs-786a`): the session
+        // username becomes the `created_by` on every chunk written below.
+        let ctx = crate::auth::authenticate(request.metadata(), &self.state.storage)?;
+        let created_by = Some(ctx.username.clone());
+        index::handle_index_project(&self.state, request, created_by).await
     }
 
     // ── Search ────────────────────────────────────────────────────────────

@@ -130,6 +130,9 @@ pub async fn run_server(
         let floor = config.maintenance.decay_score_floor;
         // `[history] retention_days` (plan 020): 0 keeps history forever.
         let retention_days = config.history.retention_days;
+        // `[chunk_retention_days]` (issue `agnostic-rlm-rs-8dcc`): 0 keeps
+        // superseded chunk history forever.
+        let chunk_retention_days = config.chunk_retention_days;
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
@@ -154,6 +157,18 @@ pub async fn run_server(
                         Ok(0) => {}
                         Ok(n) => tracing::info!(purged = n, "history retention purge"),
                         Err(e) => tracing::warn!(error = %e, "history purge failed"),
+                    }
+                }
+                if chunk_retention_days > 0 {
+                    let storage = maint_storage.clone();
+                    match crate::store::blocking(move || {
+                        crate::store::chunks::purge_inactive_chunks(&storage, chunk_retention_days)
+                    })
+                    .await
+                    {
+                        Ok(0) => {}
+                        Ok(n) => tracing::info!(purged = n, "inactive chunk purge"),
+                        Err(e) => tracing::warn!(error = %e, "inactive chunk purge failed"),
                     }
                 }
             }

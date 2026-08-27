@@ -44,6 +44,7 @@ fn l1_enqueue_then_cascade_to_l2_and_l3() {
                 source_hashes: vec!["h".into()],
                 model: Some("llama3.2".into()),
                 volunteer_username: Some("bob".into()),
+                created_by: None,
                 template_version: Some("t".into()),
                 token_count: 5,
             })
@@ -94,6 +95,7 @@ fn node_snapshot(
         source_hashes: n.source_hashes.clone(),
         model: n.model.clone(),
         volunteer_username: n.volunteer_username.clone(),
+        created_by: n.created_by.clone(),
         template_version: n.template_version.clone(),
         token_count: n.token_count,
     }

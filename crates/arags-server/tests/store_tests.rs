@@ -11,6 +11,8 @@
 //! tests are fast and hermetic; the same functions are used by the server's
 //! pooled mode.
 
+use std::collections::HashMap;
+
 use anyhow::Context;
 use arags_server::store;
 use arags_storage::Storage;
@@ -83,7 +85,8 @@ fn test_reindex_does_not_duplicate_chunks() {
     let flat: Vec<(&str, &arags_server::indexing::IndexedChunk)> =
         chunks.iter().map(|c| (c.file_path.as_str(), c)).collect();
 
-    store::insert_chunks_batched(&storage, buffer_id, &flat, 100).unwrap();
+    store::insert_chunks_batched(&storage, buffer_id, &flat, 100, &HashMap::new(), None, None)
+        .unwrap();
     assert_eq!(
         storage.count_chunks(buffer_id).unwrap(),
         2,
@@ -100,7 +103,8 @@ fn test_reindex_does_not_duplicate_chunks() {
         "buffer emptied by cascade delete"
     );
 
-    store::insert_chunks_batched(&storage, buffer_id, &flat, 100).unwrap();
+    store::insert_chunks_batched(&storage, buffer_id, &flat, 100, &HashMap::new(), None, None)
+        .unwrap();
     assert_eq!(
         storage.count_chunks(buffer_id).unwrap(),
         2,
@@ -121,4 +125,61 @@ fn test_reindex_does_not_duplicate_chunks() {
         })
         .unwrap();
     assert_eq!(fts_rows, 2, "FTS rows present for the re-inserted chunks");
+}
+
+// ── Authorship propagation (issue `agnostic-rlm-rs-786a`) ─────────────────────
+
+#[test]
+fn insert_chunks_batched_populates_created_by_and_model() {
+    let (storage, _dir) = setup();
+    let buffer_id = store::insert_project(&storage, "auth-test", "/tmp/auth-test").unwrap();
+
+    let mk = |fp: &str| arags_server::indexing::IndexedChunk {
+        file_path: fp.to_string(),
+        line_start: 1,
+        line_end: 3,
+        content: "fn main() {}".to_string(),
+        hash: format!("{fp}-hash"),
+        language: Some("rust".to_string()),
+        chunk_type: "code".to_string(),
+    };
+    let chunks = [mk("a.rs"), mk("b.rs")];
+    let flat: Vec<(&str, &arags_server::indexing::IndexedChunk)> =
+        chunks.iter().map(|c| (c.file_path.as_str(), c)).collect();
+
+    let created_by = Some("alice");
+    let model = Some("sentence-minilm");
+    store::insert_chunks_batched(
+        &storage,
+        buffer_id,
+        &flat,
+        100,
+        &HashMap::new(),
+        created_by,
+        model,
+    )
+    .unwrap();
+
+    let rows: Vec<(Option<String>, Option<String>, i64)> = storage
+        .connection()
+        .unwrap()
+        .execute(|conn| {
+            let mut stmt = conn
+                .prepare("SELECT created_by, model, is_active FROM chunks WHERE buffer_id = ?1")?;
+            let rows = stmt
+                .query_map(rusqlite::params![buffer_id], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })?
+                .filter_map(std::result::Result::ok)
+                .collect();
+            Ok(rows)
+        })
+        .unwrap();
+
+    assert_eq!(rows.len(), 2, "two active chunks persisted");
+    for (cb, m, active) in rows {
+        assert_eq!(active, 1, "chunk is active");
+        assert_eq!(cb.as_deref(), Some("alice"), "created_by populated");
+        assert_eq!(m.as_deref(), Some("sentence-minilm"), "model populated");
+    }
 }

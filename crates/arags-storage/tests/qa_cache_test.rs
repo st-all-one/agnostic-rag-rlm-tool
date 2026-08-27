@@ -44,6 +44,7 @@ fn input(
         model: Some("llama3".to_string()),
         tier_snapshot: Some("{}".to_string()),
         token_count: 12,
+        created_by: None,
     }
 }
 
@@ -119,7 +120,7 @@ fn test_qa_cache_scoped_per_project() {
 // ── Reserve lock dedupes identical concurrent MISS on same project ──────────
 
 #[test]
-fn test_qa_cache_reserve_lock_dedupes_same_project() {
+fn test_qa_cache_supersedes_same_project() {
     let (storage, _dir) = setup();
     let q = "Explain the stop-word filter.";
 
@@ -142,14 +143,25 @@ fn test_qa_cache_reserve_lock_dedupes_same_project() {
         ))
         .unwrap();
 
-    // One entry wins; the second reuses its cache_id (no duplicate digest).
+    // A re-store for the same subject SUPERSEDES: every store is a new row.
     assert!(first.created);
-    assert!(!second.created);
-    assert_eq!(first.cache_id, second.cache_id);
-    assert_eq!(first.id, second.id);
+    assert!(second.created);
+    assert_ne!(first.cache_id, second.cache_id);
+    assert_ne!(first.id, second.id);
 
-    // Only one row persisted for this (project, question_hash).
-    assert_eq!(storage.count_qa("p1").unwrap(), 1);
+    // The previous revision is retired and links to the new one; the read
+    // returns only the latest active row.
+    let old = storage.get_qa_by_rowid(first.id).unwrap().unwrap();
+    assert_eq!(old.is_active, false);
+    assert_eq!(old.superseded_by, Some(second.id));
+    let hit = storage
+        .get_cached_answer("p1", &question_hash(q))
+        .unwrap()
+        .unwrap();
+    assert_eq!(hit.id, second.id);
+
+    // Two rows persisted for this (project, question_hash): one active, one history.
+    assert_eq!(storage.count_qa("p1").unwrap(), 2);
 }
 
 // ── Staleness: chunk hash change forces re-digest (MISS) ────────────────────

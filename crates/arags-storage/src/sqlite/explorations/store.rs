@@ -18,7 +18,8 @@ use super::parse_stale_reason;
 /// [`exploration_mapper`]).
 const EXPLORATION_COLS: &str = "id, exploration_id, project, buffer_id, goal, body, summary, \
      created_by, model, template_version, epoch_created, status, stale_reason, confirmed, \
-     contradicted, access_count, token_count, created_at, updated_at, last_accessed_at";
+      contradicted, access_count, token_count, created_at, updated_at, last_accessed_at, \
+      is_active, superseded_by";
 
 fn exploration_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<ExplorationRow> {
     Ok(ExplorationRow {
@@ -44,6 +45,8 @@ fn exploration_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<ExplorationRow>
         created_at: r.get(17)?,
         updated_at: r.get(18)?,
         last_accessed_at: r.get(19)?,
+        is_active: r.get::<_, i64>(20)? != 0,
+        superseded_by: r.get(21)?,
     })
 }
 
@@ -62,6 +65,7 @@ impl Storage {
         input: &PersistExplorationInput,
     ) -> Result<StoredExploration> {
         let conn = self.connection().context("failed to acquire connection")?;
+        let start = std::time::Instant::now();
         let now = now_ms();
         let exploration_id = uuid::Uuid::now_v7().to_string();
         let body = compress_body(&input.body_markdown)?;
@@ -81,13 +85,33 @@ impl Storage {
                 )
                 .context("failed to read project epoch")?;
 
+            // Supersede any current active map for the same (project, goal):
+            // retire it first so the partial active index is never violated,
+            // then insert the new active revision.
+            let old_id: Option<i64> = tx
+                .query_row(
+                    "SELECT id FROM explorations \
+                     WHERE project = ?1 AND goal = ?2 AND is_active = 1 LIMIT 1",
+                    params![input.project, input.goal],
+                    |r| r.get::<_, i64>(0),
+                )
+                .optional()
+                .context("failed to probe existing exploration")?;
+            if let Some(old_id) = old_id {
+                tx.execute(
+                    "UPDATE explorations SET is_active = 0 WHERE id = ?1 AND is_active = 1",
+                    params![old_id],
+                )
+                .context("failed to retire superseded exploration")?;
+            }
+
             let rowid: i64 = tx
                 .query_row(
                     "INSERT INTO explorations \
                      (exploration_id, project, buffer_id, goal, body, summary, created_by, model, \
-                      template_version, epoch_created, status, access_count, token_count, \
+                      template_version, epoch_created, status, is_active, access_count, token_count, \
                       created_at, updated_at, last_accessed_at) \
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'fresh', 0, ?11, ?12, ?12, ?12) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'fresh', 1, 0, ?11, ?12, ?12, ?12) \
                      RETURNING id",
                     params![
                         exploration_id,
@@ -107,6 +131,14 @@ impl Storage {
                 )
                 .context("failed to insert exploration")?;
 
+            if let Some(old_id) = old_id {
+                tx.execute(
+                    "UPDATE explorations SET superseded_by = ?1 WHERE id = ?2",
+                    params![rowid, old_id],
+                )
+                .context("failed to link superseded exploration")?;
+            }
+
             for anchor in &input.anchors {
                 tx.execute(
                     "INSERT INTO exploration_files \
@@ -120,13 +152,17 @@ impl Storage {
             tx.commit().context("commit exploration tx")?;
             Ok(rowid)
         })?;
+        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
         tracing::debug!(
+            phase = "persist_exploration",
             rowid = id,
             exploration_id = %exploration_id,
             project = %input.project,
+            goal = %input.goal,
             anchors = input.anchors.len(),
             bytes = body.len(),
-            "exploration persisted"
+            elapsed_ms = format!("{elapsed_ms:.2}"),
+            "exploration persisted (superseding prior active revision)"
         );
 
         Ok(StoredExploration { exploration_id, id })
@@ -189,7 +225,7 @@ impl Storage {
                  WHERE explorations.rowid IN \
                    (SELECT rowid FROM explorations_fts WHERE explorations_fts MATCH ?2 \
                     ORDER BY rank LIMIT ?3) \
-                 AND project = ?1 AND status != 'retired'"
+                 AND project = ?1 AND is_active = 1 AND status != 'retired'"
             );
             let mut stmt = c.prepare(&sql).context("prepare search_explorations_fts")?;
             let rows = stmt
@@ -239,6 +275,43 @@ impl Storage {
                 )?,
             };
             Ok(usize::try_from(n).unwrap_or(0))
+        })
+    }
+
+    /// Walk the supersede chain starting from `id`, returning every revision in
+    /// oldest→newest order (issue `agnostic-rlm-rs-e210`). The starting row need
+    /// not be the oldest; only the forward chain reachable via `superseded_by`
+    /// is returned. Retired (`is_active = 0`) revisions are included so callers
+    /// can audit the full map history.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any query fails.
+    pub fn get_exploration_history(&self, id: i64) -> Result<Vec<ExplorationRow>> {
+        let conn = self.connection().context("failed to acquire connection")?;
+        conn.execute(|c| {
+            let mut chain = Vec::new();
+            let mut current: Option<i64> = Some(id);
+            while let Some(cid) = current {
+                let sql = format!("SELECT {EXPLORATION_COLS} FROM explorations WHERE id = ?1");
+                let Some(row) = c
+                    .query_row(sql.as_str(), params![cid], exploration_mapper)
+                    .optional()
+                    .context("failed to read exploration history row")?
+                else {
+                    break;
+                };
+                let next: Option<i64> = c
+                    .query_row(
+                        "SELECT superseded_by FROM explorations WHERE id = ?1",
+                        params![cid],
+                        |r| r.get(0),
+                    )
+                    .context("failed to read exploration superseded_by")?;
+                chain.push(row);
+                current = next;
+            }
+            Ok(chain)
         })
     }
 

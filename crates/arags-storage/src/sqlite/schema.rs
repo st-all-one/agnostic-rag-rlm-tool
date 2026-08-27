@@ -20,6 +20,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/020_add_exploration_review.sql"),
     include_str!("../../migrations/021_temporal_metadata.sql"),
     include_str!("../../migrations/022_vector_status.sql"),
+    include_str!("../../migrations/023_inactive_retention.sql"),
+    include_str!("../../migrations/024_supersede_derived.sql"),
 ];
 
 /// Total number of migrations in [`MIGRATIONS`].
