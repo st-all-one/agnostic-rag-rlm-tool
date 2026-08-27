@@ -157,6 +157,9 @@ override por projeto) → `~/.arags/arags.toml` (`[server].addr`) → env
 | `arags history [--limit] [--user]` | Histórico de consultas por usuário (escopado por refresh token) |
 | `arags-server up\|status\|admin ...` | Binário do servidor (data plane gRPC; `admin create-refresh`, etc.) |
 
+Veja `docs/agent-integration.md` para integrar o `arags` com agentes consumidores
+Tier 1 (Continue, Cline, Tabby, Aider).
+
 **Removidos (plan 019):** `run`, `context`, `session`, `status`, `cost`,
 `cancel`, `checkpoints`, `restore-page`, `wiki`, `consolidate` (CLI), `decay`
 (CLI) e `entities` (CLI). A manutenção server-side (consolidate/decay) é feita

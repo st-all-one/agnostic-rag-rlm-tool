@@ -54,7 +54,9 @@ pub struct AppState {
 /// a local Ollama daemon (`kind = "ollama"`, e.g. `all-minilm:22m`), the
 /// native all-`MiniLM`-L6-v2 checkpoint at `model_dir` (candle, default), or
 /// a hash fallback when no usable backend is configured.
-fn load_embedder(cfg: &crate::config::EmbedderConfig) -> Arc<dyn Embedder + Send + Sync> {
+pub(crate) fn load_embedder(
+    cfg: &crate::config::EmbedderConfig,
+) -> Arc<dyn Embedder + Send + Sync> {
     use arags_embedding::embedder::{EmbeddingConfig, EmbeddingModel};
 
     let kind = cfg.kind.clone().unwrap_or_else(|| {
@@ -230,12 +232,10 @@ fn wrap_with_cache(
         return embedder;
     }
     let db_path = config.data_dir.join("embedding-cache.db");
-    match arags_embedding::embedder::cache::EmbeddingCache::open(
-        &db_path.to_string_lossy(),
-        embedder_dimension(),
-    ) {
+    let dims = embedder.dimensions();
+    match arags_embedding::embedder::cache::EmbeddingCache::open(&db_path.to_string_lossy(), dims) {
         Ok(cache) => {
-            tracing::info!(db = %db_path.display(), dims = embedder_dimension(), "embedding cache enabled");
+            tracing::info!(db = %db_path.display(), dims, "embedding cache enabled");
             Arc::new(arags_embedding::embedder::cache::CachedEmbedder::new(
                 embedder, cache,
             ))

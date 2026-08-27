@@ -6,13 +6,17 @@
 # runtime mounts or network needed. Override via mount/env if desired.
 #
 #   Build (compile here):      docker build -f docker/Dockerfile -t arags-server .
-#   Build (GitHub release):    docker build -f docker/Dockerfile \
+#   Build (remote tarball):    docker build -f docker/Dockerfile \
 #                                --build-arg ARAGS_BIN_URL=<release .tar.gz URL> \
 #                                -t arags-server .
+#   Build (local tarball):     docker build -f docker/Dockerfile \
+#                                --build-arg ARAGS_LOCAL_TARBALL=arags-server-linux-musl-amd64.tar.gz \
+#                                -t arags-server .
 #
-# ARAGS_BIN_URL must point to a gzip'd tarball containing `arags-server`
-# built for x86_64-unknown-linux-musl. Once CI publishes musl release assets,
-# pass this arg and the compile stage is skipped entirely.
+# ARAGS_BIN_URL points to a gzip'd tarball containing `arags-server` (built for
+# x86_64-unknown-linux-musl). ARAGS_LOCAL_TARBALL is the same tarball already
+# present in the build context (used by CI). When either is supplied the
+# compile stage is skipped entirely; when both are empty the source build runs.
 
 # ---------------------------------------------------------------------------
 # Builder — musl toolchain. rustc >= 1.88 required by transitive deps.
@@ -20,6 +24,10 @@
 FROM rust:1-alpine AS builder
 
 ARG ARAGS_BIN_URL=""
+# Local tarball already in the build context (CI path). Empty by default so
+# the normal source build runs. When set, it must be a gzip'd tarball holding
+# `arags-server` for x86_64-unknown-linux-musl.
+ARG ARAGS_LOCAL_TARBALL=""
 # Checkpoint revision of sentence-transformers/all-MiniLM-L6-v2 baked at
 # /models (model.safetensors ~90MB + tokenizer.json). Pin a commit SHA for
 # reproducible images; "main" tracks upstream.
@@ -36,9 +44,18 @@ RUN mkdir -p /models && \
     curl -fsSL -o /models/tokenizer.json \
       "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/${ARAGS_MODEL_REV}/tokenizer.json"
 
-# Fast path: pre-compiled musl binary from a GitHub release asset.
-RUN if [ -n "$ARAGS_BIN_URL" ]; then \
-        mkdir -p /out && curl -fsSL "$ARAGS_BIN_URL" | tar xz -C /out && \
+# Bring the local tarball into the builder (placeholder when not supplied so
+# the COPY always resolves; it is only extracted when an arg is provided).
+COPY ${ARAGS_LOCAL_TARBALL:-docker/Dockerfile.dockerignore} /prebuilt.tar.gz
+
+# Fast path: pre-compiled musl binary from a URL or local build-context tarball.
+RUN if [ -n "$ARAGS_BIN_URL" ] || [ -n "$ARAGS_LOCAL_TARBALL" ]; then \
+        mkdir -p /out; \
+        if [ -n "$ARAGS_LOCAL_TARBALL" ]; then \
+            tar xzf /prebuilt.tar.gz -C /out; \
+        else \
+            curl -fsSL "$ARAGS_BIN_URL" | tar xz -C /out; \
+        fi; \
         mv "$(find /out -name arags-server -type f | head -n1)" /out/arags-server; \
     fi
 

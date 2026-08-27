@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use arags_embedding::embedder::Embedder;
 use arags_proto::proto::arags_service_client::AragsServiceClient;
 use arags_proto::proto::arags_service_server::AragsServiceServer;
 use arags_storage::{QuestionVectorStore, Storage, VectorStore};
@@ -10,7 +11,7 @@ use tracing::{info, warn};
 
 use crate::config::ServerConfig;
 use crate::grpc::AragsGrpcService;
-use crate::state::AppState;
+use crate::state::{AppState, load_embedder};
 use crate::timing::Timer;
 
 /// Load config, open storage, wire the service and run the gRPC server.
@@ -39,12 +40,16 @@ pub async fn run() -> Result<()> {
         Storage::open(&config.data_dir).context("failed to open storage")?
     };
 
-    let vector_store = match VectorStore::open_with_dims(
-        &config.data_dir,
-        crate::state::embedder_dimension(),
-    )
-    .await
-    {
+    // Load the embedder once so every vector space is sized by its *actual*
+    // dimensionality (issue `agnostic-rlm-rs-e9e3`): a mismatch between the
+    // hardcoded `embedder_dimension()` constant and the configured embedder
+    // silently fails exploration (and other) vector inserts, leaving the
+    // semantic index empty.
+    let embedder = load_embedder(&config.embedder);
+    let embed_dims = embedder.dimensions();
+    info!(dims = embed_dims, "embedder loaded; sizing vector spaces");
+
+    let vector_store = match VectorStore::open_with_dims(&config.data_dir, embed_dims).await {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {
             tracing::warn!(error = %e, "vector store unavailable, continuing without semantic search");
@@ -54,7 +59,7 @@ pub async fn run() -> Result<()> {
 
     let question_vector_store = match arags_storage::QuestionVectorStore::open(
         &config.data_dir,
-        crate::state::embedder_dimension(),
+        embed_dims,
     ) {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {
@@ -63,10 +68,7 @@ pub async fn run() -> Result<()> {
         }
     };
 
-    let rlm_vector_store = match arags_storage::RlmVectorStore::open(
-        &config.data_dir,
-        crate::state::embedder_dimension(),
-    ) {
+    let rlm_vector_store = match arags_storage::RlmVectorStore::open(&config.data_dir, embed_dims) {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {
             tracing::warn!(error = %e, "rlm vector store unavailable, summary semantic search disabled");
@@ -76,7 +78,7 @@ pub async fn run() -> Result<()> {
 
     let exploration_vector_store = match arags_storage::ExplorationVectorStore::open(
         &config.data_dir,
-        crate::state::embedder_dimension(),
+        embed_dims,
     ) {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {
@@ -88,6 +90,7 @@ pub async fn run() -> Result<()> {
     run_server(
         config,
         storage,
+        embedder,
         vector_store,
         question_vector_store,
         rlm_vector_store,
@@ -104,14 +107,16 @@ pub async fn run() -> Result<()> {
 pub async fn run_server(
     config: ServerConfig,
     storage: Storage,
+    embedder: Arc<dyn Embedder + Send + Sync>,
     vector_store: Option<Arc<VectorStore>>,
     question_vector_store: Option<Arc<QuestionVectorStore>>,
     rlm_vector_store: Option<Arc<arags_storage::RlmVectorStore>>,
     exploration_vector_store: Option<Arc<arags_storage::ExplorationVectorStore>>,
 ) -> Result<()> {
-    let state = AppState::with_vector_stores(
+    let state = AppState::with_embedder(
         storage.clone(),
         config.clone(),
+        embedder,
         vector_store,
         question_vector_store,
         rlm_vector_store,

@@ -12,59 +12,76 @@ jobs:
   build-binaries:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    # AlmaLinux runs inside a glibc container on the Ubuntu host runner.
+    container: ${{ matrix.container }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux x86_64
+          # Debian (glibc x86_64)
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact: arags-linux-amd64
-            server_artifact: arags-server-linux-amd64
-          # Linux ARM64
-          - target: aarch64-unknown-linux-gnu
+            artifact: arags-debian-amd64
+            server_artifact: arags-server-debian-amd64
+          # musl (x86_64-unknown-linux-musl, fully static)
+          - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
-            artifact: arags-linux-arm64
-            server_artifact: arags-server-linux-arm64
-            cross: true
-          # macOS x86_64
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            artifact: arags-macos-amd64
-            server_artifact: arags-server-macos-amd64
-          # macOS ARM64 (Apple Silicon)
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            artifact: arags-macos-arm64
-            server_artifact: arags-server-macos-arm64
-          # Windows x86_64
+            artifact: arags-linux-musl-amd64
+            server_artifact: arags-server-linux-musl-amd64
+            musl: true
+          # AlmaLinux (glibc x86_64 via container)
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            container: almalinux:9
+            artifact: arags-almalinux-amd64
+            server_artifact: arags-server-almalinux-amd64
+          # Windows Server (x86_64-pc-windows-msvc)
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact: arags-windows-amd64.exe
             server_artifact: arags-server-windows-amd64.exe
+          # macOS — ARM only (Apple Silicon). No x86_64 macOS target.
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: arags-macos-arm64
+            server_artifact: arags-server-macos-arm64
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install container dependencies (AlmaLinux)
+        if: matrix.container != ''
+        run: |
+          dnf install -y epel-release
+          dnf install -y curl tar gzip gcc-c++ make protobuf-compiler ca-certificates
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools (Linux ARM64)
-        if: matrix.cross
+      - name: Install musl target & tools
+        if: matrix.musl
         run: |
+          rustup target add x86_64-unknown-linux-musl
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          sudo apt-get install -y musl-tools
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> "$GITHUB_ENV"
+
+      - name: Install protoc (non-container Linux/macOS)
+        if: matrix.container == '' && runner.os != 'Windows'
+        run: |
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            brew install protobuf
+          else
+            sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          fi
 
       - name: Build CLI binary
-        run: |
-          cargo build --release --bin arags --target ${{ matrix.target }}
+        run: cargo build --release --bin arags --target ${{ matrix.target }}
 
       - name: Build server binary
-        run: |
-          cargo build --release --bin arags-server --target ${{ matrix.target }}
+        run: cargo build --release --bin arags-server --target ${{ matrix.target }}
 
       - name: Rename artifacts (Unix)
         if: runner.os != 'Windows'
@@ -104,10 +121,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Linux amd64 binary
+      # Pull the prebuilt static musl server binary and wrap it as the
+      # tarball the Dockerfile expects via ARAGS_LOCAL_TARBALL (keeps the
+      # default source-build path intact when this arg is empty).
+      - name: Download musl server binary
         uses: actions/download-artifact@v4
         with:
-          name: arags-server-linux-amd64
+          name: arags-server-linux-musl-amd64
+
+      - name: Package musl binary as tarball
+        run: |
+          mv arags-server-linux-musl-amd64 arags-server
+          chmod +x arags-server
+          tar czf arags-server-linux-musl-amd64.tar.gz arags-server
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -138,6 +164,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ARAGS_LOCAL_TARBALL=arags-server-linux-musl-amd64.tar.gz
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -151,10 +179,13 @@ jobs:
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
 
       - name: Create checksums
         run: |
-          find . -type f -not -name '*.sha256' -not -name '*.yml' | while read f; do
+          find artifacts -type f -not -name '*.sha256' | while read f; do
             sha256sum "$f" > "$f.sha256"
           done
 
@@ -163,7 +194,7 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            arags-*
-            arags-server-*
+            artifacts/arags-*
+            artifacts/arags-server-*
           draft: false
           prerelease: false

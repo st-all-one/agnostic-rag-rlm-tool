@@ -15,6 +15,7 @@ use crate::config::{ExplorationConfig, ServerConfig, ValidationMode};
 use crate::grpc::exploration::handle_persist_exploration;
 use crate::grpc::exploration::search::handle_search_explorations;
 use crate::state::AppState;
+use arags_embedding::embedder::{Embedder, LightweightEmbedder};
 use arags_proto::proto::{PersistExplorationRequest, SearchExplorationsRequest};
 use arags_storage::{ExplorationVectorStore, Storage};
 
@@ -358,6 +359,93 @@ async fn exploration_nonadmin_quorum_creates_submission_candidate() {
         hits.iter().all(|h| h.exploration_id != resp.exploration_id),
         "quorum candidate must not surface until decided"
     );
+}
+
+#[tokio::test]
+async fn explore_search_returns_persisted_map_in_semantic_results() {
+    // Reproduces `agnostic-rlm-rs-e9e3`: the exploration vector must be indexed
+    // and retrievable via semantic search. The dedicated `exploration_vectors`
+    // space is sized by the embedder's *real* dimensionality; a mismatch with
+    // the hardcoded `embedder_dimension()` constant silently fails
+    // `vectors.insert`, leaving the vector absent so search returns no hits.
+    // Here the store is sized to the embedder dimension (the fix); sizing it
+    // with the constant instead reproduces the bug.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let storage = Storage::open(dir.path()).expect("open storage");
+    seed_project(&storage, "proj", 1);
+    seed_chunks(
+        &storage,
+        1,
+        &[("src/a.rs", "hash-a"), ("src/b.rs", "hash-b")],
+    );
+
+    let (_, admin_refresh) = arags_storage::tokens::create_token(
+        &storage,
+        &arags_storage::tokens::NewToken {
+            username: "admin-1".into(),
+            role: arags_storage::tokens::Role::Admin,
+            created_by: "system".into(),
+        },
+    )
+    .expect("admin token");
+    let (admin_session, ..) =
+        arags_storage::tokens::create_session(&storage, &admin_refresh).expect("admin session");
+    let (_, user_refresh) = arags_storage::tokens::create_token(
+        &storage,
+        &arags_storage::tokens::NewToken {
+            username: "dev1".into(),
+            role: arags_storage::tokens::Role::NonAdmin,
+            created_by: "system".into(),
+        },
+    )
+    .expect("user token");
+    let (user_session, ..) =
+        arags_storage::tokens::create_session(&storage, &user_refresh).expect("user session");
+
+    let dims = 16usize;
+    let embedder: Arc<dyn Embedder + Send + Sync> = Arc::new(LightweightEmbedder::new(dims));
+    let vectors = Arc::new(ExplorationVectorStore::open(dir.path(), dims).expect("vector store"));
+    let state = AppState::with_embedder(
+        storage.clone(),
+        ServerConfig::default(),
+        embedder,
+        None,
+        None,
+        None,
+        Some(vectors),
+    )
+    .expect("app state");
+    std::mem::forget(dir);
+
+    let persisted = handle_persist_exploration(
+        &state,
+        persist_request(&admin_session, vec!["src/a.rs".into(), "src/b.rs".into()]),
+    )
+    .await
+    .unwrap()
+    .into_inner();
+    assert!(persisted.accepted);
+
+    let query_text = "anexos compartilhados\nresumo denso da conexão";
+    let mut search_req = Request::new(SearchExplorationsRequest {
+        project: "proj".into(),
+        query: query_text.into(),
+        limit: 5,
+        include_stale: true,
+        as_of_epoch: 0,
+    });
+    *search_req.metadata_mut() = bearer(&user_session);
+    let hits = handle_search_explorations(&state, search_req)
+        .await
+        .unwrap()
+        .into_inner()
+        .hits;
+
+    assert!(
+        !hits.is_empty(),
+        "persisted map must surface in semantic exploration search"
+    );
+    assert_eq!(hits[0].exploration_id, persisted.exploration_id);
 }
 
 #[tokio::test]

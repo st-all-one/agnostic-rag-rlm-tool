@@ -1,0 +1,121 @@
+# arags-server-gpu — OPT-IN Vulkan GPU release artifact.
+#
+# STRICTLY OPT-IN. This image is ONLY built when a Vulkan-capable release is
+# explicitly requested. It is NEVER part of the default/portable build.
+#
+# This Dockerfile builds a static musl binary of `arags-server` with the
+# `llamacpp-vulkan` feature enabled, wiring in the llama.cpp + Vulkan backend
+# for on-GPU embedding. The default `docker/Dockerfile` (portable candle, no
+# Vulkan/cmake) is untouched by this file.
+#
+# Tag the resulting image with the `-gpu` suffix:
+#   docker build -f docker/Dockerfile.gpu -t arags-server-gpu:latest \
+#       -t arags-server-gpu:<version> .
+#
+# NOTE: This build REQUIRES the Vulkan SDK (and a Vulkan loader) at compile
+# time and a Vulkan device at runtime. It is authored for CI runners that
+# provide the SDK; it CANNOT be validated in environments without it.
+
+# ---------------------------------------------------------------------------
+# Builder — musl + Vulkan SDK.
+# ---------------------------------------------------------------------------
+FROM rust:1-alpine AS builder
+
+ARG ARAGS_VERSION=latest
+# Checkpoint revision of sentence-transformers/all-MiniLM-L6-v2 baked at
+# /models (model.safetensors ~90MB + tokenizer.json). Pin a commit SHA for
+# reproducible images; "main" tracks upstream.
+ARG ARAGS_MODEL_REV=main
+
+# cmake + Vulkan SDK are REQUIRED here (and ONLY here) — the llama.cpp C++
+# backend needs cmake to build, and the `vulkan` feature of llama-cpp-4 needs
+# the Vulkan headers/loader to link. The portable Dockerfile does NOT pull any
+# of this in.
+RUN apk add --no-cache build-base cmake protoc protobuf-dev ca-certificates \
+        curl vulkan-tools vulkan-loader vulkan-headers
+
+# Vulkan SDK env (used by the llama-cpp-4 `vulkan` feature at build/link time).
+ENV VULKAN_SDK=/usr \
+    VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+
+WORKDIR /src
+
+# Model weights first: independent of code, caches across source changes.
+RUN mkdir -p /models && \
+    curl -fsSL -o /models/model.safetensors \
+      "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/${ARAGS_MODEL_REV}/model.safetensors" && \
+    curl -fsSL -o /models/tokenizer.json \
+      "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/${ARAGS_MODEL_REV}/tokenizer.json"
+
+# Dependency layer cached via dummy sources. Stub bench files too — manifests
+# declare [[bench]] targets whose paths must exist for the workspace to parse.
+COPY Cargo.toml Cargo.lock ./
+COPY crates/arags-proto/Cargo.toml crates/arags-proto/
+COPY crates/arags-core/Cargo.toml crates/arags-core/
+COPY crates/arags-storage/Cargo.toml crates/arags-storage/
+COPY crates/arags-embedding/Cargo.toml crates/arags-embedding/
+COPY crates/arags-search/Cargo.toml crates/arags-search/
+COPY crates/arags-llm/Cargo.toml crates/arags-llm/
+COPY crates/arags-memory/Cargo.toml crates/arags-memory/
+COPY crates/arags-server/Cargo.toml crates/arags-server/
+
+RUN mkdir -p crates/arags-proto/src crates/arags-core/src crates/arags-storage/src \
+        crates/arags-embedding/src crates/arags-search/src crates/arags-llm/src \
+        crates/arags-memory/src crates/arags-server/src \
+        crates/arags-storage/benches crates/arags-embedding/benches \
+ && for c in proto core storage embedding search llm memory; do \
+        echo "pub fn dummy() {}" > "crates/arags-$c/src/lib.rs"; done \
+ && echo "fn main() {}" > crates/arags-server/src/main.rs \
+ && echo "" > crates/arags-storage/benches/qa_cache.rs \
+ && echo "" > crates/arags-embedding/benches/ingestion.rs
+
+# musl is crt-static by default; link libstdc++ statically for the C++ runtime
+# (usearch/cxx/llama.cpp). Do NOT enable +crt-static globally: it breaks
+# proc-macros. Baseline x86-64-v2: portable across commodity CI runners.
+# The crate-level `llamacpp-vulkan` feature pulls in the Vulkan-linked backend.
+ENV RUSTFLAGS="-C target-cpu=x86-64-v2 -C link-arg=-static-libstdc++"
+RUN cargo build --release -p arags-server --target x86_64-unknown-linux-musl --features llamacpp-vulkan
+
+COPY crates/ crates/
+
+# Context mtimes are older than the dummy sources above — without this cargo
+# would reuse the dependency-stage rlibs built from the stubs.
+RUN find crates -name '*.rs' -exec touch {} +
+
+RUN cargo build --release -p arags-server --target x86_64-unknown-linux-musl --features llamacpp-vulkan && \
+    strip target/x86_64-unknown-linux-musl/release/arags-server && \
+    mkdir -p /out && cp target/x86_64-unknown-linux-musl/release/arags-server /out/
+
+# Empty /data pre-owned by the runtime UID: scratch has no mkdir/chown and a
+# bare VOLUME would be created root-owned, breaking first boot.
+RUN mkdir /data-empty && chown 65532:65532 /data-empty
+
+# ---------------------------------------------------------------------------
+# Runtime — scratch. No shell, no libc, no package manager.
+# ---------------------------------------------------------------------------
+FROM scratch
+
+# Runtime Vulkan loader so the Vulkan-linked backend can find a device.
+COPY --from=builder /usr/lib/libvulkan.so.1 /usr/lib/libvulkan.so.1
+COPY --from=builder /out/arags-server /arags-server
+COPY --from=builder /models/ /models/
+COPY --from=builder --chown=65532:65532 /data-empty/ /data/
+
+ENV HOME=/data \
+    ARAGS_DATA_DIR=/data \
+    ARAGS_EMBEDDER_MODEL_DIR=/models \
+    RUST_LOG=info,arags_server=info \
+    VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+
+VOLUME ["/data"]
+
+ENV ARAGS_SERVER_ADDR=0.0.0.0:50051
+EXPOSE 50051
+
+USER 65532:65532
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD ["/arags-server", "status"]
+
+ENTRYPOINT ["/arags-server"]
+CMD ["up"]
