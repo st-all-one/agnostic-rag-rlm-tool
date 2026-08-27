@@ -68,7 +68,10 @@ fn map_search_tier(tier: &str) -> arags_proto::proto::SearchTier {
 pub fn dispatch(cli: Cli, rt: &Runtime) -> Result<()> {
     let cfg = user_config::load().unwrap_or_default();
 
-    let project = cli.project.clone().unwrap_or_else(|| PathBuf::from("."));
+    let project = cli
+        .project_path
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("."));
 
     let is_content = matches!(
         cli.command,

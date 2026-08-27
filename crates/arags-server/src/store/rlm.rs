@@ -40,9 +40,12 @@ fn payload_json(payload: &RlmJobPayload) -> Result<String> {
 /// `(new_jobs, reset_jobs)` where resets are jobs whose source changed while
 /// pending/claimed (generation bump = cooperative cancellation signal).
 ///
-/// `quorum_n` is the fan-out degree: each subject is enqueued as `quorum_n`
-/// independent claimable slots sharing a `generation_group_id` (issue
-/// `agnostic-rlm-rs-6d97`). `1` keeps the classic single-volunteer behaviour.
+/// Each file is enqueued as **exactly one** pending job (`quorum_slots = 1`):
+/// the index hook fires once per buffer commit, so re-enqueuing the same file
+/// across commits must not fan out into duplicate pending jobs (issue
+/// `agnostic-rlm-rs-51be`). The cosine quorum fan-out is still applied where it
+/// matters — at volunteer reassignment (`agnostic-rlm-rs-6d97`) and the
+/// cascade path — not here.
 ///
 /// # Errors
 ///
@@ -52,7 +55,6 @@ pub fn enqueue_rlm_l1_work(
     buffer_id: i64,
     project: &str,
     affected_files: &[String],
-    quorum_n: usize,
 ) -> Result<(usize, usize)> {
     let mut new_jobs = 0;
     let mut reset_jobs = 0;
@@ -93,13 +95,13 @@ pub fn enqueue_rlm_l1_work(
             subject: file.clone(),
             payload,
             priority: PRIORITY_FRESH,
-            quorum_slots: quorum_n,
+            quorum_slots: 1,
         };
-        let (_, generation) = storage.enqueue_rlm_job(&job, &[])?;
-        if generation > 0 {
-            reset_jobs += 1;
-        } else {
+        let (_, generation, created) = storage.enqueue_rlm_job(&job, &[])?;
+        if created {
             new_jobs += 1;
+        } else if generation > 0 {
+            reset_jobs += 1;
         }
     }
     Ok((new_jobs, reset_jobs))

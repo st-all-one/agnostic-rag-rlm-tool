@@ -44,9 +44,11 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub format: Option<OutputFormatArg>,
 
-    /// Project path.
-    #[arg(short, long, global = true)]
-    pub project: Option<PathBuf>,
+    /// Project path override (used by `init` / `persist`). This is the
+    /// filesystem path of the project root, distinct from the canonical project
+    /// *name* accepted by subcommand `--project` flags (e.g. `explore search`).
+    #[arg(short = 'P', long = "project-path", global = true)]
+    pub project_path: Option<PathBuf>,
 
     /// LLM backend name (overrides config).
     #[arg(long, global = true)]
@@ -55,4 +57,47 @@ pub struct Cli {
     /// Model name (overrides config).
     #[arg(long, global = true)]
     pub model: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use crate::cli::commands::ExploreCmd;
+    use super::*;
+
+    /// `arags explore search "q"` (no `--project`) must parse without panicking;
+    /// the project scope then falls back to the configured/local project.
+    #[test]
+    fn explore_search_parses_without_project_flag() {
+        let parsed = Cli::try_parse_from(["arags", "explore", "search", "q"]);
+        assert!(
+            parsed.is_ok(),
+            "explore search without --project must parse: {:?}",
+            parsed.err()
+        );
+    }
+
+    /// `arags explore search "q" --project sucesu` previously panicked with a
+    /// clap arg-id collision between the global `--project` (path) flag and the
+    /// subcommand `--project` (name) flag. It must now parse and carry the value.
+    #[test]
+    fn explore_search_parses_with_project_flag() {
+        let parsed =
+            Cli::try_parse_from(["arags", "explore", "search", "q", "--project", "sucesu"]);
+        assert!(
+            parsed.is_ok(),
+            "explore search --project must parse without panicking: {:?}",
+            parsed.err()
+        );
+        match parsed.unwrap().command {
+            Commands::Explore {
+                cmd: ExploreCmd::Search { project, query, .. },
+            } => {
+                assert_eq!(query, "q");
+                assert_eq!(project.as_deref(), Some("sucesu"));
+            }
+            other => panic!("expected ExploreCmd::Search, got {other:?}"),
+        }
+    }
 }

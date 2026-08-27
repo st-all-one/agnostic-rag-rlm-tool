@@ -137,4 +137,18 @@ cargo fmt -p arags-cli -- --check
   `query -qa` (digest) e `persist` (summarize) via `arags-llm`.
 - A config do usuário é 2-escopos (`user_config.rs`): `~/.arags/arags.toml`
   (global, com `[auth]` só-global) + `.arags.toml` (local, merge por campo,
-  `[project]`). `server.addr` alimenta o cliente.
+  `[project]`).   `server.addr` alimenta o cliente.
+
+## Recent Updates (2026-08-27)
+
+- **`arags init` completo (`e5d8`):** wizard TTY + modo flags (`--name`
+  obrigatório em `--non-interactive`, `--ignore`, `--server-addr`,
+  `--register/--no-register`); idempotente (re-init abre edição); hook de
+  conflito de identidade via `GetProject`.
+- **Superfície ask/query (`7aa8`):** `search` objetiva (sem LLM); `ask` digere
+  via LLM do usuário implicitamente; `query` é alias DEPRECATED (avisa → `ask`).
+- **`explore search --project` (`88f0`):** colisão de arg `project` (global ×
+  subcomando) corrigida — global renomeado p/ `project_path`/`--project-path`.
+- **Volunteer (`51be`/`077f`):** `[volunteer]` usa o LLM local do usuário (ex.
+  Ollama `llama3.2:1b`) para sintetizar jobs RLM; o claim no server não quebra
+  mais (`077f`).

@@ -86,3 +86,10 @@ cargo fmt -p arags-core -- --check
 - `RootCompactor::summarize_with_llm` usa o `LlmBackend` para resumir; mantém fallback sem LLM.
 - `SamplingArgs.seed`, quando presente, é propagado para a chamada LLM para reprodutibilidade.
 - Cache com `dep_key` invalida entradas automaticamente quando a dependência muda (hash).
+
+## Recent Updates (2026-08-27)
+
+- **Attestation BFT-leve (`64af`):** `src/rlm_attestation.rs` com
+  `sign_rlm_submission` (HMAC/session-binding, deps `hmac`/`subtle`). O server
+  verifica `submission_hmac` em `grpc/rlm.rs`; `f = floor((n-1)/3)`, `>= 2f+1`,
+  fusão ponderada por trust. `RlmJobPayload` ganhou o campo `submission_hmac`.

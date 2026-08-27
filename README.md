@@ -62,9 +62,18 @@ Documentação de uso e operação em [`wiki/`](wiki/README.md):
   aditivos no proto; clientes antigos ignoram as novas seções.
 - **Auth (plan 018):** refresh-tokens + sessões de curta duração com roles
   `Admin`/`NonAdmin`; RPCs mutantes exigem `Bearer` válido.
+- **Multi-user hardening (`agnostic-rlm-rs-7222`):** **audit log**
+  (`audit_log` table, `migrations/029_audit_log.sql`) gravado nos 4 paths
+  mutators (index/persist/complete_rlm/submit); **rate-limiting por usuário**
+  (`[rate_limit]` em `server.toml`, janela fixa por `username`). Falha de audit
+  é warn-only; estouro de rate-limit nega com `resource_exhausted`.
 - **Sem LLM no servidor** para qualquer operação (index/search/ask/memory/
   history). O LLM é usado **apenas no cliente**, para `ask` (digest implícito)
   e `persist` (summarize), via `arags-llm`. `search` é objetivo e não invoca LLM.
+  O **embedder de chunks é configurável** no `server.toml`: candle
+  all-MiniLM-L6-v2 (INT8, default, sem rede) **ou Ollama opt-in**
+  (`[embedder] kind = "ollama"`, ex. `all-minilm:22m`, 384 dims) — sem build
+  especial; GPU Vulkan é opcional via `--features llamacpp-vulkan`.
 - Manutenção (consolidate/decay) do servidor é feita por **cron + RPC admin**
   `TriggerMaintenance` (e `arags-server admin consolidate`), não por comandos de
   CLI do usuário.
@@ -143,7 +152,7 @@ override por projeto) → `~/.arags/arags.toml` (`[server].addr`) → env
 
 | Comando | Descrição |
 |---------|-----------|
-| `arags init [--index] [--no-index]` | Scaffold de `<proj>/.arags.toml` (gitignored) + index |
+| `arags init [--name <n>] [--server-addr <a>] [--index\|--no-index]` | Scaffold de `<proj>/.arags.toml` (gitignored, nome canônico) + index; idempotente (re-init abre edição) |
 | `arags index <dir>` | Faz stream do texto bruto; servidor chunk+embed. Dot-paths (`.env`, `.git/`, ...) e regras de `.gitignore` (raiz e aninhados, com `!` de negação) são ignorados |
 | `arags index <dir> --register` | Indexa + registra o projeto para **auto-atualização** (daemon background no client; ver [Auto-atualização](#auto-atualização-watch-daemon)) |
 | `arags index <dir> --unregister` | Para o daemon e remove o registro (`[watch] enabled = false`) |

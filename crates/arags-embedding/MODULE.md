@@ -63,3 +63,12 @@ cargo bench -p arags-embedding
   de backend em `server.toml`; mudanças de arquitetura são código, não config.
 - Trocar modelo/dims exige reindex (vetores incompatíveis) e ajuste de
   `qa_cache.question_vector_dims`.
+
+## Recent Updates (2026-08-27)
+
+- **Backend Ollama (opt-in):** `embedder/ollama.rs` implementa a trait
+  `Embedder` para um daemon Ollama local — `server.toml [embedder]
+  kind = "ollama"` + `ollama_url`/`ollama_model` (ex. `all-minilm:22m`, 384
+  dims). candle INT8 continua o default; Ollama não exige build especial (GPU
+  Vulkan é opcional via `--features llamacpp-vulkan`). Os espaços vetoriais do
+  server são dimensionados por `embedder.dimensions()`.

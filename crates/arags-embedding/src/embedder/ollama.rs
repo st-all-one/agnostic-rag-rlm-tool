@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
@@ -113,41 +113,103 @@ fn parse_base(url: &str) -> anyhow::Result<(String, u16)> {
     }
 }
 
-/// Minimal blocking HTTP/1.1 POST (no TLS, `Connection: close`) over
-/// `TcpStream`. Sufficient for localhost Ollama; reads the body via
-/// `Content-Length` and falls back to whatever the server sends on close.
+/// Minimal blocking HTTP POST (no TLS) over `TcpStream` for localhost Ollama.
+///
+/// Ollama answers with `Transfer-Encoding: chunked` for many payloads and with
+/// `Content-Length` for others, so the body is decoded from either framing. A
+/// naive `read_to_string`-until-EOF previously blocked on the socket read
+/// timeout while the full body had already arrived — which presented as a
+/// startup "deadlock" during vector-space bootstrap (issue `agnostic-rlm-rs-3a68`).
 fn http_post(host: &str, port: u16, path: &str, body: &str) -> anyhow::Result<String> {
-    let mut stream = TcpStream::connect((host, port))
+    let stream = TcpStream::connect((host, port))
         .map_err(|e| anyhow!("ollama connect {host}:{port}: {e}"))?;
     stream.set_read_timeout(Some(Duration::from_secs(60)))?;
     let request = format!(
-        "POST {path} HTTP/1.0\r\nHost: {host}:{port}\r\nContent-Type: application/json\r\nContent-Length: {len}\r\n\r\n{body}",
+        "POST {path} HTTP/1.1\r\nHost: {host}:{port}\r\nContent-Type: application/json\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n{body}",
         len = body.len()
     );
-    stream.write_all(request.as_bytes())?;
-    let mut response = String::new();
-    stream.read_to_string(&mut response)?;
-    parse_http_body(&response)
+    let mut reader = BufReader::new(stream);
+    reader.get_mut().write_all(request.as_bytes())?;
+
+    // Read the response headers line-by-line until the blank separator.
+    let mut header = String::with_capacity(256);
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line)? == 0 {
+            break;
+        }
+        if line == "\r\n" {
+            break;
+        }
+        header.push_str(&line);
+    }
+
+    let is_chunked = header
+        .lines()
+        .any(|l| l.to_ascii_lowercase().starts_with("transfer-encoding:") && l.to_ascii_lowercase().contains("chunked"));
+
+    let body_bytes = if is_chunked {
+        read_chunked(&mut reader)?
+    } else {
+        let content_length = response_content_length(&header);
+        if content_length > 0 {
+            let mut buf = vec![0u8; content_length];
+            reader.read_exact(&mut buf)?;
+            buf
+        } else {
+            // No framing header: read until EOF (Connection: close).
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf)?;
+            buf
+        }
+    };
+    Ok(String::from_utf8_lossy(&body_bytes).into_owned())
 }
 
-/// Extract the JSON body from a raw HTTP response, honoring `Content-Length`.
-fn parse_http_body(response: &str) -> anyhow::Result<String> {
-    let idx = response
-        .find("\r\n\r\n")
-        .ok_or_else(|| anyhow!("ollama response missing header/body separator"))?;
-    let header = &response[..idx];
-    let mut content_length = 0usize;
-    for line in header.lines() {
-        if let Some(val) = line.to_ascii_lowercase().strip_prefix("content-length:") {
-            content_length = val.trim().parse().unwrap_or(0);
+/// Decode an HTTP `Transfer-Encoding: chunked` body from `reader`.
+///
+/// Each chunk is `<hex-size>\r\n<data>\r\n`, terminated by `0\r\n\r\n`.
+fn read_chunked<R: Read>(reader: &mut BufReader<R>) -> anyhow::Result<Vec<u8>> {
+    let mut out = Vec::new();
+    loop {
+        let mut size_line = String::new();
+        reader.read_line(&mut size_line)?;
+        let hex = size_line
+            .trim()
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim();
+        let size =
+            usize::from_str_radix(hex, 16).map_err(|e| anyhow!("ollama chunk size parse `{hex}`: {e}"))?;
+        if size == 0 {
+            // Consume the trailing CRLF that terminates the final chunk.
+            let mut term = [0u8; 2];
+            reader.read_exact(&mut term)?;
+            break;
         }
+        let mut chunk = vec![0u8; size];
+        reader.read_exact(&mut chunk)?;
+        out.extend_from_slice(&chunk);
+        // Each chunk body is followed by CRLF.
+        let mut crlf = [0u8; 2];
+        reader.read_exact(&mut crlf)?;
     }
-    let body_bytes = response.as_bytes().get(idx + 4..).unwrap_or(b"");
-    if content_length > 0 && body_bytes.len() >= content_length {
-        Ok(String::from_utf8_lossy(&body_bytes[..content_length]).into_owned())
-    } else {
-        Ok(String::from_utf8_lossy(body_bytes).into_owned())
-    }
+    Ok(out)
+}
+
+/// Extract `Content-Length` from an HTTP response header block (case
+/// insensitive). Returns `0` when the header is absent or unparseable, in
+/// which case the caller falls back to reading the body until EOF.
+fn response_content_length(header: &str) -> usize {
+    header
+        .lines()
+        .find_map(|line| {
+            line.to_ascii_lowercase()
+                .strip_prefix("content-length:")
+                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+        })
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -171,8 +233,30 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_http_body_content_length() {
-        let raw = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\n{\"a\":[1,2,3]}extra";
-        assert_eq!(parse_http_body(raw).unwrap(), "{\"a\":[1,2,3]}");
+    fn test_response_content_length_parses_header() {
+        // Honoring `Content-Length` (not read-to-EOF) is what keeps large
+        // Ollama batches from stalling on a kept-alive connection.
+        assert_eq!(
+            response_content_length("HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\n"),
+            13
+        );
+        assert_eq!(
+            response_content_length("content-length: 0\r\n\r\n"),
+            0
+        );
+        assert_eq!(
+            response_content_length("HTTP/1.1 200 OK\r\nX-Foo: bar\r\n\r\n"),
+            0
+        );
+    }
+
+    #[test]
+    fn test_read_chunked_decodes_body() {
+        // Ollama answers many payloads with `Transfer-Encoding: chunked`
+        // (issue `agnostic-rlm-rs-3a68`). The decoder must strip the framing.
+        let raw: Vec<u8> = b"5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n".to_vec();
+        let mut reader = BufReader::new(std::io::Cursor::new(raw));
+        let decoded = read_chunked(&mut reader).unwrap();
+        assert_eq!(decoded, b"hello world");
     }
 }

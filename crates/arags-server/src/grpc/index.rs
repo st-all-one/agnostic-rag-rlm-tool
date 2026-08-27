@@ -589,7 +589,6 @@ where
             .iter()
             .filter_map(|(id, _)| i64::try_from(*id).ok())
             .collect();
-        let quorum_n = state.config.quorum.n.max(1);
         let storage = state.storage.clone();
         let project_for_rlm = project.clone();
         match store::blocking(move || -> anyhow::Result<(usize, usize)> {
@@ -599,7 +598,7 @@ where
             if files.is_empty() {
                 return Ok((0, 0));
             }
-            store::rlm::enqueue_rlm_l1_work(&storage, buffer_id, &project_for_rlm, &files, quorum_n)
+            store::rlm::enqueue_rlm_l1_work(&storage, buffer_id, &project_for_rlm, &files)
         })
         .await
         {
@@ -858,7 +857,7 @@ mod tests {
             priority: 5,
             quorum_slots: 1,
         };
-        let (job_id, _gen) = storage.enqueue_rlm_job(&job, &[]).unwrap();
+        let (job_id, _gen, _) = storage.enqueue_rlm_job(&job, &[]).unwrap();
         assert!(job_id > 0, "pending rlm job must be seeded");
 
         // Stream yields Init + one File then the sender is dropped (simulated

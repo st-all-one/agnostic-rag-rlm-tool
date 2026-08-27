@@ -29,12 +29,31 @@ pub(crate) fn build(req: &CompletionRequest) -> Value {
 pub(crate) fn parse(model: &str, body: &str) -> Result<CompletionResponse, LlmError> {
     let v: Value =
         serde_json::from_str(body).map_err(|e| LlmError::Serialization(e.to_string()))?;
-    let content = v["message"]["content"]
-        .as_str()
+    // Accept BOTH response shapes the Ollama `family` can hit:
+    //  - OpenAI-compatible `/v1/chat/completions` (our default `completions_path`):
+    //    `choices[0].message.content` + `usage.{prompt,completion}_tokens`.
+    //  - Native Ollama `/api/chat`: top-level `message.content` +
+    //    `prompt_eval_count`/`eval_count`.
+    let content = v
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .or_else(|| v.get("message").and_then(|m| m.get("content")).and_then(|c| c.as_str()))
         .unwrap_or_default()
         .to_string();
-    let prompt = v["prompt_eval_count"].as_u64().unwrap_or(0);
-    let completion = v["eval_count"].as_u64().unwrap_or(0);
+    let (prompt, completion) = if let Some(u) = v.get("usage").and_then(Value::as_object) {
+        (
+            u.get("prompt_tokens").and_then(Value::as_u64).unwrap_or(0),
+            u.get("completion_tokens").and_then(Value::as_u64).unwrap_or(0),
+        )
+    } else {
+        (
+            v.get("prompt_eval_count").and_then(Value::as_u64).unwrap_or(0),
+            v.get("eval_count").and_then(Value::as_u64).unwrap_or(0),
+        )
+    };
     Ok(CompletionResponse {
         content,
         model: if model.is_empty() {
@@ -49,4 +68,40 @@ pub(crate) fn parse(model: &str, body: &str) -> Result<CompletionResponse, LlmEr
             cost_usd: 0.0,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_openai_compat_shape_extracts_content_and_usage() {
+        // Default `completions_path = "chat/completions"` hits Ollama's
+        // OpenAI-compatible endpoint, which returns `choices[0].message.content`
+        // + `usage`. Regression test for the empty-content bug (family=ollama
+        // previously only read the native `message.content` top-level field).
+        let body = r#"{
+            "model": "llama3.2:1b",
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "Summary of the controller."}}],
+            "usage": {"prompt_tokens": 12, "completion_tokens": 5, "total_tokens": 17}
+        }"#;
+        let resp = parse("llama3.2:1b", body).unwrap();
+        assert_eq!(resp.content, "Summary of the controller.");
+        assert_eq!(resp.usage.prompt_tokens, 12);
+        assert_eq!(resp.usage.completion_tokens, 5);
+    }
+
+    #[test]
+    fn parse_native_ollama_shape_still_extracts_content() {
+        let body = r#"{
+            "model": "llama3.2:1b",
+            "message": {"role": "assistant", "content": "Native summary."},
+            "prompt_eval_count": 9,
+            "eval_count": 4
+        }"#;
+        let resp = parse("llama3.2:1b", body).unwrap();
+        assert_eq!(resp.content, "Native summary.");
+        assert_eq!(resp.usage.prompt_tokens, 9);
+        assert_eq!(resp.usage.completion_tokens, 4);
+    }
 }

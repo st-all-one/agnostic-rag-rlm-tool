@@ -5,6 +5,84 @@ Este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Added — Recuperação pós-incidente + conclusão do roadmap RLM (2026-08-27)
+
+Conjunto de mudanças recuperadas (trabalho perdido em arquivos apagados antes
+do commit) e nova funcionalidade fechada no roadmap. Todas as issues abaixo
+foram validadas por `cargo fmt --check` + `cargo clippy --workspace -- -D warnings`
++ `cargo test --workspace` verdes.
+
+#### Recuperação fiel (reimplementação a partir de `CRITICAL_RECUPERATION/`)
+- **Trust scoring (`agnostic-rlm-rs-f486`):** `record_strike` decai
+  `trust_score` (−0.2) e retorna `(strikes, trust_score)`; novos
+  `bump_trust_on_accept`, `is_banned`, `list_volunteers_by_trust`, `read_trust`;
+  migration `028_rlm_exclusions.sql` (`MIGRATION_COUNT=28`); `claim_rlm_job`
+  rejeita voluntários banidos e exclui divergers; reassign em `quorum.rs`.
+- **Remoção de feedback público de exploração (`agnostic-rlm-rs-f5f3`):**
+  removido `FeedbackExploration` (RPC/handler/CLI) e a superfície `feedback`
+  pública; mantidos `invalidate`/`review` admin. Doctest de remoção
+  `exploration_public_feedback_surface_removed`.
+- **Quorum BFT-leve por attestation HMAC (`agnostic-rlm-rs-64af`):**
+  `sign_rlm_submission` (`arags-core::rlm_attestation`), campo `submission_hmac`
+  no `rlm.proto`, verificação no server gRPC; `f = floor((n-1)/3)`, exigência
+  `>= 2f+1`, fusão ponderada por trust. Deps `hmac`/`subtle`.
+
+#### Cluster C — CLI / UX (`e5d8`, `7aa8`)
+- `arags init` completo: wizard TTY interativo + modo flags (`--name` obrigatório
+  em `--non-interactive`, `--ignore`, `--server-addr`, `--register/--no-register`),
+  idempotente (re-init abre edição), hook de conflito de identidade via `GetProject`.
+- `search` objetiva (sem LLM); `query` → `ask` com `-qa` implícito; `query`
+  mantido como alias DEPRECATED (avisa e roteia p/ `ask`); `BuildContext`
+  no-LLM migrado para `search --context`.
+
+#### Cluster D — GPU / build / CI (`0fc4`, `d607`, `2ff6`, `1957`)
+- `0fc4`: splits dos 9 arquivos da allowlist (≤300 linhas de produção);
+  `ALLOWLIST` vazia (gate verde).
+- `d607`: baseline x86-64-v2 (`.cargo/config.toml` `target-cpu=x86-64-v2`;
+  native apenas via `RUSTFLAGS`); `docker/Dockerfile` aplica x86-64-v2.
+- `2ff6`: `docker/Dockerfile.gpu` (musl + `--features llamacpp-vulkan`, Vulkan
+  SDK isolado) + `scripts/release-gpu.sh` (tag `-gpu`).
+- `1957`: `.github/workflows/release.yml` matriz (Debian gnu / musl / AlmaLinux
+  / Windows msvc / macOS ARM-only); `docker/Dockerfile` aceita `ARAGS_BIN_URL`.
+
+#### Cluster E — integração / revisão / multi-user (`e9e3`, `27dc`, `9527`, `7222`)
+- `e9e3`: `explore search` corrigido — os 4 espaços vetoriais são dimensionados
+  por `embedder.dimensions()` (não mais hardcodado 384); insert silencioso de
+  mapas de exploração resolvido. Teste `explore_search_returns_persisted_map_in_semantic_results`.
+- `27dc`: `plan/023-systemic-review.md` (revisão sistêmica pós-plan 023).
+- `9527`: `docs/agent-integration.md` (Tier 1: Continue/Cline/Tabby/Aider).
+- `7222`: **audit log** (`029_audit_log.sql`, `sqlite/audit.rs` com
+  `write_audit_log`/`list_audit_log`) + **rate-limiting por usuário**
+  (`config.rs` `RateLimitConfig`, `ratelimit/` em-memory `parking_lot`) em 4
+  paths mutators (`index_project`, `persist_exploration`, `complete_rlm_job`,
+  `submit_rlm_candidate`); nega → `resource_exhausted`; falha de audit é
+  warn-only. `MIGRATION_COUNT=29`.
+
+#### Validado em e2e (2026-08-27)
+- Server sobe (binário release) com embedder **Ollama** (`kind="ollama"`,
+  `all-minilm:22m`, 384 dims, ~37ms/embed) validado ponta-a-ponta; auth por
+  refresh-token; `arags index` (fontes após excluir vendor/REFERENCE/etc.);
+  `search` híbrida (~200ms); `ask` com modelo principal externo (opencode `hy3`)
+  ~19s; `explore search` gracioso sem mapas.
+
+### Fixed — bugs descobertos em e2e (2026-08-27)
+- **`agnostic-rlm-rs-077f` — `ClaimRlmJob` SQLite 517:** handler abria txn de
+  leitura e promovia p/ escrita em outra conexão do pool (`SQLITE_BUSY_SNAPSHOT`)
+  — bloqueava 100% do volunteer. Agora `claim_rlm_job`
+  (`storage/sqlite/rlm/complete.rs`) abre transação **IMMEDIATE write** numa
+  única conexão. Teste `claim_rlm_job_succeeds_without_sqlite_517`.
+- **`agnostic-rlm-rs-51be` — over-enqueue de RLM jobs:** o hook
+  `enqueue_rlm_l1_work` fazia fan-out de `quorum_n=3` slots por arquivo → 4.740
+  jobs pendentes para 1.581 arquivos. Agora 1 job pendente por arquivo
+  (`quorum_slots:1`); `enqueue_rlm_job` retorna `created_new` e dedup por
+  `(project,level,subject)`. Teste
+  `enqueue_rlm_l1_work_does_not_duplicate_pending_across_commits`.
+- **`agnostic-rlm-rs-88f0` — `explore search --project` panic (clap):** colisão
+  de arg id `project` entre `Cli.project` (global, PathBuf) e
+  `ExploreCmd::Search.project`. Global renomeado p/ `project_path`/`--project-path`
+  (`root.rs:47`). Testes `explore_search_parses_with_project_flag`/
+  `_without_project_flag`.
+
 ### Added — plan 023: Unified Contextual Query (epic `agnostic-rlm-rs-43a9`)
 
 Uma única `arags query`/`search` agora funde os quatro espaços vetoriais do

@@ -158,3 +158,23 @@ O schema é gerenciado por `arags-storage` (ver `migrations/` do workspace):
 - O servidor **não** possui LLM: não há `summarizer`, `runs` de RLM nem `sessions`.
   A manutenção (consolidate/decay) é disparada por cron ou pelo RPC admin
   `TriggerMaintenance`.
+
+## Recent Updates (2026-08-27)
+
+- **Embedder Ollama opt-in:** `[embedder] kind = "ollama"` usa um daemon Ollama
+  local (ex. `all-minilm:22m`, 384 dims) — sem build especial; candle INT8
+  continua default. Validado e2e (~37ms/embed).
+- **RLM volunteer (`077f`/`51be`):** `claim_rlm_job`
+  (`sqlite/rlm/complete.rs`) abre transação **IMMEDIATE write** única
+  (elimina SQLite 517 sob pool); o hook `enqueue_rlm_l1_work` (`store/rlm.rs`)
+  emite **1 job pendente por arquivo** (`quorum_slots:1`) — fim do over-enqueue
+  (era 4.740 jobs para 1.581 arquivos).
+- **Multi-user (`7222`):** audit log (`029_audit_log.sql`, `sqlite/audit.rs`) +
+  rate-limiting por usuário (`config.rs` `RateLimitConfig`, `ratelimit/`) em 4
+  paths mutators; nega → `resource_exhausted`.
+- **Explorations (`e9e3`):** os 4 espaços vetoriais são dimensionados por
+  `embedder.dimensions()` (não mais hardcodado 384).
+- **Attestation BFT-leve (`64af`):** `submission_hmac` no `rlm.proto` verificado
+  em `grpc/rlm.rs`; `f = floor((n-1)/3)`, `>= 2f+1`, fusão ponderada por trust.
+- **Trust scoring (`f486`):** `claim_rlm_job` rejeita banidos e exclui divergers;
+  `quorum.rs` reassigna após divergência total.

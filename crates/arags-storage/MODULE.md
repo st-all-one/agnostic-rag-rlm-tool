@@ -112,3 +112,16 @@ CARGO_BUILD_JOBS=4 cargo clippy -p arags-storage --all-targets -- -D warnings
 - Novas tabelas entram como migration versionada + `run_migrations`; novos CRUD ficam em módulo dedicado em `src/sqlite/`.
 - `insert_chunk`/`insert_chunk_content`/`delete_chunks_for_file` são escritas transacionais por arquivo (chunk + FTS + entities + vectors).
 - Backup = `Storage::backup(dest)` (`VACUUM INTO`, destino não pode existir); verificação = `Storage::verify()` (`PRAGMA integrity_check`).
+
+## Recent Updates (2026-08-27)
+
+- **Migrations:** `028_rlm_exclusions.sql` (trust scoring / `f486`) e
+  `029_audit_log.sql` (audit log / `7222`); `MIGRATION_COUNT = 29`.
+- **`claim_rlm_job` (`077f`):** transação **IMMEDIATE write** única em
+  `sqlite/rlm/complete.rs` — elimina `SQLITE_BUSY_SNAPSHOT` (517) sob pool
+  (read→write promotion).
+- **Enqueue RLM (`51be`):** `enqueue_rlm_job` retorna `(id, generation,
+  created_new)`; `enqueue_rlm_l1_work` emite 1 job por arquivo (dedup por
+  `(project, level, subject)` — fim do over-enqueue de 4.740 jobs).
+- **Audit (`sqlite/audit.rs`):** `write_audit_log`/`list_audit_log`
+  parametrizados, dentro de `store::blocking(...)`.

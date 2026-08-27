@@ -6,6 +6,8 @@
 
 use anyhow::{Context, Result};
 use rusqlite::OptionalExtension;
+use rusqlite::Transaction;
+use rusqlite::TransactionBehavior;
 use rusqlite::params;
 
 use super::super::conn::Storage;
@@ -172,7 +174,14 @@ impl Storage {
         let expires = now.saturating_add(lease_ms.max(1_000));
         let conn = self.connection().context("acquire connection")?;
         conn.execute(|c| {
-            let tx = c.unchecked_transaction().context("begin claim tx")?;
+            // IMMEDIATE: take the write lock up front so the read-then-write
+            // claim cannot hit SQLITE_BUSY_SNAPSHOT (517) — "cannot promote read
+            // transaction to write transaction because of writes by another
+            // connection" — when another pooled connection has already committed
+            // a write into the WAL. The whole claim (select candidate, claim it,
+            // reload) runs on this single transaction/connection.
+            let tx = Transaction::new_unchecked(c, TransactionBehavior::Immediate)
+                .context("begin claim tx")?;
             // Volunteers may cap the level they accept (quota); `i64::MAX`
             // accepts everything. A volunteer may hold at most one slot of any
             // generation group (so the N fanned-out slots go to N distinct
@@ -210,18 +219,23 @@ impl Storage {
                 let _ = tx.finish();
                 return Ok(None);
             };
-            tx.execute(
-                "UPDATE rlm_jobs SET status = 'claimed', claimed_by = ?1, claimed_at = ?2, \
-                   lease_expires_at = ?3, attempts = attempts + 1, updated_at = ?2 \
-                 WHERE id = ?4 AND status = 'pending'",
-                params![volunteer, now, expires, job_id],
-            )
-            .context("claim rlm_job")?;
-            tx.commit().context("commit claim tx")?;
+            let claimed = tx
+                .execute(
+                    "UPDATE rlm_jobs SET status = 'claimed', claimed_by = ?1, claimed_at = ?2, \
+                       lease_expires_at = ?3, attempts = attempts + 1, updated_at = ?2 \
+                     WHERE id = ?4 AND status = 'pending'",
+                    params![volunteer, now, expires, job_id],
+                )
+                .context("claim rlm_job")?;
+            if claimed != 1 {
+                let _ = tx.finish();
+                anyhow::bail!("claim rlm_job affected {claimed} rows (expected 1)");
+            }
             let sql = format!("SELECT {JOB_COLS} FROM rlm_jobs WHERE id = ?1");
-            let job = c
+            let job = tx
                 .query_row(sql.as_str(), params![job_id], job_mapper)
                 .context("reload claimed rlm_job")?;
+            tx.commit().context("commit claim tx")?;
             Ok(Some(ClaimedRlmJob {
                 id: job.id,
                 job_key: job.job_key,

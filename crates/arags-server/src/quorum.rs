@@ -570,7 +570,7 @@ async fn reassign_rlm_on_divergence(
     })
     .await
     {
-        Ok((first_id, new_generation)) => info!(
+        Ok((first_id, new_generation, _)) => info!(
             phase = "rlm_quorum_reassign",
             status = "reassigned",
             subject,

@@ -181,7 +181,7 @@ async fn grpc_index_project_persists_chunks_end_to_end() {
         priority: 5,
         quorum_slots: 1,
     };
-    let (job_id, _gen) = server
+    let (job_id, _gen, _) = server
         .storage
         .enqueue_rlm_job(&job, &[])
         .expect("seed rlm job");
@@ -281,7 +281,7 @@ async fn seed_and_claim_rlm_job(server: &TestServer, session: &str) -> (i64, i64
         priority: 5,
         quorum_slots: 3,
     };
-    let (job_id, _gen) = server
+    let (job_id, _gen, _) = server
         .storage
         .enqueue_rlm_job(&job, &[])
         .expect("seed rlm job");
@@ -427,7 +427,7 @@ async fn grpc_disconnect_after_init_keeps_rlm_claim_working() {
         priority: 5,
         quorum_slots: 1,
     };
-    let (job_id, _gen) = server
+    let (job_id, _gen, _) = server
         .storage
         .enqueue_rlm_job(&job, &[])
         .expect("seed rlm job");

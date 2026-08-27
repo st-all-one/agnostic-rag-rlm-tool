@@ -51,7 +51,7 @@ fn subject_key(project: &str, level: i64, subject: &str) -> String {
 #[tokio::test]
 async fn rlm_job_creates_n_independent_slots() {
     let (_dir, storage, _state) = fixture(3).await;
-    let (id, _gen) = storage
+    let (id, _gen, _) = storage
         .enqueue_rlm_job(
             &NewRlmJob {
                 buffer_id: Some(1),

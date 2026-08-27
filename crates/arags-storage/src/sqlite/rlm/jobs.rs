@@ -33,10 +33,16 @@ impl Storage {
     /// non-empty, a brand-new generation group is always allocated (even for an
     /// existing subject) so a re-fan-out after total divergence starts clean.
     ///
+    /// Returns `(rowid, generation, created_new)` where `created_new` is `true`
+    /// only when a brand-new job row was inserted for this subject; an existing
+    /// live job (or a reset of a finished one) yields `created_new = false`.
+    /// Callers use this to report truthfully how much *new* work was enqueued
+    /// (a repeated enqueue of an already-pending subject is not new work).
+    ///
     /// # Errors
     ///
     /// Returns an error if the insert fails.
-    pub fn enqueue_rlm_job(&self, job: &NewRlmJob, exclude: &[String]) -> Result<(i64, i64)> {
+    pub fn enqueue_rlm_job(&self, job: &NewRlmJob, exclude: &[String]) -> Result<(i64, i64, bool)> {
         let slots = job.quorum_slots.max(1);
         let logical = rlm_job_key(&job.project, job.level, &job.subject);
         let now = now_ms();
@@ -73,7 +79,8 @@ impl Storage {
                     .any(|(_, st, _, _)| st == "pending" || st == "claimed");
                 if live {
                     // A live slot already owns the work — keep it authoritative.
-                    return Ok((existing[0].0, existing[0].2));
+                    // No new row was created; repeated enqueues are not new work.
+                    return Ok((existing[0].0, existing[0].2, false));
                 }
                 // All slots finished/cancelled: reset, bump generation, recreate.
                 let old_generation = existing[0].2;
@@ -99,7 +106,8 @@ impl Storage {
                 let first =
                     insert_rlm_slots(c, job, slots, &logical, group_id, new_generation, now)
                         .context("recreate rlm_job slots")?;
-                return Ok((first, new_generation));
+                // Reset of a finished/cancelled job: not brand-new work.
+                return Ok((first, new_generation, false));
             }
             // Fresh subject: allocate a new generation group and create slots.
             let group_id: i64 = c
@@ -123,7 +131,8 @@ impl Storage {
             insert_rlm_exclusions(c, group_id, exclude).context("record rlm exclusions")?;
             let first = insert_rlm_slots(c, job, slots, &logical, group_id, generation, now)
                 .context("create rlm_job slots")?;
-            Ok((first, generation))
+            // Fresh subject: a genuinely new job row was created.
+            Ok((first, generation, true))
         })
     }
 

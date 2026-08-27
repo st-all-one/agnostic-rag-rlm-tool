@@ -76,7 +76,12 @@ pub(crate) async fn handle_complete_rlm_job(
     // the published node once N candidates are in. We never publish a fresh node
     // here for N>1 (the quorum is the authority).
     let quorum_n = state.config.quorum.n.max(1);
-    if quorum_n > 1 {
+    let is_admin = ctx.is_admin();
+    // Admin submitters bypass the cosine quorum and are auto-approved
+    // immediately (project decision). The quorum remains the authority for
+    // non-admin volunteers, so `quorum.n = 3` can stay the default while a
+    // trusted admin token still force-approves (issue `agnostic-rlm-rs-3a68`).
+    if quorum_n > 1 && !is_admin {
         if let Some(resp) = super::quorum::decide_quorum_submission(
             state,
             &job,
@@ -95,12 +100,12 @@ pub(crate) async fn handle_complete_rlm_job(
         }
     }
 
-    // Single-volunteer path (N == 1): persist the node atomically and gate it
-    // through the admin review queue.
+    // Single-volunteer / admin-bypass path: persist the node atomically and
+    // gate it through the admin review queue.
     // Atomic completion: lease/generation validation, node upsert and job
     // flip to `done` share one transaction — a failure cannot strand a done
     // job without its node (the claim stays retryable instead).
-    let auto_approved = ctx.is_admin();
+    let auto_approved = is_admin;
     let accepted = {
         let storage = state.storage.clone();
         let username = ctx.username.clone();

@@ -195,9 +195,9 @@ fn staleness_marks_affected_nodes_with_hashes() {
 #[test]
 fn enqueue_is_idempotent_for_pending_and_resets_finished() {
     let storage = temp_storage();
-    let (id1, gen1) = storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
+    let (id1, gen1, _) = storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     assert_eq!(gen1, 0);
-    let (id2, _) = storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
+    let (id2, _, _) = storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     assert_eq!(id1, id2);
 
     // Claim then finish; a new enqueue bumps generation and re-opens it.
@@ -213,7 +213,7 @@ fn enqueue_is_idempotent_for_pending_and_resets_finished() {
     );
     assert_eq!(storage.count_rlm_jobs("p", "done").unwrap(), 1);
 
-    let (_, gen3) = storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
+    let (_, gen3, _) = storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
     assert_eq!(gen3, 1);
     assert_eq!(storage.count_rlm_jobs("p", "pending").unwrap(), 1);
 }
@@ -636,7 +636,7 @@ fn diverger_is_excluded_from_reassigned_generation_group() {
     };
 
     // Original fan-out (no exclusions).
-    let (_, gen0) = storage.enqueue_rlm_job(&spec, &[]).unwrap();
+    let (_, gen0, _) = storage.enqueue_rlm_job(&spec, &[]).unwrap();
 
     // Volunteers claim and finish both slots so the group is fully done.
     let j1 = storage
@@ -659,7 +659,7 @@ fn diverger_is_excluded_from_reassigned_generation_group() {
     );
 
     // Re-fan-out after divergence, excluding two volunteers.
-    let (_, gen1) = storage
+    let (_, gen1, _) = storage
         .enqueue_rlm_job(&spec, &["alice".into(), "bob".into()])
         .unwrap();
     assert!(gen1 > gen0, "re-fan-out advances the generation");
@@ -711,4 +711,29 @@ fn diverger_is_excluded_from_reassigned_generation_group() {
             .is_none(),
         "excluded diverger must not claim the new group"
     );
+}
+
+/// Regression (agnostic-rlm-rs-077f): claiming a pending RLM job must not fail
+/// with `SQLITE_BUSY_SNAPSHOT` (error 517) by promoting a deferred read
+/// transaction to a write. The claim opens an IMMEDIATE write transaction and
+/// performs the select + update + reload on that single connection, so it must
+/// succeed and transition the job `pending` -> `claimed` under the volunteer.
+#[test]
+fn claim_rlm_job_succeeds_without_sqlite_517() {
+    let storage = temp_storage();
+    storage.enqueue_rlm_job(&job("p", 1, "a.rs"), &[]).unwrap();
+
+    let claimed = storage
+        .claim_rlm_job("bob", DEFAULT_RLM_LEASE_MS, None, 3)
+        .expect("claim must not raise SQLITE_BUSY_SNAPSHOT (517)");
+    let claimed = claimed.expect("a pending job must be claimable");
+
+    assert_eq!(claimed.subject, "a.rs");
+    assert_eq!(storage.count_rlm_jobs("p", "claimed").unwrap(), 1);
+    assert_eq!(storage.count_rlm_jobs("p", "pending").unwrap(), 0);
+
+    // The claimed row is owned by the volunteer (verified via the job record).
+    let row = storage.get_rlm_job(claimed.id).unwrap().unwrap();
+    assert_eq!(row.status, "claimed");
+    assert_eq!(row.claimed_by.as_deref(), Some("bob"));
 }
