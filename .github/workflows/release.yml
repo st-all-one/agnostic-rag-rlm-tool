@@ -78,10 +78,16 @@ jobs:
           # avx512fp16/amx-fp16 target attributes absent from the base GCC 11.
           # gcc-toolset-13 (GCC 13) provides them; put it first on PATH.
           dnf install -y gcc-toolset-13 gcc-toolset-13-gcc-c++
-          # rustc invokes `cc` as the linker; the toolset ships gcc/g++ but not
-          # `cc`, so symlink it (base gcc is intentionally not installed).
-          ln -sf gcc /opt/rh/gcc-toolset-13/root/usr/bin/cc
-          echo "PATH=/opt/rh/gcc-toolset-13/root/usr/bin:$PATH" >> "$GITHUB_ENV"
+          # numkong (pulled in by tokenizers) needs a modern compiler: it uses
+          # avx512fp16/amx-fp16 target attributes absent from the base GCC 11.
+          # Point CC/CXX and the Rust linker at the toolset explicitly (absolute
+          # paths) so we never depend on `cc` being resolvable via PATH.
+          TS=/opt/rh/gcc-toolset-13/root/usr/bin
+          ln -sf gcc "$TS/cc"
+          echo "PATH=$TS:$PATH" >> "$GITHUB_ENV"
+          echo "CC=$TS/gcc" >> "$GITHUB_ENV"
+          echo "CXX=$TS/g++" >> "$GITHUB_ENV"
+          echo "RUSTFLAGS=-C linker=$TS/g++" >> "$GITHUB_ENV"
           echo "PROTOC_INCLUDE=/usr/include" >> "$GITHUB_ENV"
 
       # musl targets are built inside rust:1-alpine via `docker run` on the HOST
