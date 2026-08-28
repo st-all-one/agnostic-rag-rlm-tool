@@ -67,21 +67,34 @@ jobs:
           dnf install -y epel-release
           # protobuf-compiler lives in the CodeReady Builder (CRB) repo
           dnf config-manager --set-enabled crb || crb enable
-          dnf install -y curl tar gzip gcc-c++ make protobuf-compiler ca-certificates
+          # curl-minimal already provides /usr/bin/curl on AlmaLinux 9 and
+          # conflicts with the full curl package, so install it explicitly.
+          dnf install -y curl-minimal tar gzip gcc-c++ make protobuf-compiler ca-certificates
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install musl target & tools
+      - name: Install musl target
+        if: matrix.musl
+        run: rustup target add ${{ matrix.target }}
+
+      # Zig provides a cross C/C++ compiler for the musl target. This is
+      # required because tokenizers -> esaxx-rs/link-cplusplus need musl-g++
+      # (musl-tools only ships musl-gcc, which is insufficient).
+      - name: Install Zig
         if: matrix.musl
         run: |
-          rustup target add ${{ matrix.target }}
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
-          # musl-gcc targets the host arch; name the linker env after the target.
-          echo "CARGO_TARGET_$(echo '${{ matrix.target }}' | tr '[:lower:]' '[:upper:]' | tr '-' '_')_LINKER=musl-gcc" >> "$GITHUB_ENV"
+          ZIG_VER=0.13.0
+          ARCH=$(uname -m)
+          curl -sSL "https://ziglang.org/download/${ZIG_VER}/zig-linux-${ARCH}-${ZIG_VER}.tar.xz" -o zig.tar.xz
+          tar -xf zig.tar.xz
+          echo "$PWD/zig-linux-${ARCH}-${ZIG_VER}" >> "$GITHUB_PATH"
+
+      - name: Install cargo-zigbuild
+        if: matrix.musl
+        run: cargo install cargo-zigbuild --locked
 
       - name: Install protoc (non-container, all OSes)
         if: matrix.container == ''
@@ -90,10 +103,20 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build CLI binary
-        run: cargo build --release --bin arags --target ${{ matrix.target }}
+        run: |
+          if [ "${{ matrix.musl }}" = "true" ]; then
+            cargo zigbuild --release --bin arags --target ${{ matrix.target }}
+          else
+            cargo build --release --bin arags --target ${{ matrix.target }}
+          fi
 
       - name: Build server binary
-        run: cargo build --release --bin arags-server --target ${{ matrix.target }}
+        run: |
+          if [ "${{ matrix.musl }}" = "true" ]; then
+            cargo zigbuild --release --bin arags-server --target ${{ matrix.target }}
+          else
+            cargo build --release --bin arags-server --target ${{ matrix.target }}
+          fi
 
       - name: Rename artifacts (Unix)
         if: runner.os != 'Windows'
