@@ -125,3 +125,7 @@ CARGO_BUILD_JOBS=4 cargo clippy -p arags-storage --all-targets -- -D warnings
   `(project, level, subject)` — fim do over-enqueue de 4.740 jobs).
 - **Audit (`sqlite/audit.rs`):** `write_audit_log`/`list_audit_log`
   parametrizados, dentro de `store::blocking(...)`.
+- **`VectorStore::delete_chunk_ids_blocking` (`fa25`):** variante síncrona de
+  `delete_chunk_ids` — mantém os vetores em sincronia com o SQLite quando chunks
+  são removidos por consolidação/decay no servidor, evitando o rebuild completo
+  no bootstrap (divergência de contagem).

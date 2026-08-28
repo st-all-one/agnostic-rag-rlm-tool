@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed — vetores órfãos em consolidação/decay (agnostic-rlm-rs-fa25)
+- **`ConsolidationEngine::with_vector_store` + purge de vetores**
+  (`consolidation.rs`): quando um `VectorStore` de chunks é anexado, a
+  deduplicação (`remove_duplicate_chunks`) e o decay (`arags-server`) agora
+  também removem os vetores usearch dos chunks excluídos. Antes, só as linhas
+  do SQLite eram removidas, deixando vetores órfãos → divergência de contagem
+  → rebuild completo (re-embed) a cada reinício do servidor. A purga é
+  best-effort (erro logado, nunca fatal). `ConsolidateOptions`/`ConsolidateResult`
+  inalterados; `new(storage)` continua sem vector store (vetores não são
+  purgeados em testes unitários).
+
 ## [0.2.0] - 2026-08-19
 
 ### Changed

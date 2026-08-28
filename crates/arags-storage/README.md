@@ -177,6 +177,11 @@ dirty) e flush uniforme via trait `FlushableVectorSpace` no graceful shutdown
 do servidor. Rajadas de inserts (bulk answers, conclusões RLM) amortizam para
 um único write O(N) do arquivo.
 
+O espaço A (chunks) também expõe `VectorStore::delete_chunk_ids` (async) e
+`delete_chunk_ids_blocking` (síncrono) para purgar vetores de chunks removidos
+(em consolidação/decay) — mantém o índice usearch em sincronia com o SQLite e
+evita o rebuild completo no bootstrap (`agnostic-rlm-rs-fa25`).
+
 ## Uso Exclusive (CLI)
 
 ```rust

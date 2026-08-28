@@ -76,3 +76,12 @@ O wiring do watcher (agora em `arags-cli`, `arags index --register`), consolida�
 (`arags consolidate`) e `HistoryManager` no modo servidor pertencem a `arags-cli` /
 `arags-server` e não foram editados nesta tarefa. As APIs de engine já existem e
 são chamáveis.
+
+## Recent Updates (2026-08-28)
+
+- **Consolidação mantém os vetores em sincronia (`fa25`):** `ConsolidationEngine`
+  ganhou `with_vector_store(Arc<VectorStore>)`; `remove_duplicate_chunks` (e o
+  decay no servidor) agora purga os vetores usearch dos chunks removidos, evitando
+  a divergência de contagem que obrigava o bootstrap a re-embedar tudo a cada
+  reinício. Sem vector store anexado, o comportamento é o de antes (útil em
+  testes).

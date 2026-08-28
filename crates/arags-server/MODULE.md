@@ -178,3 +178,17 @@ O schema é gerenciado por `arags-storage` (ver `migrations/` do workspace):
   em `grpc/rlm.rs`; `f = floor((n-1)/3)`, `>= 2f+1`, fusão ponderada por trust.
 - **Trust scoring (`f486`):** `claim_rlm_job` rejeita banidos e exclui divergers;
   `quorum.rs` reassigna após divergência total.
+- **Bootstrap em background + sem vetores órfãos (`0631`/`fa25`, 2026-08-28):**
+  `bootstrap_vector_spaces` roda num `tokio::spawn` (porta binda na hora; rebuild
+  de divergência em segundo plano). A manutenção (`maintenance.rs` consolidate/
+  decay) agora recebe o `VectorStore` de chunks e purge os vetores dos chunks
+  removidos (`delete_chunk_ids_blocking` via `ConsolidationEngine::with_vector_store`),
+  mantendo usearch em sincronia com o SQLite — fim do rebuild completo a cada
+  reinício. Aplicado a `lifecycle.rs` (ticker), `grpc/memory.rs` (`TriggerMaintenance`)
+  e `admin consolidate`.
+- **Ollama connect timeout (`9288`, 2026-08-28):** `embedder/ollama.rs::http_post`
+  usa `TcpStream::connect_timeout(10s)`; Ollama inatingível falha rápido em vez de
+  travar o embed do bootstrap.
+- **`admin consolidate` sem panic (`4cbe`, 2026-08-28):** `admin::run` é `async` e
+  aguarda `run_maintenance` diretamente (antes aninhava `Runtime` dentro de
+  `#[tokio::main]` e panicava).

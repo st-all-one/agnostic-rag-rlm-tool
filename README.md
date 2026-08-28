@@ -66,6 +66,11 @@ Documentação de uso e operação em [`wiki/`](wiki/README.md):
   (`audit_log` table, `migrations/029_audit_log.sql`) gravado nos 4 paths
   mutators (index/persist/complete_rlm/submit); **rate-limiting por usuário**
   (`[rate_limit]` em `server.toml`, janela fixa por `username`). Falha de audit
+- **Bootstrap sem travar o startup (`agnostic-rlm-rs-fa25` / `0631`):** o
+  `arags-server` reconcilia os 4 espaços vetoriais em background no `tokio::spawn`
+  (porta gRPC binda na hora); a manutenção (`consolidate`/`decay`) purge os
+  vetores usearch dos chunks removidos, mantendo usearch em sincronia com o
+  SQLite e evitando o rebuild completo a cada reinício.
   é warn-only; estouro de rate-limit nega com `resource_exhausted`.
 - **Sem LLM no servidor** para qualquer operação (index/search/ask/memory/
   history). O LLM é usado **apenas no cliente**, para `ask` (digest implícito)

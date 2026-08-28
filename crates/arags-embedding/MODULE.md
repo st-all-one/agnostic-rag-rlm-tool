@@ -72,3 +72,6 @@ cargo bench -p arags-embedding
   dims). candle INT8 continua o default; Ollama não exige build especial (GPU
   Vulkan é opcional via `--features llamacpp-vulkan`). Os espaços vetoriais do
   server são dimensionados por `embedder.dimensions()`.
+- **Ollama connect timeout (`9288`, 2026-08-28):** `http_post` resolve o
+  endereço e usa `TcpStream::connect_timeout(10s)`; Ollama inatingível falha
+  rápido em vez de travar o embed do bootstrap (antes só tinha read timeout).

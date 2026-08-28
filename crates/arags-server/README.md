@@ -148,7 +148,9 @@ servidor.
   `stale` por hash de chunk no pós-reindex.
 - **`maintenance`** (`src/maintenance.rs`): consolidação/decay agendados (cron)
   + purge de histórico (`[history] retention_days`) e RPC admin
-  `TriggerMaintenance`.
+  `TriggerMaintenance`. A consolidação/decay também **purge os vetores usearch**
+  dos chunks removidos (`VectorStore` anexado ao `ConsolidationEngine`), mantendo
+  o espaço vetorial em sincronia com o SQLite e evitando rebuild no bootstrap.
 - **`state`**: `AppState` compartilhado (storage, embedder, vector store,
   question_vector_store, qa_config, maintenance config).
 - **`timing`**: `Timer` que emite `elapsed_ms`/`elapsed_us` estruturados via `tracing`.

@@ -51,6 +51,34 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - Decay não servido (`agnostic-rlm-rs-fce3`): `[search].decay_lambda` aplica
   decay exponencial nos scores dos chunks.
 
+### Fixed — bootstrap/startup hang (agnostic-rlm-rs-fa25 / 0631 / 9288 / 4cbe)
+
+- **Vetores órfãos em manutenção (`fa25`):** `maintenance::consolidate`/`decay`
+  agora recebem o `VectorStore` de chunks e o repassam a `ConsolidationEngine`
+  (`with_vector_store`); chunks removidos por deduplicação/decay também têm seus
+  vetores usearch apagados (`delete_chunk_ids_blocking`). Antes, a contagem do
+  usearch ficava maior que a do SQLite → o bootstrap fazia `clear()` + re-embed de
+  tudo a cada reinício (o "deadlock" de startup). Aplicado ao ticker de
+  manutenção (`lifecycle.rs`), ao RPC `TriggerMaintenance` (`grpc/memory.rs`) e ao
+  `admin consolidate` (que abre o próprio store).
+- **Bootstrap em background (`0631`):** `bootstrap_vector_spaces` agora roda num
+  `tokio::spawn` — a porta gRPC é bindada imediatamente e o rebuild (quando há
+  divergência) ocorre em segundo plano. Servidor saudável em segundos mesmo
+  durante um re-embed de minutos; se a divergência reaparecer, o serving não
+  trava.
+- **Connect timeout do Ollama (`9288`):** `embedder/ollama.rs::http_post` resolve
+  o endereço e usa `TcpStream::connect_timeout(10s)` (antes só tinha read timeout).
+  Um Ollama inatingível vira erro rápido em vez de stall infinito no embed do
+  bootstrap.
+- **`admin consolidate` panic (`4cbe`):** `admin::run` era `fn` e aninhava um
+  `tokio::Runtime` dentro do `#[tokio::main]` (pânico "Cannot start a runtime from
+  within a runtime"). Agora é `async` e faz `.await` de `run_maintenance`
+  diretamente; o subcomando `admin consolidate` funciona para limpeza manual.
+- **Verificado em e2e (2026-08-28):** volume com 7382 vetores vs 7264 chunks
+  (118 órfãos, resíduo pré-fixo) recuperado por bootstrap em background (saudável
+  em ~6s, rebuild de ~6min em segundo plano); restart posterior in-sync em 20ms.
+
+
 ### Added — plan 022: handlers de explorações + hook de índice
 - **`grpc/exploration/{mod,search,feedback}.rs`**: `PersistExploration`
   (validação de contrato/caps, resolução path→hash, embed best-effort),

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed — vetores órfãos / bootstrap (agnostic-rlm-rs-fa25, 0631)
+- **`VectorStore::delete_chunk_ids_blocking`** (`src/lance/vectors.rs`): variante
+  síncrona de `delete_chunk_ids` para chamadores fora de contexto async (ex.:
+  consolidação de memória que roda sob o lock do SQLite). Usada por
+  `arags-memory`/`arags-server` para purgar os vetores dos chunks removidos em
+  `consolidate`/`decay`, mantendo o espaço usearch em sincronia com o SQLite e
+  eliminando a divergência de contagem que forçava um re-embed completo a cada
+  reinício do servidor (o "hang" de startup).
+
 ### Added — plan 023: trust pipeline, review gate e VectorSpaceStore genérico
 
 - **`vector_space.rs` — `VectorSpaceStore` genérico (`agnostic-rlm-rs-89fb`,

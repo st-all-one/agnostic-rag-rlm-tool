@@ -65,6 +65,28 @@ foram validadas por `cargo fmt --check` + `cargo clippy --workspace -- -D warnin
   `search` híbrida (~200ms); `ask` com modelo principal externo (opencode `hy3`)
   ~19s; `explore search` gracioso sem mapas.
 
+### Fixed — bootstrap/startup hang (agnostic-rlm-rs-fa25 / 0631 / 9288 / 4cbe)
+
+- **Vetores órfãos em manutenção (`fa25`):** `consolidate`/`decay` do servidor
+  agora purgem os vetores usearch dos chunks removidos (o `VectorStore` de chunks
+  é anexado ao `ConsolidationEngine` e `delete_chunk_ids_blocking` apaga os
+  órfãos). Antes, a divergência de contagem (vetores > chunks no usearch) obrigava
+  o bootstrap a `clear()` + re-embed de tudo a cada reinício — o "hang" de startup.
+- **Bootstrap em background (`0631`):** `bootstrap_vector_spaces` roda num
+  `tokio::spawn`; a porta gRPC é bindada imediatamente e o rebuild (se houver
+  divergência) ocorre em segundo plano. Servidor saudável em segundos mesmo
+  durante um re-embed de minutos.
+- **Ollama connect timeout (`9288`):** `embedder/ollama.rs::http_post` usa
+  `TcpStream::connect_timeout(10s)`; um daemon Ollama inatingível falha rápido em
+  vez de travar o embed do bootstrap (antes só havia read timeout).
+- **`admin consolidate` panic (`4cbe`):** `admin::run` agora é `async` (antes
+  aninhava um `tokio::Runtime` dentro de `#[tokio::main]` e panicava com "Cannot
+  start a runtime from within a runtime"); o subcomando `admin consolidate`
+  funciona para limpeza manual.
+- **Verificado em e2e (2026-08-28):** volume com 118 vetores órfãos (7382 vs
+  7264 chunks, resíduo pré-fixo) recuperado por bootstrap em background — saudável
+  em ~6s, rebuild de ~6min em segundo plano; restart posterior in-sync em 20ms.
+
 ### Fixed — bugs descobertos em e2e (2026-08-27)
 - **`agnostic-rlm-rs-077f` — `ClaimRlmJob` SQLite 517:** handler abria txn de
   leitura e promovia p/ escrita em outra conexão do pool (`SQLITE_BUSY_SNAPSHOT`)
