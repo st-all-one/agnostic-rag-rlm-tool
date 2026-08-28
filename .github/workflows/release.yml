@@ -24,26 +24,31 @@ jobs:
             os: ubuntu-latest
             artifact: arags-debian-amd64
             server_artifact: arags-server-debian-amd64
-          # musl (x86_64-unknown-linux-musl, fully static — imagem Docker amd64)
+          # musl x86_64 — built NATIVELY inside rust:1-alpine. The SIMD C deps
+          # (numkong, pulled in by tokenizers) need a modern GCC + musl-g++, which
+          # Alpine provides; zig/clang and old glibc GCC both fail to compile it.
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
+            container: rust:1-alpine
             artifact: arags-linux-musl-amd64
             server_artifact: arags-server-linux-musl-amd64
             musl: true
-          # AlmaLinux (glibc x86_64 via container)
+          # AlmaLinux (glibc x86_64 via container; needs GCC 13 toolset for numkong)
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             container: almalinux:9
             artifact: arags-almalinux-amd64
             server_artifact: arags-server-almalinux-amd64
+            almalinux: true
           # Linux ARM64 (glibc, nativo em runner arm)
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
             artifact: arags-linux-gnu-arm64
             server_artifact: arags-server-linux-gnu-arm64
-          # musl (aarch64-unknown-linux-musl, estático — imagem Docker arm64)
+          # musl aarch64 — built NATIVELY inside rust:1-alpine (arm64 runner)
           - target: aarch64-unknown-linux-musl
             os: ubuntu-24.04-arm
+            container: rust:1-alpine
             artifact: arags-linux-musl-arm64
             server_artifact: arags-server-linux-musl-arm64
             musl: true
@@ -62,42 +67,39 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install container dependencies (AlmaLinux)
-        if: matrix.container != ''
+        if: matrix.almalinux
         run: |
           dnf install -y epel-release
-          # protobuf-compiler lives in the CodeReady Builder (CRB) repo
           dnf config-manager --set-enabled crb || crb enable
           # curl-minimal already provides /usr/bin/curl on AlmaLinux 9 and
           # conflicts with the full curl package, so install it explicitly.
           # protobuf-devel ships the well-known google/protobuf/*.proto types that
           # prost-build needs; PROTOC_INCLUDE points protoc at them.
-          dnf install -y curl-minimal tar gzip gcc-c++ make protobuf-compiler protobuf-devel ca-certificates
+          dnf install -y curl-minimal tar gzip make protobuf-compiler protobuf-devel ca-certificates
+          # numkong (pulled in by tokenizers) needs a modern compiler: it uses
+          # avx512fp16/amx-fp16 target attributes absent from the base GCC 11.
+          # gcc-toolset-13 (GCC 13) provides them; put it first on PATH.
+          dnf install -y gcc-toolset-13 gcc-toolset-13-gcc-c++
+          echo "PATH=/opt/rh/gcc-toolset-13/root/usr/bin:$PATH" >> "$GITHUB_ENV"
           echo "PROTOC_INCLUDE=/usr/include" >> "$GITHUB_ENV"
 
+      # musl targets are built NATIVELY inside rust:1-alpine (Alpine ships a
+      # modern GCC + musl-g++ that the SIMD C deps, e.g. numkong, require).
+      # rustup is glibc-only and cannot run in Alpine, so we use the image's
+      # preinstalled Rust toolchain instead of dtolnay/rust-toolchain.
+      - name: Install Alpine build dependencies (musl)
+        if: matrix.musl
+        run: |
+          apk add --no-cache g++ protobuf protobuf-dev git bash
+          echo "PROTOC_INCLUDE=/usr/include" >> "$GITHUB_ENV"
+          # Statically link the C++/gcc runtimes so the musl binary is portable.
+          echo "RUSTFLAGS=-C link-arg=-static-libstdc++ -C link-arg=-static-libgcc" >> "$GITHUB_ENV"
+
       - name: Install Rust toolchain
+        if: ${{ !matrix.musl }}
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
-      - name: Install musl target
-        if: matrix.musl
-        run: rustup target add ${{ matrix.target }}
-
-      # Zig provides a cross C/C++ compiler for the musl target. This is
-      # required because tokenizers -> esaxx-rs/link-cplusplus need musl-g++
-      # (musl-tools only ships musl-gcc, which is insufficient).
-      - name: Install Zig
-        if: matrix.musl
-        run: |
-          ZIG_VER=0.13.0
-          ARCH=$(uname -m)
-          curl -sSL "https://ziglang.org/download/${ZIG_VER}/zig-linux-${ARCH}-${ZIG_VER}.tar.xz" -o zig.tar.xz
-          tar -xf zig.tar.xz
-          echo "$PWD/zig-linux-${ARCH}-${ZIG_VER}" >> "$GITHUB_PATH"
-
-      - name: Install cargo-zigbuild
-        if: matrix.musl
-        run: cargo install cargo-zigbuild --locked
 
       - name: Install protoc (non-container, all OSes)
         if: matrix.container == ''
@@ -105,20 +107,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build CLI binary (musl)
-        if: matrix.musl
-        run: cargo zigbuild --release --bin arags --target ${{ matrix.target }}
-
       - name: Build CLI binary
-        if: ${{ !matrix.musl }}
         run: cargo build --release --bin arags --target ${{ matrix.target }}
 
-      - name: Build server binary (musl)
-        if: matrix.musl
-        run: cargo zigbuild --release --bin arags-server --target ${{ matrix.target }}
-
       - name: Build server binary
-        if: ${{ !matrix.musl }}
         run: cargo build --release --bin arags-server --target ${{ matrix.target }}
 
       - name: Rename artifacts (Unix)

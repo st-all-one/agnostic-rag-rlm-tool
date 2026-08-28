@@ -19,7 +19,7 @@
 # ---------------------------------------------------------------------------
 # Builder — musl + Vulkan SDK.
 # ---------------------------------------------------------------------------
-FROM rust:1-alpine AS builder
+FROM rust:1.98.0-alpine3.24@sha256:a10e64dd139b7387337c7fbe8aca31b959b57b2fd4c8ae20a02cf1d6ea424dce AS builder
 
 ARG ARAGS_VERSION=latest
 # Checkpoint revision of sentence-transformers/all-MiniLM-L6-v2 baked at
