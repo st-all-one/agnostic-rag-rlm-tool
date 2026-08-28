@@ -22,7 +22,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::{ReceiverStream, TcpListenerStream};
 use tonic::Request;
 use tonic::metadata::MetadataValue;
-use tonic::transport::{Channel, Server};
+use tonic::transport::Server;
 
 use arags_proto::proto::arags_service_client::AragsServiceClient;
 use arags_proto::proto::arags_service_server::AragsServiceServer;

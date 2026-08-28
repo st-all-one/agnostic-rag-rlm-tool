@@ -8,7 +8,6 @@ use tonic::Request;
 
 use super::feedback::{handle_invalidate_exploration, handle_review_exploration};
 use super::handle_persist_exploration;
-use super::search::handle_get_exploration_by_id;
 use super::search::handle_search_explorations;
 use super::tests::{bearer, fixture, persist_request};
 use crate::config::ValidationMode;

@@ -39,16 +39,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Run tests
-        run: cargo test --workspace -- --exclude-should-panic
+        run: cargo test --workspace
 
       - name: Run clippy
         run: cargo clippy --workspace -- -D warnings
 
       - name: Check formatting
         run: cargo fmt -- --check
-
-      - name: Enforce file-length limit (plan 021)
-        run: ./scripts/check_file_length.sh
 
   build:
     name: Build

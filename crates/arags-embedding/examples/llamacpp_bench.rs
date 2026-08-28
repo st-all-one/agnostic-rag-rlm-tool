@@ -1,8 +1,11 @@
 #![cfg_attr(not(feature = "llamacpp"), allow(dead_code))]
 
+#[cfg(feature = "llamacpp")]
 use std::path::Path;
+#[cfg(feature = "llamacpp")]
 use std::time::Instant;
 
+#[cfg(feature = "llamacpp")]
 use arags_embedding::embedder::Embedder;
 
 #[cfg(feature = "llamacpp")]
