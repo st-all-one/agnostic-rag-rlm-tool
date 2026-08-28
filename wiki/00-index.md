@@ -31,6 +31,7 @@ agentes de IA (e a humanos) trabalhando em codebases massivas.
 | 4 | [04-boas-praticas.md](04-boas-praticas.md) | Escolha de dataset, higiene de indexação, segurança, tuning de busca, anti-padrões. |
 | 5 | [05-integracao-ia.md](05-integracao-ia.md) | Como agentes/subagentes consomem e gravam conhecimento; foco no **explorer** e no contrato de explorações. |
 | 6 | [06-configuracoes-avancadas.md](06-configuracoes-avancadas.md) | GPU para embeddings, backends de LLM locais, troca de modelo, rate-limit, time-travel. |
+| 7 | [08-docker.md](08-docker.md) | Uso da imagem Docker Hub, modo Ollama como embedding, multi-arch, imagem GPU, build from-release. |
 
 ## Começo rápido (30 segundos)
 

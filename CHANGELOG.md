@@ -5,6 +5,33 @@ Este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-28
+
+Primeira release pública estável do **arags** (Agnostic RAG Server): data plane
+server-first, LLM-free e agent-agnostic. Esta versão consolida o roadmap dos
+planos 016–029 — recuperação pós-incidente, conclusão do RLM/quorum, dataset de
+explorações (explorer), integração Tier 1 com agentes, build/GPU/CI, audit log e
+rate-limiting. O cliente `arags` é um cliente gRPC puro; o LLM (do usuário) atua
+apenas em `ask`, `persist` e `volunteer`. Estado de escopo:
+
+- **9 crates** no workspace; `version = "0.1.0"` em todo o workspace.
+- **4 datasets de conhecimento**: chunks (A), qa_cache (B), rlm_nodes (C),
+  explorations (D) — cada um com espaço vetorial HNSW dedicado (384 dims, cosseno)
+  + FTS5; unified contextual query funde os quatro na leitura.
+- **Servidor LLM-free**: indexação, busca híbrida BM25+semântica (RRF), QA-cache,
+  RLM, explorações e manutenção sem nenhum crate de LLM no grafo.
+- **Auth** por refresh token (1 ano) + sessão efêmera Bearer; RPCs mutantes e
+  admin gateados por role.
+- **Operação**: imagem Docker única (musl/scratch, ~109MB, modelo assado),
+  `server.toml` campo a campo, CLI `admin` dentro do container.
+- **GPU/local**: embedder `minilm` (CPU, default), `ollama` e `llamacpp`
+  (Vulkan, `--features llamacpp-vulkan`); LLM local do cliente via
+  `family = openai|anthropic|gemini|ollama`.
+- **Confiança**: proveniência por hash, staleness por âncora, review gates
+  (RLM/explorations) e time-travel por revisão (`--as-of`).
+- **Qualidade**: `cargo fmt --check`, `cargo clippy --workspace -- -D warnings` e
+  `cargo test --workspace` verdes; documentação de usuário em `wiki/`.
+
 ### Added — Recuperação pós-incidente + conclusão do roadmap RLM (2026-08-27)
 
 Conjunto de mudanças recuperadas (trabalho perdido em arquivos apagados antes
@@ -359,11 +386,3 @@ Mudanças de superfície relacionadas:
   `[embedder]` no `server.toml` (`ARAGS_SERVER_ADDR`/`ARAGS_DATA_DIR` continuam
   como overrides de env).
 
-## [0.1.0]
-
-### Added
-
-- Workspace inicial (9 crates): CLI gRPC, server data plane (gRPC/TLS),
-  storage SQLite/LanceDB, embeddings BGE-M3/Ollama/lightweight, busca híbrida
-  BM25+semântica+RRF, QA-cache semântico (plan 017), auth por refresh token
-  (plan 018), memória multi-projeto.

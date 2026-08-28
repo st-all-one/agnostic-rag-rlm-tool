@@ -187,21 +187,6 @@ arags ask --cache-id 018f3c...        # lookup determinístico (sem LLM)
 
 ---
 
-### `arags query` — [DEPRECATED] alias de `ask` (1 release)
-
-`arags query` ainda existe como **alias deprecado**: imprime um aviso de
-depreciação apontando para `arags ask` e roteia para a mesma lógica (digest
-implícito; `--cache-id` faz lookup determinístico). O antigo comportamento
-"sem flags" (apenas chunks crus, sem LLM) migrou para `arags search --context`.
-
-```bash
-arags query "como funciona o login?"   # DEPRECATED → roteia para ask
-```
-
-> Prefira `arags ask` em novos fluxos e na documentação de agentes.
-
----
-
 ### `arags maintenance` — administração da manutenção do servidor (admin)
 
 | Subcomando | Flags | Descrição |

@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -23,7 +24,7 @@ jobs:
             os: ubuntu-latest
             artifact: arags-debian-amd64
             server_artifact: arags-server-debian-amd64
-          # musl (x86_64-unknown-linux-musl, fully static)
+          # musl (x86_64-unknown-linux-musl, fully static — imagem Docker amd64)
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             artifact: arags-linux-musl-amd64
@@ -35,6 +36,17 @@ jobs:
             container: almalinux:9
             artifact: arags-almalinux-amd64
             server_artifact: arags-server-almalinux-amd64
+          # Linux ARM64 (glibc, nativo em runner arm)
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            artifact: arags-linux-gnu-arm64
+            server_artifact: arags-server-linux-gnu-arm64
+          # musl (aarch64-unknown-linux-musl, estático — imagem Docker arm64)
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            artifact: arags-linux-musl-arm64
+            server_artifact: arags-server-linux-musl-arm64
+            musl: true
           # Windows Server (x86_64-pc-windows-msvc)
           - target: x86_64-pc-windows-msvc
             os: windows-latest
@@ -63,10 +75,11 @@ jobs:
       - name: Install musl target & tools
         if: matrix.musl
         run: |
-          rustup target add x86_64-unknown-linux-musl
+          rustup target add ${{ matrix.target }}
           sudo apt-get update
           sudo apt-get install -y musl-tools
-          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> "$GITHUB_ENV"
+          # musl-gcc targets the host arch; name the linker env after the target.
+          echo "CARGO_TARGET_$(echo '${{ matrix.target }}' | tr '[:lower:]' '[:upper:]' | tr '-' '_')_LINKER=musl-gcc" >> "$GITHUB_ENV"
 
       - name: Install protoc (non-container Linux/macOS)
         if: matrix.container == '' && runner.os != 'Windows'
@@ -96,6 +109,13 @@ jobs:
           cp target/${{ matrix.target }}/release/arags.exe ${{ matrix.artifact }}
           cp target/${{ matrix.target }}/release/arags-server.exe ${{ matrix.server_artifact }}
 
+      # Server tarball consumed by the Docker build (one per Linux target, named
+      # after the full rust triple so the Dockerfile can resolve it by TARGETARCH).
+      - name: Package server tarball (Linux)
+        if: contains(matrix.target, 'linux')
+        run: |
+          tar czf "arags-server-${{ matrix.target }}.tar.gz" -C "target/${{ matrix.target }}/release" arags-server
+
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
@@ -110,10 +130,18 @@ jobs:
           path: ${{ matrix.server_artifact }}
           retention-days: 1
 
+      - name: Upload server tarball (Docker)
+        if: contains(matrix.target, 'linux')
+        uses: actions/upload-artifact@v4
+        with:
+          name: arags-server-${{ matrix.target }}.tar.gz
+          path: arags-server-${{ matrix.target }}.tar.gz
+          retention-days: 1
+
   docker:
     name: Build Docker image
     runs-on: ubuntu-latest
-    needs: build-binaries
+    needs: release
     permissions:
       contents: read
       packages: write
@@ -121,19 +149,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Pull the prebuilt static musl server binary and wrap it as the
-      # tarball the Dockerfile expects via ARAGS_LOCAL_TARBALL (keeps the
-      # default source-build path intact when this arg is empty).
-      - name: Download musl server binary
-        uses: actions/download-artifact@v4
-        with:
-          name: arags-server-linux-musl-amd64
-
-      - name: Package musl binary as tarball
-        run: |
-          mv arags-server-linux-musl-amd64 arags-server
-          chmod +x arags-server
-          tar czf arags-server-linux-musl-amd64.tar.gz arags-server
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -153,6 +170,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+            type=raw,value=latest
             type=sha
 
       - name: Build and push Docker image
@@ -160,19 +178,23 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # The Dockerfile pulls the prebuilt static musl server binary for the
+          # target arch directly from the GitHub Release (no compile). ARAGS_REPO
+          # + ARAGS_VERSION let it build the per-arch asset URL from TARGETARCH.
           build-args: |
-            ARAGS_LOCAL_TARBALL=arags-server-linux-musl-amd64.tar.gz
+            ARAGS_REPO=${{ github.repository }}
+            ARAGS_VERSION=${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-binaries, docker]
+    needs: [build-binaries]
     permissions:
       contents: write
 
@@ -183,18 +205,18 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Create checksums
+      - name: Build sha256sums.txt
         run: |
-          find artifacts -type f -not -name '*.sha256' | while read f; do
-            sha256sum "$f" > "$f.sha256"
-          done
+          cd artifacts
+          sha256sum arags* > sha256sums.txt
+          cat sha256sums.txt
 
       - name: Create release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
             artifacts/arags-*
-            artifacts/arags-server-*
+            artifacts/sha256sums.txt
           draft: false
           prerelease: false
