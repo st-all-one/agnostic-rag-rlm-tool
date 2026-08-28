@@ -95,6 +95,59 @@ fn decode_content(file: &IndexFile) -> Result<String, Status> {
     String::from_utf8(bytes).map_err(internal)
 }
 
+/// Await one spawned embed task, persist its vectors, and mark the chunks
+/// `pending_vector` on any embed/persist failure so a later re-embed recovers
+/// them. Extracted from the per-file loop so embeds can overlap across files
+/// (issue `agnostic-rlm-rs-b64b`) while sharing one commit path.
+async fn drain_embed_handle(
+    state: &AppState,
+    buffer_id: i64,
+    handle: EmbedHandle,
+    batch_chunk_ids: Vec<i64>,
+) -> Result<(), Status> {
+    let out = handle
+        .await
+        .map_err(|e| Status::internal(format!("embedding task failed: {e}")))?;
+    match out {
+        Ok(entries) => {
+            if let Some(vs) = &state.vector_store {
+                if let Err(e) = vs.insert_vectors(&entries).await {
+                    warn!(
+                        error = %e,
+                        buffer_id,
+                        n_chunks = batch_chunk_ids.len(),
+                        "failed to persist vectors; marking chunks pending_vector"
+                    );
+                    mark_chunks_pending(state, buffer_id, &batch_chunk_ids);
+                }
+            }
+        }
+        Err(e) => {
+            warn!(
+                error = %e,
+                buffer_id,
+                n_chunks = batch_chunk_ids.len(),
+                "batch embedding failed; marking chunks pending_vector"
+            );
+            mark_chunks_pending(state, buffer_id, &batch_chunk_ids);
+        }
+    }
+    Ok(())
+}
+
+/// Mark chunks `pending_vector` (best-effort) so a later re-embed recovers them.
+fn mark_chunks_pending(state: &AppState, buffer_id: i64, ids: &[i64]) {
+    if let Err(m) = state.storage.mark_chunks_pending_vector(buffer_id, ids) {
+        warn!(error = %m, "failed to mark chunks pending_vector");
+    } else {
+        debug!(
+            buffer_id,
+            n_marked = ids.len(),
+            "marked chunks pending_vector for re-embed"
+        );
+    }
+}
+
 /// Index a project from a client stream of file bytes.
 ///
 /// This is the thin gRPC entry point. It delegates the stream-processing loop
@@ -325,7 +378,7 @@ where
                 }
 
                 // Phase 2: embed + persist vectors, bounded to this file.
-                if let Some(vector_store) = &state.vector_store {
+                if state.vector_store.is_some() {
                     let embed_batch = state.config.embedder.batch_size.max(1);
                     let embedder = state.embedder.clone();
                     let buffer_id_u = u64::try_from(bid).unwrap_or(u64::MAX);
@@ -333,6 +386,9 @@ where
                     // so the blocking task can confine candle's matmul and
                     // report backpressure signal (issue `agnostic-rlm-rs-6690`).
                     let pool_threads = state.index_embed_pool.current_num_threads();
+                    // Bound pending embeds so peak memory stays limited while
+                    // embeddings overlap across files (agnostic-rlm-rs-b64b).
+                    let embed_cap = (pool_threads * 2).max(4);
                     for batch in res.persisted.chunks(embed_batch) {
                         let owned_batch: Vec<(i64, String)> = batch.to_vec();
                         let batch_chunk_ids: Vec<i64> =
@@ -379,57 +435,14 @@ where
                         embed_abort.push(handle, batch_chunk_ids);
                     }
 
-                    // Await all batches for this file. On a join failure we bail
-                    // out; the still-pending handles remain in `embed_abort` and
-                    // are aborted by its `Drop` impl (or the explicit call).
-                    while let Some((handle, batch_chunk_ids)) = embed_abort.pop() {
-                        let out = handle.await.map_err(|e| {
-                            embed_abort.abort_all();
-                            Status::internal(format!("embedding task failed: {e}"))
-                        })?;
-                        match out {
-                            Ok(entries) => {
-                                if let Err(e) = vector_store.insert_vectors(&entries).await {
-                                    warn!(
-                                        error = %e,
-                                        buffer_id = bid,
-                                        n_chunks = batch_chunk_ids.len(),
-                                        "failed to persist vectors; marking chunks pending_vector"
-                                    );
-                                    if let Err(m) = state
-                                        .storage
-                                        .mark_chunks_pending_vector(bid, &batch_chunk_ids)
-                                    {
-                                        warn!(error = %m, "failed to mark chunks pending_vector");
-                                    } else {
-                                        debug!(
-                                            buffer_id = bid,
-                                            n_marked = batch_chunk_ids.len(),
-                                            "marked chunks pending_vector for re-embed"
-                                        );
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                warn!(
-                                    error = %e,
-                                    buffer_id = bid,
-                                    n_chunks = batch_chunk_ids.len(),
-                                    "batch embedding failed; marking chunks pending_vector"
-                                );
-                                if let Err(m) = state
-                                    .storage
-                                    .mark_chunks_pending_vector(bid, &batch_chunk_ids)
-                                {
-                                    warn!(error = %m, "failed to mark chunks pending_vector");
-                                } else {
-                                    debug!(
-                                        buffer_id = bid,
-                                        n_marked = batch_chunk_ids.len(),
-                                        "marked chunks pending_vector for re-embed"
-                                    );
-                                }
-                            }
+                    // Bound in-flight embeds: drain the most-recently-spawned
+                    // handle whenever too many are pending, so peak memory stays
+                    // bounded while embeddings run concurrently across files
+                    // (issue `agnostic-rlm-rs-b64b`). The remaining handles are
+                    // drained once the stream ends (after the main `while`).
+                    while embed_abort.0.len() >= embed_cap {
+                        if let Some((handle, ids)) = embed_abort.pop() {
+                            drain_embed_handle(state, bid, handle, ids).await?;
                         }
                     }
                 }
@@ -444,13 +457,21 @@ where
     // tasks that the `EmbedAbortGuard` will cancel on drop — this is the
     // diagnostic signal called for by issue `agnostic-rlm-rs-ccc3` to confirm
     // no pooled connection/transaction leaks past the handler.
-    let aborted_embed_tasks = embed_abort.0.len();
+    let pending_embed_tasks = embed_abort.0.len();
     warn!(
         reason = "client_disconnect",
         elapsed_ms = start.elapsed().as_millis() as u64,
-        aborted_embed_tasks,
-        "index stream ended; pooled connections/tx released"
+        pending_embed_tasks,
+        "index stream ended; draining pending embeds"
     );
+
+    // Final drain: commit vectors for every embed spawned across all files.
+    // These overlapped with per-file persistence during the stream (b64b), so
+    // the semantic index is assembled here rather than per-file. On an errored
+    // stream the `EmbedAbortGuard` aborts them instead (no drain).
+    while let Some((handle, ids)) = embed_abort.pop() {
+        drain_embed_handle(state, buffer_id.unwrap_or(0), handle, ids).await?;
+    }
 
     // End-of-stream orphan pass (issue `agnostic-rlm-rs-8dcc`): any active chunk
     // key snapshotted at Phase 0 that Phase 1 never re-inserted is now orphaned
@@ -1057,8 +1078,23 @@ mod tests {
         let mut cfg = ServerConfig::default();
         cfg.exploration.enabled = false;
         cfg.rlm.enabled = false;
-        let state =
-            AppState::with_vector_stores(storage.clone(), cfg, None, None, None, None).unwrap();
+        let dims = arags_embedding::embedder::minilm::HIDDEN_SIZE;
+        let vector_store = Arc::new(
+            VectorStore::open_with_dims(&dir.path().join("vectors"), dims)
+                .await
+                .unwrap(),
+        );
+        let embedder: Arc<dyn Embedder + Send + Sync> = Arc::new(LightweightEmbedder::new(dims));
+        let state = AppState::with_embedder(
+            storage.clone(),
+            cfg,
+            embedder,
+            Some(vector_store.clone()),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         // Run 1: index a single file "a.rs" with a unique marker.
         let (tx, rx) = mpsc::channel::<Result<IndexChunk, tonic::Status>>(8);
@@ -1074,6 +1110,11 @@ mod tests {
             chunk_count(&storage, 1),
             1,
             "run1 should persist exactly one chunk"
+        );
+        assert_eq!(
+            vector_store.count().await,
+            1,
+            "run1 vector count must track the single chunk"
         );
         assert!(
             chunk_text_has(&storage, 1, "alpha_marker"),
@@ -1103,6 +1144,11 @@ mod tests {
             chunk_text_has(&storage, 1, "beta_marker"),
             "run2 content must be present"
         );
+        assert_eq!(
+            vector_store.count().await,
+            1,
+            "run2 vector count must track the single active chunk (no duplicate keys)"
+        );
 
         // Run 3: re-index again to prove stability (no O(2^n) growth).
         let (tx, rx) = mpsc::channel::<Result<IndexChunk, tonic::Status>>(8);
@@ -1126,6 +1172,11 @@ mod tests {
         assert!(
             !chunk_text_has(&storage, 1, "beta_marker"),
             "run2 content gone after third re-index"
+        );
+        assert_eq!(
+            vector_store.count().await,
+            1,
+            "third re-index vector count stays stable"
         );
     }
 

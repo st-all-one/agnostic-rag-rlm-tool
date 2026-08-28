@@ -32,6 +32,8 @@ uuid.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true
 criterion.workspace = true
+hex.workspace = true
+sha2.workspace = true
 
 [[bench]]
 name = "qa_cache"

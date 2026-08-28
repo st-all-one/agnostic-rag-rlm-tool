@@ -114,19 +114,37 @@ impl ConsolidationEngine {
                     .context("failed to count duplicates")?;
                 removed += total.saturating_sub(1);
             } else {
-                // Keep the first chunk, remove the rest
-                let mut del_stmt = conn
-                    .prepare(
-                        "DELETE FROM chunks WHERE id IN (
-                            SELECT id FROM chunks WHERE buffer_id = ?1 AND hash = ?2
-                            ORDER BY id DESC
-                            LIMIT -1 OFFSET 1
-                        )",
-                    )
-                    .context("failed to prepare delete duplicates")?;
+                // Keep the first chunk, remove the rest. Several child tables
+                // reference `chunks(id)` through FKs that are NOT declared
+                // `ON DELETE CASCADE`, so deleting a chunk directly fails with a
+                // foreign-key constraint violation. Purge the dependent rows
+                // first, in FK-respecting order (findings before tasks, both
+                // before chunk_texts, then the chunks themselves).
+                let dup_ids = "SELECT id FROM chunks WHERE buffer_id = ?1 AND hash = ?2 ORDER BY id DESC LIMIT -1 OFFSET 1";
+                conn.execute(
+                    &format!(
+                        "DELETE FROM findings WHERE chunk_id IN ({dup_ids}) \
+                         OR task_id IN (SELECT id FROM tasks WHERE chunk_id IN ({dup_ids}))"
+                    ),
+                    rusqlite::params![buffer_id, hash],
+                )
+                .context("failed to delete duplicate finding rows")?;
+                conn.execute(
+                    &format!("DELETE FROM tasks WHERE chunk_id IN ({dup_ids})"),
+                    rusqlite::params![buffer_id, hash],
+                )
+                .context("failed to delete duplicate task rows")?;
+                conn.execute(
+                    &format!("DELETE FROM chunk_texts WHERE chunk_id IN ({dup_ids})"),
+                    rusqlite::params![buffer_id, hash],
+                )
+                .context("failed to delete duplicate chunk_texts rows")?;
 
-                let deleted = del_stmt
-                    .execute(rusqlite::params![buffer_id, hash])
+                let deleted = conn
+                    .execute(
+                        &format!("DELETE FROM chunks WHERE id IN ({dup_ids})"),
+                        rusqlite::params![buffer_id, hash],
+                    )
                     .context("failed to delete duplicates")?;
 
                 removed += u64::try_from(deleted).unwrap_or(0);

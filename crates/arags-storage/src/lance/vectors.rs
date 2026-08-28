@@ -138,6 +138,10 @@ impl VectorStore {
                     entry.vector.len()
                 );
             }
+            // usearch has no native upsert: clear any prior key first so a
+            // re-index over partially-committed data (same chunk_id reused after
+            // a hash match) cannot trip "Duplicate keys not allowed".
+            let _ = index.remove(entry.chunk_id);
             index
                 .add(entry.chunk_id, &entry.vector)
                 .map_err(|e| anyhow::anyhow!("failed to add vector {}: {e}", entry.chunk_id))?;

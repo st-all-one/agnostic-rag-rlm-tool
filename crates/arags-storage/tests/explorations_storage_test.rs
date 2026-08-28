@@ -20,7 +20,10 @@ fn anchor(path: &str, hash: &str) -> ExplorationAnchor {
     ExplorationAnchor {
         buffer_id: 1,
         path: path.into(),
-        content_hash: hash.into(),
+        // `chunks.hash` is stored as raw bytes; the read-time recheck compares
+        // `lower(hex(ch.hash)) = lower(content_hash)`, so the anchor hash must be
+        // the hex encoding of the same bytes that `seed_chunks` stores as `hash.as_bytes()`.
+        content_hash: hex::encode(hash.as_bytes()),
         role: ROLE_CITED.into(),
     }
 }
@@ -264,13 +267,13 @@ fn test_context_role_does_not_invalidate_but_cited_does() {
                 ExplorationAnchor {
                     buffer_id: 1,
                     path: "src/cited.rs".into(),
-                    content_hash: "h1".into(),
+                    content_hash: hex::encode("h1".as_bytes()),
                     role: ROLE_CITED.into(),
                 },
                 ExplorationAnchor {
                     buffer_id: 1,
                     path: "src/ctx.rs".into(),
-                    content_hash: "h1".into(),
+                    content_hash: hex::encode("h1".as_bytes()),
                     role: ROLE_CONTEXT.into(),
                 },
             ],
@@ -478,4 +481,67 @@ fn supersede_exploration_creates_new_active_row_and_history() {
     assert_eq!(history[1].id, v2.id);
     assert_eq!(history[2].id, v3.id);
     assert_eq!(history[2].is_active, true);
+}
+
+// Regression for agnostic-rlm-rs-8007: a freshly persisted map whose cited
+// anchor stores a REAL 32-byte (binary, non-UTF8) content hash must NOT be
+// classified stale. `chunks.hash` holds the raw digest bytes; the anchor's
+// `content_hash` is the hex of those bytes. The read-time recheck compares
+// `lower(hex(ch.hash)) = lower(content_hash)`, which holds — so `recheck`
+// returns empty and the map surfaces in default search.
+#[test]
+fn test_staleness_recheck_holds_with_binary_digest() {
+    let storage = temp_storage();
+
+    let digest: Vec<u8> = {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(b"fn main() { let x = 1; }");
+        h.finalize().to_vec()
+    };
+    let digest_hex = hex::encode(&digest);
+
+    storage
+        .connection()
+        .unwrap()
+        .execute(|c| {
+            c.execute(
+                "INSERT INTO buffers (id, name, path) VALUES (?1, ?2, ?3) \
+                 ON CONFLICT(id) DO NOTHING",
+                rusqlite::params![1, "proj-1", "/tmp/proj"],
+            )?;
+            c.execute(
+                "DELETE FROM chunks WHERE buffer_id = ?1 AND file_path = ?2",
+                rusqlite::params![1, "src/a.rs"],
+            )?;
+            c.execute(
+                "INSERT INTO chunks \
+                  (buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash) \
+                  VALUES (?1, ?2, 0, 1, 1, 1, ?3)",
+                rusqlite::params![1, "src/a.rs", digest.as_slice()],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+
+    let stored = storage
+        .persist_exploration(&input(
+            "p1",
+            "mapa com âncora binária",
+            vec![ExplorationAnchor {
+                buffer_id: 1,
+                path: "src/a.rs".into(),
+                content_hash: digest_hex,
+                role: ROLE_CITED.into(),
+            }],
+        ))
+        .unwrap();
+
+    assert!(
+        storage
+            .recheck_anchors_for_rowid(stored.id)
+            .unwrap()
+            .is_empty(),
+        "binary-digest anchor must hold immediately after persist"
+    );
 }

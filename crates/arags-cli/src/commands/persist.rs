@@ -33,10 +33,19 @@ pub fn run_persist(
 ) -> Result<()> {
     println!("Response ID: {response_id}");
 
+    // Resolve the canonical project name so the server can locate the cached
+    // answer (answers are scoped per project). The local `.arags.toml`
+    // `[project].name` is authoritative; fall back to the path only if unset.
+    let project_name = cfg
+        .project
+        .name
+        .clone()
+        .unwrap_or_else(|| project.to_string_lossy().to_string());
+
     let resp = rt
         .block_on(client.get_answer_by_id(GetAnswerByIdRequest {
             cache_id: response_id.to_string(),
-            project: String::new(),
+            project: project_name,
         }))?
         .into_inner();
 

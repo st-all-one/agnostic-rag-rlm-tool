@@ -31,3 +31,4 @@ data/
 *.db-shm
 *.db-wal
 *.db-wal-journal
+.arags.toml

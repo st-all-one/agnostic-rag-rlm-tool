@@ -142,12 +142,12 @@ impl Storage {
             let sql = "SELECT e.id, e.exploration_id, f.path \
                        FROM explorations e \
                        JOIN exploration_files f ON f.exploration_rowid = e.id \
-                       WHERE e.project = ?1 AND e.status != 'retired' AND f.role = 'cited' \
-                       AND NOT EXISTS (\
-                           SELECT 1 FROM chunks ch \
-                           WHERE ch.buffer_id = f.buffer_id \
-                             AND ch.file_path = f.path \
-                             AND ch.hash = CAST(f.content_hash AS BLOB))";
+                        WHERE e.project = ?1 AND e.status != 'retired' AND f.role = 'cited' \
+                        AND NOT EXISTS (\
+                            SELECT 1 FROM chunks ch \
+                            WHERE ch.buffer_id = f.buffer_id \
+                              AND ch.file_path = f.path \
+                              AND lower(hex(ch.hash)) = lower(f.content_hash))";
             let mut stmt = c.prepare(sql).context("prepare broken_anchors")?;
             let rows = stmt
                 .query_map(params![project], |r| {
@@ -172,12 +172,12 @@ impl Storage {
         let conn = self.connection().context("failed to acquire connection")?;
         conn.execute(|c| {
             let sql = "SELECT f.path FROM exploration_files f \
-                       WHERE f.exploration_rowid = ?1 AND f.role = 'cited' \
-                       AND NOT EXISTS (\
-                           SELECT 1 FROM chunks ch \
-                           WHERE ch.buffer_id = f.buffer_id \
-                             AND ch.file_path = f.path \
-                             AND ch.hash = CAST(f.content_hash AS BLOB))";
+                        WHERE f.exploration_rowid = ?1 AND f.role = 'cited' \
+                        AND NOT EXISTS (\
+                            SELECT 1 FROM chunks ch \
+                            WHERE ch.buffer_id = f.buffer_id \
+                              AND ch.file_path = f.path \
+                              AND lower(hex(ch.hash)) = lower(f.content_hash))";
             let mut stmt = c.prepare(sql).context("prepare recheck anchors")?;
             let rows = stmt
                 .query_map(params![id], |r| r.get::<_, String>(0))?
@@ -211,7 +211,7 @@ impl Storage {
                 let hash: Option<Option<String>> = stmt
                     .query_row(params![buffer_id, path], |r| {
                         let bytes: Vec<u8> = r.get(0)?;
-                        Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
+                        Ok(Some(hex::encode(&bytes)))
                     })
                     .optional()
                     .with_context(|| format!("resolve hash for {path}"))?;

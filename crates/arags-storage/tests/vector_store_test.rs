@@ -118,3 +118,37 @@ async fn test_persistence_across_reopen() {
     let results = store.search_similar(&vec_of(0.0), None, 3).await.unwrap();
     assert_eq!(results[0].chunk_id, 0);
 }
+
+// Regression for agnostic-rlm-rs-85a5: re-inserting vectors whose chunk ids
+// already exist (a re-index over partially-committed data) must be an idempotent
+// upsert, not a `Duplicate keys not allowed` failure.
+#[tokio::test]
+async fn test_reinsert_same_chunk_ids_is_idempotent_upsert() {
+    let tmp = TempDir::new().unwrap();
+    let store = VectorStore::open(tmp.path()).await.unwrap();
+
+    let entries: Vec<VectorEntry> = (0..3)
+        .map(|i| VectorEntry {
+            chunk_id: i,
+            buffer_id: 0,
+            vector: vec_of(i as f32),
+        })
+        .collect();
+    store.insert_vectors(&entries).await.unwrap();
+    assert_eq!(store.count().await, 3);
+
+    // Re-embed the same chunk ids with (possibly) new vectors, as a resumed
+    // index run would.
+    let replay: Vec<VectorEntry> = (0..3)
+        .map(|i| VectorEntry {
+            chunk_id: i,
+            buffer_id: 0,
+            vector: vec_of((i + 10) as f32),
+        })
+        .collect();
+    store.insert_vectors(&replay).await.unwrap();
+
+    assert_eq!(store.count().await, 3, "no duplicate keys; count unchanged");
+    let results = store.search_similar(&vec_of(10.0), None, 3).await.unwrap();
+    assert_eq!(results[0].chunk_id, 0, "latest vector wins");
+}
