@@ -69,7 +69,10 @@ jobs:
           dnf config-manager --set-enabled crb || crb enable
           # curl-minimal already provides /usr/bin/curl on AlmaLinux 9 and
           # conflicts with the full curl package, so install it explicitly.
-          dnf install -y curl-minimal tar gzip gcc-c++ make protobuf-compiler ca-certificates
+          # protobuf-devel ships the well-known google/protobuf/*.proto types that
+          # prost-build needs; PROTOC_INCLUDE points protoc at them.
+          dnf install -y curl-minimal tar gzip gcc-c++ make protobuf-compiler protobuf-devel ca-certificates
+          echo "PROTOC_INCLUDE=/usr/include" >> "$GITHUB_ENV"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -102,21 +105,21 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build CLI binary (musl)
+        if: matrix.musl
+        run: cargo zigbuild --release --bin arags --target ${{ matrix.target }}
+
       - name: Build CLI binary
-        run: |
-          if [ "${{ matrix.musl }}" = "true" ]; then
-            cargo zigbuild --release --bin arags --target ${{ matrix.target }}
-          else
-            cargo build --release --bin arags --target ${{ matrix.target }}
-          fi
+        if: ${{ !matrix.musl }}
+        run: cargo build --release --bin arags --target ${{ matrix.target }}
+
+      - name: Build server binary (musl)
+        if: matrix.musl
+        run: cargo zigbuild --release --bin arags-server --target ${{ matrix.target }}
 
       - name: Build server binary
-        run: |
-          if [ "${{ matrix.musl }}" = "true" ]; then
-            cargo zigbuild --release --bin arags-server --target ${{ matrix.target }}
-          else
-            cargo build --release --bin arags-server --target ${{ matrix.target }}
-          fi
+        if: ${{ !matrix.musl }}
+        run: cargo build --release --bin arags-server --target ${{ matrix.target }}
 
       - name: Rename artifacts (Unix)
         if: runner.os != 'Windows'
