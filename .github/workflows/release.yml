@@ -65,6 +65,8 @@ jobs:
         if: matrix.container != ''
         run: |
           dnf install -y epel-release
+          # protobuf-compiler lives in the CodeReady Builder (CRB) repo
+          dnf config-manager --set-enabled crb || crb enable
           dnf install -y curl tar gzip gcc-c++ make protobuf-compiler ca-certificates
 
       - name: Install Rust toolchain
@@ -81,14 +83,11 @@ jobs:
           # musl-gcc targets the host arch; name the linker env after the target.
           echo "CARGO_TARGET_$(echo '${{ matrix.target }}' | tr '[:lower:]' '[:upper:]' | tr '-' '_')_LINKER=musl-gcc" >> "$GITHUB_ENV"
 
-      - name: Install protoc (non-container Linux/macOS)
-        if: matrix.container == '' && runner.os != 'Windows'
-        run: |
-          if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            brew install protobuf
-          else
-            sudo apt-get update && sudo apt-get install -y protobuf-compiler
-          fi
+      - name: Install protoc (non-container, all OSes)
+        if: matrix.container == ''
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build CLI binary
         run: cargo build --release --bin arags --target ${{ matrix.target }}
