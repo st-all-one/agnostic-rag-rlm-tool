@@ -1,4 +1,4 @@
-//! Audit-log storage API tests (issue `agnostic-rlm-rs-7222`).
+//! Audit-log storage API tests (issue `agnostic-rag-rlm-tool-7222`).
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 

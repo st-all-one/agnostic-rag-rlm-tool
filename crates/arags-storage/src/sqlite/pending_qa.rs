@@ -1,4 +1,4 @@
-//! Re-digest queue for stale QA answers (issue `agnostic-rlm-rs-d172`,
+//! Re-digest queue for stale QA answers (issue `agnostic-rag-rlm-tool-d172`,
 //! plan `pl-783b` step 4).
 //!
 //! When a `qa_cache` row is marked stale (source chunk changed) the staleness

@@ -7,16 +7,27 @@ Otimizado para indexação de repositório, busca híbrida (BM25 + semântica) e
 > `arags` é um cliente gRPC que só usa **o seu LLM local** em três pontos —
 > *digest* (`ask`), *summarize* (`persist`) e síntese RLM (`volunteer`).
 
-## O que esperar
+## Instalação
 
-- **Busca híbrida em milissegundos** (tipicamente ~21ms): BM25 + semântica fundidos
-  por RRF. `arags search` é **objetivo**.
-- **Unified query:** toda busca já devolve, quando próximos no espaço vetorial,
-  chunks **+** resumos RLM aprovados **+** mapas de exploração relevantes.
-- **QA-Cache determinístico:** `arags ask` digesta com seu LLM e guarda a resposta;
-  perguntas iguais (por proveniência de chunk) devolvem cache, sem reprocessamento.
+Instale os binários `arags` (cliente) e `arags-server` (servidor de dados) a
+partir dos GitHub Releases pré-compilados, com verificação de checksum SHA-256:
 
-## Início rápido
+```bash
+curl --proto '=https' \
+     --tlsv1.2 \
+     --show-error \
+     --fail \
+  https://raw.githubusercontent.com/st-all-one/agnostic-rag-rlm-tool/main/install.sh \
+  | sh
+```
+
+> **Requisito:** `curl`, `tar` (e `unzip` em Windows) no sistema. O servidor
+> distribui os pesos do modelo embutidos; nenhum download adicional é necessário.
+
+Alternativamente, use o Docker para o servidor (veja o passo 1 do
+[Início rápido](#início-rápido)).
+
+## Quickstart
 
 Você precisa de duas peças: um **servidor** (dono do estado) e um **cliente**
 (`arags`). Recomendado para começar: Docker para o servidor.
@@ -67,6 +78,17 @@ arags init ./meu-projeto            # cria .arags.toml (gitignored) + indexa
 arags search "auth middleware"      # busca híbrida (sem LLM)
 arags ask "como funciona o login?"  # digest no seu LLM + QA-Cache
 ```
+
+
+## O que esperar
+
+- **Busca híbrida em milissegundos** (tipicamente ~21ms): BM25 + semântica fundidos
+  por RRF. `arags search` é **objetivo**.
+- **Unified query:** toda busca já devolve, quando próximos no espaço vetorial,
+  chunks **+** resumos RLM aprovados **+** mapas de exploração relevantes.
+- **QA-Cache determinístico:** `arags ask` digesta com seu LLM e guarda a resposta;
+  perguntas iguais (por proveniência de chunk) devolvem cache, sem reprocessamento.
+
 
 ## O que considerar antes de usar:
 

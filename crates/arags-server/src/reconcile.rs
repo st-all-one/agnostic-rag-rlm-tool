@@ -1,8 +1,8 @@
 //! Reconcile worker: re-derive missing usearch vectors from canonical SQLite
-//! text (issue `agnostic-rlm-rs-36ae`, plan `pl-783b` step 2).
+//! text (issue `agnostic-rag-rlm-tool-36ae`, plan `pl-783b` step 2).
 //!
 //! When an embedding or vector insert fails during normal indexing/store, the
-//! row is recorded with a `pending_vector` status (issue `agnostic-rlm-rs-50ed`)
+//! row is recorded with a `pending_vector` status (issue `agnostic-rag-rlm-tool-50ed`)
 //! so the data plane stays consistent: SQLite remains the source of truth and
 //! the semantic spaces eventually catch up. This module walks the four vector
 //! spaces (chunks, QA questions, RLM summaries, explorations), re-embeds the
@@ -14,7 +14,7 @@
 //! read, the connection is dropped, the (CPU/await) embed runs outside any lock,
 //! then vectors are written and markers cleared inside a fresh blocking scope.
 //! Embedding runs on the capped index-embed rayon pool (issue
-//! `agnostic-rlm-rs-6690`) so reconcile never saturates the global pool.
+//! `agnostic-rag-rlm-tool-6690`) so reconcile never saturates the global pool.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -378,7 +378,7 @@ async fn reconcile_explorations(
 }
 
 /// Revert expired QA re-digest leases back to `pending` so the next maintenance
-/// cycle re-offers the work to volunteers (issue `agnostic-rlm-rs-d172`). The
+/// cycle re-offers the work to volunteers (issue `agnostic-rag-rlm-tool-d172`). The
 /// server is LLM-free: it only owns the queue, not the digest.
 ///
 /// # Errors

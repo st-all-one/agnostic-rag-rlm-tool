@@ -1,4 +1,4 @@
--- Plan `pl-783b` step 4 / issue `agnostic-rlm-rs-d172`: re-digest de QA via
+-- Plan `pl-783b` step 4 / issue `agnostic-rag-rlm-tool-d172`: re-digest de QA via
 -- fila com lease (job pending_qa com preferred_user -> fallback voluntários ->
 -- timeout 300s devolve ao queue p/ próximo ciclo).
 --

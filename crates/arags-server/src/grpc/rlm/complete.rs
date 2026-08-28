@@ -22,7 +22,7 @@ pub(crate) async fn handle_complete_rlm_job(
     request: Request<CompleteRlmJobRequest>,
 ) -> Result<Response<CompleteRlmJobResponse>, Status> {
     let ctx = crate::auth::authenticate(request.metadata(), &state.storage)?;
-    // Per-user rate limit on this mutating RPC (issue `agnostic-rlm-rs-7222`).
+    // Per-user rate limit on this mutating RPC (issue `agnostic-rag-rlm-tool-7222`).
     // A denial must NOT be audited.
     let now = crate::state::AppState::now_secs();
     if !state.check_rate_limit(&ctx.username, now) {
@@ -81,7 +81,7 @@ pub(crate) async fn handle_complete_rlm_job(
     // Admin submitters bypass the cosine quorum and are auto-approved
     // immediately (project decision). The quorum remains the authority for
     // non-admin volunteers, so `quorum.n = 3` can stay the default while a
-    // trusted admin token still force-approves (issue `agnostic-rlm-rs-3a68`).
+    // trusted admin token still force-approves (issue `agnostic-rag-rlm-tool-3a68`).
     if quorum_n > 1 && !is_admin {
         if let Some(resp) = super::quorum::decide_quorum_submission(
             state,
@@ -230,7 +230,7 @@ pub(crate) async fn handle_complete_rlm_job(
         "rlm job completed"
     );
 
-    // Audit the successful completion (issue `agnostic-rlm-rs-7222`).
+    // Audit the successful completion (issue `agnostic-rag-rlm-tool-7222`).
     // Best-effort: a logging failure must not fail the request.
     state.audit(
         &job.project,

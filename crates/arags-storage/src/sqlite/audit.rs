@@ -1,5 +1,5 @@
 //! Append-only audit log of key data-plane actions (issue
-//! `agnostic-rlm-rs-7222`).
+//! `agnostic-rag-rlm-tool-7222`).
 //!
 //! Every mutating server RPC records a cheap, parameterized row so operators
 //! can reconstruct *who* did *what* to *which* project/target and *when*.

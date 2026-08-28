@@ -1,9 +1,9 @@
-//! Quorum / security configuration (Cluster B, issue `agnostic-rlm-rs-a5d7`).
+//! Quorum / security configuration (Cluster B, issue `agnostic-rag-rlm-tool-a5d7`).
 
 use serde::{Deserialize, Serialize};
 
 /// How to fuse agreeing candidate submissions into the accepted answer
-/// (issue `agnostic-rlm-rs-a5d7`). The selection of *which* candidates agree is
+/// (issue `agnostic-rag-rlm-tool-a5d7`). The selection of *which* candidates agree is
 /// decided by the quorum cosine-similarity threshold (`quorum_sim_threshold`,
 /// implemented in later issues `6d97`/`64af`); this enum only picks the merge
 /// strategy once a quorum exists.
@@ -19,7 +19,7 @@ pub enum FusionStrategy {
     Longest,
 }
 
-/// Quorum / security configuration (Cluster B, issue `agnostic-rlm-rs-a5d7`).
+/// Quorum / security configuration (Cluster B, issue `agnostic-rag-rlm-tool-a5d7`).
 ///
 /// Drives the volunteer fan-out and candidate-submission decision pipeline.
 /// The decision algorithm itself lives in later issues (`6d97`/`64af`); this

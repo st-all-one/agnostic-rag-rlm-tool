@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-### Fixed — vetores órfãos / bootstrap (agnostic-rlm-rs-fa25, 0631)
+### Fixed — vetores órfãos / bootstrap (agnostic-rag-rlm-tool-fa25, 0631)
 - **`VectorStore::delete_chunk_ids_blocking`** (`src/lance/vectors.rs`): variante
   síncrona de `delete_chunk_ids` para chamadores fora de contexto async (ex.:
   consolidação de memória que roda sob o lock do SQLite). Usada por
@@ -13,7 +13,7 @@
 
 ### Added — plan 023: trust pipeline, review gate e VectorSpaceStore genérico
 
-- **`vector_space.rs` — `VectorSpaceStore` genérico (`agnostic-rlm-rs-89fb`,
+- **`vector_space.rs` — `VectorSpaceStore` genérico (`agnostic-rag-rlm-tool-89fb`,
   `8bb5`):** núcleo único usearch (cosseno, single-file) compartilhado pelos
   três espaços dedicados; persistência **debounced** (`SAVE_DEBOUNCE_MS = 2s`,
   flag dirty + `last_save`) amortiza rajadas de inserts a um único O(N) write;
@@ -23,14 +23,14 @@
   `vector_space/testing.rs`.
 - **Trust pipeline da QA:** `chunk_hashes_match(&[(i64, String)])` verifica
   provenance contra hashes atuais; `chunk_ages_hours(&[i64])` alimenta o decay
-  de saliência no serving (`agnostic-rlm-rs-fce3`). Testes em
+  de saliência no serving (`agnostic-rag-rlm-tool-fce3`). Testes em
   `tests/chunks_test.rs`.
 - **Review gate de explorações:** migration
   **`020_add_exploration_review.sql`** rebuilda a tabela `explorations`
   adicionando `'pending_review'` ao CHECK de status (SQLite não altera CHECK);
   `mark_exploration_pending(rowid)` + `review_exploration(id, approved,
   reviewer)` (fresh/retired auditado).
-- **Fix de scoping (`agnostic-rlm-rs-0764`):** `get_approved_rlm_nodes` agora
+- **Fix de scoping (`agnostic-rag-rlm-tool-0764`):** `get_approved_rlm_nodes` agora
   exige `buffer_id` — a hidratação vetorial da passada semântica não cruza
   projetos. Teste de regressão em `tests/rlm_storage_test.rs`.
 - **Fix de deadlock pré-existente:** `get_chunks_with_content` chamava

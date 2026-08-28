@@ -1,8 +1,8 @@
--- Plan 023 / issue `agnostic-rlm-rs-50ed`: vector-derivation failure tracking.
+-- Plan 023 / issue `agnostic-rag-rlm-tool-50ed`: vector-derivation failure tracking.
 --
 -- When an embedding or usearch vector insertion fails for a row, the server
 -- must record a pending state in SQLite (instead of silently dropping the
--- row) so a later reconcile worker (issue `agnostic-rlm-rs-36ae`) can
+-- row) so a later reconcile worker (issue `agnostic-rag-rlm-tool-36ae`) can
 -- re-embed from the canonical text.
 --
 -- `chunks` already carries a free-form `status TEXT` column with no CHECK, so

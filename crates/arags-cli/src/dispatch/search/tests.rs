@@ -1,4 +1,4 @@
-//! Unit tests for the rethought query CLI surface (issue `agnostic-rlm-rs-7aa8`).
+//! Unit tests for the rethought query CLI surface (issue `agnostic-rag-rlm-tool-7aa8`).
 //!
 //! These tests exercise the **pure decision logic** (no live gRPC server or
 //! real LLM required) plus the mock-LLM harness from `b020`

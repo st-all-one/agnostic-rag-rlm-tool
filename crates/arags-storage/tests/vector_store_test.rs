@@ -119,7 +119,7 @@ async fn test_persistence_across_reopen() {
     assert_eq!(results[0].chunk_id, 0);
 }
 
-// Regression for agnostic-rlm-rs-85a5: re-inserting vectors whose chunk ids
+// Regression for agnostic-rag-rlm-tool-85a5: re-inserting vectors whose chunk ids
 // already exist (a re-index over partially-committed data) must be an idempotent
 // upsert, not a `Duplicate keys not allowed` failure.
 #[tokio::test]

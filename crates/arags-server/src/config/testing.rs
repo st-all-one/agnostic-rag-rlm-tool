@@ -99,7 +99,7 @@ mod tests {
     #[test]
     fn quorum_config_defaults_when_section_absent() {
         // A `server.toml` without `[quorum]` must parse with built-in defaults
-        // (issue `agnostic-rlm-rs-a5d7`); existing configs keep working.
+        // (issue `agnostic-rag-rlm-tool-a5d7`); existing configs keep working.
         let (_d, path) = temp_config("listen_addr = \"127.0.0.1:50051\"\n");
         let cfg = ServerConfig::load_from_path(&path).unwrap();
         assert_eq!(cfg.quorum.n, 3);
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn exploration_validation_mode_defaults_to_quorum() {
         // A `[exploration]` section without `validation_mode` must parse as
-        // `Quorum` (issue `agnostic-rlm-rs-e89e`), and `require_review` stays
+        // `Quorum` (issue `agnostic-rag-rlm-tool-e89e`), and `require_review` stays
         // its own default (`false`).
         let (_d, path) = temp_config("[exploration]\nenabled = true\n");
         let cfg = ServerConfig::load_from_path(&path).unwrap();
@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn test_server_config_index_embed_threads_reserves_cores() {
         // Default must leave at least 1 core for serving, and reserve cores
-        // when the host has >= 3 (issue `agnostic-rlm-rs-6690`).
+        // when the host has >= 3 (issue `agnostic-rag-rlm-tool-6690`).
         let cfg = ServerConfig::default();
         assert!(cfg.index_embed_threads >= 1, "must leave at least 1 core");
         let total = num_cpus::get();

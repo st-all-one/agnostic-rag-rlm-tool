@@ -58,7 +58,7 @@ pub struct ServerConfig {
     pub pool_size: u32,
 
     /// Dedicated rayon thread count for **index (Phase-2) embedding** (issue
-    /// `agnostic-rlm-rs-6690`). The index embedder runs inside a *capped* rayon
+    /// `agnostic-rag-rlm-tool-6690`). The index embedder runs inside a *capped* rayon
     /// pool so a large `arags index` cannot saturate every core and starve a
     /// concurrent `arags search --tier auto`. Defaults to `num_cpus - 2`
     /// (minimum 1), deliberately leaving at least 2 cores (or 1 when only 1–2
@@ -101,7 +101,7 @@ pub struct ServerConfig {
     #[serde(default)]
     pub rlm: RlmConfig,
 
-    /// Quorum / security (Cluster B keystone, issue `agnostic-rlm-rs-a5d7`):
+    /// Quorum / security (Cluster B keystone, issue `agnostic-rag-rlm-tool-a5d7`):
     /// fan-out of volunteer jobs, cosine-similarity agreement threshold, the
     /// fusion strategy used to merge agreeing candidates, and the strikes
     /// budget before a volunteer is deprioritized/banned. The actual decision
@@ -114,14 +114,14 @@ pub struct ServerConfig {
     #[serde(default)]
     pub exploration: ExplorationConfig,
 
-    /// Per-user rate limiting on mutating RPCs (issue `agnostic-rlm-rs-7222`).
+    /// Per-user rate limiting on mutating RPCs (issue `agnostic-rag-rlm-tool-7222`).
     /// `enabled = false` makes every check a no-op pass. Missing section →
     /// defaults.
     #[serde(default)]
     pub rate_limit: RateLimitConfig,
 
     /// Retired (`is_active = 0`) chunk history retention window in days (issue
-    /// `agnostic-rlm-rs-8dcc`). The maintenance ticker permanently purges
+    /// `agnostic-rag-rlm-tool-8dcc`). The maintenance ticker permanently purges
     /// superseded chunks older than this many days; `0` keeps history forever.
     #[serde(default = "default_chunk_retention_days")]
     pub chunk_retention_days: u64,
@@ -162,7 +162,7 @@ fn dirs() -> Option<PathBuf> {
         .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
 }
 
-/// Per-user rate-limiting configuration (issue `agnostic-rlm-rs-7222`).
+/// Per-user rate-limiting configuration (issue `agnostic-rag-rlm-tool-7222`).
 ///
 /// A fixed-window limiter keyed by authenticated username gates every mutating
 /// RPC. When `enabled` is `false` the limiter is a no-op pass (the default

@@ -56,7 +56,7 @@ pub(crate) async fn hybrid_search(
     // worker, so run it on a blocking task. Falls back to BM25-only when the
     // embed fails. The query embed runs on the **global** rayon pool (not the
     // capped index pool), so a concurrent `arags index` cannot starve it (issue
-    // `agnostic-rlm-rs-6690`). We surface contention for observability only.
+    // `agnostic-rag-rlm-tool-6690`). We surface contention for observability only.
     if state.index_embed_in_flight() > 0 {
         debug!(
             active_index_embeds = state.index_embed_in_flight(),

@@ -1,4 +1,4 @@
-//! Tests for vector-derivation failure tracking (issue `agnostic-rlm-rs-50ed`).
+//! Tests for vector-derivation failure tracking (issue `agnostic-rag-rlm-tool-50ed`).
 //!
 //! Verifies migration 022 adds the `vector_status` column to the dedicated
 //! vector-space tables, and that the `pending_vector` marking/reporting

@@ -42,7 +42,7 @@ message CompleteRlmJobRequest {
   // Prompt template version used (server-defined templates).
   string template_version = 5;
   int64 token_count = 6;
-  // HMAC-SHA256 session-binding attestation (issue `agnostic-rlm-rs-64af`).
+  // HMAC-SHA256 session-binding attestation (issue `agnostic-rag-rlm-tool-64af`).
   // Hex of HMAC-SHA256(key = SHA256(session_token),
   //   msg = "{job_id}.{generation}.{candidate_hash}")
   // where candidate_hash is the SHA256 hex of summary_text. The server verifies

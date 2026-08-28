@@ -27,7 +27,7 @@ pub mod proto {
 
 pub use proto::*;
 
-/// Regression guard for issue `agnostic-rlm-rs-f5f3`: the public "explore
+/// Regression guard for issue `agnostic-rag-rlm-tool-f5f3`: the public "explore
 /// feedback" surface (the `FeedbackExploration` RPC, the `FeedbackKind` enum
 /// and the `FeedbackExploration{Request,Response}` messages) was HARD-REMOVED
 /// to eliminate a sybil-by-AI risk. If any of these types are re-introduced to

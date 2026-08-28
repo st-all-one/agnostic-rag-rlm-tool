@@ -10,7 +10,7 @@ workspace = true
 
 [dependencies]
 # rustls em vez de native-tls: sem OpenSSL, o binário compila estático
-# em musl/Alpine (agnostic-rlm-rs-d14e).
+# em musl/Alpine (agnostic-rag-rlm-tool-d14e).
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
     "rustls-tls",

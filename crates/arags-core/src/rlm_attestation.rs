@@ -1,5 +1,5 @@
 //! HMAC session-binding attestation for RLM volunteer submissions (issue
-//! `agnostic-rlm-rs-64af`).
+//! `agnostic-rag-rlm-tool-64af`).
 //!
 //! Every non-admin volunteer submission is HMAC-SHA256 signed over a canonical
 //! string `{job_id}.{generation}.{candidate_hash}` with a key derived from the

@@ -1,5 +1,5 @@
 //! Tests for the per-user fixed-window rate limiter (issue
-//! `agnostic-rlm-rs-7222`).
+//! `agnostic-rag-rlm-tool-7222`).
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 

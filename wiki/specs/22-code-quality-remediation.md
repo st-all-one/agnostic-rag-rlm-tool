@@ -2,7 +2,7 @@
 
 ## Context
 
-A revisão geral de qualidade (epic `agnostic-rlm-rs-df11`) analisou os arquivos `.rs`
+A revisão geral de qualidade (epic `agnostic-rag-rlm-tool-df11`) analisou os arquivos `.rs`
 modificados nos últimos 10 commits (~150 arquivos, ~29k linhas), com foco no commit
 `7040d9e FEAT: Implements RLM`, contra os critérios:
 
@@ -63,14 +63,14 @@ Fase E (polimento):                     021.7 lints → 021.8 gate CI        [02
 
 | Issue sd | Título | Prioridade |
 |----------|--------|------------|
-| `agnostic-rlm-rs-c0b6` | 021.1 Hardening: SQL vinculado, transação RLM, parse_json_array | 0 (Critical) |
-| `agnostic-rlm-rs-0720` | 021.2 Deduplicação: sanitize(), JobPayload ×3, constantes | 1 (High) |
-| `agnostic-rlm-rs-0201` | 021.3 Split dispatch/server.rs (1116 linhas) | 1 (High) |
-| `agnostic-rlm-rs-1b32` | 021.4 Split sqlite/rlm.rs e demais >300 linhas | 1 (High) |
-| `agnostic-rlm-rs-e481` | 021.5 Extrair testes inline p/ tests/ + AGENTS.md (bloq. por 021.3+021.4) | 1 (High) |
-| `agnostic-rlm-rs-ef25` | 021.6 Cobertura efetiva: volunteer.rs, watch daemon, core, proptest | 1 (High) |
-| `agnostic-rlm-rs-fa43` | 021.7 Lints modernos: glob imports, format! hot loop, casts | 2 (Medium) |
-| `agnostic-rlm-rs-3913` | 021.8 Gate de CI: limite 300 linhas (bloq. por 021.3+021.4+021.5) | 2 (Medium) |
+| `agnostic-rag-rlm-tool-c0b6` | 021.1 Hardening: SQL vinculado, transação RLM, parse_json_array | 0 (Critical) |
+| `agnostic-rag-rlm-tool-0720` | 021.2 Deduplicação: sanitize(), JobPayload ×3, constantes | 1 (High) |
+| `agnostic-rag-rlm-tool-0201` | 021.3 Split dispatch/server.rs (1116 linhas) | 1 (High) |
+| `agnostic-rag-rlm-tool-1b32` | 021.4 Split sqlite/rlm.rs e demais >300 linhas | 1 (High) |
+| `agnostic-rag-rlm-tool-e481` | 021.5 Extrair testes inline p/ tests/ + AGENTS.md (bloq. por 021.3+021.4) | 1 (High) |
+| `agnostic-rag-rlm-tool-ef25` | 021.6 Cobertura efetiva: volunteer.rs, watch daemon, core, proptest | 1 (High) |
+| `agnostic-rag-rlm-tool-fa43` | 021.7 Lints modernos: glob imports, format! hot loop, casts | 2 (Medium) |
+| `agnostic-rag-rlm-tool-3913` | 021.8 Gate de CI: limite 300 linhas (bloq. por 021.3+021.4+021.5) | 2 (Medium) |
 
 ---
 

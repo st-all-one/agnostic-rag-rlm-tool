@@ -63,7 +63,7 @@ fn test_list_projects() {
     assert_eq!(projects.len(), 3);
 }
 
-// ── Re-index idempotency (stopgap for agnostic-rlm-rs-20cd) ──────────────────
+// ── Re-index idempotency (stopgap for agnostic-rag-rlm-tool-20cd) ──────────────────
 
 #[test]
 fn test_reindex_does_not_duplicate_chunks() {
@@ -127,7 +127,7 @@ fn test_reindex_does_not_duplicate_chunks() {
     assert_eq!(fts_rows, 2, "FTS rows present for the re-inserted chunks");
 }
 
-// ── Authorship propagation (issue `agnostic-rlm-rs-786a`) ─────────────────────
+// ── Authorship propagation (issue `agnostic-rag-rlm-tool-786a`) ─────────────────────
 
 #[test]
 fn insert_chunks_batched_populates_created_by_and_model() {

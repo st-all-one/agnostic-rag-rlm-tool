@@ -180,7 +180,7 @@ um único write O(N) do arquivo.
 O espaço A (chunks) também expõe `VectorStore::delete_chunk_ids` (async) e
 `delete_chunk_ids_blocking` (síncrono) para purgar vetores de chunks removidos
 (em consolidação/decay) — mantém o índice usearch em sincronia com o SQLite e
-evita o rebuild completo no bootstrap (`agnostic-rlm-rs-fa25`).
+evita o rebuild completo no bootstrap (`agnostic-rag-rlm-tool-fa25`).
 
 ## Uso Exclusive (CLI)
 

@@ -40,17 +40,17 @@ pub struct AppState {
     /// Semantic query-answer cache tunables (plan 017).
     pub qa_config: QaCacheConfig,
     /// Dedicated (capped) rayon pool for **index (Phase-2) embedding** (issue
-    /// `agnostic-rlm-rs-6690`). Running the embed inside `pool.install(...)`
+    /// `agnostic-rag-rlm-tool-6690`). Running the embed inside `pool.install(...)`
     /// keeps candle's internal `rayon::join` matmul off the global rayon pool,
     /// so concurrent query embeds (which run on the global pool) keep serving
     /// while a large `arags index` is in flight.
     pub index_embed_pool: Arc<ThreadPool>,
     /// Number of index embed batches currently in flight. Read by the query
     /// path to surface contention (debug) and to gate backpressure so a query
-    /// never hangs behind a saturating index (issue `agnostic-rlm-rs-6690`).
+    /// never hangs behind a saturating index (issue `agnostic-rag-rlm-tool-6690`).
     pub active_index_embeds: Arc<AtomicUsize>,
     /// Per-user fixed-window rate limiter for mutating RPCs (issue
-    /// `agnostic-rlm-rs-7222`). Always present; a disabled config is a no-op
+    /// `agnostic-rag-rlm-tool-7222`). Always present; a disabled config is a no-op
     /// pass via [`RateLimiter::check`].
     pub rate_limiter: Arc<RateLimiter>,
     started_at: std::time::Instant,
@@ -202,7 +202,7 @@ pub fn embedder_dimension() -> usize {
 }
 
 /// Build the **capped** rayon pool used for index (Phase-2) embedding (issue
-/// `agnostic-rlm-rs-6690`).
+/// `agnostic-rag-rlm-tool-6690`).
 ///
 /// candle's internal matmul uses `rayon::join`, which runs on the *currently
 /// installed* rayon pool. By spawning index embeds inside
@@ -318,7 +318,7 @@ impl AppState {
 
     /// Constructor with an explicit embedder (used by tests and by callers that
     /// want to inject a non-default embedder, e.g. the lightweight fixture).
-    /// Builds the capped index-embed rayon pool (issue `agnostic-rlm-rs-6690`).
+    /// Builds the capped index-embed rayon pool (issue `agnostic-rag-rlm-tool-6690`).
     ///
     /// # Errors
     ///
@@ -371,7 +371,7 @@ impl AppState {
     }
 
     /// Whether an index embedding batch is currently in flight (used by the
-    /// query path for backpressure/observability, issue `agnostic-rlm-rs-6690`).
+    /// query path for backpressure/observability, issue `agnostic-rag-rlm-tool-6690`).
     #[must_use]
     pub fn index_embed_in_flight(&self) -> usize {
         self.active_index_embeds
@@ -401,7 +401,7 @@ impl AppState {
         self.rate_limiter.check(username, now)
     }
 
-    /// Best-effort audit-log write (issue `agnostic-rlm-rs-7222`). A failure to
+    /// Best-effort audit-log write (issue `agnostic-rag-rlm-tool-7222`). A failure to
     /// record the entry is warned and ignored — it MUST never fail the request
     /// being audited.
     pub fn audit(

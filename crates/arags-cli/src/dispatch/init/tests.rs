@@ -44,7 +44,7 @@ fn test_is_valid_canonical_name_rejects_legacy_keys() {
 #[test]
 fn test_is_valid_canonical_name_accepts_logical_name() {
     assert!(is_valid_canonical_name("my-service"));
-    assert!(is_valid_canonical_name("agnostic-rlm-rs"));
+    assert!(is_valid_canonical_name("agnostic-rag-rlm-tool"));
     assert!(is_valid_canonical_name("team backend"));
 }
 

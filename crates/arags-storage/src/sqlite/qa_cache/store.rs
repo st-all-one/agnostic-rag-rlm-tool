@@ -13,7 +13,7 @@ use tracing::debug;
 impl Storage {
     /// Store a digested answer, returning its stable `cache_id` and rowid.
     ///
-    /// **Superseding (issue `agnostic-rlm-rs-e210`):** if an active row already
+    /// **Superseding (issue `agnostic-rag-rlm-tool-e210`):** if an active row already
     /// exists for `(project, buffer_id, question_hash)` a *new* row is inserted
     /// (`version = old + 1`, `is_active = 1`) and the previous active row is
     /// retired (`is_active = 0`, `superseded_by = new_id`). Reads therefore see
@@ -173,7 +173,7 @@ impl Storage {
     }
 
     /// Walk the supersede chain starting from `id`, returning every revision in
-    /// oldest→newest order (issue `agnostic-rlm-rs-e210`). The starting row need
+    /// oldest→newest order (issue `agnostic-rag-rlm-tool-e210`). The starting row need
     /// not be the oldest; only the forward chain reachable via `superseded_by`
     /// is returned. Retired (`is_active = 0`) revisions are included so callers
     /// can audit the full answer history.

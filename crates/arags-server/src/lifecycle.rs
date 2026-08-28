@@ -46,7 +46,7 @@ pub async fn run() -> Result<()> {
     info!(duration_ms = %storage_start.elapsed().as_millis(), "opened storage");
 
     // Load the embedder once so every vector space is sized by its *actual*
-    // dimensionality (issue `agnostic-rlm-rs-e9e3`): a mismatch between the
+    // dimensionality (issue `agnostic-rag-rlm-tool-e9e3`): a mismatch between the
     // hardcoded `embedder_dimension()` constant and the configured embedder
     // silently fails exploration (and other) vector inserts, leaving the
     // semantic index empty.
@@ -138,12 +138,12 @@ pub async fn run_server(
     )?;
 
     // Bootstrap rebuild: reconcile the four usearch vector spaces with canonical
-    // SQLite before serving (issue `agnostic-rlm-rs-620d`). If a count diverges
+    // SQLite before serving (issue `agnostic-rag-rlm-tool-620d`). If a count diverges
     // the space is rebuilt from source-of-truth text; in-sync spaces are left
-    // untouched. With `agnostic-rlm-rs-fa25` the maintenance paths keep the
+    // untouched. With `agnostic-rag-rlm-tool-fa25` the maintenance paths keep the
     // stores in sync, so divergence is now rare — but when it does occur the
     // full re-embed can take minutes. Run it in the background (issue
-    // `agnostic-rlm-rs-0631`) so the gRPC port binds immediately and the server
+    // `agnostic-rag-rlm-tool-0631`) so the gRPC port binds immediately and the server
     // starts serving without blocking on a recovery rebuild. Best-effort — a
     // failure is logged, never fatal to startup.
     let boot_state = state.clone();
@@ -166,7 +166,7 @@ pub async fn run_server(
         let floor = config.maintenance.decay_score_floor;
         // `[history] retention_days` (plan 020): 0 keeps history forever.
         let retention_days = config.history.retention_days;
-        // `[chunk_retention_days]` (issue `agnostic-rlm-rs-8dcc`): 0 keeps
+        // `[chunk_retention_days]` (issue `agnostic-rag-rlm-tool-8dcc`): 0 keeps
         // superseded chunk history forever.
         let chunk_retention_days = config.chunk_retention_days;
         tokio::spawn(async move {
@@ -192,13 +192,13 @@ pub async fn run_server(
                 } else {
                     info!("maintenance tick completed");
                 }
-                // QA re-digest queue (issue `agnostic-rlm-rs-d172`): revert
+                // QA re-digest queue (issue `agnostic-rag-rlm-tool-d172`): revert
                 // expired leases (default 300s) so the next cycle re-offers the
                 // work to volunteers and a crashed volunteer never strands it.
                 if let Err(e) = crate::reconcile::reclaim_expired_pending_qa(&recon_state).await {
                     warn!(error = %e, "reclaim expired pending qa failed");
                 }
-                // Reconcile worker (`agnostic-rlm-rs-36ae`): re-derive any
+                // Reconcile worker (`agnostic-rag-rlm-tool-36ae`): re-derive any
                 // `pending_vector` rows from canonical SQLite text so the
                 // usearch spaces catch up with the source of truth.
                 if let Err(e) = crate::reconcile::reconcile_pending_vectors(&recon_state).await {
@@ -233,8 +233,8 @@ pub async fn run_server(
     // checkpoint folds the write-ahead log back into the database on a fixed
     // cadence. `flush_interval_ms == 0` disables it. This is a pure
     // *optimization* — durability/consistency are guaranteed by SQLite WAL
-    // itself, the bootstrap rebuild (`agnostic-rlm-rs-620d`) and the reconcile
-    // worker (`agnostic-rlm-rs-36ae`); the periodic flush merely bounds the
+    // itself, the bootstrap rebuild (`agnostic-rag-rlm-tool-620d`) and the reconcile
+    // worker (`agnostic-rag-rlm-tool-36ae`); the periodic flush merely bounds the
     // WAL growth window and is safe to skip.
     if config.flush_interval_ms > 0 {
         let flush_storage = storage.clone();

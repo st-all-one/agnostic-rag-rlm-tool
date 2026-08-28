@@ -1,4 +1,4 @@
--- Cluster B keystone (issue `agnostic-rlm-rs-a5d7`): modelo de dados de
+-- Cluster B keystone (issue `agnostic-rag-rlm-tool-a5d7`): modelo de dados de
 -- submissões candidatas + reputação de voluntários.
 --
 -- A tabela `submissions` guarda as respostas candidatas produzidas por

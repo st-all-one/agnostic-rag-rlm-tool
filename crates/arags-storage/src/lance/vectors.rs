@@ -236,9 +236,9 @@ impl VectorStore {
     /// buffer map. Missing ids are ignored (idempotent), so this is safe to call
     /// with ids that were never embedded. Persists the index after removal.
     ///
-    /// Used by the re-index stopgap (`agnostic-rlm-rs-20cd`) to purge vectors
+    /// Used by the re-index stopgap (`agnostic-rag-rlm-tool-20cd`) to purge vectors
     /// for chunks deleted during a replace-style re-index, and by memory
-    /// consolidation/decay (`agnostic-rlm-rs-fa25`) to keep the usearch chunk
+    /// consolidation/decay (`agnostic-rag-rlm-tool-fa25`) to keep the usearch chunk
     /// space in sync with canonical SQLite after chunk rows are removed — which
     /// prevents the bootstrap count-divergence that forced a full rebuild on
     /// every restart.
@@ -306,7 +306,7 @@ impl VectorStore {
 
     /// Drop every vector and rebuild an empty index with the same
     /// dimensionality/metric, clearing the buffer map too. Used by the server
-    /// bootstrap rebuild (`agnostic-rlm-rs-620d`) to reconstruct a divergent
+    /// bootstrap rebuild (`agnostic-rag-rlm-tool-620d`) to reconstruct a divergent
     /// chunk space from canonical SQLite text. Persists the empty index.
     ///
     /// # Errors

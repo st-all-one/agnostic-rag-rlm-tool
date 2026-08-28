@@ -51,7 +51,7 @@ println!("Removidos: {} duplicatas", result.duplicate_chunks_removed);
 
 // Quando o servidor anexa o VectorStore, a deduplicação também purge os
 // vetores usearch dos chunks removidos (evita divergência de contagem no
-// bootstrap — `agnostic-rlm-rs-fa25`):
+// bootstrap — `agnostic-rag-rlm-tool-fa25`):
 // let engine = engine.with_vector_store(chunk_vector_store);
 
 ```

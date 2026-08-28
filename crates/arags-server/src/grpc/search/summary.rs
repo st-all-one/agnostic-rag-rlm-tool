@@ -72,7 +72,7 @@ pub(crate) async fn summary_search(
         let q = fts_query.to_string();
         // Query embed runs on the global rayon pool; the capped index pool keeps
         // it from being starved during a concurrent `arags index` (issue
-        // `agnostic-rlm-rs-6690`).
+        // `agnostic-rag-rlm-tool-6690`).
         if state.index_embed_in_flight() > 0 {
             debug!(
                 active_index_embeds = state.index_embed_in_flight(),

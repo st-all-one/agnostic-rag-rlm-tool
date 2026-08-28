@@ -29,7 +29,7 @@ impl Storage {
     /// carries no slot suffix).
     ///
     /// `exclude` lists volunteers that must NOT be able to claim this group's
-    /// slots (issue `agnostic-rlm-rs-f486`): it is written into
+    /// slots (issue `agnostic-rag-rlm-tool-f486`): it is written into
     /// `rlm_job_exclusions` keyed by the new `generation_group_id`. When
     /// non-empty, a brand-new generation group is always allocated (even for an
     /// existing subject) so a re-fan-out after total divergence starts clean.

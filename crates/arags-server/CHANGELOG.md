@@ -10,7 +10,7 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
   (imagens container assam/montam checkpoints sem arquivo de config);
   núcleo puro `with_overrides(addr, data_dir, model_dir)` testável.
 
-### Added — plan 023: Unified Contextual Query (epic `agnostic-rlm-rs-43a9`)
+### Added — plan 023: Unified Contextual Query (epic `agnostic-rag-rlm-tool-43a9`)
 
 - **Espaço C fundido na query** (`grpc/search.rs`): `summary_search` roda FTS
   (`rlm_fts`, com retry OR para linguagem natural) + passada semântica sobre
@@ -23,15 +23,15 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **Espaço D anexado** (`exploration/search.rs`): pipeline read-time extraído
   para `search_explorations_core` e reuso na unified query; hits frescos
   entram como `ExplorationRef` compacto (gate de status/grounding intacto).
-- **Trust pipeline B/C (`agnostic-rlm-rs-ac7f`)**: `provenance_intact` no hit
+- **Trust pipeline B/C (`agnostic-rag-rlm-tool-ac7f`)**: `provenance_intact` no hit
   exato/near-hit da QA compara `source_hashes` com hashes atuais dos chunks
   (drift → `mark_qa_stale` → MISS); Phase 4.6 em `grpc/index.rs` marca nós RLM
   stale por hash pós-reindex (`mark_rlm_stale_by_hashes`) — saem da busca até
   reprocesso. Falha de verificação falha aberto (nunca quebra serving).
-- **Review gate D (`agnostic-rlm-rs-35a1`)**: `[exploration].require_review`
+- **Review gate D (`agnostic-rag-rlm-tool-35a1`)**: `[exploration].require_review`
   coloca persist de não-admins em `pending_review`; busca nunca superficializa;
   novo RPC admin-gated `ReviewExploration` aprova/rejeita.
-- **Knobs `[search]`** (`agnostic-rlm-rs-9ff2`): `decay_lambda` (serving decay
+- **Knobs `[search]`** (`agnostic-rag-rlm-tool-9ff2`): `decay_lambda` (serving decay
   via `chunk_ages_hours`; 0=off), `summary_ratio`, `summary_min_score`,
   `exploration_enabled`, `exploration_limit`.
 - **Flush vetorial no shutdown**: `AppState::flush_vector_stores()` persiste os
@@ -45,13 +45,13 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
   re-travava o mutex da conexão via `get_chunk_content` dentro do closure já
   dono do lock — hang eterno no modo Single quando a provenance tinha chunks.
   Corrigido no storage; descoberto pelo teste `exact_hit_with_drifted_provenance_serves_miss`.
-- QA near-hit cross-project leak (`agnostic-rlm-rs-3c84`): guard de projeto +
+- QA near-hit cross-project leak (`agnostic-rag-rlm-tool-3c84`): guard de projeto +
   staleness antes do Jaccard.
-- RLM semantic unscoped (`agnostic-rlm-rs-0764`): hidratação escopada por buffer.
-- Decay não servido (`agnostic-rlm-rs-fce3`): `[search].decay_lambda` aplica
+- RLM semantic unscoped (`agnostic-rag-rlm-tool-0764`): hidratação escopada por buffer.
+- Decay não servido (`agnostic-rag-rlm-tool-fce3`): `[search].decay_lambda` aplica
   decay exponencial nos scores dos chunks.
 
-### Fixed — bootstrap/startup hang (agnostic-rlm-rs-fa25 / 0631 / 9288 / 4cbe)
+### Fixed — bootstrap/startup hang (agnostic-rag-rlm-tool-fa25 / 0631 / 9288 / 4cbe)
 
 - **Vetores órfãos em manutenção (`fa25`):** `maintenance::consolidate`/`decay`
   agora recebem o `VectorStore` de chunks e o repassam a `ConsolidationEngine`
@@ -87,7 +87,7 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
   confiança;   `GetExplorationById` com body/âncoras/metadata vivos;
   `InvalidateExploration` admin (Stale mantém história, Delete remove
   linha+vetor). O RPC de feedback do consumidor (`FeedbackExploration`) foi
-  removido depois por risco sybil (ver `agnostic-rlm-rs-f5f3`).
+  removido depois por risco sybil (ver `agnostic-rag-rlm-tool-f5f3`).
 - **Hook pós-index (Phase 4.5)**: `bump_project_epoch` +
   `mark_stale_if_anchors_changed` por projeto indexado.
 - **Verify-on-hit (plan 022.8, opcional)**: `[exploration].verify_on_hit`
@@ -128,7 +128,7 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
   para submódulos-arquivo (`config/testing.rs`, `store/rlm/tests.rs`,
   `grpc/query_cache/tests.rs`) — arquivos de produção enxutos.
 
-### Changed — embedder fixo all-MiniLM-L6-v2 (BREAKING) — agnostic-rlm-rs-1194
+### Changed — embedder fixo all-MiniLM-L6-v2 (BREAKING) — agnostic-rag-rlm-tool-1194
 - `[embedder]` sem seleção de modelo: `model_dir` (checkpoint MiniLM),
   `quantization` (`int8` default), knobs de chunk/batch/cache. Campos
   `model`, `dims`, `ollama_url/ollama_model/ollama_prefix` **removidos**.

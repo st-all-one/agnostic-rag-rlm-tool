@@ -34,7 +34,7 @@ type EmbedHandle = JoinHandle<EmbeddingResult<Vec<VectorEntry>>>;
 /// Drop guard that aborts every spawned embed task.
 ///
 /// Guarantees no blocking embed task outlives [`index_stream_loop`] (issue
-/// `agnostic-rlm-rs-e5d0`): if the client disconnects or any step errors, all
+/// `agnostic-rag-rlm-tool-e5d0`): if the client disconnects or any step errors, all
 /// pending embeds are cancelled before the handler returns, so the CPU stops
 /// promptly and the pooled DB connections are released for the next request.
 struct EmbedAbortGuard(Vec<(EmbedHandle, Vec<i64>)>);
@@ -98,7 +98,7 @@ fn decode_content(file: &IndexFile) -> Result<String, Status> {
 /// Await one spawned embed task, persist its vectors, and mark the chunks
 /// `pending_vector` on any embed/persist failure so a later re-embed recovers
 /// them. Extracted from the per-file loop so embeds can overlap across files
-/// (issue `agnostic-rlm-rs-b64b`) while sharing one commit path.
+/// (issue `agnostic-rag-rlm-tool-b64b`) while sharing one commit path.
 async fn drain_embed_handle(
     state: &AppState,
     buffer_id: i64,
@@ -173,7 +173,7 @@ pub(crate) async fn handle_index_project(
 /// promptly, dropping `AbortOnDrop`-guarded embed tasks and releasing every
 /// pooled SQLite connection/transaction (none are held across iterations).
 ///
-/// Per issue `agnostic-rlm-rs-e5d0`, a client that disconnects after `Init`
+/// Per issue `agnostic-rag-rlm-tool-e5d0`, a client that disconnects after `Init`
 /// must NOT leave the buffer purged — the destructive Phase-0 replace is
 /// deferred to the first `File` message (see the `phase0_done` guard below),
 /// and a mid-stream disconnect aborts pending embeds and frees the pool so a
@@ -198,7 +198,7 @@ where
     let start = Instant::now();
     // Authorship: the embedding model (chunks are produced by the embedder, not
     // an LLM) and the authenticated session username threaded from the gRPC
-    // layer (issue `agnostic-rlm-rs-786a`). `None` only occurs in hermetic
+    // layer (issue `agnostic-rag-rlm-tool-786a`). `None` only occurs in hermetic
     // tests that bypass the auth wrapper.
     let model_name = state.embedder.name();
     let model: Option<&str> = Some(model_name);
@@ -212,9 +212,9 @@ where
     // retained: each file is chunked, inserted and embedded inline, then its
     // content is dropped, so peak memory stays bounded to a single file. This
     // fixes the all-repo OOM that accumulated every file's bytes in `chunks`
-    // for the whole stream (agnostic-rlm-rs-5124).
+    // for the whole stream (agnostic-rag-rlm-tool-5124).
     let mut persisted_all: Vec<(i64, String)> = Vec::new();
-    // Immutable supersede (issue `agnostic-rlm-rs-8dcc`): a re-index no longer
+    // Immutable supersede (issue `agnostic-rag-rlm-tool-8dcc`): a re-index no longer
     // *deletes* the buffer's chunks — it snapshots the currently-active chunk
     // keys on the first `File` message, then inserts NEW active rows and
     // *retires* (is_active = 0) the previous version of each matching key as
@@ -231,11 +231,11 @@ where
     let mut pre_active: usize = 0;
     let mut total_inserted: usize = 0;
     let mut total_retired: usize = 0;
-    // Deferred snapshot (issue `agnostic-rlm-rs-e5d0`): nothing destructive may
+    // Deferred snapshot (issue `agnostic-rag-rlm-tool-e5d0`): nothing destructive may
     // run until the stream actually delivers a `File`. A client that
     // disconnects right after `Init` (or never sends files) must NOT leave the
     // buffer touched — that broken state is what breaks RLM claims until
-    // restart (`agnostic-rlm-rs-ccc3`). So the supersede snapshot is taken only
+    // restart (`agnostic-rag-rlm-tool-ccc3`). So the supersede snapshot is taken only
     // on the first `File` message.
     let mut phase0_done = false;
     // Live embed tasks. The guard aborts every handle still in the vec on drop,
@@ -269,7 +269,7 @@ where
                 let bid = buffer_id
                     .ok_or_else(|| Status::invalid_argument("file message before init"))?;
 
-                // Phase 0 (issue `agnostic-rlm-rs-8dcc`): supersede instead of
+                // Phase 0 (issue `agnostic-rag-rlm-tool-8dcc`): supersede instead of
                 // delete. Snapshot the currently-active chunk keys so Phase 1
                 // can retire the previous version of each as it re-inserts, and
                 // so the end-of-stream orphan pass knows what was removed. This
@@ -316,7 +316,7 @@ where
                 total_chunks += chunk_list.len();
 
                 // Phase 1: persist this file's chunks (transactional, bounded)
-                // instead of buffering the whole repo (agnostic-rlm-rs-5124).
+                // instead of buffering the whole repo (agnostic-rag-rlm-tool-5124).
                 // `store::blocking` acquires a pooled connection, runs the
                 // transaction and drops it before returning — nothing is held
                 // across loop iterations.
@@ -384,10 +384,10 @@ where
                     let buffer_id_u = u64::try_from(bid).unwrap_or(u64::MAX);
                     // Clone the capped index-embed pool + the in-flight counter
                     // so the blocking task can confine candle's matmul and
-                    // report backpressure signal (issue `agnostic-rlm-rs-6690`).
+                    // report backpressure signal (issue `agnostic-rag-rlm-tool-6690`).
                     let pool_threads = state.index_embed_pool.current_num_threads();
                     // Bound pending embeds so peak memory stays limited while
-                    // embeddings overlap across files (agnostic-rlm-rs-b64b).
+                    // embeddings overlap across files (agnostic-rag-rlm-tool-b64b).
                     let embed_cap = (pool_threads * 2).max(4);
                     for batch in res.persisted.chunks(embed_batch) {
                         let owned_batch: Vec<(i64, String)> = batch.to_vec();
@@ -438,7 +438,7 @@ where
                     // Bound in-flight embeds: drain the most-recently-spawned
                     // handle whenever too many are pending, so peak memory stays
                     // bounded while embeddings run concurrently across files
-                    // (issue `agnostic-rlm-rs-b64b`). The remaining handles are
+                    // (issue `agnostic-rag-rlm-tool-b64b`). The remaining handles are
                     // drained once the stream ends (after the main `while`).
                     while embed_abort.0.len() >= embed_cap {
                         if let Some((handle, ids)) = embed_abort.pop() {
@@ -455,7 +455,7 @@ where
     // whatever was persisted. No connection or embed task is held here.
     // Record the disconnect with its elapsed time and the count of embed
     // tasks that the `EmbedAbortGuard` will cancel on drop — this is the
-    // diagnostic signal called for by issue `agnostic-rlm-rs-ccc3` to confirm
+    // diagnostic signal called for by issue `agnostic-rag-rlm-tool-ccc3` to confirm
     // no pooled connection/transaction leaks past the handler.
     let pending_embed_tasks = embed_abort.0.len();
     warn!(
@@ -473,7 +473,7 @@ where
         drain_embed_handle(state, buffer_id.unwrap_or(0), handle, ids).await?;
     }
 
-    // End-of-stream orphan pass (issue `agnostic-rlm-rs-8dcc`): any active chunk
+    // End-of-stream orphan pass (issue `agnostic-rag-rlm-tool-8dcc`): any active chunk
     // key snapshotted at Phase 0 that Phase 1 never re-inserted is now orphaned
     // (file removed or chunk moved). Retire it softly so search never surfaces
     // it, and purge its vector. Scoped inside `store::blocking` so no pooled
@@ -533,7 +533,7 @@ where
         net_chunks,
         orphan_count,
         elapsed_ms = start.elapsed().as_millis(),
-        "superseded buffer chunks on re-index (agnostic-rlm-rs-8dcc)"
+        "superseded buffer chunks on re-index (agnostic-rag-rlm-tool-8dcc)"
     );
 
     // Phase 3: bump aggregate counts by this stream's *net* contribution so a
@@ -640,7 +640,7 @@ where
         "project indexed"
     );
 
-    // Audit the successful index (issue `agnostic-rlm-rs-7222`). `created_by`
+    // Audit the successful index (issue `agnostic-rag-rlm-tool-7222`). `created_by`
     // carries the authenticated username threaded from the gRPC layer; when it
     // is absent (hermetic unit tests) the log is skipped. Best-effort.
     if let Some(by) = &created_by {
@@ -756,7 +756,7 @@ mod tests {
     /// Return true if any chunk text for `buffer_id` contains `needle`.
     /// Used to prove a re-index *replaced* (not appended) content: the old
     /// run's marker must vanish from `chunk_texts`/`chunks_fts` after a
-    /// subsequent re-index (issue `agnostic-rlm-rs-20cd`). Only active chunks
+    /// subsequent re-index (issue `agnostic-rag-rlm-tool-20cd`). Only active chunks
     /// are considered (history is filtered out), mirroring live search.
     fn chunk_text_has(storage: &Storage, buffer_id: i64, needle: &str) -> bool {
         storage
@@ -847,7 +847,7 @@ mod tests {
         // A subsequent direct Storage operation must succeed — proving no
         // pooled connection / open transaction leaked from the aborted handler
         // (this is what broke RLM `claim rlm_job` until restart, issue
-        // agnostic-rlm-rs-ccc3).
+        // agnostic-rag-rlm-tool-ccc3).
         let conn = storage.connection();
         assert!(
             conn.is_ok(),
@@ -868,7 +868,7 @@ mod tests {
         // This is the row that the post-disconnect `claim rlm_job` path must
         // be able to flip to `claimed` — the operation that failed with
         // gRPC Internal until the server was restarted (issue
-        // agnostic-rlm-rs-ccc3).
+        // agnostic-rag-rlm-tool-ccc3).
         let job = NewRlmJob {
             buffer_id: Some(1),
             project: "proj".to_string(),
@@ -909,7 +909,7 @@ mod tests {
         );
     }
 
-    /// Issue `agnostic-rlm-rs-6690`: index embedding must run on a *capped*
+    /// Issue `agnostic-rag-rlm-tool-6690`: index embedding must run on a *capped*
     /// rayon pool (built in `AppState`) so a large `arags index` cannot
     /// saturate every core and starve a concurrent `arags search`. This test
     /// drives `index_stream_loop` with a real (but weight-free) lightweight
@@ -992,7 +992,7 @@ mod tests {
         );
     }
 
-    /// Issue `agnostic-rlm-rs-6690`: while an index embed is in flight on the
+    /// Issue `agnostic-rag-rlm-tool-6690`: while an index embed is in flight on the
     /// *capped* pool, a concurrent query embed on the *global* pool must still
     /// complete promptly (never hang/starve for 90s). This is the structural
     /// guarantee that the bounded pool isolates index work from serving.
@@ -1063,7 +1063,7 @@ mod tests {
         assert!(bg.await.unwrap().is_ok(), "background index completed");
     }
 
-    /// Issue `agnostic-rlm-rs-20cd`: a re-index must *replace*, not *append*.
+    /// Issue `agnostic-rag-rlm-tool-20cd`: a re-index must *replace*, not *append*.
     /// Historically each re-index doubled the chunk/FTS/vector counts
     /// (O(2^n) growth). The deferred Phase-0 delete (e5d0) must keep counts
     /// stable across repeated index streams for the same buffer. This test
@@ -1180,7 +1180,7 @@ mod tests {
         );
     }
 
-    /// Issue `agnostic-rlm-rs-8dcc`: re-indexing supersedes the previous chunk
+    /// Issue `agnostic-rag-rlm-tool-8dcc`: re-indexing supersedes the previous chunk
     /// version (soft `is_active = 0`) rather than deleting it. The old content
     /// must be retained as history (`is_active = 0`) but MUST NOT surface in
     /// active counts nor in semantic search (its vector is purged at retire).
@@ -1309,7 +1309,7 @@ mod tests {
         );
     }
 
-    /// Issue `agnostic-rlm-rs-6690` / `agnostic-rlm-rs-5124`: full external
+    /// Issue `agnostic-rag-rlm-tool-6690` / `agnostic-rag-rlm-tool-5124`: full external
     /// reproduction — run `arags index` of a large repo while `arags search
     /// --tier auto` runs, asserting search latency stays under threshold (no
     /// 90s timeout). Marked `#[ignore]` so CI does not hang on real candle

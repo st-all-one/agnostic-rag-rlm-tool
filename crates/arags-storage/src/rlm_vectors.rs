@@ -110,7 +110,7 @@ impl RlmVectorStore {
     }
 
     /// Drop every vector and rebuild an empty index (bootstrap rebuild,
-    /// `agnostic-rlm-rs-620d`).
+    /// `agnostic-rag-rlm-tool-620d`).
     ///
     /// # Errors
     ///

@@ -2,7 +2,7 @@
 //!
 //! NOTE: the public consumer feedback RPC (`FeedbackExploration`,
 //! `handle_feedback_exploration`) was HARD-REMOVED in issue
-//! `agnostic-rlm-rs-f5f3` to eliminate a sybil-by-AI risk: an attacker could
+//! `agnostic-rag-rlm-tool-f5f3` to eliminate a sybil-by-AI risk: an attacker could
 //! flood confirm/contradict votes to manipulate map rankings. The internal
 //! storage layer still exposes `record_feedback`/`FeedbackKind`, but nothing in
 //! the public RPC surface writes it anymore. Admin invalidation mirrors the

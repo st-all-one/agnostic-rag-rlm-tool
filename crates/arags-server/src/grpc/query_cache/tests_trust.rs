@@ -12,7 +12,7 @@ use arags_proto::proto::{QueryWithCacheRequest, StoreAnswerRequest};
 use arags_storage::{tokens::NewToken, tokens::Role};
 use tonic::Request;
 
-/// Regression (agnostic-rlm-rs-3c84): the question-vector space is global, so
+/// Regression (agnostic-rag-rlm-tool-3c84): the question-vector space is global, so
 /// a near-hit candidate from another project must never be served.
 #[tokio::test]
 async fn near_hit_from_other_project_is_not_served() {
@@ -81,7 +81,7 @@ async fn near_hit_from_other_project_is_not_served() {
     assert!(!resp.hit, "cross-project near-hit must not be served");
 }
 
-/// Trust pipeline (agnostic-rlm-rs-ac7f): a cached answer whose provenance
+/// Trust pipeline (agnostic-rag-rlm-tool-ac7f): a cached answer whose provenance
 /// chunks changed content is stale at read time — the first hit detects the
 /// drift, marks the entry stale and falls through to MISS.
 #[tokio::test]

@@ -1,4 +1,4 @@
-//! RLM cosine-quorum decision engine (issue `agnostic-rlm-rs-6d97`, plan
+//! RLM cosine-quorum decision engine (issue `agnostic-rag-rlm-tool-6d97`, plan
 //! `pl-84c3` step 2).
 //!
 //! A subject fanned out to `n` volunteer slots (each staged as a `candidate`
@@ -155,7 +155,7 @@ pub async fn decide_rlm_quorum(
         })
         .collect();
 
-    // Byzantine bound (issue `agnostic-rlm-rs-64af`): tolerate up to
+    // Byzantine bound (issue `agnostic-rag-rlm-tool-64af`): tolerate up to
     // `f = floor((n - 1) / 3)` malicious volunteers; a valid quorum needs at
     // least `2f + 1` mutually-agreeing candidates. With `n >= 3f + 1` and at
     // most `f` byzantine, an honest majority yields a unique accepted value.
@@ -220,7 +220,7 @@ pub async fn decide_rlm_quorum(
         });
     }
 
-    // Trust-weighted fusion (issue `agnostic-rlm-rs-64af`): weight the published
+    // Trust-weighted fusion (issue `agnostic-rag-rlm-tool-64af`): weight the published
     // choice by each agreeing candidate's `volunteer_trust.trust_score` so a
     // higher-trust volunteer's answer is preferred when several agree. All DB
     // reads stay inside `store::blocking`.
@@ -422,7 +422,7 @@ async fn embed_candidates(state: &AppState, texts: &[String]) -> Result<Vec<Embe
 
 /// After a total-divergence rejection, re-fan the subject out to a fresh
 /// generation group of `n` slots while excluding the volunteers that just
-/// diverged (issue `agnostic-rlm-rs-f486`). Re-fan-outs are capped at
+/// diverged (issue `agnostic-rag-rlm-tool-f486`). Re-fan-outs are capped at
 /// `quorum.strikes_limit` rounds: once the subject's generation reaches that
 /// ceiling (or every known volunteer is banned/excluded) the subject is left
 /// for human review and a `phase = "rlm_quorum_reassign", status = "exhausted"`
@@ -643,7 +643,7 @@ fn centroid(agreeing: &[usize], vectors: &[Embedding]) -> Embedding {
 /// Pick which agreeing candidate becomes the published RLM node.
 ///
 /// Ranks the agreeing members by a trust-weighted score — `trust_score` is the
-/// primary bias (the BFT guarantee of `agnostic-rlm-rs-64af` prefers reputable
+/// primary bias (the BFT guarantee of `agnostic-rag-rlm-tool-64af` prefers reputable
 /// volunteers), with the similarity to the consensus centroid (or text length
 /// for the `Longest` strategy) as the base. Returns the index into `pending`.
 ///

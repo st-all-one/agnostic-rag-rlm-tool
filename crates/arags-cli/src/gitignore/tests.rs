@@ -107,7 +107,7 @@ fn test_glob_match_basics() {
 
 #[test]
 fn nested_unanchored_star_never_leaks_outside_base() {
-    // Regression (agnostic-rlm-rs-4d4d): Laravel's bootstrap/cache/.gitignore
+    // Regression (agnostic-rag-rlm-tool-4d4d): Laravel's bootstrap/cache/.gitignore
     // contains a bare `*`; it must only govern paths under bootstrap/cache/,
     // never wipe the whole project index.
     let star = parse_line("*", Path::new("bootstrap/cache")).expect("rule");

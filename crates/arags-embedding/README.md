@@ -7,7 +7,7 @@ Pipeline de chunking e geração de embeddings para o arags.
 - **Chunking**: Divisão inteligente de arquivos em chunks (code, text, markdown, recursive)
 - **Embedding**: Geração de vetores via all-MiniLM-L6-v2 nativo em candle (INT8 default)
 - **Modelo fixo**: all-MiniLM-L6-v2 nativo em candle (produção); hash determinístico apenas para testes
-- **Ollama opt-in**: `[embedder] kind = "ollama"` + `ollama_url`/`ollama_model` usa um daemon Ollama local (ex. `all-minilm:22m`, 384 dims) sem build especial; `http_post` tem connect timeout de 10s (`agnostic-rlm-rs-9288`)
+- **Ollama opt-in**: `[embedder] kind = "ollama"` + `ollama_url`/`ollama_model` usa um daemon Ollama local (ex. `all-minilm:22m`, 384 dims) sem build especial; `http_post` tem connect timeout de 10s (`agnostic-rag-rlm-tool-9288`)
 - **Quantização**: MiniLM em INT8 via `QMatMul`, com opção f32
 - **Matryoshka**: truncamento do vetor para dimensões configuráveis (default 512)
 - **Fallback**: Embedding determinístico via SHA-256 quando modelo não disponível

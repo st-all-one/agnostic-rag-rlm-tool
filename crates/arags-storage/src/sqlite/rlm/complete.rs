@@ -156,7 +156,7 @@ impl Storage {
     /// (`volunteer_trust.strikes >= strikes_limit`) is banned and their claim
     /// is rejected (returns `None`). Volunteers excluded for a specific
     /// generation group via `rlm_job_exclusions` (re-fan-out after divergence,
-    /// issue `agnostic-rlm-rs-f486`) are likewise skipped.
+    /// issue `agnostic-rag-rlm-tool-f486`) are likewise skipped.
     ///
     /// # Errors
     ///

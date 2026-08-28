@@ -8,7 +8,7 @@ use super::types::{QaCacheRow, StoreAnswerInput};
 /// Projection shared by all `qa_cache` row queries (order fixed; see
 /// [`row_mapper`]). The trailing `is_active` / `superseded_by` / `epoch` /
 /// `created_by` / `version` are what the supersede chain walks for time-travel
-/// (issue `agnostic-rlm-rs-e210` / plan 021).
+/// (issue `agnostic-rag-rlm-tool-e210` / plan 021).
 pub(crate) const QA_COLS: &str = "id, cache_id, buffer_id, project, question_text, question_hash, \
      answer_text, source_chunk_ids, source_hashes, model, confidence, tier_snapshot, \
      token_count, access_count, created_at, last_accessed_at, stale, invalidated_at, \
@@ -54,7 +54,7 @@ pub(crate) fn row_mapper(r: &rusqlite::Row<'_>) -> rusqlite::Result<QaCacheRow> 
 
 /// Supersede-aware insert for a QA answer: retire any active row at
 /// `(project, buffer_id, question_hash)` and insert a fresh active revision
-/// (issue `agnostic-rlm-rs-e210`). Runs inside an open transaction so the
+/// (issue `agnostic-rag-rlm-tool-e210`). Runs inside an open transaction so the
 /// retire/insert pair commits atomically.
 pub(crate) fn store_answer_inner(
     c: &rusqlite::Connection,

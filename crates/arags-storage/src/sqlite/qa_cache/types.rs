@@ -45,10 +45,10 @@ pub struct QaCacheRow {
     pub invalidated_by: Option<String>,
     /// Why invalidated (audit).
     pub invalidated_reason: Option<String>,
-    /// Whether this is the live revision (issue `agnostic-rlm-rs-e210`).
+    /// Whether this is the live revision (issue `agnostic-rag-rlm-tool-e210`).
     pub is_active: bool,
     /// Rowid of the newer revision that superseded this one (`is_active = 0`
-    /// rows only); `None` for the live row (issue `agnostic-rlm-rs-e210`).
+    /// rows only); `None` for the live row (issue `agnostic-rag-rlm-tool-e210`).
     pub superseded_by: Option<i64>,
     /// Project epoch at write time (drift / time-travel, plan 021).
     pub epoch: i64,
@@ -82,7 +82,7 @@ pub struct StoreAnswerInput {
     /// Token cost.
     pub token_count: i64,
     /// Authenticated session username that stored the answer (issue
-    /// `agnostic-rlm-rs-786a`). `None` when the store is used outside an
+    /// `agnostic-rag-rlm-tool-786a`). `None` when the store is used outside an
     /// authenticated session (e.g. CLI hermetic paths).
     pub created_by: Option<String>,
 }

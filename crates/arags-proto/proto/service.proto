@@ -49,7 +49,7 @@ service AragsService {
   rpc StoreAnswer(StoreAnswerRequest) returns (StoreAnswerResponse);
   rpc GetAnswerById(GetAnswerByIdRequest) returns (GetAnswerByIdResponse);
 
-  // QA re-digest queue (issue `agnostic-rlm-rs-d172`): a volunteer claims a
+  // QA re-digest queue (issue `agnostic-rag-rlm-tool-d172`): a volunteer claims a
   // lease, re-digests a stale answer locally, stores it (StoreAnswer), then
   // completes the job. The server is LLM-free and only owns the queue.
   rpc ClaimPendingQa(ClaimPendingQaRequest) returns (ClaimPendingQaResponse);

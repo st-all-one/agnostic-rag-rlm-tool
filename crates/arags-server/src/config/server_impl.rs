@@ -56,7 +56,7 @@ impl ServerConfig {
     /// environment overrides (plan 020 keeps them as ops escape hatches over
     /// the file; the model dir one lets container images bake or mount
     /// checkpoints without a config file). `ARAGS_INDEX_EMBED_THREADS` caps the
-    /// index-embed rayon pool (issue `agnostic-rlm-rs-6690`).
+    /// index-embed rayon pool (issue `agnostic-rag-rlm-tool-6690`).
     #[must_use]
     pub fn with_env_overrides(self) -> Self {
         let addr = std::env::var("ARAGS_SERVER_ADDR").ok();

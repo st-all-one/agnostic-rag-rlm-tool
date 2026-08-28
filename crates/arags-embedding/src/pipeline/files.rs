@@ -111,7 +111,7 @@ const DEFAULT_IGNORES: &[&str] = &[
     ".next",
     ".turbo",
     "bower_components",
-    // Noisy corpus-diluting paths (issue agnostic-rlm-rs-a884).
+    // Noisy corpus-diluting paths (issue agnostic-rag-rlm-tool-a884).
     "Seeds",
     ".seeds",
     "storage/logs",

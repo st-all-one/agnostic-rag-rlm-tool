@@ -218,7 +218,7 @@ impl EffectiveUserConfig {
     /// Effective index ignore patterns: the project `[project] ignore` list
     /// (local over global) merged with the `ARAGS_INDEX_IGNORE` env var
     /// (comma-separated). Defaults are applied at discovery time and can be
-    /// extended here (issue agnostic-rlm-rs-a884).
+    /// extended here (issue agnostic-rag-rlm-tool-a884).
     #[must_use]
     pub fn index_ignore_patterns(&self) -> Vec<String> {
         let mut out = self.ignore_patterns();
@@ -235,7 +235,7 @@ impl EffectiveUserConfig {
 }
 
 /// A canonical project name is a **logical** identifier for the knowledge
-/// entity, not a filesystem path (issue `agnostic-rlm-rs-f5db`). Worktrees of
+/// entity, not a filesystem path (issue `agnostic-rag-rlm-tool-f5db`). Worktrees of
 /// the same repo share one canonical name; the on-disk root is tracked
 /// separately by the server.
 ///

@@ -118,7 +118,7 @@ fn list_nodes_filters_by_review_and_level() {
     );
 }
 
-/// Regression (agnostic-rlm-rs-0764): hydration of vector-search hits must be
+/// Regression (agnostic-rag-rlm-tool-0764): hydration of vector-search hits must be
 /// scoped by buffer so other projects' summaries never surface in results.
 #[test]
 fn approved_node_hydration_is_scoped_by_buffer() {
@@ -713,7 +713,7 @@ fn diverger_is_excluded_from_reassigned_generation_group() {
     );
 }
 
-/// Regression (agnostic-rlm-rs-077f): claiming a pending RLM job must not fail
+/// Regression (agnostic-rag-rlm-tool-077f): claiming a pending RLM job must not fail
 /// with `SQLITE_BUSY_SNAPSHOT` (error 517) by promoting a deferred read
 /// transaction to a write. The claim opens an IMMEDIATE write transaction and
 /// performs the select + update + reload on that single connection, so it must

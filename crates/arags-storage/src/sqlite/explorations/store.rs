@@ -353,7 +353,7 @@ impl Storage {
     }
 
     /// Walk the supersede chain starting from `id`, returning every revision in
-    /// oldest→newest order (issue `agnostic-rlm-rs-e210`). The starting row need
+    /// oldest→newest order (issue `agnostic-rag-rlm-tool-e210`). The starting row need
     /// not be the oldest; only the forward chain reachable via `superseded_by`
     /// is returned. Retired (`is_active = 0`) revisions are included so callers
     /// can audit the full map history.
@@ -408,7 +408,7 @@ impl Storage {
     ///
     /// Sets `vector_status = 'pending_vector'` for every id in `exploration_ids`
     /// that belongs to `buffer_id`. The canonical summary text is preserved, so
-    /// a reconcile worker (issue `agnostic-rlm-rs-36ae`) can re-embed.
+    /// a reconcile worker (issue `agnostic-rag-rlm-tool-36ae`) can re-embed.
     ///
     /// # Errors
     ///
@@ -471,7 +471,7 @@ impl Storage {
 
     /// Return `(id, text)` pairs for the given explorations, where `text` is the
     /// canonical embed input (`goal\n{summary}`) matching the normal persist
-    /// path, used by the reconcile worker (`agnostic-rlm-rs-36ae`) to re-embed
+    /// path, used by the reconcile worker (`agnostic-rag-rlm-tool-36ae`) to re-embed
     /// from SQLite. Missing rows are skipped.
     ///
     /// # Errors
@@ -515,7 +515,7 @@ impl Storage {
 
     /// Return `(id, text)` pairs for **every** exploration, where `text` is the
     /// canonical embed input (`goal\n{summary}`), used by the server bootstrap
-    /// rebuild (`agnostic-rlm-rs-620d`) to reconstruct the exploration vector
+    /// rebuild (`agnostic-rag-rlm-tool-620d`) to reconstruct the exploration vector
     /// space from SQLite when it diverges from the store.
     ///
     /// # Errors

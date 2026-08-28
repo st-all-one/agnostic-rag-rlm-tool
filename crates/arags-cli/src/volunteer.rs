@@ -273,7 +273,7 @@ fn process(
         anyhow::bail!("model produced an implausibly short summary; refusing to submit");
     }
 
-    // Attest the submission (issue `agnostic-rlm-rs-64af`): HMAC-SHA256 over the
+    // Attest the submission (issue `agnostic-rag-rlm-tool-64af`): HMAC-SHA256 over the
     // session token so the server can verify non-admin volunteers before counting
     // the candidate toward the BFT quorum. A missing session yields an empty HMAC
     // which the server rejects for quorum jobs.

@@ -22,7 +22,7 @@
   offsets válidos contra a fonte. Regressions file versionado no repo.
 - `proptest` entra como `[dev-dependencies]`.
 
-### Fixed — Ollama connect timeout (agnostic-rlm-rs-9288)
+### Fixed — Ollama connect timeout (agnostic-rag-rlm-tool-9288)
 - **`embedder/ollama.rs::http_post`:** resolve o endereço via
   `ToSocketAddrs` e usa `TcpStream::connect_timeout(10s)` (antes só havia
   `read_timeout` de 60s). Um daemon Ollama inatingível/black-holed vira erro
@@ -31,7 +31,7 @@
   `ollama_url`/`ollama_model`; o CHANGELOG histórico da plan 021 que o declarava
   "removido" está dessincronizado — ele foi re-adicionado como opt-in.)
 
-### Changed — all-MiniLM-L6-v2 nativo (BREAKING) — agnostic-rlm-rs-1194
+### Changed — all-MiniLM-L6-v2 nativo (BREAKING) — agnostic-rag-rlm-tool-1194
 - **Novo backend `minilm`**: encoder BERT canônico em candle
   (`embedder/minilm/`), atenção 4-D batched correta, positions a partir de 1,
   token-type row 0, mean pooling + L2. INT8 (`QMatMul`) por default.

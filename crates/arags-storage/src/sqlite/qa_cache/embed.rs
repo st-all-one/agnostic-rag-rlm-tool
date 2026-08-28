@@ -8,7 +8,7 @@ use crate::sqlite::conn::Storage;
 
 impl Storage {
     /// Return `(id, question_text)` pairs for the given QA cache rows, used by
-    /// the reconcile worker (`agnostic-rlm-rs-36ae`) to re-embed the canonical
+    /// the reconcile worker (`agnostic-rag-rlm-tool-36ae`) to re-embed the canonical
     /// question text from SQLite. Missing rows are skipped.
     ///
     /// # Errors
@@ -44,7 +44,7 @@ impl Storage {
     }
 
     /// Return `(id, question_text)` pairs for **every** QA cache row, used by
-    /// the server bootstrap rebuild (`agnostic-rlm-rs-620d`) to reconstruct the
+    /// the server bootstrap rebuild (`agnostic-rag-rlm-tool-620d`) to reconstruct the
     /// question vector space from SQLite when it diverges from the store.
     /// Missing rows are skipped.
     ///

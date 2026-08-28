@@ -83,7 +83,7 @@ const DEFAULT_IGNORED_DIRS: &[&str] = &[
     "build",
     ".next",
     ".terraform",
-    // Noisy corpus-diluting paths (issue agnostic-rlm-rs-a884).
+    // Noisy corpus-diluting paths (issue agnostic-rag-rlm-tool-a884).
     "Seeds",
     ".seeds",
     "REFERENCE",

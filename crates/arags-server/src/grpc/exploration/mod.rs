@@ -10,7 +10,7 @@
 //! Split by concern:
 //! - `search`: semantic search + single-map fetch (read-time trust pipeline)
 //! - `feedback`: admin invalidation + admin review gate (the public consumer
-//!   feedback RPC was HARD-REMOVED in issue `agnostic-rlm-rs-f5f3` — sybil
+//!   feedback RPC was HARD-REMOVED in issue `agnostic-rag-rlm-tool-f5f3` — sybil
 //!   risk; internal `record_feedback` storage may still be exercised directly)
 
 use tracing::{debug, info, warn};
@@ -89,7 +89,7 @@ pub(crate) async fn handle_persist_exploration(
 ) -> Result<Response<arags_proto::proto::PersistExplorationResponse>, Status> {
     let _timer = crate::timing::Timer::new("handler.persist_exploration");
     let ctx = crate::auth::authenticate(request.metadata(), &state.storage)?;
-    // Per-user rate limit on this mutating RPC (issue `agnostic-rlm-rs-7222`).
+    // Per-user rate limit on this mutating RPC (issue `agnostic-rag-rlm-tool-7222`).
     // A denial must NOT be audited.
     let now = crate::state::AppState::now_secs();
     if !state.check_rate_limit(&ctx.username, now) {
@@ -134,7 +134,7 @@ pub(crate) async fn handle_persist_exploration(
         .await
         .map_err(internal)?;
 
-    // Validation gate (issue `agnostic-rlm-rs-e89e`): route non-admin persists
+    // Validation gate (issue `agnostic-rag-rlm-tool-e89e`): route non-admin persists
     // per `[exploration] validation_mode`. Admins auto-approve (maps stay
     // `fresh`) in both modes. Non-admins in `Review` mode keep the original
     // admin-approval gate when `require_review` is set; non-admins in `Quorum`
@@ -225,7 +225,7 @@ pub(crate) async fn handle_persist_exploration(
         "exploration persisted"
     );
 
-    // Audit the successful persist (issue `agnostic-rlm-rs-7222`). Best-effort:
+    // Audit the successful persist (issue `agnostic-rag-rlm-tool-7222`). Best-effort:
     // a logging failure must not fail the request.
     state.audit(
         &req.project,

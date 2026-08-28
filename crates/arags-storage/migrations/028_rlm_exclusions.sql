@@ -1,4 +1,4 @@
--- Issue `agnostic-rlm-rs-f486`: per-generation-group volunteer exclusions.
+-- Issue `agnostic-rag-rlm-tool-f486`: per-generation-group volunteer exclusions.
 --
 -- When the cosine quorum exhausts a generation group (all candidates diverge
 -- below `quorum_sim_threshold`) it re-fans the subject out to a NEW generation

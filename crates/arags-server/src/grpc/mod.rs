@@ -98,11 +98,11 @@ impl AragsService for AragsGrpcService {
         request: Request<Streaming<IndexChunk>>,
     ) -> Result<Response<IndexResponse>, Status> {
         let _timer = crate::timing::Timer::new("handler.index_project");
-        // Authenticate up-front (issue `agnostic-rlm-rs-786a`): the session
+        // Authenticate up-front (issue `agnostic-rag-rlm-tool-786a`): the session
         // username becomes the `created_by` on every chunk written below.
         let ctx = crate::auth::authenticate(request.metadata(), &self.state.storage)?;
         // Per-user rate limit on the mutating `index_project` RPC (issue
-        // `agnostic-rlm-rs-7222`). A denial must NOT be audited.
+        // `agnostic-rag-rlm-tool-7222`). A denial must NOT be audited.
         let now = crate::state::AppState::now_secs();
         if !self.state.check_rate_limit(&ctx.username, now) {
             return Err(tonic::Status::resource_exhausted("rate limit exceeded"));
@@ -192,7 +192,7 @@ impl AragsService for AragsGrpcService {
         query_cache::handle_get_answer_by_id(&self.state, request).await
     }
 
-    // ── QA re-digest queue (issue `agnostic-rlm-rs-d172`) ────────────────
+    // ── QA re-digest queue (issue `agnostic-rag-rlm-tool-d172`) ────────────────
 
     #[instrument(skip(self, request))]
     async fn claim_pending_qa(

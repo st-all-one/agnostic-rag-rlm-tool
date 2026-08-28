@@ -1,4 +1,4 @@
-//! Quorum fan-out decision for `CompleteRlmJob` (issue `agnostic-rlm-rs-64af`).
+//! Quorum fan-out decision for `CompleteRlmJob` (issue `agnostic-rag-rlm-tool-64af`).
 //!
 //! When a subject is fanned out to `N > 1` volunteers, each submission only
 //! stages a candidate; the cosine quorum decides the published node. The helper
@@ -32,7 +32,7 @@ pub(crate) async fn decide_quorum_submission(
     provided_hmac: &str,
     start: Instant,
 ) -> Result<Option<CompleteRlmJobResponse>, Status> {
-    // Attestation gate (issue `agnostic-rlm-rs-64af`): every non-admin
+    // Attestation gate (issue `agnostic-rag-rlm-tool-64af`): every non-admin
     // volunteer submission is HMAC-signed (session-bound). Verify it before
     // counting the candidate toward the BFT quorum; a mismatch is rejected at
     // the edge and is NEVER staged.
@@ -92,7 +92,7 @@ pub(crate) async fn decide_quorum_submission(
     .await
     .map_err(internal)?;
 
-    // Audit the candidate staging (issue `agnostic-rlm-rs-7222`). Best-effort:
+    // Audit the candidate staging (issue `agnostic-rag-rlm-tool-7222`). Best-effort:
     // a logging failure must not fail the request.
     state.audit(
         &job.project,

@@ -46,7 +46,7 @@ ollama_model = "all-minilm:22m"
 
 ## Referências
 
-- Repositório: `https://github.com/st-all-one/agnostic-rlm-rs`
+- Repositório: `https://github.com/st-all-one/agnostic-rag-rlm-tool`
 - Documentação do usuário: `wiki/` (arquitetura, servidor, CLI, boas práticas,
   integração com IA, configurações avançadas, Docker)
 - Configuração do servidor: `docker/server.toml` (campo a campo)

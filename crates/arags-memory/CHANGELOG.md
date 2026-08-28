@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-### Fixed — vetores órfãos em consolidação/decay (agnostic-rlm-rs-fa25)
+### Fixed — vetores órfãos em consolidação/decay (agnostic-rag-rlm-tool-fa25)
 - **`ConsolidationEngine::with_vector_store` + purge de vetores**
   (`consolidation.rs`): quando um `VectorStore` de chunks é anexado, a
   deduplicação (`remove_duplicate_chunks`) e o decay (`arags-server`) agora

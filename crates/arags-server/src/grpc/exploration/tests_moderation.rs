@@ -1,6 +1,6 @@
 //! Admin invalidation + review-gate handler tests (plan 022/023). Shares the
 //! storage/auth fixture from `tests.rs`. The public consumer feedback tests
-//! were removed with the feedback RPC in issue `agnostic-rlm-rs-f5f3`.
+//! were removed with the feedback RPC in issue `agnostic-rag-rlm-tool-f5f3`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 

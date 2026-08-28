@@ -1,4 +1,4 @@
--- RLM quorum fan-out (issue `agnostic-rlm-rs-6d97`, plan `pl-84c3` step 2):
+-- RLM quorum fan-out (issue `agnostic-rag-rlm-tool-6d97`, plan `pl-84c3` step 2):
 -- a single subject may be fanned out to N independent volunteer job slots that
 -- share a `generation_group_id`. Each slot is claimed independently (one slot
 -- per volunteer per group), completed independently, and its candidate summary

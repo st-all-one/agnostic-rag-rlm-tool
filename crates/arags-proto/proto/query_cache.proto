@@ -113,7 +113,7 @@ message GetAnswerByIdResponse {
   repeated string source_hashes = 6;
 }
 
-// ── QA re-digest queue (issue `agnostic-rlm-rs-d172`) ──
+// ── QA re-digest queue (issue `agnostic-rag-rlm-tool-d172`) ──
 //
 // A volunteer client claims a lease, re-digests the (stale) answer locally with
 // its own LLM, stores it via StoreAnswer, then completes the job. The server is

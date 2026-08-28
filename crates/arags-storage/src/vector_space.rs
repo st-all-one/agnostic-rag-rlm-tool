@@ -112,7 +112,7 @@ impl VectorSpaceStore {
 
     /// Drop every vector and rebuild an empty index with the same
     /// dimensionality/metric. Used by the server bootstrap rebuild
-    /// (`agnostic-rlm-rs-620d`) to reconstruct a divergent space from canonical
+    /// (`agnostic-rag-rlm-tool-620d`) to reconstruct a divergent space from canonical
     /// SQLite text. Persists the empty index so the on-disk file matches.
     ///
     /// # Errors

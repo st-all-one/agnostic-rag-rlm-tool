@@ -1,4 +1,4 @@
--- Plan 021 follow-up: derived-record superseding (issue `agnostic-rlm-rs-e210`).
+-- Plan 021 follow-up: derived-record superseding (issue `agnostic-rag-rlm-tool-e210`).
 --
 -- `qa_cache`, `rlm_nodes` and `explorations` now keep history: storing a NEW
 -- answer / RLM node / exploration map for the same subject no longer

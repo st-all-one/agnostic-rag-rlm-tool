@@ -139,9 +139,9 @@ fn parse_base(url: &str) -> anyhow::Result<(String, u16)> {
 /// `Content-Length` for others, so the body is decoded from either framing. A
 /// naive `read_to_string`-until-EOF previously blocked on the socket read
 /// timeout while the full body had already arrived — which presented as a
-/// startup "deadlock" during vector-space bootstrap (issue `agnostic-rlm-rs-3a68`).
+/// startup "deadlock" during vector-space bootstrap (issue `agnostic-rag-rlm-tool-3a68`).
 ///
-/// The connect phase is bounded by a connect timeout (issue `agnostic-rlm-rs-9288`):
+/// The connect phase is bounded by a connect timeout (issue `agnostic-rag-rlm-tool-9288`):
 /// a black-holed/unreachable Ollama now fails fast instead of stalling the
 /// bootstrap embed loop indefinitely (the read timeout only covers the response).
 fn http_post(host: &str, port: u16, path: &str, body: &str) -> anyhow::Result<String> {
@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn test_read_chunked_decodes_body() {
         // Ollama answers many payloads with `Transfer-Encoding: chunked`
-        // (issue `agnostic-rlm-rs-3a68`). The decoder must strip the framing.
+        // (issue `agnostic-rag-rlm-tool-3a68`). The decoder must strip the framing.
         let raw: Vec<u8> = b"5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n".to_vec();
         let mut reader = BufReader::new(std::io::Cursor::new(raw));
         let decoded = read_chunked(&mut reader).unwrap();

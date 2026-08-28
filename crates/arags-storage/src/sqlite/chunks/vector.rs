@@ -11,7 +11,7 @@ impl Storage {
     ///
     /// Sets `status = 'pending_vector'` for every chunk in `chunk_ids` that
     /// belongs to `buffer_id`. The canonical text is preserved, so a reconcile
-    /// worker (issue `agnostic-rlm-rs-36ae`) can re-embed later.
+    /// worker (issue `agnostic-rag-rlm-tool-36ae`) can re-embed later.
     ///
     /// # Errors
     ///
@@ -67,7 +67,7 @@ impl Storage {
     }
 
     /// Return `(chunk_id, buffer_id, content)` triples for the given chunk ids,
-    /// used by the reconcile worker (`agnostic-rlm-rs-36ae`) to re-embed from
+    /// used by the reconcile worker (`agnostic-rag-rlm-tool-36ae`) to re-embed from
     /// canonical text. Chunks whose `chunk_texts` row has been purged are
     /// skipped (they cannot be reconciled and remain pending).
     ///
@@ -112,7 +112,7 @@ impl Storage {
 
     /// Return `(chunk_id, buffer_id, content)` triples for **every** chunk that
     /// has canonical text (all `chunk_texts` rows joined to `chunks`). Used by
-    /// the server bootstrap rebuild (`agnostic-rlm-rs-620d`) to reconstruct the
+    /// the server bootstrap rebuild (`agnostic-rag-rlm-tool-620d`) to reconstruct the
     /// chunk vector space from SQLite when it diverges from the store.
     ///
     /// # Errors

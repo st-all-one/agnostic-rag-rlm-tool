@@ -1,4 +1,4 @@
-//! In-memory per-user fixed-window rate limiter (issue `agnostic-rlm-rs-7222`).
+//! In-memory per-user fixed-window rate limiter (issue `agnostic-rag-rlm-tool-7222`).
 //!
 //! Keyed by authenticated username, gating mutating RPCs. No external crate: a
 //! `parking_lot::Mutex<HashMap>` holds one small bucket per user. When the

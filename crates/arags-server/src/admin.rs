@@ -133,7 +133,7 @@ pub async fn run() -> Result<()> {
             };
             let floor = config.maintenance.decay_score_floor;
             // Open the chunk vector store so decay/consolidate can also purge
-            // orphan vectors (issue `agnostic-rlm-rs-fa25`). On a fresh store
+            // orphan vectors (issue `agnostic-rag-rlm-tool-fa25`). On a fresh store
             // usearch restores the on-disk dimensionality; a missing file falls
             // back to the default 384. `main` already runs a tokio runtime, so
             // await directly here rather than nesting another (which panics).

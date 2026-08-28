@@ -15,7 +15,7 @@
   `scripts/check_file_length.sh`); split `backend/family/*` rastreado no sd
   (issue 021.9).
 
-### Changed — agnostic-rlm-rs-d14e
+### Changed — agnostic-rag-rlm-tool-d14e
 - `reqwest` com `default-features = false` + `rustls-tls`: o CLI compila
   estático em musl/Alpine **sem OpenSSL** (validado em container).
 

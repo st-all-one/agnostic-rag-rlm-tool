@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   stale_reason/epoch_drift/feedback), `GetExplorationById*` (body completo +
   âncoras), `InvalidateExploration*` reusando `InvalidateMode`. O
   `FeedbackExploration*` (feedback do consumidor) foi removido depois por
-  risco sybil (ver `agnostic-rlm-rs-f5f3`).
+  risco sybil (ver `agnostic-rag-rlm-tool-f5f3`).
 - Cinco novos RPCs registrados no `service.proto`; import no `build.rs`.
 - Testes de contrato: mensagens round-trip e reuso do modo de invalidação.
 

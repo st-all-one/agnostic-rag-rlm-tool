@@ -1,4 +1,4 @@
-//! QA re-digest queue RPCs (issue `agnostic-rlm-rs-d172`): claim and complete
+//! QA re-digest queue RPCs (issue `agnostic-rag-rlm-tool-d172`): claim and complete
 //! volunteer re-digestion jobs. The server is LLM-free — the volunteer digests
 //! locally and stores via `StoreAnswer`.
 

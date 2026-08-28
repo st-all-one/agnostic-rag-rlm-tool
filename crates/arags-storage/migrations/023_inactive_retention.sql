@@ -1,5 +1,5 @@
 -- Plan 023: inactive-chunk retention columns for immutable supersede writes
--- (issue `agnostic-rlm-rs-8dcc`).
+-- (issue `agnostic-rag-rlm-tool-8dcc`).
 --
 -- Re-indexing no longer deletes chunks; it supersedes them (sets is_active = 0
 -- and `superseded_by` to the new row). Retired rows keep their `chunk_texts`

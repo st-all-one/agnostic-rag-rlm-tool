@@ -135,7 +135,7 @@ pub(crate) fn run_init(
     append_gitignore(project, &local_path)?;
 
     // On completion: optional health-check + identity-conflict hook. Both are
-    // best-effort — a down server only warns (issue `agnostic-rlm-rs-e5d8`).
+    // best-effort — a down server only warns (issue `agnostic-rag-rlm-tool-e5d8`).
     run_server_checks(rt, cfg, project, &name, flags.non_interactive)?;
 
     if register {
@@ -323,7 +323,7 @@ fn prompt_server_addr(default: &str) -> Result<Option<String>> {
 
 /// Best-effort project name *suggestion*: git remote, else directory basename.
 /// Used only to prefill the interactive prompt — never applied as the value
-/// (issue `agnostic-rlm-rs-f5db`).
+/// (issue `agnostic-rag-rlm-tool-f5db`).
 #[must_use]
 pub(crate) fn suggest_project_name(project: &Path) -> String {
     if let Ok(output) = std::process::Command::new("git")
@@ -392,7 +392,7 @@ fn existing_server_addr(existing: &LocalConfig) -> Option<String> {
 }
 
 /// Optional server checks run after the config is written (issue
-/// `agnostic-rlm-rs-e5d8`):
+/// `agnostic-rag-rlm-tool-e5d8`):
 ///
 /// 1. **Health-check** — ping `GetServerStatus` and confirm the `refresh_token`
 ///    authenticated (the session token is attached by the client). A down
@@ -400,7 +400,7 @@ fn existing_server_addr(existing: &LocalConfig) -> Option<String> {
 /// 2. **Identity-conflict hook** — reuse the existing `GetProject`-by-name RPC
 ///    to detect whether the chosen canonical name already exists on the server
 ///    with a *distinct* root (a different checkout claiming the same knowledge
-///    entity). Mirrors the `agnostic-rlm-rs-f5db` identity heuristic: an exact
+///    entity). Mirrors the `agnostic-rag-rlm-tool-f5db` identity heuristic: an exact
 ///    root match is a benign re-init, a differing root is a real conflict. In
 ///    non-interactive mode a conflict is a hard failure; interactively it is a
 ///    warning only.

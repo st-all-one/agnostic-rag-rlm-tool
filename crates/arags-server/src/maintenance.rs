@@ -60,7 +60,7 @@ fn resolve_buffer_ids(storage: &Storage, project: &str) -> Result<Vec<i64>> {
 /// Consolidate memory for a project (or every project when `project` is empty).
 ///
 /// `vector_store` is the chunk usearch space; when provided, deduplicated chunks
-/// also have their vectors purged (issue `agnostic-rlm-rs-fa25`) so the semantic
+/// also have their vectors purged (issue `agnostic-rag-rlm-tool-fa25`) so the semantic
 /// index stays in sync with SQLite.
 ///
 /// # Errors
@@ -95,7 +95,7 @@ pub fn consolidate(
 /// removing chunks whose salience is below `score_floor`.
 ///
 /// `vector_store` is the chunk usearch space; when provided, decayed chunks also
-/// have their vectors purged (issue `agnostic-rlm-rs-fa25`) so the semantic index
+/// have their vectors purged (issue `agnostic-rag-rlm-tool-fa25`) so the semantic index
 /// stays in sync with SQLite.
 ///
 /// # Errors
@@ -188,7 +188,7 @@ async fn run_decay_for_buffer(
 
             // Drop the orphan vectors so the usearch chunk count matches SQLite
             // and the server bootstrap no longer sees a divergence (issue
-            // `agnostic-rlm-rs-fa25`). Best-effort: a failure is logged.
+            // `agnostic-rag-rlm-tool-fa25`). Best-effort: a failure is logged.
             if let Some(vs) = &vector_store {
                 if !removed_chunk_ids.is_empty() {
                     if let Err(e) = vs.delete_chunk_ids_blocking(&removed_chunk_ids) {
@@ -238,7 +238,7 @@ mod tests {
 
     /// End-to-end check that `consolidate` keeps the usearch chunk space in sync
     /// with SQLite: deduplicated chunks also lose their vectors (issue
-    /// `agnostic-rlm-rs-fa25`), so the server bootstrap no longer sees a
+    /// `agnostic-rag-rlm-tool-fa25`), so the server bootstrap no longer sees a
     /// count divergence that forces a full re-embed on restart.
     #[tokio::test]
     async fn consolidate_purges_orphan_vectors_for_duplicate_chunks() {

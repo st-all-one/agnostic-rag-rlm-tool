@@ -29,7 +29,7 @@ fn test_init_creates_local_arags_toml_and_gitignores() {
     assert!(content.contains("[project]"));
     assert!(content.contains("name = \"meu-repo\""));
     // The generated local config must NOT carry a `[server]` stamp
-    // (agnostic-rlm-rs-152a): the global addr wins unless overridden.
+    // (agnostic-rag-rlm-tool-152a): the global addr wins unless overridden.
     assert!(!content.contains("[server]"));
 
     // Simulate the idempotent gitignore append performed by `arags init`

@@ -1,4 +1,4 @@
--- Audit log (append-only) of key data-plane actions (issue agnostic-rlm-rs-7222).
+-- Audit log (append-only) of key data-plane actions (issue agnostic-rag-rlm-tool-7222).
 CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project TEXT,

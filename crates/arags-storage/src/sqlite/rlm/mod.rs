@@ -76,12 +76,12 @@ pub struct RlmNode {
     /// Whether source data changed after this summary was written.
     pub stale: bool,
     /// Authenticated session username that created the row (issue
-    /// `agnostic-rlm-rs-786a`).
+    /// `agnostic-rag-rlm-tool-786a`).
     pub created_by: Option<String>,
-    /// Whether this is the live revision (issue `agnostic-rlm-rs-e210`).
+    /// Whether this is the live revision (issue `agnostic-rag-rlm-tool-e210`).
     pub is_active: bool,
     /// Rowid of the newer revision that superseded this one (`is_active = 0`
-    /// rows only); `None` for the live row (issue `agnostic-rlm-rs-e210`).
+    /// rows only); `None` for the live row (issue `agnostic-rag-rlm-tool-e210`).
     pub superseded_by: Option<i64>,
     /// Project epoch at write time (drift / time-travel, plan 021).
     pub epoch: i64,
@@ -247,7 +247,7 @@ pub fn rlm_job_key(project: &str, level: i64, subject: &str) -> String {
     format!("L{level}:{project}:{subject}")
 }
 
-/// Superseding insert for a summary node (issue `agnostic-rlm-rs-e210`).
+/// Superseding insert for a summary node (issue `agnostic-rag-rlm-tool-e210`).
 ///
 /// Runs on any connection/transaction handle; returns `(rowid, node_id)`.
 ///

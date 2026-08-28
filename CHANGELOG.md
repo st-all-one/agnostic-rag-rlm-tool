@@ -40,16 +40,16 @@ foram validadas por `cargo fmt --check` + `cargo clippy --workspace -- -D warnin
 + `cargo test --workspace` verdes.
 
 #### Recuperação fiel (reimplementação a partir de `CRITICAL_RECUPERATION/`)
-- **Trust scoring (`agnostic-rlm-rs-f486`):** `record_strike` decai
+- **Trust scoring (`agnostic-rag-rlm-tool-f486`):** `record_strike` decai
   `trust_score` (−0.2) e retorna `(strikes, trust_score)`; novos
   `bump_trust_on_accept`, `is_banned`, `list_volunteers_by_trust`, `read_trust`;
   migration `028_rlm_exclusions.sql` (`MIGRATION_COUNT=28`); `claim_rlm_job`
   rejeita voluntários banidos e exclui divergers; reassign em `quorum.rs`.
-- **Remoção de feedback público de exploração (`agnostic-rlm-rs-f5f3`):**
+- **Remoção de feedback público de exploração (`agnostic-rag-rlm-tool-f5f3`):**
   removido `FeedbackExploration` (RPC/handler/CLI) e a superfície `feedback`
   pública; mantidos `invalidate`/`review` admin. Doctest de remoção
   `exploration_public_feedback_surface_removed`.
-- **Quorum BFT-leve por attestation HMAC (`agnostic-rlm-rs-64af`):**
+- **Quorum BFT-leve por attestation HMAC (`agnostic-rag-rlm-tool-64af`):**
   `sign_rlm_submission` (`arags-core::rlm_attestation`), campo `submission_hmac`
   no `rlm.proto`, verificação no server gRPC; `f = floor((n-1)/3)`, exigência
   `>= 2f+1`, fusão ponderada por trust. Deps `hmac`/`subtle`.
@@ -92,7 +92,7 @@ foram validadas por `cargo fmt --check` + `cargo clippy --workspace -- -D warnin
   `search` híbrida (~200ms); `ask` com modelo principal externo (opencode `hy3`)
   ~19s; `explore search` gracioso sem mapas.
 
-### Fixed — bootstrap/startup hang (agnostic-rlm-rs-fa25 / 0631 / 9288 / 4cbe)
+### Fixed — bootstrap/startup hang (agnostic-rag-rlm-tool-fa25 / 0631 / 9288 / 4cbe)
 
 - **Vetores órfãos em manutenção (`fa25`):** `consolidate`/`decay` do servidor
   agora purgem os vetores usearch dos chunks removidos (o `VectorStore` de chunks
@@ -115,24 +115,24 @@ foram validadas por `cargo fmt --check` + `cargo clippy --workspace -- -D warnin
   em ~6s, rebuild de ~6min em segundo plano; restart posterior in-sync em 20ms.
 
 ### Fixed — bugs descobertos em e2e (2026-08-27)
-- **`agnostic-rlm-rs-077f` — `ClaimRlmJob` SQLite 517:** handler abria txn de
+- **`agnostic-rag-rlm-tool-077f` — `ClaimRlmJob` SQLite 517:** handler abria txn de
   leitura e promovia p/ escrita em outra conexão do pool (`SQLITE_BUSY_SNAPSHOT`)
   — bloqueava 100% do volunteer. Agora `claim_rlm_job`
   (`storage/sqlite/rlm/complete.rs`) abre transação **IMMEDIATE write** numa
   única conexão. Teste `claim_rlm_job_succeeds_without_sqlite_517`.
-- **`agnostic-rlm-rs-51be` — over-enqueue de RLM jobs:** o hook
+- **`agnostic-rag-rlm-tool-51be` — over-enqueue de RLM jobs:** o hook
   `enqueue_rlm_l1_work` fazia fan-out de `quorum_n=3` slots por arquivo → 4.740
   jobs pendentes para 1.581 arquivos. Agora 1 job pendente por arquivo
   (`quorum_slots:1`); `enqueue_rlm_job` retorna `created_new` e dedup por
   `(project,level,subject)`. Teste
   `enqueue_rlm_l1_work_does_not_duplicate_pending_across_commits`.
-- **`agnostic-rlm-rs-88f0` — `explore search --project` panic (clap):** colisão
+- **`agnostic-rag-rlm-tool-88f0` — `explore search --project` panic (clap):** colisão
   de arg id `project` entre `Cli.project` (global, PathBuf) e
   `ExploreCmd::Search.project`. Global renomeado p/ `project_path`/`--project-path`
   (`root.rs:47`). Testes `explore_search_parses_with_project_flag`/
   `_without_project_flag`.
 
-### Added — plan 023: Unified Contextual Query (epic `agnostic-rlm-rs-43a9`)
+### Added — plan 023: Unified Contextual Query (epic `agnostic-rag-rlm-tool-43a9`)
 
 Uma única `arags query`/`search` agora funde os quatro espaços vetoriais do
 sistema: chunks (A), respostas QA cacheadas (B), sumários RLM aprovados (C) e
@@ -169,21 +169,21 @@ continuam funcionando.
   Single) — hang eterno quando a provenance tinha ≥1 chunk id. O lookup de
   conteúdo agora roda na conexão já travada. Descoberto pelo novo teste
   `exact_hit_with_drifted_provenance_serves_miss`.
-- QA near-hit cross-project leak (`agnostic-rlm-rs-3c84`): similaridade alta
+- QA near-hit cross-project leak (`agnostic-rag-rlm-tool-3c84`): similaridade alta
   entre projetos diferentes não serve mais resposta de outro projeto; guard
   de projeto + staleness antes do Jaccard.
-- RLM semantic pass unscoped (`agnostic-rlm-rs-0764`): hidratação vetorial de
+- RLM semantic pass unscoped (`agnostic-rag-rlm-tool-0764`): hidratação vetorial de
   nós aprovados é escopada por `buffer_id`.
-- Decay nunca ligado no serving (`agnostic-rlm-rs-fce3`): `[search].decay_lambda`
+- Decay nunca ligado no serving (`agnostic-rag-rlm-tool-fce3`): `[search].decay_lambda`
   aplica decay exponencial de saliência na resposta (idades via novo
   `chunk_ages_hours`).
-- Dims default inconsistentes (`agnostic-rlm-rs-2296`): 1024 → 384
+- Dims default inconsistentes (`agnostic-rag-rlm-tool-2296`): 1024 → 384
   (`arags_core::EMBEDDING_DIMS`, alinhado ao all-MiniLM-L6-v2).
-- Persistência vetorial O(N) por mutação (`agnostic-rlm-rs-8bb5`): novo
+- Persistência vetorial O(N) por mutação (`agnostic-rag-rlm-tool-8bb5`): novo
   `VectorSpaceStore` genérico deduplica os três espaços dedicados (QA/RLM/
   explorações) com persistência **debounced** (2s) + flush no graceful
   shutdown.
-- Estratégias de fusão documentadas por espaço (`agnostic-rlm-rs-be4d`) no
+- Estratégias de fusão documentadas por espaço (`agnostic-rag-rlm-tool-be4d`) no
   README do `arags-search`.
 
 ### Changed — Docker consolidado em uma única imagem (2026-08-25)
@@ -215,7 +215,7 @@ continuam funcionando.
   **`EXPLORATIONS.md`** (raiz). Espaço vetorial próprio
   (`exploration_vectors.usearch`) isolado dos demais.
 
-### Changed — Code Quality Remediation (plan 021, epic `agnostic-rlm-rs-1a52`)
+### Changed — Code Quality Remediation (plan 021, epic `agnostic-rag-rlm-tool-1a52`)
 
 Remediação completa da revisão de qualidade pós-RLM (14 arquivos >300 linhas,
 testes inline em 16 arquivos, SQL por interpolação, duplicações e lacunas de
@@ -260,7 +260,7 @@ cobertura). Detalhes por crate nos respectivos `CHANGELOG.md`.
 **Baseline pós-remediação:** `cargo fmt --check` ✅ · `clippy -D warnings` 0 ✅ ·
 **426 testes verdes** (era 395) ✅ · gate de linhas OK ✅.
 
-### Added — RLM: sumarização recursiva hierárquica distribuída (agnostic-rlm-rs-8f12 / plan pl-db3e)
+### Added — RLM: sumarização recursiva hierárquica distribuída (agnostic-rag-rlm-tool-8f12 / plan pl-db3e)
 
 Novo dataset de **sumários recursivos** (Recursive Language Model), processado
 de baixo para cima por voluntários com LLM local:
@@ -295,7 +295,7 @@ de baixo para cima por voluntários com LLM local:
 - Fix: backend Ollama agora envia `"stream": false` (respostas NDJSON
   quebravam o parser).
 
-### Added — ignore de dotfiles + `.gitignore` e auto-atualização com `index --register` (agnostic-rlm-rs-4442, 740a, fe41)
+### Added — ignore de dotfiles + `.gitignore` e auto-atualização com `index --register` (agnostic-rag-rlm-tool-4442, 740a, fe41)
 
 #### Ignore de arquivos (descoberta de arquivos)
 
@@ -322,14 +322,14 @@ de baixo para cima por voluntários com LLM local:
   a flag em `.arags.toml`.
 - Novo módulo: `arags-cli/src/watcher.rs`.
 
-### Removed — watch legado migrado (agnostic-rlm-rs-fe41)
+### Removed — watch legado migrado (agnostic-rag-rlm-tool-fe41)
 
 - `arags-memory::watch` (`WatchMonitor`/`WatchHandle`/`WatchEvent`, do antigo
   experimento `--watch`), seus testes e a dependência `notify` do crate foram
   removidos; a funcionalidade de auto-atualização agora vive no client
   (`arags-cli/src/watcher.rs`, ver acima).
 
-### Changed — embedding nativo all-MiniLM-L6-v2 (agnostic-rlm-rs-1194)
+### Changed — embedding nativo all-MiniLM-L6-v2 (agnostic-rag-rlm-tool-1194)
 
 O modelo de embeddings virou **parte do projeto**: all-MiniLM-L6-v2 nativo em
 candle (22M params, 384 dims, INT8 default), sem Ollama, sem Python, sem rede.

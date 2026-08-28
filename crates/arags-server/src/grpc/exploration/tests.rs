@@ -363,7 +363,7 @@ async fn exploration_nonadmin_quorum_creates_submission_candidate() {
 
 #[tokio::test]
 async fn explore_search_returns_persisted_map_in_semantic_results() {
-    // Reproduces `agnostic-rlm-rs-e9e3`: the exploration vector must be indexed
+    // Reproduces `agnostic-rag-rlm-tool-e9e3`: the exploration vector must be indexed
     // and retrievable via semantic search. The dedicated `exploration_vectors`
     // space is sized by the embedder's *real* dimensionality; a mismatch with
     // the hardcoded `embedder_dimension()` constant silently fails

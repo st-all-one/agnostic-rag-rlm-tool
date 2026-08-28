@@ -28,7 +28,7 @@ impl Storage {
             })
             .context("failed to mark qa_cache stale")?;
         // Staleness triggers a re-digest job so a volunteer re-derives the
-        // answer (issue `agnostic-rlm-rs-d172`). Best-effort: a failure to
+        // answer (issue `agnostic-rag-rlm-tool-d172`). Best-effort: a failure to
         // enqueue must not roll back the staleness mark.
         if n > 0 {
             if let Err(e) = self.enqueue_pending_qa_for_stale(id) {
@@ -101,7 +101,7 @@ impl Storage {
     ///
     /// Sets `vector_status = 'pending_vector'` for every id in `cache_ids`. The
     /// canonical question text is preserved, so a reconcile worker
-    /// (issue `agnostic-rlm-rs-36ae`) can re-embed.
+    /// (issue `agnostic-rag-rlm-tool-36ae`) can re-embed.
     ///
     /// # Errors
     ///

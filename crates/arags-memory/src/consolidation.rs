@@ -41,7 +41,7 @@ pub struct ConsolidationEngine {
     storage: Storage,
     /// Optional chunk `VectorStore`. When present, chunks removed during
     /// deduplication also have their usearch vectors purged so the semantic
-    /// index stays in sync with canonical `SQLite` (issue `agnostic-rlm-rs-fa25`).
+    /// index stays in sync with canonical `SQLite` (issue `agnostic-rag-rlm-tool-fa25`).
     /// When absent (e.g. unit tests), vector cleanup is skipped.
     vector_store: Option<Arc<VectorStore>>,
 }

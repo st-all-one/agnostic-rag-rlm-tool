@@ -54,7 +54,7 @@ impl Storage {
     /// Publish the quorum-accepted summary as the live RLM node for a subject.
     ///
     /// Used by the cosine-quorum decision (`crate::...::quorum` / issue
-    /// `agnostic-rlm-rs-6d97`): the fused consensus text is written via the same
+    /// `agnostic-rag-rlm-tool-6d97`): the fused consensus text is written via the same
     /// superseding upsert as [`Storage::store_rlm_node`] but is **approved
     /// immediately** (the quorum is the quality gate, standing in for the admin
     /// review) with `reviewed_by = "quorum"`. Returns the new node `(rowid,
@@ -346,7 +346,7 @@ impl Storage {
     }
 
     /// Walk the supersede chain starting from `id`, returning every revision in
-    /// oldest→newest order (issue `agnostic-rlm-rs-e210`). The starting row need
+    /// oldest→newest order (issue `agnostic-rag-rlm-tool-e210`). The starting row need
     /// not be the oldest; only the forward chain reachable via `superseded_by`
     /// is returned. Retired (`is_active = 0`) revisions are included so callers
     /// can audit the full node history.
@@ -386,7 +386,7 @@ impl Storage {
     ///
     /// Sets `vector_status = 'pending_vector'` for every node in `node_ids`
     /// that belongs to `buffer_id`. The canonical summary text is preserved,
-    /// so a reconcile worker (issue `agnostic-rlm-rs-36ae`) can re-embed.
+    /// so a reconcile worker (issue `agnostic-rag-rlm-tool-36ae`) can re-embed.
     ///
     /// # Errors
     ///
@@ -445,7 +445,7 @@ impl Storage {
 
     /// Return `(id, text)` pairs for the given RLM nodes, where `text` is the
     /// canonical embed input (`subject\n{summary_text}`) matching the normal
-    /// index path, used by the reconcile worker (`agnostic-rlm-rs-36ae`) to
+    /// index path, used by the reconcile worker (`agnostic-rag-rlm-tool-36ae`) to
     /// re-embed from SQLite. Missing rows are skipped.
     ///
     /// # Errors
@@ -487,7 +487,7 @@ impl Storage {
 
     /// Return `(id, text)` pairs for **every** RLM node, where `text` is the
     /// canonical embed input (`subject\n{summary_text}`), used by the server
-    /// bootstrap rebuild (`agnostic-rlm-rs-620d`) to reconstruct the RLM summary
+    /// bootstrap rebuild (`agnostic-rag-rlm-tool-620d`) to reconstruct the RLM summary
     /// vector space from SQLite when it diverges from the store.
     ///
     /// # Errors

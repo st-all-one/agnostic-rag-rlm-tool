@@ -483,7 +483,7 @@ fn supersede_exploration_creates_new_active_row_and_history() {
     assert_eq!(history[2].is_active, true);
 }
 
-// Regression for agnostic-rlm-rs-8007: a freshly persisted map whose cited
+// Regression for agnostic-rag-rlm-tool-8007: a freshly persisted map whose cited
 // anchor stores a REAL 32-byte (binary, non-UTF8) content hash must NOT be
 // classified stale. `chunks.hash` holds the raw digest bytes; the anchor's
 // `content_hash` is the hex of those bytes. The read-time recheck compares

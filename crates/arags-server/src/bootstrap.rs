@@ -1,5 +1,5 @@
 //! Bootstrap rebuild of the four vector spaces from canonical SQLite text
-//! (issue `agnostic-rlm-rs-620d`, plan `pl-783b` step 3).
+//! (issue `agnostic-rag-rlm-tool-620d`, plan `pl-783b` step 3).
 //!
 //! On startup the server compares the canonical row count in SQLite (the source
 //! of truth) against the vector count currently on disk for each of the four

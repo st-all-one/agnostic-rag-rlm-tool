@@ -190,7 +190,7 @@ fn test_consolidate_empty_project() {
 }
 
 /// Deduplication must also purge the vectors of the removed chunks (issue
-/// `agnostic-rlm-rs-fa25`) so the usearch chunk count stays equal to the
+/// `agnostic-rag-rlm-tool-fa25`) so the usearch chunk count stays equal to the
 /// SQLite chunk count. Without this, the orphan vectors cause a bootstrap
 /// count-divergence that forces a full re-embed on every restart.
 #[tokio::test]

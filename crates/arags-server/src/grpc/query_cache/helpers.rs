@@ -23,7 +23,7 @@ pub(crate) const NEAR_HIT_CANDIDATES: usize = 10;
 ///
 /// Runs on the **global** rayon pool (not the capped index pool), so a
 /// concurrent `arags index` cannot starve QA-cache lookups (issue
-/// `agnostic-rlm-rs-6690`).
+/// `agnostic-rag-rlm-tool-6690`).
 pub(crate) async fn embed_query(state: &AppState, question: &str) -> Option<Vec<f32>> {
     if state.index_embed_in_flight() > 0 {
         debug!(

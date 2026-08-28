@@ -19,7 +19,7 @@
   Mapa/Conexões/Evidências/Limitações; summary derivado do primeiro parágrafo
   do Mapa), dedup de `--paths` extras, stdin suportado.
 - **`explore`**: subcomando de feedback do consumidor removido depois
-  (risco sybil por IA; ver `agnostic-rlm-rs-f5f3`) — permaneceram apenas
+  (risco sybil por IA; ver `agnostic-rag-rlm-tool-f5f3`) — permaneceram apenas
   `search`/`persist`.
 - 5 testes novos (parser happy/rejeições/tolerante + rendering).
 
@@ -57,7 +57,7 @@
 
 ### Fixed
 - `arags init` não carimba mais `[server] addr = "127.0.0.1"` hardcoded no
-  `.arags.toml` local (agnostic-rlm-rs-152a) — o addr do `~/.arags/arags.toml`
+  `.arags.toml` local (agnostic-rag-rlm-tool-152a) — o addr do `~/.arags/arags.toml`
   global passa a valer; default continua `127.0.0.1:50051` quando nada é
   configurado.
 

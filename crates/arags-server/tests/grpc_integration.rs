@@ -5,7 +5,7 @@
 //! drive it with the *generated* `AragsServiceClient` over a real channel —
 //! exercising the full transport (auth handshake, client-streaming
 //! `index_project`, unary `claim_rlm_job`), not just the handler functions in
-//! isolation. This closes the gap noted in `agnostic-rlm-rs-b020`, whose client
+//! isolation. This closes the gap noted in `agnostic-rag-rlm-tool-b020`, whose client
 //! tests could not spin an in-process server.
 //!
 //! Everything is storage-only: `AppState::with_vector_stores(...)` is built with
@@ -205,7 +205,7 @@ async fn grpc_index_project_persists_chunks_end_to_end() {
     server.handle.abort();
 }
 
-/// Issue `agnostic-rlm-rs-7222`: a mutating RPC must record an append-only
+/// Issue `agnostic-rag-rlm-tool-7222`: a mutating RPC must record an append-only
 /// audit-log entry attributed to the authenticated user. `index_project` is the
 /// simplest mutating path that needs no extra config; we drive a real gRPC
 /// round-trip and assert the storage reflects the audit row.
@@ -319,7 +319,7 @@ async fn rlm_submission_valid_hmac_accepted() {
     let (job_id, generation) = seed_and_claim_rlm_job(&server, &session).await;
     let summary = "The module parses JSON configuration files and exposes a typed API.";
 
-    // Correctly-signed submission (issue `agnostic-rlm-rs-64af`).
+    // Correctly-signed submission (issue `agnostic-rag-rlm-tool-64af`).
     let hmac = sign_rlm_submission(&session, job_id, generation, summary);
 
     let mut req = Request::new(CompleteRlmJobRequest {
@@ -417,7 +417,7 @@ async fn grpc_disconnect_after_init_keeps_rlm_claim_working() {
     let session = auth.into_inner().session_token;
 
     // Seed a PENDING RLM job (the row that must remain claimable after a
-    // mid-index disconnect — issue `agnostic-rlm-rs-ccc3`).
+    // mid-index disconnect — issue `agnostic-rag-rlm-tool-ccc3`).
     let job = NewRlmJob {
         buffer_id: Some(1),
         project: "itest".to_string(),

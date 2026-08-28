@@ -226,7 +226,7 @@ impl Storage {
         let tx = conn.unchecked_transaction()?;
         // Cascade to every child table so deleting a buffer leaves no orphans in
         // FTS5 / entity indexes (the same "deletes don't cascade" gap tracked in
-        // agnostic-rlm-rs-20cd).
+        // agnostic-rag-rlm-tool-20cd).
         tx.execute(
             "DELETE FROM chunks_fts WHERE rowid IN (SELECT id FROM chunks WHERE buffer_id = ?1)",
             params![buffer_id],

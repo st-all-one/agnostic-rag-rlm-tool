@@ -7,9 +7,9 @@ set -euo pipefail
 MAX_LINES=300
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-# allowlist: "path:justification" (tracked in seeds issue agnostic-rlm-rs-XXXX/021.9)
+# allowlist: "path:justification" (tracked in seeds issue agnostic-rag-rlm-tool-XXXX/021.9)
 # NOTE: the 9 files below were split into cohesive submodules (issue
-# agnostic-rlm-rs-0fc4) and removed from the allowlist once each production
+# agnostic-rag-rlm-tool-0fc4) and removed from the allowlist once each production
 # surface dropped to <= 300 lines:
 #   crates/arags-llm/src/config.rs         -> config/{presets,llm_config}.rs
 #   crates/arags-llm/src/backend.rs        -> backend/family/{openai,anthropic,gemini,ollama}.rs

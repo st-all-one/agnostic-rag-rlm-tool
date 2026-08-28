@@ -1,5 +1,5 @@
 //! Candidate submissions + volunteer trust (Cluster B keystone, issue
-//! `agnostic-rlm-rs-a5d7`).
+//! `agnostic-rag-rlm-tool-a5d7`).
 //!
 //! When a volunteer produces an answer for a subject (an RLM node, an
 //! exploration map, or a QA), it is stored as a `candidate` [`Submission`]. The

@@ -9,7 +9,7 @@ use rusqlite::{params, params_from_iter};
 /// Composite key that identifies a chunk's *position* within a buffer: the
 /// chunk's provenance file plus its line span. Two index runs that touch the
 /// same physical location share a key, which is how re-indexing supersedes the
-/// previous active version of that chunk (issue `agnostic-rlm-rs-8dcc`) instead
+/// previous active version of that chunk (issue `agnostic-rag-rlm-tool-8dcc`) instead
 /// of deleting it.
 pub type ChunkKey = (String, i64, i64); // (file_path, line_start, line_end)
 
@@ -239,7 +239,7 @@ pub fn increment_buffer_counts(
 
 /// Insert flattened `(file_path, chunk)` pairs in transactional batches of at
 /// most `max_batch` rows (`server.toml max_batch_size`, plan 020), applying
-/// immutable-versioning semantics (issue `agnostic-rlm-rs-8dcc`):
+/// immutable-versioning semantics (issue `agnostic-rag-rlm-tool-8dcc`):
 ///
 /// * An active chunk already exists at the same key `(file_path, line_start,
 ///   line_end)` **and same hash** → unchanged; the existing id is reused and no
@@ -486,7 +486,7 @@ fn retire_row(
 }
 
 /// Snapshot the currently-active chunk keys → ids for a buffer (issue
-/// `agnostic-rlm-rs-8dcc`). Used by the index loop to (a) drive per-chunk
+/// `agnostic-rag-rlm-tool-8dcc`). Used by the index loop to (a) drive per-chunk
 /// supersede decisions and (b) compute the orphan set at end-of-stream.
 ///
 /// # Errors
@@ -527,7 +527,7 @@ pub fn snapshot_active_chunks(storage: &Storage, buffer_id: i64) -> Result<HashM
 /// Retire a single active chunk (soft-delete). `superseded_by` links the row
 /// that replaced it, or `None` for an orphan (file removed / chunk moved). The
 /// FTS5 row is dropped so hybrid search never returns it; the caller is
-/// responsible for purging the usearch vector (issue `agnostic-rlm-rs-8dcc`).
+/// responsible for purging the usearch vector (issue `agnostic-rag-rlm-tool-8dcc`).
 ///
 /// # Errors
 ///
@@ -608,10 +608,10 @@ pub fn purge_inactive_chunks(storage: &Storage, retention_days: u64) -> Result<u
 /// `chunk_texts` and `chunk_entities`, and return the deleted chunk ids together
 /// with the number of distinct files they covered.
 ///
-/// This is the re-index stopgap for `agnostic-rlm-rs-20cd`: calling it before
+/// This is the re-index stopgap for `agnostic-rag-rlm-tool-20cd`: calling it before
 /// [`insert_chunks_batched`] makes a repeated `IndexProject` *replace* rather
 /// than *append*, keeping chunk/FTS/vector counts stable. The durable fix is
-/// immutable versioned writes (`agnostic-rlm-rs-8dcc`).
+/// immutable versioned writes (`agnostic-rag-rlm-tool-8dcc`).
 ///
 /// Pool-safe: runs through [`arags_storage::Storage::connection`], so it works in
 /// both single and pooled (server) modes.

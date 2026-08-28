@@ -43,8 +43,8 @@ fn payload_json(payload: &RlmJobPayload) -> Result<String> {
 /// Each file is enqueued as **exactly one** pending job (`quorum_slots = 1`):
 /// the index hook fires once per buffer commit, so re-enqueuing the same file
 /// across commits must not fan out into duplicate pending jobs (issue
-/// `agnostic-rlm-rs-51be`). The cosine quorum fan-out is still applied where it
-/// matters — at volunteer reassignment (`agnostic-rlm-rs-6d97`) and the
+/// `agnostic-rag-rlm-tool-51be`). The cosine quorum fan-out is still applied where it
+/// matters — at volunteer reassignment (`agnostic-rag-rlm-tool-6d97`) and the
 /// cascade path — not here.
 ///
 /// # Errors
@@ -115,7 +115,7 @@ pub fn enqueue_rlm_l1_work(
 /// Returns whether parent work was enqueued.
 ///
 /// `quorum_n` is the fan-out degree applied to the enqueued parent job (issue
-/// `agnostic-rlm-rs-6d97`); `1` keeps the single-volunteer behaviour.
+/// `agnostic-rag-rlm-tool-6d97`); `1` keeps the single-volunteer behaviour.
 ///
 /// # Errors
 ///

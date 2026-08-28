@@ -137,10 +137,14 @@ COPY crates/ crates/
 # would reuse the dependency-stage rlibs built from the stubs.
 RUN find crates -name '*.rs' -exec touch {} +
 
+# strip is best-effort only: during a multi-arch buildx run the builder's
+# binutils may not match the target arch (e.g. x64 strip on an aarch64 musl
+# binary), which would otherwise abort the build. The binary is already a
+# valid, statically-linked musl executable — stripping is purely optional.
 RUN if [ ! -f /out/arags-server ]; then \
-        cargo build --release -p arags-server && strip target/release/arags-server \
+        cargo build --release -p arags-server && strip target/release/arags-server 2>/dev/null || true \
         && mkdir -p /out && cp target/release/arags-server /out/; \
-    else strip /out/arags-server; fi
+    else strip /out/arags-server 2>/dev/null || true; fi
 
 # Empty /data pre-owned by the runtime UID: scratch has no mkdir/chown and a
 # bare VOLUME would be created root-owned, breaking first boot.

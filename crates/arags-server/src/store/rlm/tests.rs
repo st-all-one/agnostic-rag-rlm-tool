@@ -64,7 +64,7 @@ fn enqueue_rlm_l1_work_does_not_duplicate_pending_across_commits() {
 
     // A second buffer commit touches the same file: the hook must NOT create a
     // duplicate pending job, and must not report it as new work (issue
-    // `agnostic-rlm-rs-51be`).
+    // `agnostic-rag-rlm-tool-51be`).
     let (new_jobs2, _) =
         enqueue_rlm_l1_work(&storage, buffer_id, project, &[file.clone()]).unwrap();
     assert_eq!(new_jobs2, 0, "re-enqueue of a live job is not new work");

@@ -11,7 +11,7 @@ pool_size = 4
 flush_interval_ms = 100
 max_batch_size = 50
 # Dedicated rayon threads for index (Phase-2) embedding (issue
-# agnostic-rlm-rs-6690). Caps candle's matmul so a large `arags index` cannot
+# agnostic-rag-rlm-tool-6690). Caps candle's matmul so a large `arags index` cannot
 # saturate every core and starve concurrent `arags search`. Default = num_cpus-2
 # (min 1); override via ARAGS_INDEX_EMBED_THREADS. Leave unset for auto.
 # index_embed_threads = 2
