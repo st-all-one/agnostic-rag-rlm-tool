@@ -1,7 +1,7 @@
-# 1. Panorama Arquitetural
+# 1. Panorama Geral da Arquitetura
 
-> **Server-first:** todo o estado e todo o processamento de dados vivem no
-> `arags-server`; o `arags-cli` é um cliente gRPC fino; o LLM é sempre **o do
+> Server-first: o **estado e todo o processamento de dados vivem no
+> `arags-server`**; o `arags-cli` é um cliente gRPC fino; o LLM é sempre **o do
 > usuário**, nunca do servidor.
 
 ## 1.1 Princípios
@@ -9,13 +9,14 @@
 1. **On-demand, não-recursivo** — não há loop de agente nem orquestração
    planner/solver/synthesizer no servidor. Indexa, busca, responde.
 2. **Servidor = plano de dados puro (LLM-free)** — indexação (chunking +
-   embeddings), busca híbrida, QA-Cache, memória, histórico, manutenção, RLM e
-   explorações. Nenhum crate de LLM no grafo de dependências do servidor.
-3. **Cliente = gRPC puro** — só usa LLM local (`arags-llm`) em três pontos:
-   *digest* (`ask`), *summarize* (`persist`) e síntese RLM (`volunteer`). Não há
-   modo offline; quem quiser isolamento sobe o próprio `arags-server`.
-4. **Agent-agnostic** — qualquer agente consome a saída via CLI/gRPC; formatos
-   de saída pensados para máquina (`text`, `jsonl`, `full_json`).
+   embeddings), busca híbrida, QA-Cache, memória, histórico, manutenção. Nenhum
+   crate de LLM no grafo de dependências do servidor.
+3. **Cliente = gRPC puro** — só usa LLM local (`arags-llm`) em dois pontos:
+   *digest* da resposta (`query -qa`) e *summarize* (`persist`). Não há modo
+   offline; quem quiser "offline" sobe o próprio `arags-server`.
+4. **Agent-agnostic** — qualquer agente (OPencode, Cursor, Aider, Pi,
+   Claude…) consome a saída via CLI/gRPC; formatos de saída pensados para
+   máquina (`text`, `jsonl`, `full_json`).
 5. **Confiança explícita** — todo conhecimento derivado (QA cacheada, sumário
    RLM, mapa de exploração) carrega proveniência por hash, staleness automático
    e gates de review.
@@ -32,7 +33,7 @@
 │    ├── qa:      QueryWithCache / StoreAnswer / GetAnswerById  │
 │    ├── memory:  ListMemory / GetCache / InvalidateCache       │
 │    ├── history: GetHistory                                    │
-│    ├── rlm:     ClaimRlmJob / CompleteRlmJob / ReviewRlmNode… │
+│    ├── rlm:     ClaimRlmJob / CompleteRlmJob / ReviewRlmNode…│
 │    ├── explor.: Persist/Search/Get/Feedback/ReviewExploration │
 │    └── admin:   AuthRefresh / TriggerMaintenance / Status     │
 │                                                               │
@@ -46,11 +47,11 @@
                            │ gRPC (protobuf; TLS/mTLS opcional)
 ┌──────────────────────────┴────────────────────────────────────┐
 │                    arags-cli  (thin client)                   │
-│  init · index · watch-daemon · search · ask · persist ·       │
-│  maintenance · history · explore · volunteer                  │
+│  init · index · watch-daemon · search · query · memory ·      │
+│  persist · history · explore · volunteer                      │
 │  retry/backoff · Bearer interceptor (AuthRefresh) · mTLS      │
-│  LLM do usuário APENAS em: ask (digest), persist (summarize), │
-│  volunteer (síntese RLM)                                       │
+│  LLM do usuário APENAS em: query -qa (digest), persist        │
+│  (summarize), volunteer (síntese RLM)                         │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -63,7 +64,7 @@
 | `arags-core` | Tipos compartilhados (`EMBEDDING_DIMS=384`, RLM payload/prioridades, score de confiança de exploração) | — |
 | `arags-proto` | Contrato tipado gRPC/protobuf (`service.proto` + domínios); trait `AragsService` | prost/tonic |
 | `arags-storage` | SQLite (metadados, FTS5, tokens, jobs RLM) + usearch (HNSW, persistência debounced) | rusqlite, usearch |
-| `arags-embedding` | Chunking por estratégia (code/text/markdown) + embedders (candle MiniLM, Ollama, llama.cpp) | candle |
+| `arags-embedding` | Chunking por estratégia (code/text/markdown) + embedder nativo MiniLM INT8 | candle |
 | `arags-search` | Busca híbrida: FTS5 BM25 + vetorial + fusão RRF (tie-break determinístico) | storage, core |
 | `arags-memory` | Memória multi-projeto, knowledge base, histórico, consolidate/decay | storage |
 | `arags-llm` | Abstração de backends LLM **client-side**: famílias openai/anthropic/gemini/ollama, retry, fallback, pricing | tokio |
@@ -93,7 +94,7 @@ funde na leitura.
 
 ### Unified Contextual Query (plan 023)
 
-Uma única `search`/`ask` devolve três seções:
+Uma única `search`/`query` devolve três seções:
 
 1. **Results** — chunks verbatim (BM25 ⊕ semântica via RRF). Budget mínimo
    garantido; recebe o restante do orçamento de tokens.
@@ -116,16 +117,16 @@ Campos são **aditivos no proto**: clientes antigos ignoram as seções novas.
   afirmação-chave contra os vetores atuais (pega alucinação que hash não vê).
 - **Feedback:** consumidores confirmam/contradizem mapas; contradições
   acumuladas aposentam (`contradiction_limit`).
-- **Review gate:** com `validation_mode = "review"` (ou `[exploration].require_review`
-  no modo quorum), mapas de não-admins nascem `pending_review` e só viram
-  buscáveis após aprovação (`ReviewExploration` admin). O mesmo gate vale para
-  nós RLM (`ReviewRlmNode`); voluntários admin auto-aprovam.
+- **Review gate:** com `[exploration].require_review=true`, mapas de
+  não-admins nascem `pending_review` e só viram buscáveis após aprovação
+  (`ReviewExploration` admin). O mesmo gate vale para nós RLM
+  (`ReviewRlmNode`); voluntários admin auto-aprovam.
 
 ## 1.6 RLM — sumários recursivos distribuídos
 
 ```
 chunks ──L1──▶ resumo do arquivo ──L2──▶ resumo do tema ──L3──▶ visão do projeto
-         (voluntário + LLM local, lease exclusivo, submissão transacional)
+        (voluntário + LLM local, lease exclusivo, submissão transacional)
 ```
 
 - Agrupamento L2 determinístico por prefixo de path; tolerância progressiva
@@ -178,13 +179,9 @@ sumários C → anexo best-effort das explorações D → resposta tripla.
 **QA-Cache:** `QueryWithCache(pergunta)` → embed no espaço B → hit exato/near-hit
 (verifica `provenance_intact` antes de servir) → HIT devolve resposta pronta
 (0 chamadas LLM); MISS devolve top-K chunks crus e o **cliente** digesta com o
-LLM local, exibe e dispara `StoreAnswer`. Toda resposta tem `cache_id` UUIDv7
-estável → `GetAnswerById` é lookup determinístico 1:1 (anti-drift para
-sub-agentes).
-
-**Time-travel (plan 021):** `search`/`ask`/`explore` aceitam `--as-of` (RFC3339)
-ou `--as-of-epoch` (unix seconds) para servir a revisão de conhecimento ativa
-naquela data — útil para auditoria e "como o código era".
+LLM local, exibe e dispara `StoreAnswer` (fire-and-forget). Toda resposta tem
+`cache_id` UUIDv7 estável → `GetAnswerById` é lookup determinístico 1:1
+(anti-drift para sub-agentes).
 
 ## 1.10 Performance (targets e alavancas)
 
@@ -192,9 +189,8 @@ naquela data — útil para auditoria e "como o código era".
 - SQLite: page_size 8192, WAL, synchronous NORMAL, mmap 256MB, cache 64MB,
   busy_timeout 5s, hard_heap_limit 100MB.
 - Escrita conciliada por pool (`pool_size`), lotes de transação
-  (`max_batch_size`), checkpoint PASSIVE periódico (`flush_interval_ms`),
-  threads dedicados de embedding (`index_embed_threads`).
+  (`max_batch_size`), checkpoint PASSIVE periódico (`flush_interval_ms`).
 - Release: LTO, codegen-units=1, panic=abort, strip, mimalloc, musl estático no
   container (~109MB com modelo assado).
 
-Continua em: [02-arags-server.md](02-arags-server.md) · [03-arags-cli.md](03-arags-cli.md)
+Continua em: [02-cli-arags.md](02-cli-arags.md) · [03-server-docker.md](03-server-docker.md)

@@ -1,7 +1,4 @@
-# 4. Boas Práticas e Recomendações
-
-Este documento reúne recomendações para uso saudável do arags: escolha de
-dataset, higiene de indexação, segurança, operação e tuning de busca.
+# 4. Boas Práticas e Noções Gerais
 
 ## 4.1 Escolhendo o dataset certo (a decisão mais importante)
 
@@ -10,7 +7,7 @@ Antes de gravar ou buscar conhecimento, classifique a pergunta:
 | Situação | Dataset/ferramenta | Comando |
 |----------|--------------------|---------|
 | "O que este arquivo/módulo contém?" | chunks | `arags search` |
-| Pergunta factual fechada, já respondida antes | qa_cache | `arags ask` / `--cache-id` |
+| Pergunta factual fechada, já respondida antes | qa_cache | `arags query -qa` / `--cache-id` |
 | "O que é este módulo/tema?" (visão de síntese) | rlm_nodes | `arags search --tier summary` |
 | "Como as peças se conectam para X?" (conexão transversal descoberta investigando) | explorations | `arags explore persist/search` |
 | Resumo de arquivo único | RLM L1 — **não** persista como exploração | automático via index+volunteer |
@@ -43,32 +40,31 @@ Confundir datasets polui o repositório e degrada a confiança dos rankings.
    No cliente basta apontar `https://` ou definir `tls_ca/cert/key`.
 3. **Menor privilégio**: agentes consumidores devem ser `non_admin`. Reserve
    `admin` para operadores e para os poucos voluntários cujas submissões devem
-   auto-aprovar. Com `validation_mode = "review"` (ou `require_review=true`)
-   você ganha moderação do dataset D mesmo com usuários comuns.
+   auto-aprovar. Com `[exploration].require_review=true` você ganha moderação
+   do dataset D mesmo com usuários comuns.
 4. **Admin CLI**: só roda onde o DB é acessível (dentro do container) — não
    exponha `docker exec` para quem não é operador.
-5. **Queries**: FTS5 é sanitizado server-side; ainda assim, trate entrada de
-   usuário como dado, nunca construa SQL fora dos RPCs.
+5. **Queries**: FTS5 é sanitizado server-side (`sanitize_fts`); ainda assim,
+   trate entrada de usuário como dado, nunca construa SQL fora dos RPCs.
 
 ## 4.4 Operação do servidor
 
 - **Recursos**: 1 vCPU/512MB roda bem para times pequenos; embedding INT8 é o
   pico de CPU na indexação. Para muitos projetos simultâneos, ajuste
-  `[embedder].batch_size`, `pool_size` e `index_embed_threads` ao hardware.
+  `[embedder].batch_size` e `pool_size` ao hardware.
 - **Manutenção**: ticker default 1h faz consolidate/decay/purge de histórico.
   Desligado (`interval_secs=0`)? Então agende cron externo chamando
   `TriggerMaintenance` (RPC admin) ou `docker exec ... admin consolidate`.
 - **Retenção**: `[history].retention_days=90` mantém o histórico útil sem
-  crescer indefinidamente; `[chunk].chunk_retention_days` remove chunks
-  órfãos.
+  crescer indefinidamente.
 - **Observabilidade**: logs tracing estruturados; cada handler gRPC emite
   tempos (`elapsed_ms/us`). Suba `RUST_LOG=arags_server=debug` para diagnosticar.
 - **Healthcheck**: `docker inspect --format '{{.State.Health.Status}}' arags`;
   o container se autoclassifica saudável via `GetServerStatus`.
-- **Backups**: tar do volume `/data` (WAL garante consistência; ver 02-arags-server.md).
+- **Backups**: tar do volume `/data` (WAL garante consistência; ver wiki/03).
 - **Upgrade do modelo/config que muda chunking** (`max_tokens`,
-  `overlap_tokens`, ou troca de `kind` de embedder): exige **reindex completo**
-  — chunks antigos ficam com geometria incompatível.
+  `overlap_tokens`): exige **reindex completo** — chunks antigos ficam com
+  geometria incompatível.
 
 ## 4.5 Tuning rápido de busca
 
@@ -78,20 +74,20 @@ Confundir datasets polui o repositório e degrada a confiança dos rankings.
 | Sumários dominam a resposta | baixe `[search].summary_ratio` (ex.: 0.3) |
 | Sumários bons estão sendo cortados | baixe `[search].summary_min_score` |
 | Resultados velhos aparecendo demais | `[search].decay_lambda > 0` (ex.: 0.01/h) |
-| Mapa de exploração duvidoso surfacando | endureça `hit_low`; ou `validation_mode="review"` |
-| Muitos falsos negativos em explorações | suba levemente `hit_low`; considere `verify_on_hit=true` só com CPU de sobra |
+| Mapa de exploração duvidoso surfacando | dê `--contradict`; endureça `hit_low` |
+| Muitos falsos negativos em explorações | suba levemente `hit_low`; considere `verify_on_hit=false→true` só com CPU de sobra |
 
-## 4.6 Anti-padrões
+## 4.6 Anti-padrões (do contrato de explorações, aplicáveis ao todo)
 
 - **Persistiu hipótese como fato** → sem evidência, vai em `Limitações`.
 - **Âncoras frouxas** → citar entry points quando o mecanismo mora em outro
   arquivo faz o staleness falhar. Ancore onde o mecanismo *vive*.
 - **Mapa enciclopédia** → uma exploração = um objetivo; três objetivos = três
   mapas componíveis.
-- **Re-persistir o que existe** → busque antes; se há mapa `fresh`, valorize-o
-  em vez de duplicar.
+- **Re-persistir o que existe** → busque antes; se há mapa `fresh`, dê
+  `--confirm` em vez de duplicar.
 - **Invalidar à mão o que o hash já resolve** → staleness é automático;
-  `maintenance invalidate --radius` é para *cadeias de erro* (resposta errada que
+  `memory invalidate --radius` é para *cadeias de erro* (resposta errada que
   contaminou vizinhas semanticamente).
 - **Rodar agente com token admin no dia-a-dia** → review gates existem para
   serem úteis, não para serem burlados por padrão.
@@ -113,8 +109,6 @@ Confundir datasets polui o repositório e degrada a confiança dos rankings.
 - **Voluntário é opt-in e limitado** (`lease_secs`, `max_level`,
   `max_tokens_per_job`): rodar `arags volunteer` numa máquina pessoal não a
   transforma em servidor.
-- **Time-travel**: `--as-of` permite auditar "como o código era" em qualquer
-  busca/pergunta/exploração — sem mexer no índice atual.
 
 ## 4.8 Checklist de setup saudável
 
@@ -128,4 +122,4 @@ Confundir datasets polui o repositório e degrada a confiança dos rankings.
 - [ ] Cron/intervalo de manutenção definido
 - [ ] Backup do volume `/data` agendado
 
-Segue: [05-integracao-ia.md](05-integracao-ia.md)
+Segue: [05-integracao-agentes.md](05-integracao-agentes.md)

@@ -1,4 +1,5 @@
 #![allow(clippy::unused_async)]
+#![allow(clippy::unused_async_trait_impl)]
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

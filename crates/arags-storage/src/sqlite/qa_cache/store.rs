@@ -41,7 +41,7 @@ impl Storage {
             phase = "store_answer",
             rowid = id,
             cache_id = %cache_id,
-            buffer_id = input.buffer_id.map_or(-1, |b| b),
+            buffer_id = input.buffer_id.unwrap_or(-1),
             project = %input.project,
             elapsed_ms,
             "qa answer stored (superseding prior active revision)"

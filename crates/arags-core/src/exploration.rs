@@ -203,7 +203,7 @@ pub fn claim_text(body_markdown: &str) -> &str {
     }
     for section in ["## Conexões", "## Mapa"] {
         if let Some((_, tail)) = body.split_once(section) {
-            let end = tail.find("\n## ").map_or(tail.len(), |i| i);
+            let end = tail.find("\n## ").unwrap_or(tail.len());
             let text = tail[..end].trim();
             if !text.is_empty() {
                 return text;
