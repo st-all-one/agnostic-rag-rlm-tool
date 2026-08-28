@@ -29,7 +29,6 @@ jobs:
           # Alpine provides; zig/clang and old glibc GCC both fail to compile it.
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
-            container: rust:1-alpine
             artifact: arags-linux-musl-amd64
             server_artifact: arags-server-linux-musl-amd64
             musl: true
@@ -48,7 +47,6 @@ jobs:
           # musl aarch64 — built NATIVELY inside rust:1-alpine (arm64 runner)
           - target: aarch64-unknown-linux-musl
             os: ubuntu-24.04-arm
-            container: rust:1-alpine
             artifact: arags-linux-musl-arm64
             server_artifact: arags-server-linux-musl-arm64
             musl: true
@@ -80,20 +78,30 @@ jobs:
           # avx512fp16/amx-fp16 target attributes absent from the base GCC 11.
           # gcc-toolset-13 (GCC 13) provides them; put it first on PATH.
           dnf install -y gcc-toolset-13 gcc-toolset-13-gcc-c++
+          # rustc invokes `cc` as the linker; the toolset ships gcc/g++ but not
+          # `cc`, so symlink it (base gcc is intentionally not installed).
+          ln -sf gcc /opt/rh/gcc-toolset-13/root/usr/bin/cc
           echo "PATH=/opt/rh/gcc-toolset-13/root/usr/bin:$PATH" >> "$GITHUB_ENV"
           echo "PROTOC_INCLUDE=/usr/include" >> "$GITHUB_ENV"
 
-      # musl targets are built NATIVELY inside rust:1-alpine (Alpine ships a
-      # modern GCC + musl-g++ that the SIMD C deps, e.g. numkong, require).
-      # rustup is glibc-only and cannot run in Alpine, so we use the image's
-      # preinstalled Rust toolchain instead of dtolnay/rust-toolchain.
-      - name: Install Alpine build dependencies (musl)
+      # musl targets are built inside rust:1-alpine via `docker run` on the HOST
+      # runner. Alpine ships a modern GCC + musl-g++ that the SIMD C deps
+      # (numkong, from tokenizers) require, and building on the host avoids the
+      # GitHub limitation that JS actions can't run inside Alpine containers on
+      # arm64. The binary lands in the mounted target/ dir for later upload.
+      - name: Build musl binaries (Alpine via Docker)
         if: matrix.musl
         run: |
-          apk add --no-cache g++ protobuf protobuf-dev git bash
-          echo "PROTOC_INCLUDE=/usr/include" >> "$GITHUB_ENV"
-          # Statically link the C++/gcc runtimes so the musl binary is portable.
-          echo "RUSTFLAGS=-C link-arg=-static-libstdc++ -C link-arg=-static-libgcc" >> "$GITHUB_ENV"
+          docker run --rm \
+            -v "$PWD":/src -w /src \
+            -v "$HOME/.cargo":/root/.cargo \
+            rust:1-alpine sh -c "
+              apk add --no-cache g++ protobuf protobuf-dev git bash &&
+              export PROTOC_INCLUDE=/usr/include &&
+              export RUSTFLAGS='-C link-arg=-static-libstdc++ -C link-arg=-static-libgcc' &&
+              cargo build --release --bin arags --target ${{ matrix.target }} &&
+              cargo build --release --bin arags-server --target ${{ matrix.target }}
+            "
 
       - name: Install Rust toolchain
         if: ${{ !matrix.musl }}
@@ -102,15 +110,17 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install protoc (non-container, all OSes)
-        if: matrix.container == ''
+        if: ${{ !matrix.musl && matrix.container == '' }}
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build CLI binary
+        if: ${{ !matrix.musl }}
         run: cargo build --release --bin arags --target ${{ matrix.target }}
 
       - name: Build server binary
+        if: ${{ !matrix.musl }}
         run: cargo build --release --bin arags-server --target ${{ matrix.target }}
 
       - name: Rename artifacts (Unix)
