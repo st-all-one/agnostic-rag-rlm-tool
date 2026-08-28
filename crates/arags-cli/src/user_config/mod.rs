@@ -275,8 +275,9 @@ pub fn resolve_canonical_name(cfg: &EffectiveUserConfig) -> Result<String> {
              and set a valid [project].name."
         ),
         None => bail!(
-            "no canonical project name set. Run `arags init --name <NAME>` to define the \
-             project's knowledge-entity name (required; not derived from the path)."
+            "no canonical project name set. Define `[project].name` in the project `.arags.toml` \
+             (checked first) or in the global `~/.arags/arags.toml` via `arags init --name <NAME>` \
+             (required; not derived from the path)."
         ),
     }
 }
