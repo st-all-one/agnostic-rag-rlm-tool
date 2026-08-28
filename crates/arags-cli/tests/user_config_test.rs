@@ -50,6 +50,31 @@ fn test_user_config_merge_local_overrides_global_granular() {
 }
 
 #[test]
+fn test_user_config_local_project_name_takes_precedence() {
+    // Regression: the canonical project name must be read from the *local*
+    // `.arags.toml` first (plan 020), so `arags init --name` in a project works
+    // without also polluting the global config. A released binary that only
+    // consulted the global scope failed every runtime command with
+    // "no canonical project name set" despite a valid local name.
+    let dir = TempDir::new().unwrap();
+    let g = dir.path().join("global.toml");
+    let l = dir.path().join("local.toml");
+    write(
+        &g,
+        "[project]\nname = \"global-name\"\nignore = [\"target/\"]\n",
+    );
+    write(
+        &l,
+        "[project]\nname = \"local-name\"\nignore = [\"dist/\"]\n",
+    );
+
+    let cfg = load_from(&g, &l).unwrap();
+    assert_eq!(cfg.project.name.as_deref(), Some("local-name"));
+    // Local wins where set; the absent global `ignore` must not override.
+    assert_eq!(cfg.ignore_patterns(), vec!["dist/".to_string()]);
+}
+
+#[test]
 fn test_user_config_nested_merge_recursive() {
     let dir = TempDir::new().unwrap();
     let g = dir.path().join("global.toml");
