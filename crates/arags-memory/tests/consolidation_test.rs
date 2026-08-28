@@ -7,10 +7,12 @@
     clippy::nursery
 )]
 
+use std::sync::Arc;
+
 use arags_memory::consolidation::*;
-use arags_storage::Storage;
 use arags_storage::sqlite::buffers::NewBuffer;
 use arags_storage::sqlite::chunks::NewChunk;
+use arags_storage::{Storage, VectorEntry, VectorStore};
 use tempfile::TempDir;
 
 fn setup() -> (ConsolidationEngine, Storage, TempDir) {
@@ -185,4 +187,63 @@ fn test_consolidate_empty_project() {
     let result = engine.consolidate(buffer_id, &opts).unwrap();
     assert_eq!(result.duplicate_chunks_removed, 0);
     assert_eq!(result.low_confidence_patterns_removed, 0);
+}
+
+/// Deduplication must also purge the vectors of the removed chunks (issue
+/// `agnostic-rlm-rs-fa25`) so the usearch chunk count stays equal to the
+/// SQLite chunk count. Without this, the orphan vectors cause a bootstrap
+/// count-divergence that forces a full re-embed on every restart.
+#[tokio::test]
+async fn test_consolidate_purges_orphan_vectors_for_removed_chunks() {
+    let tmp = TempDir::new().unwrap();
+    let storage = Storage::open(tmp.path()).unwrap();
+    let dims = 384usize;
+    let vs = Arc::new(VectorStore::open_with_dims(tmp.path(), dims).await.unwrap());
+    let engine = ConsolidationEngine::new(storage.clone()).with_vector_store(vs.clone());
+    let buffer_id = create_buffer(&storage);
+
+    let hash = vec![7u8, 7u8, 7u8];
+    let mut ids = Vec::new();
+    for _ in 0..3 {
+        let id = storage
+            .insert_chunk(&NewChunk {
+                buffer_id,
+                file_path: "src/main.rs".to_string(),
+                offset_start: 0,
+                offset_end: 100,
+                line_start: 1,
+                line_end: 10,
+                hash: hash.clone(),
+                language: None,
+                chunk_type: None,
+                token_count: None,
+            })
+            .unwrap();
+        ids.push(id);
+    }
+
+    // Seed a vector for every chunk so the space mirrors SQLite (in sync).
+    let entries: Vec<VectorEntry> = ids
+        .iter()
+        .map(|id| VectorEntry {
+            chunk_id: u64::try_from(*id).unwrap(),
+            buffer_id: u64::try_from(buffer_id).unwrap(),
+            vector: vec![0.0f32; dims],
+        })
+        .collect();
+    vs.insert_vectors(&entries).await.unwrap();
+    assert_eq!(vs.count().await, 3);
+
+    // Consolidate: 2 of the 3 duplicate chunks are removed.
+    let opts = ConsolidateOptions {
+        deduplicate: true,
+        min_pattern_confidence: 0.0,
+        dry_run: false,
+    };
+    let result = engine.consolidate(buffer_id, &opts).unwrap();
+    assert_eq!(result.duplicate_chunks_removed, 2);
+
+    // Only the kept chunk's vector should remain; the two consolidated-away
+    // chunks must have had their vectors purged (no divergence for bootstrap).
+    assert_eq!(vs.count().await, 1);
 }

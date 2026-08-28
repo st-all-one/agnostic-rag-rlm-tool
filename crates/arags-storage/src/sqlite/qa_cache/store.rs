@@ -8,6 +8,7 @@ use super::row::{QA_COLS, row_mapper, store_answer_inner};
 use super::types::{QaCacheRow, StoreAnswerInput, StoredAnswer};
 use crate::sqlite::conn::Storage;
 use crate::sqlite::tokens::now_ms;
+use tracing::debug;
 
 impl Storage {
     /// Store a digested answer, returning its stable `cache_id` and rowid.
@@ -35,14 +36,14 @@ impl Storage {
         let (cache_id, id) = conn
             .execute(|c| store_answer_inner(c, input, now))
             .context("store_answer tx")?;
-        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
-        tracing::debug!(
+        let elapsed_ms = start.elapsed().as_millis();
+        debug!(
             phase = "store_answer",
             rowid = id,
             cache_id = %cache_id,
             buffer_id = input.buffer_id.map_or(-1, |b| b),
             project = %input.project,
-            elapsed_ms = format!("{elapsed_ms:.2}"),
+            elapsed_ms,
             "qa answer stored (superseding prior active revision)"
         );
 

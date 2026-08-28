@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
+use tracing::{debug, info, warn};
 
 use super::HybridSearch;
 use super::rrf::rrf_score;
@@ -52,7 +53,7 @@ impl HybridSearch {
                     match self.bm25.search(&or_query, buffer_id, k * 3) {
                         Ok(r) => r,
                         Err(e) => {
-                            tracing::warn!(error = %e, "bm25 OR-fallback failed, continuing without lexical tier");
+                            warn!(error = %e, "bm25 OR-fallback failed, continuing without lexical tier");
                             Vec::new()
                         }
                     }
@@ -61,15 +62,15 @@ impl HybridSearch {
                 }
             }
             Err(e) => {
-                tracing::warn!(error = %e, "bm25 search failed, continuing without lexical tier");
+                warn!(error = %e, "bm25 search failed, continuing without lexical tier");
                 Vec::new()
             }
         };
         for (rank, result) in bm25_results.iter().enumerate() {
             *scores.entry(result.chunk_id).or_insert(0.0) += rrf_score(rank, self.rrf_k);
         }
-        tracing::debug!(
-            elapsed_ms = tier_start.elapsed().as_millis(),
+        debug!(
+            duration_ms = %tier_start.elapsed().as_millis(),
             results = bm25_results.len(),
             "tier=fts fused"
         );
@@ -86,14 +87,14 @@ impl HybridSearch {
                                 *scores.entry(result.chunk_id).or_insert(0.0) +=
                                     rrf_score(rank, self.rrf_k);
                             }
-                            tracing::debug!(
-                                elapsed_ms = tier_start.elapsed().as_millis(),
+                            debug!(
+                                duration_ms = %tier_start.elapsed().as_millis(),
                                 results = entity_results.len(),
                                 "tier=entity fused"
                             );
                         }
                         Err(e) => {
-                            tracing::warn!(
+                            warn!(
                                 error = %e,
                                 "entity search failed, falling back to BM25 only"
                             );
@@ -115,14 +116,14 @@ impl HybridSearch {
                                     i64::try_from(result.chunk_id).context("chunk_id overflow")?;
                                 *scores.entry(cid).or_insert(0.0) += rrf_score(rank, self.rrf_k);
                             }
-                            tracing::debug!(
-                                elapsed_ms = tier_start.elapsed().as_millis(),
+                            debug!(
+                                duration_ms = %tier_start.elapsed().as_millis(),
                                 results = sem_results.len(),
                                 "tier=vector fused"
                             );
                         }
                         Err(e) => {
-                            tracing::warn!(
+                            warn!(
                                 error = %e,
                                 "semantic search failed, falling back to BM25 only"
                             );
@@ -149,15 +150,15 @@ impl HybridSearch {
             results = self.apply_decay(results, ages);
             results.truncate(k);
         }
-        tracing::debug!(
-            elapsed_ms = fusion_start.elapsed().as_millis(),
+        debug!(
+            duration_ms = %fusion_start.elapsed().as_millis(),
             "fusion + decay applied"
         );
 
-        tracing::info!(
+        info!(
             tier = %options.tier,
             results_count = results.len(),
-            elapsed_ms = start.elapsed().as_millis(),
+            duration_ms = %start.elapsed().as_millis(),
             "hybrid search completed"
         );
 

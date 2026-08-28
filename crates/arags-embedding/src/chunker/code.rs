@@ -3,6 +3,9 @@ pub mod util;
 pub use util::{is_structure_start, merge_small_chunks};
 
 use std::path::Path;
+use std::time::Instant;
+
+use tracing::debug;
 
 use crate::chunker::{
     ChunkingStrategy, RawChunk, detect_language, estimate_tokens, nth_line_byte_offset,
@@ -30,16 +33,25 @@ impl CodeChunker {
 
 impl ChunkingStrategy for CodeChunker {
     fn chunk<'a>(&self, content: &'a str, path: &Path) -> Vec<RawChunk<'a>> {
-        let _timer = crate::Timer::new("code_chunking");
+        let start = Instant::now();
         let language = detect_language(path);
 
-        match language.as_deref() {
+        let chunks = match language.as_deref() {
             Some(
                 "rust" | "python" | "javascript" | "typescript" | "go" | "java" | "cpp" | "c"
                 | "ruby" | "php",
             ) => self.chunk_by_structures(content, language.as_deref()),
             _ => self.chunk_by_lines(content, language.as_deref()),
-        }
+        };
+
+        debug!(
+            chunk_count = chunks.len(),
+            chars = content.len(),
+            language = language.as_deref().unwrap_or("unknown"),
+            duration_ms = %start.elapsed().as_millis(),
+            "chunked code"
+        );
+        chunks
     }
 }
 

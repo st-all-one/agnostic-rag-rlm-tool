@@ -1,4 +1,7 @@
 use std::path::Path;
+use std::time::Instant;
+
+use tracing::debug;
 
 use crate::chunker::{ChunkingStrategy, RawChunk, estimate_tokens, prev_char_boundary};
 
@@ -132,7 +135,14 @@ impl RecursiveChunker {
 
 impl ChunkingStrategy for RecursiveChunker {
     fn chunk<'a>(&self, content: &'a str, _path: &Path) -> Vec<RawChunk<'a>> {
-        let _timer = crate::Timer::new("recursive_chunking");
-        self.chunk_recursive(content, 0, 0)
+        let start = Instant::now();
+        let chunks = self.chunk_recursive(content, 0, 0);
+        debug!(
+            chunk_count = chunks.len(),
+            chars = content.len(),
+            duration_ms = %start.elapsed().as_millis(),
+            "chunked recursively"
+        );
+        chunks
     }
 }

@@ -16,6 +16,8 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use rusqlite::OptionalExtension;
 use rusqlite::params;
+use std::time::Instant;
+use tracing::debug;
 
 use super::conn::Storage;
 
@@ -70,30 +72,35 @@ impl Storage {
     ) -> Result<i64> {
         let now = now_secs();
         let conn = self.connection().context("acquire connection")?;
-        conn.execute(|c| {
-            let open: Option<i64> = c
-                .query_row(
-                    "SELECT id FROM pending_qa_jobs \
-                     WHERE cache_id = ?1 AND status IN ('pending','leased') LIMIT 1",
-                    params![cache_id],
-                    |r| r.get(0),
-                )
-                .optional()
-                .context("probe open pending qa job")?;
-            if let Some(id) = open {
-                return Ok(id);
-            }
-            let id: i64 = c
-                .query_row(
-                    "INSERT INTO pending_qa_jobs \
-                     (cache_id, project, preferred_user, status, created_at) \
-                     VALUES (?1, ?2, ?3, 'pending', ?4) RETURNING id",
-                    params![cache_id, project, preferred_user, now],
-                    |r| r.get(0),
-                )
-                .context("insert pending qa job")?;
-            Ok(id)
-        })
+        let start = Instant::now();
+        let id: i64 = conn
+            .execute(|c| {
+                let open: Option<i64> = c
+                    .query_row(
+                        "SELECT id FROM pending_qa_jobs \
+                         WHERE cache_id = ?1 AND status IN ('pending','leased') LIMIT 1",
+                        params![cache_id],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .context("probe open pending qa job")?;
+                if let Some(id) = open {
+                    return Ok(id);
+                }
+                let id: i64 = c
+                    .query_row(
+                        "INSERT INTO pending_qa_jobs \
+                         (cache_id, project, preferred_user, status, created_at) \
+                         VALUES (?1, ?2, ?3, 'pending', ?4) RETURNING id",
+                        params![cache_id, project, preferred_user, now],
+                        |r| r.get(0),
+                    )
+                    .context("insert pending qa job")?;
+                Ok(id)
+            })
+            .context("execute enqueue pending qa")?;
+        debug!(duration_ms = %start.elapsed().as_millis(), cache_id, "enqueued pending qa job");
+        Ok(id)
     }
 
     /// Enqueue a re-digest job from a stale `qa_cache` row id, using its

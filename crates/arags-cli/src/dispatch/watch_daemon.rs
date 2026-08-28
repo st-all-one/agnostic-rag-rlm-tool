@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
+use std::time::Instant;
 use tokio::runtime::Runtime;
+use tracing::{debug, info};
 
 use crate::auth_client::AragsClient;
 use crate::user_config::EffectiveUserConfig;
@@ -34,7 +36,7 @@ pub(crate) fn run_watch_daemon(rt: &Runtime, cfg: &EffectiveUserConfig, root: &P
     let mut client = super::connect(rt, cfg)?;
     let mut known = snapshot_state(root, &ignore, &force_include);
 
-    tracing::info!(
+    info!(
         root = %root.display(),
         %project_name,
         "watch daemon started"
@@ -111,13 +113,14 @@ fn flush_changed(
         to_send.push(path.clone());
     }
     if to_send.is_empty() {
-        tracing::debug!(count = changed.len(), "no surviving changes to index");
+        debug!(count = changed.len(), "no surviving changes to index");
         return Ok(());
     }
 
     let groups = partition_files(&to_send, WATCH_UPLOAD_PARALLELISM);
     for group in groups {
         let pb = Arc::new(indicatif::ProgressBar::hidden());
+        let start = Instant::now();
         let (files_idx, chunks_idx) = rt.block_on(stream_index_group(
             client,
             project_name.to_string(),
@@ -125,7 +128,12 @@ fn flush_changed(
             group,
             pb,
         ))?;
-        tracing::info!(files = files_idx, chunks = chunks_idx, "re-indexed changes");
+        info!(
+            duration_ms = %start.elapsed().as_millis(),
+            files = files_idx,
+            chunks = chunks_idx,
+            "re-indexed changes"
+        );
     }
 
     // Refresh fingerprints for everything we just sent.

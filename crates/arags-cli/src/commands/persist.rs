@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 use tokio::runtime::Runtime;
+use tracing::debug;
 
 use arags_llm::{CompletionRequest, LlmBackend, Message, Role};
 use chrono::Utc;
@@ -131,12 +132,12 @@ pub(crate) fn generate_summary(
         }))
         .context("LLM summarization failed")?;
     let elapsed_ms = start.elapsed().as_millis() as u64;
-    tracing::debug!(elapsed_ms, model, "llm summarize call complete");
+    debug!(elapsed_ms, model, "llm summarize call complete");
 
     let summary = response.content;
     let stripped = crate::llm_post::strip_cot(&summary);
     if stripped.len() != summary.len() {
-        tracing::debug!(
+        debug!(
             chars_removed = summary.len().saturating_sub(stripped.len()),
             "stripped chain-of-thought from summary"
         );

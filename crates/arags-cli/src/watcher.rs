@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use notify::{EventKind, RecursiveMode, Watcher};
+use tracing::{debug, info};
 
 /// Quiet-window delay before flushing accumulated changes to the server.
 pub const FLUSH_DELAY: Duration = Duration::from_secs(60);
@@ -150,7 +151,7 @@ where
     loop {
         if stop.exists() {
             let _ = std::fs::remove_file(&stop);
-            tracing::info!("watch daemon stopping");
+            info!("watch daemon stopping");
             return Ok(());
         }
 
@@ -161,7 +162,7 @@ where
                     .filter_map(|p| p.strip_prefix(root).ok().map(Path::to_path_buf))
                     .collect();
                 if !rels.is_empty() {
-                    tracing::debug!(count = rels.len(), "changes detected");
+                    debug!(count = rels.len(), "changes detected");
                     buffer.extend(rels);
                 }
             }
@@ -171,7 +172,7 @@ where
 
         if buffer.due() {
             let changed = buffer.take();
-            tracing::info!(count = changed.len(), "quiet window closed; flushing");
+            info!(count = changed.len(), "quiet window closed; flushing");
             flush(&changed)?;
         }
     }

@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::time::Instant;
+use tracing::{debug, warn};
 
 use arags_search::hybrid::rrf::rrf_score;
 
@@ -73,7 +74,7 @@ pub(crate) async fn summary_search(
         // it from being starved during a concurrent `arags index` (issue
         // `agnostic-rlm-rs-6690`).
         if state.index_embed_in_flight() > 0 {
-            tracing::debug!(
+            debug!(
                 active_index_embeds = state.index_embed_in_flight(),
                 "rlm summary query embed contends with active index embed; served on global pool"
             );
@@ -183,7 +184,7 @@ pub(crate) async fn summary_search(
                     }
                 }
             }
-            Err(e) => tracing::warn!(error = %e, "summary as_of rewrite failed; serving live"),
+            Err(e) => warn!(error = %e, "summary as_of rewrite failed; serving live"),
         }
     }
 
@@ -195,7 +196,7 @@ pub(crate) async fn summary_search(
     });
     normalize_summaries(&mut fused);
     fused.truncate(top_k);
-    tracing::debug!(
+    debug!(
         elapsed_ms = start.elapsed().as_millis(),
         lexical = lexical.len(),
         semantic = semantic.len(),

@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
+use tracing::info;
 
 use arags_search::SearchResult;
 use tonic::{Response, Status};
@@ -123,7 +124,7 @@ pub(crate) async fn handle_build_context(
     let results = to_proto_results(&candidates);
     let (context, total_tokens) = render_context(&results, max_tokens);
 
-    tracing::info!(
+    info!(
         project = %project,
         chunks = results.len(),
         total_tokens,

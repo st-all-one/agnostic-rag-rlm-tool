@@ -2,6 +2,7 @@
 //! through the admin review queue or the cosine quorum.
 
 use std::time::Instant;
+use tracing::{info, warn};
 
 use arags_storage::sqlite::rlm::NewRlmNode;
 use tonic::{Request, Response, Status};
@@ -159,31 +160,31 @@ pub(crate) async fn handle_complete_rlm_job(
                 #[allow(clippy::cast_possible_truncation)] // rowids fit u64 here
                 let key = u64::try_from(rowid).unwrap_or(u64::MAX);
                 if let Err(e) = vectors.insert(key, &vec) {
-                    tracing::warn!(error = %e, node_id = %node_id, "rlm vector insert failed; marking node pending_vector");
+                    warn!(error = %e, node_id = %node_id, "rlm vector insert failed; marking node pending_vector");
                     if let Err(m) = state
                         .storage
                         .mark_rlm_nodes_pending_vector(job.buffer_id.unwrap_or(0), &[rowid])
                     {
-                        tracing::warn!(error = %m, "failed to mark rlm node pending_vector");
+                        warn!(error = %m, "failed to mark rlm node pending_vector");
                     }
                 }
             }
             Ok(Err(e)) => {
-                tracing::warn!(error = %e, node_id = %node_id, "rlm embedding failed; marking node pending_vector");
+                warn!(error = %e, node_id = %node_id, "rlm embedding failed; marking node pending_vector");
                 if let Err(m) = state
                     .storage
                     .mark_rlm_nodes_pending_vector(job.buffer_id.unwrap_or(0), &[rowid])
                 {
-                    tracing::warn!(error = %m, "failed to mark rlm node pending_vector");
+                    warn!(error = %m, "failed to mark rlm node pending_vector");
                 }
             }
             Err(e) => {
-                tracing::warn!(error = %e, node_id = %node_id, "rlm embedding task panicked; marking node pending_vector");
+                warn!(error = %e, node_id = %node_id, "rlm embedding task panicked; marking node pending_vector");
                 if let Err(m) = state
                     .storage
                     .mark_rlm_nodes_pending_vector(job.buffer_id.unwrap_or(0), &[rowid])
                 {
-                    tracing::warn!(error = %m, "failed to mark rlm node pending_vector");
+                    warn!(error = %m, "failed to mark rlm node pending_vector");
                 }
             }
         }
@@ -214,13 +215,13 @@ pub(crate) async fn handle_complete_rlm_job(
         })
         .await
         {
-            Ok(true) => tracing::info!(level = job.level, "rlm cascade enqueued parent work"),
+            Ok(true) => info!(level = job.level, "rlm cascade enqueued parent work"),
             Ok(false) => {}
-            Err(e) => tracing::warn!(error = %e, "rlm cascade failed"),
+            Err(e) => warn!(error = %e, "rlm cascade failed"),
         }
     }
 
-    tracing::info!(
+    info!(
         job_id,
         %node_id,
         level = job.level,

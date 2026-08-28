@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use arags_storage::Storage;
+use tracing::{info, warn};
 
 use super::HybridSearch;
 
@@ -67,10 +68,10 @@ impl HybridSearch {
             results = self.apply_decay(results, ages);
         }
 
-        tracing::info!(
+        info!(
             tier = "fts",
             results_count = results.len(),
-            elapsed_ms = start.elapsed().as_millis(),
+            duration_ms = %start.elapsed().as_millis(),
             "hybrid search completed"
         );
 
@@ -91,6 +92,8 @@ impl HybridSearch {
         top_k: usize,
         storage: &Storage,
     ) -> Result<Vec<HybridResult>> {
+        let start = Instant::now();
+
         let buffers = storage.list_buffers().context("failed to list buffers")?;
 
         if buffers.is_empty() {
@@ -113,7 +116,7 @@ impl HybridSearch {
                     chunk_lists.push(results);
                 }
                 Err(e) => {
-                    tracing::warn!(
+                    warn!(
                         buffer = %buffer.name,
                         error = %e,
                         "BM25 search failed on buffer, skipping"
@@ -130,9 +133,10 @@ impl HybridSearch {
         });
         fused.truncate(top_k);
 
-        tracing::info!(
+        info!(
             buffers = buffers.len(),
             results_count = fused.len(),
+            duration_ms = %start.elapsed().as_millis(),
             "cross-project search completed"
         );
 

@@ -13,6 +13,7 @@
 //!   feedback RPC was HARD-REMOVED in issue `agnostic-rlm-rs-f5f3` — sybil
 //!   risk; internal `record_feedback` storage may still be exercised directly)
 
+use tracing::{debug, info, warn};
 pub mod feedback;
 pub(crate) mod grounding;
 pub mod search;
@@ -70,11 +71,11 @@ pub(crate) async fn embed_lenient(state: &AppState, text: String) -> Option<Vec<
         Ok(Ok(vec)) if !vec.is_empty() => Some(vec),
         Ok(Ok(_)) => None,
         Ok(Err(e)) => {
-            tracing::warn!(error = %e, "embedding failed");
+            warn!(error = %e, "embedding failed");
             None
         }
         Err(e) => {
-            tracing::warn!(error = %e, "embedding task panicked");
+            warn!(error = %e, "embedding task panicked");
             None
         }
     }
@@ -142,7 +143,7 @@ pub(crate) async fn handle_persist_exploration(
     let mut review_note = String::new();
     let mode = state.config.exploration.validation_mode;
     if ctx.is_admin() {
-        tracing::debug!(
+        debug!(
             phase = "exploration_persist",
             path = "admin_auto_approve",
             "admin persist auto-approved"
@@ -153,7 +154,7 @@ pub(crate) async fn handle_persist_exploration(
         match store::blocking(move || storage.mark_exploration_pending(rowid)).await {
             Ok(true) => review_note = "pending admin review".into(),
             Ok(false) => {}
-            Err(e) => tracing::warn!(error = %e, "failed to mark exploration pending"),
+            Err(e) => warn!(error = %e, "failed to mark exploration pending"),
         }
     } else if mode == ValidationMode::Quorum && !ctx.is_admin() {
         // Hold the map non-surfaced (reuse the existing `pending` gating so no
@@ -162,7 +163,7 @@ pub(crate) async fn handle_persist_exploration(
         let storage = state.storage.clone();
         let rowid = stored.id;
         if let Err(e) = store::blocking(move || storage.mark_exploration_pending(rowid)).await {
-            tracing::warn!(error = %e, "failed to mark quorum exploration pending");
+            warn!(error = %e, "failed to mark quorum exploration pending");
         }
         let storage = state.storage.clone();
         let project = req.project.clone();
@@ -183,7 +184,7 @@ pub(crate) async fn handle_persist_exploration(
         {
             Ok(sub_id) => {
                 review_note = "pending quorum validation".into();
-                tracing::info!(
+                info!(
                     phase = "exploration_persist",
                     path = "quorum_candidate",
                     submission_id = sub_id,
@@ -191,7 +192,7 @@ pub(crate) async fn handle_persist_exploration(
                     "exploration candidate submitted for quorum"
                 );
             }
-            Err(e) => tracing::warn!(error = %e, "failed to record quorum submission"),
+            Err(e) => warn!(error = %e, "failed to record quorum submission"),
         }
     }
 
@@ -204,18 +205,18 @@ pub(crate) async fn handle_persist_exploration(
             #[allow(clippy::cast_possible_truncation)] // rowids fit u64 here
             let key = u64::try_from(stored.id).unwrap_or(u64::MAX);
             if let Err(e) = vectors.insert(key, &vec) {
-                tracing::warn!(error = %e, exploration_id = %stored.exploration_id, "exploration vector insert failed; marking exploration pending_vector");
+                warn!(error = %e, exploration_id = %stored.exploration_id, "exploration vector insert failed; marking exploration pending_vector");
                 if let Err(m) = state
                     .storage
                     .mark_explorations_pending_vector(buffer_id, &[stored.id])
                 {
-                    tracing::warn!(error = %m, "failed to mark exploration pending_vector");
+                    warn!(error = %m, "failed to mark exploration pending_vector");
                 }
             }
         }
     }
 
-    tracing::info!(
+    info!(
         exploration_id = %stored.exploration_id,
         project = %req.project,
         created_by = %ctx.username,

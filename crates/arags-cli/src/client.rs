@@ -94,6 +94,7 @@ pub async fn create_client(config: &ClientConfig) -> Result<AragsServiceClient<C
 /// Returns an error if the address is invalid or the connection cannot be
 /// established after the retry budget is exhausted.
 pub async fn connect_channel(config: &ClientConfig) -> Result<Channel> {
+    let start = std::time::Instant::now();
     let raw = config.addr.trim();
     let (scheme, hostport) = if let Some(rest) = raw.strip_prefix("https://") {
         ("https", rest)
@@ -142,7 +143,7 @@ pub async fn connect_channel(config: &ClientConfig) -> Result<Channel> {
         attempt += 1;
         match endpoint.connect().await {
             Ok(channel) => {
-                info!(attempt, %raw, "connected to arags-server");
+                info!(attempt, %raw, duration_ms = %start.elapsed().as_millis(), "connected to arags-server");
                 return Ok(channel);
             }
             Err(e) => {

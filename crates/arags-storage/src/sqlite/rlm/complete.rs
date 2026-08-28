@@ -13,6 +13,7 @@ use rusqlite::params;
 use super::super::conn::Storage;
 use super::super::tokens::now_ms;
 use super::{ClaimedRlmJob, JOB_COLS, NewRlmNode, job_mapper};
+use tracing::{info, warn};
 
 impl Storage {
     /// Complete a claimed job. Rejects the result if the lease expired, the
@@ -62,12 +63,11 @@ impl Storage {
             Ok(n > 0)
         })?;
         if ok {
-            tracing::info!(job_id, worker, "rlm job completed");
+            info!(job_id, worker, "rlm job completed");
         } else {
-            tracing::warn!(
+            warn!(
                 job_id,
-                worker,
-                "rlm job completion rejected (stale lease/generation)"
+                worker, "rlm job completion rejected (stale lease/generation)"
             );
         }
         Ok(ok)
@@ -136,12 +136,11 @@ impl Storage {
             Ok(Some(pair))
         })?;
         if let Some((rowid, node_id)) = &outcome {
-            tracing::info!(job_id, worker, rowid, node_id = %node_id, "rlm job completed");
+            info!(job_id, worker, rowid, node_id = %node_id, "rlm job completed");
         } else {
-            tracing::warn!(
+            warn!(
                 job_id,
-                worker,
-                "rlm job completion rejected (stale lease/generation)"
+                worker, "rlm job completion rejected (stale lease/generation)"
             );
         }
         Ok(outcome)

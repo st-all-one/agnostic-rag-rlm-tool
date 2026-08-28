@@ -2,6 +2,7 @@
 //! and exploration maps into the chunk answer.
 
 use std::time::Instant;
+use tracing::{debug, warn};
 
 use arags_search::SearchTier as HybridTier;
 use tonic::{Request, Response, Status};
@@ -207,7 +208,7 @@ async fn unify_query(
                     candidates.truncate(chunk_budget);
                 }
             }
-            Err(e) => tracing::warn!(error = %e, "unified query: summary fusion failed"),
+            Err(e) => warn!(error = %e, "unified query: summary fusion failed"),
         }
     }
 
@@ -237,7 +238,7 @@ async fn unify_query(
                     .collect();
             }
             Err(status) => {
-                tracing::debug!(%status, "unified query: exploration attach skipped");
+                debug!(%status, "unified query: exploration attach skipped");
             }
         }
     }

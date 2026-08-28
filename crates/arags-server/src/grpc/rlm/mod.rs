@@ -7,6 +7,7 @@
 //! is recorded on every node; admin submitters are auto-approved (quality
 //! gate), everyone else lands in the review queue.
 
+use tracing::error;
 pub(crate) mod complete;
 pub(crate) mod quorum;
 
@@ -55,7 +56,7 @@ pub(crate) async fn handle_claim_rlm_job(
     })
     .await
     .map_err(|e| {
-        tracing::error!(error = ?e, "claim_rlm_job failed");
+        error!(error = ?e, "claim_rlm_job failed");
         internal(e)
     })?;
 

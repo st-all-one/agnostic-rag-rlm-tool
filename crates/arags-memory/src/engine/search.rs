@@ -1,5 +1,7 @@
 //! FTS5 BM25 search across indexed knowledge for [`MemoryEngine`](crate::engine::MemoryEngine).
 
+use std::time::Instant;
+
 use anyhow::{Context, Result};
 use rusqlite::params;
 use tracing::info;
@@ -31,6 +33,7 @@ impl MemoryEngine {
                    ORDER BY rank
                    LIMIT ?2";
 
+        let start = Instant::now();
         let mut stmt = conn.prepare(sql).context("failed to prepare FTS search")?;
 
         let rows: Vec<SearchResult> = stmt
@@ -45,7 +48,12 @@ impl MemoryEngine {
             .filter_map(std::result::Result::ok)
             .collect();
 
-        info!(query, results = rows.len(), "search completed");
+        info!(
+            %query,
+            results = rows.len(),
+            duration_ms = %start.elapsed().as_millis(),
+            "search completed"
+        );
 
         Ok(rows)
     }

@@ -63,8 +63,8 @@ pub struct Cli {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use crate::cli::commands::ExploreCmd;
     use super::*;
+    use crate::cli::commands::ExploreCmd;
 
     /// `arags explore search "q"` (no `--project`) must parse without panicking;
     /// the project scope then falls back to the configured/local project.

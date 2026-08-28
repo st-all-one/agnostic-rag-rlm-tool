@@ -19,6 +19,8 @@ pub mod graph;
 pub mod jobs;
 pub mod nodes;
 
+use tracing::warn;
+
 use rusqlite::OptionalExtension;
 use rusqlite::params;
 
@@ -165,7 +167,7 @@ pub(super) fn parse_json_array(text: Option<String>) -> Vec<String> {
         Some(s) if !s.is_empty() => match serde_json::from_str::<Vec<String>>(&s) {
             Ok(v) => v,
             Err(e) => {
-                tracing::warn!(
+                warn!(
                     error = %e,
                     raw_len = s.len(),
                     "malformed json array in rlm column; treating as empty"

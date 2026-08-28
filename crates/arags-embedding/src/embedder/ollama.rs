@@ -1,9 +1,10 @@
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpStream;
-use std::time::Duration;
+use std::net::{TcpStream, ToSocketAddrs};
+use std::time::{Duration, Instant};
 
 use anyhow::anyhow;
 use serde_json::Value;
+use tracing::{debug, error};
 
 use super::{Embedder, Embedding, EmbeddingError, EmbeddingResult};
 
@@ -42,25 +43,44 @@ impl OllamaEmbedder {
     }
 
     fn post_embed(&self, texts: &[&str]) -> anyhow::Result<Vec<Embedding>> {
-        let body = serde_json::json!({ "model": self.model, "input": texts }).to_string();
-        let resp = http_post(&self.host, self.port, "/api/embed", &body)?;
-        let value: Value = serde_json::from_str(&resp).map_err(|e| anyhow!("ollama json: {e}"))?;
-        let arr = value
-            .get("embeddings")
-            .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("ollama response missing `embeddings`"))?;
-        let mut out = Vec::with_capacity(arr.len());
-        for item in arr {
-            #[allow(clippy::cast_possible_truncation)]
-            let vec = item
-                .as_array()
-                .ok_or_else(|| anyhow!("ollama embedding not an array"))?
-                .iter()
-                .map(|x| x.as_f64().map_or(0.0_f32, |f| f as f32))
-                .collect::<Vec<f32>>();
-            out.push(vec);
+        let start = Instant::now();
+        let result = (|| -> anyhow::Result<Vec<Embedding>> {
+            let body = serde_json::json!({ "model": self.model, "input": texts }).to_string();
+            let resp = http_post(&self.host, self.port, "/api/embed", &body)?;
+            let value: Value =
+                serde_json::from_str(&resp).map_err(|e| anyhow!("ollama json: {e}"))?;
+            let arr = value
+                .get("embeddings")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("ollama response missing `embeddings`"))?;
+            let mut out = Vec::with_capacity(arr.len());
+            for item in arr {
+                #[allow(clippy::cast_possible_truncation)]
+                let vec = item
+                    .as_array()
+                    .ok_or_else(|| anyhow!("ollama embedding not an array"))?
+                    .iter()
+                    .map(|x| x.as_f64().map_or(0.0_f32, |f| f as f32))
+                    .collect::<Vec<f32>>();
+                out.push(vec);
+            }
+            Ok(out)
+        })();
+        match result {
+            Ok(embeddings) => {
+                debug!(
+                    batch_size = texts.len(),
+                    duration_ms = %start.elapsed().as_millis(),
+                    dims = embeddings.first().map_or(0, Vec::len),
+                    "ollama embedded batch"
+                );
+                Ok(embeddings)
+            }
+            Err(e) => {
+                error!(error = %e, batch_size = texts.len(), "ollama post_embed failed");
+                Err(e)
+            }
         }
-        Ok(out)
     }
 
     fn probe_dims(&self) -> anyhow::Result<usize> {
@@ -120,8 +140,17 @@ fn parse_base(url: &str) -> anyhow::Result<(String, u16)> {
 /// naive `read_to_string`-until-EOF previously blocked on the socket read
 /// timeout while the full body had already arrived — which presented as a
 /// startup "deadlock" during vector-space bootstrap (issue `agnostic-rlm-rs-3a68`).
+///
+/// The connect phase is bounded by a connect timeout (issue `agnostic-rlm-rs-9288`):
+/// a black-holed/unreachable Ollama now fails fast instead of stalling the
+/// bootstrap embed loop indefinitely (the read timeout only covers the response).
 fn http_post(host: &str, port: u16, path: &str, body: &str) -> anyhow::Result<String> {
-    let stream = TcpStream::connect((host, port))
+    let addr = (host, port)
+        .to_socket_addrs()
+        .map_err(|e| anyhow!("ollama resolve {host}:{port}: {e}"))?
+        .next()
+        .ok_or_else(|| anyhow!("ollama {host}:{port} has no address"))?;
+    let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10))
         .map_err(|e| anyhow!("ollama connect {host}:{port}: {e}"))?;
     stream.set_read_timeout(Some(Duration::from_secs(60)))?;
     let request = format!(
@@ -144,9 +173,10 @@ fn http_post(host: &str, port: u16, path: &str, body: &str) -> anyhow::Result<St
         header.push_str(&line);
     }
 
-    let is_chunked = header
-        .lines()
-        .any(|l| l.to_ascii_lowercase().starts_with("transfer-encoding:") && l.to_ascii_lowercase().contains("chunked"));
+    let is_chunked = header.lines().any(|l| {
+        l.to_ascii_lowercase().starts_with("transfer-encoding:")
+            && l.to_ascii_lowercase().contains("chunked")
+    });
 
     let body_bytes = if is_chunked {
         read_chunked(&mut reader)?
@@ -174,14 +204,9 @@ fn read_chunked<R: Read>(reader: &mut BufReader<R>) -> anyhow::Result<Vec<u8>> {
     loop {
         let mut size_line = String::new();
         reader.read_line(&mut size_line)?;
-        let hex = size_line
-            .trim()
-            .split(';')
-            .next()
-            .unwrap_or("")
-            .trim();
-        let size =
-            usize::from_str_radix(hex, 16).map_err(|e| anyhow!("ollama chunk size parse `{hex}`: {e}"))?;
+        let hex = size_line.trim().split(';').next().unwrap_or("").trim();
+        let size = usize::from_str_radix(hex, 16)
+            .map_err(|e| anyhow!("ollama chunk size parse `{hex}`: {e}"))?;
         if size == 0 {
             // Consume the trailing CRLF that terminates the final chunk.
             let mut term = [0u8; 2];
@@ -240,10 +265,7 @@ mod tests {
             response_content_length("HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\n"),
             13
         );
-        assert_eq!(
-            response_content_length("content-length: 0\r\n\r\n"),
-            0
-        );
+        assert_eq!(response_content_length("content-length: 0\r\n\r\n"), 0);
         assert_eq!(
             response_content_length("HTTP/1.1 200 OK\r\nX-Foo: bar\r\n\r\n"),
             0

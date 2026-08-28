@@ -184,9 +184,15 @@ pub async fn handle_trigger_maintenance(
     let project = req.project.clone();
     let floor = state.config.maintenance.decay_score_floor;
 
-    let report = crate::maintenance::run_maintenance(&project, &storage, floor, req.dry_run)
-        .await
-        .map_err(internal)?;
+    let report = crate::maintenance::run_maintenance(
+        &project,
+        &storage,
+        state.vector_store.clone(),
+        floor,
+        req.dry_run,
+    )
+    .await
+    .map_err(internal)?;
 
     Ok(Response::new(MaintenanceReport {
         duplicate_chunks_removed: i64::try_from(report.duplicate_chunks_removed)

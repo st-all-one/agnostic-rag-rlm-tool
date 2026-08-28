@@ -7,6 +7,7 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use tracing::{debug, info, warn};
 use usearch::{Index, IndexOptions, MetricKind, ScalarKind};
 
 /// Default embedding dimensionality for the stored vectors
@@ -63,6 +64,7 @@ impl VectorStore {
     /// Returns an error if the `usearch` index cannot be created or restored,
     /// or if the side metadata file is present but unreadable.
     pub async fn open_with_dims(path: &Path, dims: usize) -> Result<Self> {
+        let start = std::time::Instant::now();
         std::fs::create_dir_all(path).context("failed to create vector store directory")?;
 
         let index_path = path.join(INDEX_FILE);
@@ -70,7 +72,7 @@ impl VectorStore {
 
         let index = if index_path.exists() {
             let path_str = index_path.to_str().context("non-utf8 index path")?;
-            tracing::info!(path = %index_path.display(), "restoring usearch index");
+            info!(path = %index_path.display(), "restoring usearch index");
             Index::restore(path_str)
                 .map_err(|e| anyhow::anyhow!("failed to restore vector index: {e}"))?
         } else {
@@ -83,7 +85,7 @@ impl VectorStore {
                 expansion_search: 0,
                 ..Default::default()
             };
-            tracing::info!(path = %index_path.display(), dims, "creating usearch index");
+            info!(path = %index_path.display(), dims, "creating usearch index");
             Index::new(&opts).map_err(|e| anyhow::anyhow!("failed to create vector index: {e}"))?
         };
 
@@ -93,7 +95,7 @@ impl VectorStore {
             HashMap::new()
         };
 
-        tracing::info!(path = %index_path.display(), vectors = index.size(), "opened vector store");
+        info!(path = %index_path.display(), vectors = index.size(), duration_ms = %start.elapsed().as_millis(), "opened vector store");
 
         Ok(Self {
             index: Mutex::new(index),
@@ -151,7 +153,7 @@ impl VectorStore {
         drop(index);
         self.save_locked(&buffers)?;
 
-        tracing::info!(
+        info!(
             inserted = entries.len(),
             total = self.index.lock().size(),
             elapsed_ms = started.elapsed().as_millis(),
@@ -212,7 +214,7 @@ impl VectorStore {
             .zip(matches.distances.iter().copied())
             .collect::<Vec<_>>();
 
-        tracing::debug!(
+        debug!(
             limit,
             returned = results.len(),
             buffer_id,
@@ -234,12 +236,33 @@ impl VectorStore {
     /// with ids that were never embedded. Persists the index after removal.
     ///
     /// Used by the re-index stopgap (`agnostic-rlm-rs-20cd`) to purge vectors
-    /// for chunks deleted during a replace-style re-index.
+    /// for chunks deleted during a replace-style re-index, and by memory
+    /// consolidation/decay (`agnostic-rlm-rs-fa25`) to keep the usearch chunk
+    /// space in sync with canonical SQLite after chunk rows are removed — which
+    /// prevents the bootstrap count-divergence that forced a full rebuild on
+    /// every restart.
     ///
     /// # Errors
     ///
     /// Returns an error if the index cannot be saved.
     pub async fn delete_chunk_ids(&self, ids: &[u64]) -> Result<()> {
+        self.delete_chunk_ids_sync(ids)
+    }
+
+    /// Synchronous variant of [`delete_chunk_ids`] for callers that must purge
+    /// orphan vectors from a non-async context (e.g. memory consolidation, which
+    /// runs while holding the SQLite write lock, or maintenance decay). The
+    /// operation touches only this store's own locks and performs a single file
+    /// save, so it is safe to invoke from a blocking worker.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the index cannot be saved.
+    pub fn delete_chunk_ids_blocking(&self, ids: &[u64]) -> Result<()> {
+        self.delete_chunk_ids_sync(ids)
+    }
+
+    fn delete_chunk_ids_sync(&self, ids: &[u64]) -> Result<()> {
         if ids.is_empty() {
             return Ok(());
         }
@@ -252,7 +275,7 @@ impl VectorStore {
             match index.remove(id) {
                 Ok(n) => removed += n,
                 Err(e) => {
-                    tracing::warn!(error = ?e, chunk_id = id, "failed to remove vector from index");
+                    warn!(error = ?e, chunk_id = id, "failed to remove vector from index");
                 }
             }
             buffers.remove(&id);
@@ -260,7 +283,7 @@ impl VectorStore {
         drop(index);
         self.save_locked(&buffers)?;
 
-        tracing::info!(
+        info!(
             requested = ids.len(),
             removed,
             elapsed_ms = started.elapsed().as_millis(),
@@ -289,6 +312,7 @@ impl VectorStore {
     ///
     /// Returns an error if the fresh index cannot be created or saved.
     pub async fn clear(&self) -> Result<()> {
+        let start = std::time::Instant::now();
         let dims = self.index.lock().dimensions();
         let opts = IndexOptions {
             dimensions: dims,
@@ -304,6 +328,7 @@ impl VectorStore {
         *self.index.lock() = fresh;
         self.buffers.lock().clear();
         self.save_locked(&self.buffers.lock())?;
+        info!(duration_ms = %start.elapsed().as_millis(), "cleared vector store");
         Ok(())
     }
 }

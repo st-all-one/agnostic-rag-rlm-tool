@@ -21,7 +21,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use tokio::runtime::Runtime;
-use tracing::debug;
+use tracing::{debug, info, instrument};
 
 use crate::auth_client::AragsClient;
 use crate::cli::{Cli, Commands, OutputFormatArg};
@@ -66,6 +66,7 @@ fn map_search_tier(tier: &str) -> arags_proto::proto::SearchTier {
 /// summarize). Every data command is routed to a remote `arags-server` over
 /// gRPC; there is no local data plane (plan 020, D3).
 pub fn dispatch(cli: Cli, rt: &Runtime) -> Result<()> {
+    let start = std::time::Instant::now();
     let cfg = user_config::load().unwrap_or_default();
 
     let project = cli
@@ -91,11 +92,13 @@ pub fn dispatch(cli: Cli, rt: &Runtime) -> Result<()> {
         None => default,
     };
 
-    run(cli, cfg, project, format, rt)
+    let result = run(cli, cfg, project, format, rt);
+    info!(duration_ms = %start.elapsed().as_millis(), "dispatch complete");
+    result
 }
 
 /// Route the parsed command to its module.
-#[tracing::instrument(skip(cfg, rt))]
+#[instrument(skip(cfg, rt))]
 fn run(
     cli: Cli,
     cfg: EffectiveUserConfig,

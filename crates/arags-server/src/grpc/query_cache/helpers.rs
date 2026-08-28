@@ -3,6 +3,7 @@
 
 use arags_core::qa_cache::QaThresholds;
 use arags_storage::qa_cache as qa_store;
+use tracing::{debug, info, warn};
 
 use crate::grpc::search::{buffer_id_for, hybrid_search};
 use crate::grpc::util::sanitize_fts;
@@ -25,7 +26,7 @@ pub(crate) const NEAR_HIT_CANDIDATES: usize = 10;
 /// `agnostic-rlm-rs-6690`).
 pub(crate) async fn embed_query(state: &AppState, question: &str) -> Option<Vec<f32>> {
     if state.index_embed_in_flight() > 0 {
-        tracing::debug!(
+        debug!(
             active_index_embeds = state.index_embed_in_flight(),
             "qa query embed contends with active index embed; served on global pool"
         );
@@ -87,12 +88,12 @@ pub(crate) async fn provenance_intact(state: &AppState, row: &qa_store::QaCacheR
                 stale_storage.mark_qa_stale(id, "system", "provenance drift")
             })
             .await;
-            tracing::info!(cache_id = %row.cache_id, "qa provenance drifted; entry marked stale");
+            info!(cache_id = %row.cache_id, "qa provenance drifted; entry marked stale");
             false
         }
         Err(e) => {
             // Fail open: verification trouble must not break serving.
-            tracing::warn!(error = %e, "qa provenance check failed; serving anyway");
+            warn!(error = %e, "qa provenance check failed; serving anyway");
             true
         }
     }

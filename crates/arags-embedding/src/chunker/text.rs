@@ -1,4 +1,7 @@
 use std::path::Path;
+use std::time::Instant;
+
+use tracing::debug;
 
 use crate::chunker::{ChunkingStrategy, RawChunk, estimate_tokens, prev_char_boundary};
 
@@ -25,7 +28,7 @@ impl TextChunker {
 
 impl ChunkingStrategy for TextChunker {
     fn chunk<'a>(&self, content: &'a str, _path: &Path) -> Vec<RawChunk<'a>> {
-        let _timer = crate::Timer::new("text_chunking");
+        let start = Instant::now();
 
         // Split on double-newlines (paragraph boundaries)
         let paragraphs: Vec<&str> = content.split("\n\n").collect();
@@ -116,6 +119,12 @@ impl ChunkingStrategy for TextChunker {
             push(&mut chunks, chunk_start, content.len(), content);
         }
 
+        debug!(
+            chunk_count = chunks.len(),
+            chars = content.len(),
+            duration_ms = %start.elapsed().as_millis(),
+            "chunked text"
+        );
         chunks
     }
 }

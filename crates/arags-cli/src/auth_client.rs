@@ -22,6 +22,7 @@ use arags_proto::proto::arags_service_client::AragsServiceClient;
 use arags_proto::proto::{AuthRefreshRequest, AuthRefreshResponse};
 
 use crate::client::{self, ClientConfig};
+use tracing::warn;
 
 /// Authenticated gRPC client type returned by [`connect`].
 pub type AragsClient = AragsServiceClient<InterceptedService<Channel, BearerInterceptor>>;
@@ -74,12 +75,14 @@ pub fn connect(
         let refresh = refresh.clone();
 
         let mut refresh_client = AragsServiceClient::new(channel.clone());
+        let start = std::time::Instant::now();
         let session: AuthRefreshResponse = rt
             .block_on(refresh_client.auth_refresh(AuthRefreshRequest {
                 refresh_token: refresh.clone(),
             }))
             .context("AuthRefresh failed")?
             .into_inner();
+        warn!(duration_ms = %start.elapsed().as_millis(), "auth_refresh rpc");
         *token.lock() = session.session_token;
 
         let renewal_token = token.clone();
@@ -99,7 +102,7 @@ pub fn connect(
                         *renewal_token.lock() = resp.into_inner().session_token;
                     }
                     Err(e) => {
-                        tracing::warn!(error = %e, "auth session renewal failed; will retry");
+                        warn!(error = %e, "auth session renewal failed; will retry");
                     }
                 }
             }

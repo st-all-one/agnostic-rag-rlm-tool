@@ -12,6 +12,7 @@
 //! via a global interceptor.
 
 pub use arags_storage::Role;
+use tracing::error;
 
 use arags_storage::Storage;
 use tonic::metadata::MetadataMap;
@@ -48,7 +49,7 @@ pub fn authenticate(md: &MetadataMap, storage: &Storage) -> Result<AuthContext, 
         Ok(Some((username, role))) => Ok(AuthContext { username, role }),
         Ok(None) => Err(Status::unauthenticated("invalid or expired session")),
         Err(e) => {
-            tracing::error!(error = %e, "session validation failed");
+            error!(error = %e, "session validation failed");
             Err(Status::internal("session validation failed"))
         }
     }

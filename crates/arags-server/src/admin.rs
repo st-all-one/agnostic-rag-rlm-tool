@@ -81,7 +81,7 @@ fn parse_role(s: &str) -> Result<Role, String> {
 ///
 /// Returns an error on invalid arguments, a storage failure, or a refused
 /// destructive operation.
-pub fn run() -> Result<()> {
+pub async fn run() -> Result<()> {
     let args = std::iter::once("arags-server-admin".to_string()).chain(std::env::args().skip(2));
     let cli = AdminCli::parse_from(args);
     let config = ServerConfig::load().context("failed to load server config")?;
@@ -132,12 +132,19 @@ pub fn run() -> Result<()> {
                 project.clone()
             };
             let floor = config.maintenance.decay_score_floor;
-            let rt = tokio::runtime::Runtime::new().context("failed to build tokio runtime")?;
-            let report = rt
-                .block_on(maintenance::run_maintenance(
-                    &project, &storage, floor, dry_run,
-                ))
-                .context("maintenance failed")?;
+            // Open the chunk vector store so decay/consolidate can also purge
+            // orphan vectors (issue `agnostic-rlm-rs-fa25`). On a fresh store
+            // usearch restores the on-disk dimensionality; a missing file falls
+            // back to the default 384. `main` already runs a tokio runtime, so
+            // await directly here rather than nesting another (which panics).
+            let vector_store = arags_storage::VectorStore::open(&config.data_dir)
+                .await
+                .ok()
+                .map(std::sync::Arc::new);
+            let report =
+                maintenance::run_maintenance(&project, &storage, vector_store, floor, dry_run)
+                    .await
+                    .context("maintenance failed")?;
             println!("Maintenance report (project={scope} dry_run={dry_run}):");
             println!(
                 "  duplicate_chunks_removed         : {}",

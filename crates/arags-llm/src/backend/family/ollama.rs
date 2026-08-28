@@ -40,17 +40,25 @@ pub(crate) fn parse(model: &str, body: &str) -> Result<CompletionResponse, LlmEr
         .and_then(|c| c.get("message"))
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str())
-        .or_else(|| v.get("message").and_then(|m| m.get("content")).and_then(|c| c.as_str()))
+        .or_else(|| {
+            v.get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(|c| c.as_str())
+        })
         .unwrap_or_default()
         .to_string();
     let (prompt, completion) = if let Some(u) = v.get("usage").and_then(Value::as_object) {
         (
             u.get("prompt_tokens").and_then(Value::as_u64).unwrap_or(0),
-            u.get("completion_tokens").and_then(Value::as_u64).unwrap_or(0),
+            u.get("completion_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
         )
     } else {
         (
-            v.get("prompt_eval_count").and_then(Value::as_u64).unwrap_or(0),
+            v.get("prompt_eval_count")
+                .and_then(Value::as_u64)
+                .unwrap_or(0),
             v.get("eval_count").and_then(Value::as_u64).unwrap_or(0),
         )
     };

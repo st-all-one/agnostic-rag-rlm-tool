@@ -5,11 +5,12 @@
 //! without string parsing.
 
 use std::time::{Duration, Instant};
+use tracing::info;
 
 /// A scoped timer that logs elapsed time when dropped.
 ///
 /// Drop the timer (or let it go out of scope) to emit a structured
-/// `tracing::info!` line:
+/// `info!` line:
 /// `timer completed label=… elapsed_ms=… elapsed_us=…`
 pub struct Timer {
     label: &'static str,
@@ -20,7 +21,7 @@ impl Timer {
     /// Start a timer with a label.
     #[must_use]
     pub fn new(label: &'static str) -> Self {
-        tracing::info!(label, "timer started");
+        info!(label, "timer started");
         Self {
             label,
             start: Instant::now(),
@@ -49,10 +50,10 @@ impl Timer {
 impl Drop for Timer {
     fn drop(&mut self) {
         let elapsed = self.start.elapsed();
-        tracing::info!(
+        info!(
             label = self.label,
-            elapsed_ms = elapsed.as_millis(),
-            elapsed_us = elapsed.as_micros(),
+            duration_ms = elapsed.as_millis(),
+            duration_us = elapsed.as_micros(),
             "timer completed"
         );
     }

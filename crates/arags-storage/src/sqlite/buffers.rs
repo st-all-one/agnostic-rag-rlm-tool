@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use rusqlite::params;
+use tracing::info;
 
 use super::conn::Storage;
 
@@ -53,6 +54,7 @@ impl Storage {
         let conn = self.conn();
         let conn = conn.lock();
 
+        let start = std::time::Instant::now();
         conn.execute(
             "INSERT INTO buffers (name, path, uuid) VALUES (?1, ?2, ?3)",
             params![buffer.name, buffer.path, uuid],
@@ -60,7 +62,7 @@ impl Storage {
         .context("failed to insert buffer")?;
 
         let buffer_id = conn.last_insert_rowid();
-        tracing::info!(buffer_id, name = %buffer.name, path = %buffer.path, "inserted buffer");
+        info!(buffer_id, name = %buffer.name, path = %buffer.path, duration_ms = %start.elapsed().as_millis(), "inserted buffer");
 
         Ok(buffer_id)
     }
@@ -182,7 +184,7 @@ impl Storage {
         }
 
         if updated > 0 {
-            tracing::info!(updated, "backfilled UUIDs for existing buffers");
+            info!(updated, "backfilled UUIDs for existing buffers");
         }
 
         Ok(updated)
@@ -219,6 +221,7 @@ impl Storage {
     pub fn delete_buffer(&self, buffer_id: i64) -> Result<()> {
         let conn = self.conn();
         let conn = conn.lock();
+        let start = std::time::Instant::now();
 
         let tx = conn.unchecked_transaction()?;
         // Cascade to every child table so deleting a buffer leaves no orphans in
@@ -243,7 +246,7 @@ impl Storage {
         tx.execute("DELETE FROM buffers WHERE id = ?1", params![buffer_id])?;
         tx.commit()?;
 
-        tracing::info!(buffer_id, "deleted buffer");
+        info!(buffer_id, duration_ms = %start.elapsed().as_millis(), "deleted buffer");
 
         Ok(())
     }

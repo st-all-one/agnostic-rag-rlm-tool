@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use parking_lot::Mutex;
 use rusqlite::Connection;
+use tracing::info;
 
 use super::schema;
 
@@ -62,6 +63,7 @@ impl Storage {
     /// Returns an error if the directory cannot be created, the database cannot
     /// be opened, pragmas cannot be applied, or migrations fail.
     pub fn open_pooled(path: &Path, max_size: u32) -> Result<Self> {
+        let start = std::time::Instant::now();
         std::fs::create_dir_all(path).context("failed to create storage directory")?;
 
         let db_path = path.join("knowledge.db");
@@ -93,7 +95,7 @@ impl Storage {
         let shared = Connection::open(&db_path).context("failed to open shared read connection")?;
         Self::apply_pragmas(&shared, false)?;
 
-        tracing::info!(path = %db_path.display(), max_size, "SQLite storage opened (pooled)");
+        info!(path = %db_path.display(), max_size, duration_ms = %start.elapsed().as_millis(), "SQLite storage opened (pooled)");
 
         Ok(Self {
             sqlite: Some(Arc::new(Mutex::new(shared))),
@@ -105,6 +107,7 @@ impl Storage {
 
     /// Open in single-connection mode (internal).
     fn open_single(path: &Path, exclusive: bool) -> Result<Self> {
+        let start = std::time::Instant::now();
         std::fs::create_dir_all(path).context("failed to create storage directory")?;
 
         let db_path = path.join("knowledge.db");
@@ -115,7 +118,7 @@ impl Storage {
         // Run migrations
         schema::run_migrations(&conn)?;
 
-        tracing::info!(path = %db_path.display(), exclusive, "SQLite storage opened");
+        info!(path = %db_path.display(), exclusive, duration_ms = %start.elapsed().as_millis(), "SQLite storage opened");
 
         Ok(Self {
             sqlite: Some(Arc::new(Mutex::new(conn))),

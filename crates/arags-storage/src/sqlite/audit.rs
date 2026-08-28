@@ -51,7 +51,8 @@ impl Storage {
         target: Option<&str>,
         detail: Option<&str>,
     ) -> Result<i64> {
-        self.connection()?.execute(|conn| {
+        let start = std::time::Instant::now();
+        let id = self.connection()?.execute(|conn| {
             conn.execute(
                 "INSERT INTO audit_log (project, username, action, target, detail) \
                  VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -59,7 +60,15 @@ impl Storage {
             )
             .with_context(|| format!("failed to insert audit_log entry for action {action}"))?;
             Ok(conn.last_insert_rowid())
-        })
+        })?;
+        tracing::debug!(
+            id,
+            action,
+            username,
+            duration_ms = %start.elapsed().as_millis(),
+            "audit log written"
+        );
+        Ok(id)
     }
 
     /// List audit-log entries, optionally filtered by `project` and `username`.

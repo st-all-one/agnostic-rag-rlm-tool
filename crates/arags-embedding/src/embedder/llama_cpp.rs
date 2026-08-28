@@ -7,12 +7,14 @@
 //! acceleration, single static binary.
 
 use std::path::Path;
+use std::time::Instant;
 
 use llama_cpp_4::context::params::LlamaContextParams;
 use llama_cpp_4::llama_backend::LlamaBackend;
 use llama_cpp_4::llama_batch::LlamaBatch;
 use llama_cpp_4::model::params::LlamaModelParams;
 use llama_cpp_4::model::{AddBos, LlamaModel};
+use tracing::{debug, error};
 
 use crate::embedder::{Embedder, Embedding, EmbeddingError, EmbeddingResult};
 
@@ -70,37 +72,56 @@ impl Embedder for LlamaCppEmbedder {
             return Ok(Vec::new());
         }
 
-        let ctx_params = LlamaContextParams::default()
-            .with_embeddings(true)
-            .with_n_ctx(std::num::NonZeroU32::new(self.n_ctx));
-        let mut ctx = self
-            .model
-            .new_context(&self.backend, ctx_params)
-            .map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?;
-
-        // One decode per text (the llama.cpp embeddings path pools the whole
-        // sequence, so a single-sequence batch is the supported shape). The
-        // context is created once and reused across the texts in the batch.
-        let mut out = Vec::with_capacity(texts.len());
-        for text in texts {
-            let toks = self
+        let start = Instant::now();
+        let dims = self.dimensions();
+        let result = (|| -> EmbeddingResult<Vec<Embedding>> {
+            let ctx_params = LlamaContextParams::default()
+                .with_embeddings(true)
+                .with_n_ctx(std::num::NonZeroU32::new(self.n_ctx));
+            let mut ctx = self
                 .model
-                .str_to_token(text, AddBos::Always)
+                .new_context(&self.backend, ctx_params)
                 .map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?;
-            let mut batch = LlamaBatch::new(toks.len(), 1);
-            batch
-                .add_sequence(&toks, 0, true)
-                .map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?;
-            ctx.decode(&mut batch)
-                .map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?;
-            let mut v = ctx
-                .embeddings_seq_ith(0)
-                .map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?
-                .to_vec();
-            normalize(&mut v);
-            out.push(v);
+
+            // One decode per text (the llama.cpp embeddings path pools the whole
+            // sequence, so a single-sequence batch is the supported shape). The
+            // context is created once and reused across the texts in the batch.
+            let mut out = Vec::with_capacity(texts.len());
+            for text in texts {
+                let toks = self
+                    .model
+                    .str_to_token(text, AddBos::Always)
+                    .map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?;
+                let mut batch = LlamaBatch::new(toks.len(), 1);
+                batch
+                    .add_sequence(&toks, 0, true)
+                    .map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?;
+                ctx.decode(&mut batch)
+                    .map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?;
+                let mut v = ctx
+                    .embeddings_seq_ith(0)
+                    .map_err(|e| EmbeddingError::LlamaCpp(e.to_string()))?
+                    .to_vec();
+                normalize(&mut v);
+                out.push(v);
+            }
+            Ok(out)
+        })();
+        match result {
+            Ok(embeddings) => {
+                debug!(
+                    batch_size = texts.len(),
+                    duration_ms = %start.elapsed().as_millis(),
+                    dims = dims,
+                    "embedded batch"
+                );
+                Ok(embeddings)
+            }
+            Err(e) => {
+                error!(error = %e, batch_size = texts.len(), "llama-cpp embed_batch failed");
+                Err(e)
+            }
         }
-        Ok(out)
     }
 
     fn dimensions(&self) -> usize {

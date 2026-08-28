@@ -2,9 +2,7 @@ use std::sync::Once;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use tracing_subscriber::fmt;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
+use tracing::info;
 
 static INIT: Once = Once::new();
 static VERBOSE: AtomicBool = AtomicBool::new(false);
@@ -14,23 +12,11 @@ pub fn init_logging(verbose: bool) {
     INIT.call_once(|| {
         VERBOSE.store(verbose, Ordering::Relaxed);
 
-        let env_filter = if verbose {
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"))
-        } else {
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
-        };
-
-        tracing_subscriber::registry()
-            .with(env_filter)
-            .with(
-                fmt::layer()
-                    .with_target(true)
-                    .with_thread_ids(verbose)
-                    .with_file(verbose)
-                    .with_line_number(verbose)
-                    .compact(),
+        tracing_subscriber::fmt()
+            .with_target(true)
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
             )
             .init();
     });
@@ -51,7 +37,7 @@ pub struct ScopedTimer {
 impl ScopedTimer {
     /// Create a new timer with a label.
     pub fn new(label: &str) -> Self {
-        tracing::info!(label = label, "started");
+        info!(label = label, "started");
         Self {
             start: Instant::now(),
             label: label.to_string(),
@@ -84,7 +70,7 @@ impl ScopedTimer {
 impl Drop for ScopedTimer {
     fn drop(&mut self) {
         let elapsed = self.start.elapsed();
-        tracing::info!(
+        info!(
             label = self.label.as_str(),
             elapsed_ms = elapsed.as_millis(),
             elapsed_us = elapsed.as_micros(),
@@ -113,7 +99,7 @@ macro_rules! timed_verbose {
 
 /// Log a metric (structured data for profiling).
 pub fn log_metric(name: &str, value: f64, unit: &str) {
-    tracing::info!(
+    info!(
         metric_name = name,
         metric_value = value,
         metric_unit = unit,

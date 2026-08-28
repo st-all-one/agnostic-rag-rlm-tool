@@ -1,3 +1,7 @@
+use std::time::Instant;
+
+use tracing::debug;
+
 use super::{Embedder, Embedding, EmbeddingResult};
 
 /// Deterministic hash-based fallback embedder.
@@ -48,18 +52,32 @@ impl Embedder for FallbackEmbedder {
     ///
     /// This implementation never returns an error.
     fn embed(&self, text: &str) -> EmbeddingResult<Embedding> {
-        Ok(Self::embed_deterministic(text, self.dims))
+        let start = Instant::now();
+        let embedding = Self::embed_deterministic(text, self.dims);
+        debug!(
+            duration_us = %start.elapsed().as_micros(),
+            dims = embedding.len(),
+            "embedded single text"
+        );
+        Ok(embedding)
     }
 
     /// # Errors
     ///
     /// This implementation never returns an error.
     fn embed_batch(&self, texts: &[&str]) -> EmbeddingResult<Vec<Embedding>> {
-        let _timer = crate::Timer::new("fallback_embed_batch");
-        Ok(texts
+        let start = Instant::now();
+        let embeddings = texts
             .iter()
             .map(|t| Self::embed_deterministic(t, self.dims))
-            .collect())
+            .collect::<Vec<_>>();
+        debug!(
+            batch_size = embeddings.len(),
+            duration_us = %start.elapsed().as_micros(),
+            dims = self.dims,
+            "embedded batch"
+        );
+        Ok(embeddings)
     }
 
     fn dimensions(&self) -> usize {

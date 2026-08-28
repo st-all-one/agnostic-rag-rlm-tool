@@ -2,6 +2,7 @@
 //! of client-digested answers.
 
 use arags_storage::qa_cache::StoreAnswerInput;
+use tracing::warn;
 
 use crate::grpc::error::{internal, invalid_arg};
 use crate::state::AppState;
@@ -72,9 +73,9 @@ pub async fn handle_store_answer(
     if let Some(vec) = super::helpers::embed_query(state, &req.question).await {
         if let Some(qv_store) = state.question_vector_store.as_ref() {
             if let Err(e) = qv_store.insert(stored.id as u64, &vec) {
-                tracing::warn!(error = %e, cache_id = %stored.cache_id, "failed to persist question vector; marking qa_cache pending_vector");
+                warn!(error = %e, cache_id = %stored.cache_id, "failed to persist question vector; marking qa_cache pending_vector");
                 if let Err(m) = state.storage.mark_qa_cache_pending_vector(&[stored.id]) {
-                    tracing::warn!(error = %m, "failed to mark qa_cache pending_vector");
+                    warn!(error = %m, "failed to mark qa_cache pending_vector");
                 }
             }
         }

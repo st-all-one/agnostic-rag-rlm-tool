@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use arags_storage::Storage;
+use tracing::info;
 
 use crate::types::Bm25Result;
 
@@ -40,7 +41,7 @@ impl Bm25Search {
             let count: i64 = conn
                 .query_row("SELECT COUNT(*) FROM chunks_fts", [], |row| row.get(0))
                 .unwrap_or(0);
-            tracing::info!(count, "chunks_fts table ready");
+            info!(count, "chunks_fts table ready");
 
             Ok(())
         })
@@ -65,9 +66,9 @@ impl Bm25Search {
             .context("failed to populate chunks_fts")
         })?;
 
-        tracing::info!(
+        info!(
             count,
-            elapsed_ms = start.elapsed().as_millis(),
+            duration_ms = %start.elapsed().as_millis(),
             "populated chunks_fts"
         );
 
@@ -130,11 +131,11 @@ impl Bm25Search {
             Ok(results)
         })?;
 
-        tracing::info!(
+        info!(
             query,
             buffer_id,
             results_count = results.len(),
-            elapsed_ms = start.elapsed().as_millis(),
+            duration_ms = %start.elapsed().as_millis(),
             "bm25 search completed"
         );
 
@@ -179,10 +180,10 @@ impl Bm25Search {
             Ok(results)
         })?;
 
-        tracing::info!(
+        info!(
             query,
             results_count = results.len(),
-            elapsed_ms = start.elapsed().as_millis(),
+            duration_ms = %start.elapsed().as_millis(),
             "bm25 search_all completed"
         );
 

@@ -1,8 +1,10 @@
 use std::path::PathBuf;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, info};
 
 use arags_storage::Storage;
 
@@ -61,6 +63,7 @@ impl ProjectManager {
             .to_str()
             .context("project path is not valid UTF-8")?;
 
+        let insert_start = Instant::now();
         let id = self
             .storage
             .insert_buffer(&arags_storage::sqlite::buffers::NewBuffer {
@@ -68,6 +71,11 @@ impl ProjectManager {
                 path: path_str.to_string(),
             })
             .context("failed to insert project")?;
+        debug!(
+            name = %options.name,
+            duration_ms = %insert_start.elapsed().as_millis(),
+            "project insert complete"
+        );
 
         let buffer = self
             .storage
@@ -75,7 +83,7 @@ impl ProjectManager {
             .context("failed to get created project")?
             .context("project not found after creation")?;
 
-        tracing::info!(project_id = id, name = %options.name, "project created");
+        info!(project_id = id, name = %options.name, "project created");
 
         Ok(ProjectInfo::from_buffer(&buffer))
     }
@@ -138,11 +146,17 @@ impl ProjectManager {
             .context("failed to find project")?
             .context("project not found")?;
 
+        let delete_start = Instant::now();
         self.storage
             .delete_buffer(buffer.id)
             .context("failed to delete project")?;
+        debug!(
+            project_id = buffer.id,
+            duration_ms = %delete_start.elapsed().as_millis(),
+            "project delete complete"
+        );
 
-        tracing::info!(project_id = buffer.id, name = name, "project forgotten");
+        info!(project_id = buffer.id, name = %name, "project forgotten");
 
         Ok(())
     }

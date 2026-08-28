@@ -11,6 +11,7 @@ use arags_proto::proto::{
     SearchExplorationsRequest, SearchExplorationsResponse,
 };
 use tonic::{Request, Response, Status};
+use tracing::{debug, info, warn};
 
 pub(crate) use super::grounding::{Grounding, ground_candidate};
 use crate::grpc::error::{internal, invalid_arg};
@@ -172,7 +173,7 @@ pub(crate) async fn search_explorations_core(
         .await
         .map_err(internal)?;
         let Some(row) = resolved else {
-            tracing::debug!(rowid, "exploration vanished mid-search; skipping");
+            debug!(rowid, "exploration vanished mid-search; skipping");
             continue;
         };
         if row.project != req_project {
@@ -222,7 +223,7 @@ pub(crate) async fn search_explorations_core(
         };
         let grounded_out = matches!(grounding, Some(Grounding::Unsupported));
         if grounded_out {
-            tracing::info!(rowid = c.row.id, "grounding downgraded map to stale");
+            info!(rowid = c.row.id, "grounding downgraded map to stale");
             if !include_stale {
                 continue;
             }
@@ -244,7 +245,7 @@ pub(crate) async fn search_explorations_core(
         touch_logged(state, &hit.exploration_id).await;
     }
 
-    tracing::debug!(
+    debug!(
         elapsed_ms = start.elapsed().as_millis(),
         candidates = candidates.len(),
         hits = hits.len(),
@@ -266,7 +267,7 @@ async fn touch_logged(state: &AppState, exploration_id: &str) {
     .await
     {
         Ok(()) => {}
-        Err(e) => tracing::warn!(error = %e, "exploration touch failed"),
+        Err(e) => warn!(error = %e, "exploration touch failed"),
     }
 }
 

@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use rusqlite::params;
+use tracing::info;
 
 use super::conn::Storage;
 
@@ -34,6 +35,7 @@ impl Storage {
     ) -> Result<i64> {
         let conn = self.conn();
         let conn = conn.lock();
+        let start = std::time::Instant::now();
 
         let id = conn
             .execute(
@@ -43,7 +45,7 @@ impl Storage {
             .context("failed to insert history")?;
 
         let history_id = i64::try_from(id).context("history id overflow")?;
-        tracing::info!(history_id, query_type, used_by, "inserted history entry");
+        info!(history_id, query_type, used_by, duration_ms = %start.elapsed().as_millis(), "inserted history entry");
 
         Ok(history_id)
     }

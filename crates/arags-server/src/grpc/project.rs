@@ -1,6 +1,7 @@
 //! Project management RPCs: `CreateProject`, `ListProjects`, `GetProject`.
 
 use tonic::{Response, Status};
+use tracing::info;
 
 use crate::grpc::error::{internal, not_found};
 use crate::state::AppState;
@@ -52,7 +53,7 @@ pub(crate) async fn handle_create_project(
         .map_err(internal)?
         .ok_or_else(|| not_found("project just created is missing"))?;
 
-    tracing::info!(project_id, name = %row.name, "project created");
+    info!(project_id, name = %row.name, "project created");
 
     Ok(Response::new(project_to_info(
         &row,
@@ -73,7 +74,7 @@ pub(crate) async fn handle_list_projects(
         .await
         .map_err(internal)?;
 
-    tracing::info!(count = projects.len(), "listed projects");
+    info!(count = projects.len(), "listed projects");
 
     let infos = projects
         .iter()

@@ -13,6 +13,8 @@ use chrono::Utc;
 use rusqlite::params;
 use sha2::{Digest, Sha256};
 use std::str::FromStr;
+use std::time::Instant;
+use tracing::debug;
 
 use super::conn::Storage;
 
@@ -252,15 +254,19 @@ pub fn revoke_all_tokens(storage: &Storage, revoked_by: &str) -> Result<u64> {
         .connection()
         .context("failed to acquire connection")?;
     let now = now_ms();
-    let count: u64 = conn.execute(|conn| {
-        conn.execute(
-            "UPDATE auth_tokens SET revoked = 1, revoked_at = ?1, revoked_by = ?2 WHERE revoked = 0",
-            params![now, revoked_by],
-        )?;
-        let n = conn.changes();
-        conn.execute("DELETE FROM auth_sessions", [])?;
-        Ok(n)
-    })?;
+    let start = Instant::now();
+    let count: u64 = conn
+        .execute(|conn| {
+            conn.execute(
+                "UPDATE auth_tokens SET revoked = 1, revoked_at = ?1, revoked_by = ?2 WHERE revoked = 0",
+                params![now, revoked_by],
+            )?;
+            let n = conn.changes();
+            conn.execute("DELETE FROM auth_sessions", [])?;
+            Ok(n)
+        })
+        .context("execute revoke all tokens")?;
+    debug!(duration_ms = %start.elapsed().as_millis(), count, "revoked all tokens");
     Ok(count)
 }
 

@@ -6,6 +6,7 @@ use arags_search::{
     SemanticSearch, build_search_results,
 };
 use tonic::Status;
+use tracing::{debug, warn};
 
 use crate::grpc::error::internal;
 use crate::state::AppState;
@@ -57,7 +58,7 @@ pub(crate) async fn hybrid_search(
     // capped index pool), so a concurrent `arags index` cannot starve it (issue
     // `agnostic-rlm-rs-6690`). We surface contention for observability only.
     if state.index_embed_in_flight() > 0 {
-        tracing::debug!(
+        debug!(
             active_index_embeds = state.index_embed_in_flight(),
             "query embed shares cores with an active index embed; served on global pool"
         );
@@ -98,7 +99,7 @@ pub(crate) async fn hybrid_search(
         let storage = state.storage.clone();
         match store::blocking(move || storage.chunk_ages_hours(&ids)).await {
             Ok(ages) => fused = hybrid.apply_decay(fused, &ages),
-            Err(e) => tracing::warn!(error = %e, "chunk age lookup failed; skipping decay"),
+            Err(e) => warn!(error = %e, "chunk age lookup failed; skipping decay"),
         }
     }
 

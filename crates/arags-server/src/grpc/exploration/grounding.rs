@@ -8,6 +8,7 @@
 //! rare and the feature defaults off.
 
 use crate::state::AppState;
+use tracing::{debug, warn};
 
 use super::search::Candidate;
 
@@ -41,7 +42,7 @@ pub(crate) async fn ground_candidate(state: &AppState, cand: &Candidate) -> Opti
             // `cos = 1 - L2sq / 2` holds exactly; clamp guards degenerate rows.
             let best_raw = matches.first().map_or(f32::INFINITY, |m| m.distance);
             let best = (1.0 - best_raw / 2.0).clamp(0.0, 1.0);
-            tracing::debug!(
+            debug!(
                 rowid = cand.row.id,
                 best_similarity = best,
                 "grounding check"
@@ -53,7 +54,7 @@ pub(crate) async fn ground_candidate(state: &AppState, cand: &Candidate) -> Opti
             }
         }
         Err(e) => {
-            tracing::warn!(error = %e, "grounding search failed; keeping map status");
+            warn!(error = %e, "grounding search failed; keeping map status");
             None
         }
     }

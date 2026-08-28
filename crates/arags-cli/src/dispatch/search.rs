@@ -2,8 +2,10 @@
 
 use anyhow::Result;
 use std::fmt::Write as _;
+use std::time::Instant;
 use tokio::runtime::Runtime;
 use tonic::Request;
+use tracing::{info, warn};
 
 use arags_proto::proto::{SearchRequest, SearchResult};
 
@@ -34,7 +36,9 @@ pub(crate) fn run_search(
         as_of_epoch,
         ..Default::default()
     });
+    let start = Instant::now();
     let response = rt.block_on(client.search(request))?;
+    info!(duration_ms = %start.elapsed().as_millis(), "search rpc");
     let inner = response.into_inner();
     let mut results = inner.results;
 
@@ -333,7 +337,7 @@ pub(crate) fn run_query_deprecated(
     format: Format,
 ) -> Result<()> {
     let msg = query_deprecation_message();
-    tracing::warn!(msg, "deprecated `query` command invoked; routing to `ask`");
+    warn!(msg, "deprecated `query` command invoked; routing to `ask`");
     eprintln!("warning: {msg}");
     run_ask(
         rt,
@@ -366,7 +370,9 @@ pub(crate) fn run_search_context(
         task: question.to_string(),
         ..Default::default()
     });
+    let start = Instant::now();
     let response = rt.block_on(client.build_context(request))?;
+    info!(duration_ms = %start.elapsed().as_millis(), "build_context rpc");
     let ctx = response.into_inner().context;
     let rendered = match format {
         Format::FullJson => crate::output::json::JsonOutput::ok()

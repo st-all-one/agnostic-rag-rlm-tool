@@ -18,9 +18,9 @@
 
 use std::sync::Arc;
 use std::time::Instant;
+use tracing::{info, instrument, warn};
 
 use anyhow::{Context, Result};
-use tracing::{info, instrument, warn};
 
 use arags_embedding::embedder::Embedding;
 use arags_storage::ExplorationVectorStore;

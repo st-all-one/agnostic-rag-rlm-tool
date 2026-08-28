@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use tokio::sync::mpsc;
@@ -12,6 +13,7 @@ use arags_proto::proto::index_chunk;
 use crate::auth_client::AragsClient;
 use crate::output::Format;
 use tokio::runtime::Runtime;
+use tracing::{info, warn};
 
 use super::discover::discover_files;
 
@@ -72,6 +74,7 @@ pub(crate) fn run_index(
 
     let mut totals = (0i64, 0i64);
     let mut handles = Vec::with_capacity(groups.len());
+    let upload_start = Instant::now();
     for group in groups {
         let mut client = client.clone();
         let pb = progress.clone();
@@ -89,6 +92,12 @@ pub(crate) fn run_index(
         totals.1 += chunks_idx;
     }
     progress.finish_and_clear();
+    info!(
+        duration_ms = %upload_start.elapsed().as_millis(),
+        files = totals.0,
+        chunks = totals.1,
+        "index pass complete"
+    );
 
     let rendered = match format {
         Format::FullJson => crate::output::json::JsonOutput::ok()
@@ -118,6 +127,7 @@ pub(crate) async fn stream_index_group(
     let (tx, rx) = mpsc::channel::<arags_proto::proto::IndexChunk>(32);
     let stream = ReceiverStream::new(rx);
     let response_fut = client.index_project(stream);
+    let start = Instant::now();
 
     let send_handle = tokio::spawn(async move {
         if tx
@@ -147,16 +157,14 @@ pub(crate) async fn stream_index_group(
                 .to_string();
             // Compress when possible; fall back to raw bytes (flagged as
             // uncompressed) if encoding unexpectedly fails.
-            let (content_bytes, compressed) = match zstd::stream::encode_all(
-                content.as_bytes(),
-                UPLOAD_ZSTD_LEVEL,
-            ) {
-                Ok(c) => (c, true),
-                Err(e) => {
-                    tracing::warn!(error = %e, path = %rel_path, "zstd encode failed; sending raw");
-                    (content.as_bytes().to_vec(), false)
-                }
-            };
+            let (content_bytes, compressed) =
+                match zstd::stream::encode_all(content.as_bytes(), UPLOAD_ZSTD_LEVEL) {
+                    Ok(c) => (c, true),
+                    Err(e) => {
+                        warn!(error = %e, path = %rel_path, "zstd encode failed; sending raw");
+                        (content.as_bytes().to_vec(), false)
+                    }
+                };
             let size = i64::try_from(content_bytes.len()).unwrap_or(i64::MAX);
             if tx
                 .send(arags_proto::proto::IndexChunk {
@@ -179,6 +187,10 @@ pub(crate) async fn stream_index_group(
     let response = response_fut
         .await
         .map_err(|e| anyhow::anyhow!("index stream failed: {e}"))?;
+    info!(
+        duration_ms = %start.elapsed().as_millis(),
+        "index_project stream complete"
+    );
     send_handle
         .await
         .map_err(|e| anyhow::anyhow!("upload task failed: {e}"))?;

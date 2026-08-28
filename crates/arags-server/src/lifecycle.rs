@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
+use tracing::{info, warn};
 
 use anyhow::{Context, Result};
 use arags_embedding::embedder::Embedder;
@@ -7,7 +9,6 @@ use arags_proto::proto::arags_service_client::AragsServiceClient;
 use arags_proto::proto::arags_service_server::AragsServiceServer;
 use arags_storage::{QuestionVectorStore, Storage, VectorStore};
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
-use tracing::{info, warn};
 
 use crate::config::ServerConfig;
 use crate::grpc::AragsGrpcService;
@@ -25,7 +26,9 @@ use crate::timing::Timer;
 pub async fn run() -> Result<()> {
     let _timer = Timer::new("server_startup");
 
+    let config_start = Instant::now();
     let config = ServerConfig::load().context("failed to load server config")?;
+    info!(duration_ms = %config_start.elapsed().as_millis(), "loaded server config");
 
     info!(addr = %config.listen_addr, "starting arags-server");
 
@@ -33,56 +36,67 @@ pub async fn run() -> Result<()> {
     // `connection()`-based writes while a dedicated shared connection keeps
     // the `conn()`-based read helpers valid. `pool_size == 1` degrades to
     // single-connection mode.
+    let storage_start = Instant::now();
     let storage = if config.pool_size > 1 {
         Storage::open_pooled(&config.data_dir, config.pool_size)
             .context("failed to open pooled storage")?
     } else {
         Storage::open(&config.data_dir).context("failed to open storage")?
     };
+    info!(duration_ms = %storage_start.elapsed().as_millis(), "opened storage");
 
     // Load the embedder once so every vector space is sized by its *actual*
     // dimensionality (issue `agnostic-rlm-rs-e9e3`): a mismatch between the
     // hardcoded `embedder_dimension()` constant and the configured embedder
     // silently fails exploration (and other) vector inserts, leaving the
     // semantic index empty.
+    let embedder_start = Instant::now();
     let embedder = load_embedder(&config.embedder);
+    info!(duration_ms = %embedder_start.elapsed().as_millis(), "loaded embedder");
     let embed_dims = embedder.dimensions();
     info!(dims = embed_dims, "embedder loaded; sizing vector spaces");
 
+    let vs_start = Instant::now();
     let vector_store = match VectorStore::open_with_dims(&config.data_dir, embed_dims).await {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {
-            tracing::warn!(error = %e, "vector store unavailable, continuing without semantic search");
+            warn!(error = %e, duration_ms = %vs_start.elapsed().as_millis(), "vector store unavailable, continuing without semantic search");
             None
         }
     };
+    if vector_store.is_some() {
+        info!(duration_ms = %vs_start.elapsed().as_millis(), "opened chunk vector store");
+    }
 
+    let qvs_start = Instant::now();
     let question_vector_store = match arags_storage::QuestionVectorStore::open(
         &config.data_dir,
         embed_dims,
     ) {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {
-            tracing::warn!(error = %e, "question vector store unavailable, semantic cache lookup disabled");
+            warn!(error = %e, duration_ms = %qvs_start.elapsed().as_millis(), "question vector store unavailable, semantic cache lookup disabled");
             None
         }
     };
 
+    let rvs_start = Instant::now();
     let rlm_vector_store = match arags_storage::RlmVectorStore::open(&config.data_dir, embed_dims) {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {
-            tracing::warn!(error = %e, "rlm vector store unavailable, summary semantic search disabled");
+            warn!(error = %e, duration_ms = %rvs_start.elapsed().as_millis(), "rlm vector store unavailable, summary semantic search disabled");
             None
         }
     };
 
+    let evs_start = Instant::now();
     let exploration_vector_store = match arags_storage::ExplorationVectorStore::open(
         &config.data_dir,
         embed_dims,
     ) {
         Ok(store) => Some(Arc::new(store)),
         Err(e) => {
-            tracing::warn!(error = %e, "exploration vector store unavailable, map search disabled");
+            warn!(error = %e, duration_ms = %evs_start.elapsed().as_millis(), "exploration vector store unavailable, map search disabled");
             None
         }
     };
@@ -126,10 +140,18 @@ pub async fn run_server(
     // Bootstrap rebuild: reconcile the four usearch vector spaces with canonical
     // SQLite before serving (issue `agnostic-rlm-rs-620d`). If a count diverges
     // the space is rebuilt from source-of-truth text; in-sync spaces are left
-    // untouched. Best-effort — a failure is logged, never fatal to startup.
-    if let Err(e) = crate::bootstrap::bootstrap_vector_spaces(&state).await {
-        tracing::warn!(error = %e, "vector space bootstrap failed; serving with possibly stale indexes");
-    }
+    // untouched. With `agnostic-rlm-rs-fa25` the maintenance paths keep the
+    // stores in sync, so divergence is now rare — but when it does occur the
+    // full re-embed can take minutes. Run it in the background (issue
+    // `agnostic-rlm-rs-0631`) so the gRPC port binds immediately and the server
+    // starts serving without blocking on a recovery rebuild. Best-effort — a
+    // failure is logged, never fatal to startup.
+    let boot_state = state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = crate::bootstrap::bootstrap_vector_spaces(&boot_state).await {
+            warn!(error = %e, "vector space bootstrap failed; serving with possibly stale indexes");
+        }
+    });
 
     let grpc_service = AragsServiceServer::new(AragsGrpcService::new(state.clone()));
 
@@ -153,36 +175,42 @@ pub async fn run_server(
                 // RLM: requeue claimed jobs whose lease expired without
                 // completion so crashed volunteers do not strand work units.
                 match maint_storage.requeue_expired_rlm_leases() {
-                    Ok(n) if n > 0 => tracing::info!(requeued = n, "rlm expired leases requeued"),
+                    Ok(n) if n > 0 => info!(requeued = n, "rlm expired leases requeued"),
                     Ok(_) => {}
-                    Err(e) => tracing::warn!(error = %e, "rlm lease requeue failed"),
+                    Err(e) => warn!(error = %e, "rlm lease requeue failed"),
                 }
-                if let Err(e) =
-                    crate::maintenance::run_maintenance("", &maint_storage, floor, false).await
+                if let Err(e) = crate::maintenance::run_maintenance(
+                    "",
+                    &maint_storage,
+                    recon_state.vector_store.clone(),
+                    floor,
+                    false,
+                )
+                .await
                 {
-                    tracing::warn!(error = %e, "maintenance tick failed");
+                    warn!(error = %e, "maintenance tick failed");
                 } else {
-                    tracing::info!("maintenance tick completed");
+                    info!("maintenance tick completed");
                 }
                 // QA re-digest queue (issue `agnostic-rlm-rs-d172`): revert
                 // expired leases (default 300s) so the next cycle re-offers the
                 // work to volunteers and a crashed volunteer never strands it.
                 if let Err(e) = crate::reconcile::reclaim_expired_pending_qa(&recon_state).await {
-                    tracing::warn!(error = %e, "reclaim expired pending qa failed");
+                    warn!(error = %e, "reclaim expired pending qa failed");
                 }
                 // Reconcile worker (`agnostic-rlm-rs-36ae`): re-derive any
                 // `pending_vector` rows from canonical SQLite text so the
                 // usearch spaces catch up with the source of truth.
                 if let Err(e) = crate::reconcile::reconcile_pending_vectors(&recon_state).await {
-                    tracing::warn!(error = %e, "reconcile pending vectors tick failed");
+                    warn!(error = %e, "reconcile pending vectors tick failed");
                 }
                 if retention_days > 0 {
                     let cutoff =
                         chrono::Utc::now().timestamp() - i64::from(retention_days) * 86_400;
                     match maint_storage.purge_history_before(cutoff) {
                         Ok(0) => {}
-                        Ok(n) => tracing::info!(purged = n, "history retention purge"),
-                        Err(e) => tracing::warn!(error = %e, "history purge failed"),
+                        Ok(n) => info!(purged = n, "history retention purge"),
+                        Err(e) => warn!(error = %e, "history purge failed"),
                     }
                 }
                 if chunk_retention_days > 0 {
@@ -193,8 +221,8 @@ pub async fn run_server(
                     .await
                     {
                         Ok(0) => {}
-                        Ok(n) => tracing::info!(purged = n, "inactive chunk purge"),
-                        Err(e) => tracing::warn!(error = %e, "inactive chunk purge failed"),
+                        Ok(n) => info!(purged = n, "inactive chunk purge"),
+                        Err(e) => warn!(error = %e, "inactive chunk purge failed"),
                     }
                 }
             }
@@ -215,7 +243,7 @@ pub async fn run_server(
             loop {
                 tokio::time::sleep(flush_interval).await;
                 if let Err(e) = flush_storage.wal_checkpoint() {
-                    tracing::warn!(error = %e, "WAL flush tick failed");
+                    warn!(error = %e, "WAL flush tick failed");
                 }
             }
         });

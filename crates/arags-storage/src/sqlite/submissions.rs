@@ -16,6 +16,8 @@
 use anyhow::{Context, Result};
 use rusqlite::OptionalExtension;
 use rusqlite::params;
+use std::time::Instant;
+use tracing::debug;
 
 use super::conn::Storage;
 
@@ -62,24 +64,29 @@ impl Storage {
         candidate_by: &str,
     ) -> Result<i64> {
         let conn = self.connection().context("acquire connection")?;
-        conn.execute(|c| {
-            let id: i64 = c
-                .query_row(
-                    "INSERT INTO submissions \
-                     (project, subject_type, subject_key, candidate_text, candidate_by) \
-                     VALUES (?1, ?2, ?3, ?4, ?5) RETURNING id",
-                    params![
-                        project,
-                        subject_type,
-                        subject_key,
-                        candidate_text,
-                        candidate_by
-                    ],
-                    |r| r.get(0),
-                )
-                .context("insert submission")?;
-            Ok(id)
-        })
+        let start = Instant::now();
+        let id: i64 = conn
+            .execute(|c| {
+                let id: i64 = c
+                    .query_row(
+                        "INSERT INTO submissions \
+                         (project, subject_type, subject_key, candidate_text, candidate_by) \
+                         VALUES (?1, ?2, ?3, ?4, ?5) RETURNING id",
+                        params![
+                            project,
+                            subject_type,
+                            subject_key,
+                            candidate_text,
+                            candidate_by
+                        ],
+                        |r| r.get(0),
+                    )
+                    .context("insert submission")?;
+                Ok(id)
+            })
+            .context("execute insert submission")?;
+        debug!(duration_ms = %start.elapsed().as_millis(), subject_type, subject_key, "inserted submission");
+        Ok(id)
     }
 
     /// Accept a candidate submission: status becomes `accepted`, `decided_at`

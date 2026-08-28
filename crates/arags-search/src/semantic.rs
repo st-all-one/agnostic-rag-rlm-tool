@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use arags_storage::VectorStore;
+use tracing::info;
 
 use crate::types::SemanticResult;
 
@@ -44,10 +45,10 @@ impl SemanticSearch {
             })
             .collect();
 
-        tracing::info!(
+        info!(
             buffer_id,
             results_count = results.len(),
-            elapsed_ms = start.elapsed().as_millis(),
+            duration_ms = %start.elapsed().as_millis(),
             "semantic search completed"
         );
 
@@ -80,9 +81,9 @@ impl SemanticSearch {
             })
             .collect();
 
-        tracing::info!(
+        info!(
             results_count = results.len(),
-            elapsed_ms = start.elapsed().as_millis(),
+            duration_ms = %start.elapsed().as_millis(),
             "semantic search_all completed"
         );
 

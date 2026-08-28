@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
+use tracing::{info, warn};
 
 use anyhow::Context;
 use anyhow::Result;
@@ -96,7 +97,7 @@ pub(crate) fn load_embedder(
             };
             match arags_embedding::embedder::build_embedder(&embed_cfg) {
                 Ok(embedder) => {
-                    tracing::info!(
+                    info!(
                         model = embedder.name(),
                         dims = embedder.dimensions(),
                         "loaded ollama embedder"
@@ -104,7 +105,7 @@ pub(crate) fn load_embedder(
                     return embedder;
                 }
                 Err(err) => {
-                    tracing::warn!(
+                    warn!(
                         error = %err,
                         "ollama embedder failed to load; using hash embedder"
                     );
@@ -117,7 +118,7 @@ pub(crate) fn load_embedder(
                     let quant = cfg.resolved_quantization();
                     match MinilmEmbedder::new(&dir, quant) {
                         Ok(embedder) => {
-                            tracing::info!(
+                            info!(
                                 model_dir = %dir.display(),
                                 ?quant,
                                 "loaded minilm embedder"
@@ -125,20 +126,20 @@ pub(crate) fn load_embedder(
                             return Arc::new(embedder);
                         }
                         Err(err) => {
-                            tracing::warn!(
+                            warn!(
                                 error = %err,
                                 "`MiniLM` load failed, falling back to hash embedder"
                             );
                         }
                     }
                 } else {
-                    tracing::warn!(
+                    warn!(
                         model_dir = %dir.display(),
                         "model.safetensors missing; using hash embedder"
                     );
                 }
             } else {
-                tracing::warn!("[embedder] kind=minilm without model_dir; using hash embedder");
+                warn!("[embedder] kind=minilm without model_dir; using hash embedder");
             }
         }
         "lightweight" => {
@@ -149,9 +150,7 @@ pub(crate) fn load_embedder(
         #[cfg(feature = "llamacpp")]
         "llamacpp" => {
             let Some(model_path) = cfg.llama_cpp_model.clone() else {
-                tracing::warn!(
-                    "[embedder] kind=llamacpp without llama_cpp_model; using hash embedder"
-                );
+                warn!("[embedder] kind=llamacpp without llama_cpp_model; using hash embedder");
                 return Arc::new(fallback::FallbackEmbedder::new(
                     arags_embedding::embedder::minilm::HIDDEN_SIZE,
                 ));
@@ -169,7 +168,7 @@ pub(crate) fn load_embedder(
             };
             match arags_embedding::embedder::build_embedder(&embed_cfg) {
                 Ok(embedder) => {
-                    tracing::info!(
+                    info!(
                         model = embedder.name(),
                         dims = embedder.dimensions(),
                         "loaded llama.cpp embedder"
@@ -177,7 +176,7 @@ pub(crate) fn load_embedder(
                     return embedder;
                 }
                 Err(err) => {
-                    tracing::warn!(
+                    warn!(
                         error = %err,
                         "llama.cpp embedder failed to load; using hash embedder"
                     );
@@ -185,7 +184,7 @@ pub(crate) fn load_embedder(
             }
         }
         _ => {
-            tracing::warn!(kind = %kind, "[embedder] unknown kind; using hash embedder");
+            warn!(kind = %kind, "[embedder] unknown kind; using hash embedder");
         }
     }
 
@@ -233,20 +232,30 @@ fn wrap_with_cache(
     config: &ServerConfig,
 ) -> Arc<dyn Embedder + Send + Sync> {
     if !config.embedder.cache {
-        tracing::info!("[embedder] cache = false; running without embedding cache");
+        info!("[embedder] cache = false; running without embedding cache");
         return embedder;
     }
     let db_path = config.data_dir.join("embedding-cache.db");
     let dims = embedder.dimensions();
+    let cache_start = std::time::Instant::now();
     match arags_embedding::embedder::cache::EmbeddingCache::open(&db_path.to_string_lossy(), dims) {
         Ok(cache) => {
-            tracing::info!(db = %db_path.display(), dims, "embedding cache enabled");
+            info!(
+                db = %db_path.display(),
+                dims,
+                duration_ms = %cache_start.elapsed().as_millis(),
+                "embedding cache enabled"
+            );
             Arc::new(arags_embedding::embedder::cache::CachedEmbedder::new(
                 embedder, cache,
             ))
         }
         Err(e) => {
-            tracing::warn!(error = %e, "embedding cache open failed; running uncached");
+            warn!(
+                error = %e,
+                duration_ms = %cache_start.elapsed().as_millis(),
+                "embedding cache open failed; running uncached"
+            );
             embedder
         }
     }
@@ -323,7 +332,9 @@ impl AppState {
         rlm_vector_store: Option<Arc<RlmVectorStore>>,
         exploration_vector_store: Option<Arc<ExplorationVectorStore>>,
     ) -> Result<Self> {
+        let pool_start = std::time::Instant::now();
         let index_embed_pool = build_index_embed_pool(&config)?;
+        let pool_ms = pool_start.elapsed().as_millis();
         let qa_config = config.qa_cache.clone();
         let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit));
 
@@ -342,9 +353,10 @@ impl AppState {
             started_at: std::time::Instant::now(),
         };
 
-        tracing::info!(
+        info!(
             index_embed_threads = state.index_embed_pool.current_num_threads(),
             total_cpus = num_cpus::get(),
+            duration_ms = %pool_ms,
             "built capped index-embed rayon pool (reserves cores for query serving)"
         );
 
@@ -404,7 +416,7 @@ impl AppState {
             .storage
             .write_audit_log(project, username, action, target, detail)
         {
-            tracing::warn!(
+            warn!(
                 error = %e,
                 action,
                 username,
@@ -420,7 +432,7 @@ impl AppState {
             if let Some(store) = store {
                 if store.is_dirty() {
                     if let Err(e) = store.persist() {
-                        tracing::warn!(error = %e, space = name, "vector index flush failed");
+                        warn!(error = %e, space = name, "vector index flush failed");
                     }
                 }
             }
@@ -450,7 +462,7 @@ fn spawn_eviction_worker(storage: Storage, qa_config: QaCacheConfig) {
                 qa_config.max_entries_per_project,
                 qa_config.eviction_lambda_ms,
             ) {
-                tracing::warn!(error = %e, "qa_cache eviction tick failed");
+                warn!(error = %e, "qa_cache eviction tick failed");
             }
         }
     });

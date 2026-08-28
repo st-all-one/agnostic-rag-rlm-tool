@@ -5,8 +5,10 @@ pub mod helpers;
 pub use helpers::{compute_hash, detect_language, estimate_tokens, find_line_boundary};
 
 use std::path::Path;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
+use tracing::{debug, info};
 
 use arags_storage::Storage;
 use arags_storage::sqlite::chunks::NewChunk;
@@ -123,11 +125,11 @@ impl KnowledgeEngine {
             .context("failed to update buffer counts")?;
 
         let duration = start.elapsed();
-        tracing::info!(
-            project = project_name,
+        info!(
+            project = %project_name,
             files = files_processed,
             chunks = chunks_created,
-            elapsed_ms = duration.as_millis(),
+            duration_ms = %duration.as_millis(),
             "directory indexed"
         );
 
@@ -149,6 +151,7 @@ impl KnowledgeEngine {
         file_path: &Path,
         options: &IndexOptions,
     ) -> Result<Vec<i64>> {
+        let start = Instant::now();
         let raw = std::fs::read(file_path)
             .with_context(|| format!("failed to read file: {}", file_path.display()))?;
         // Lossy decode: source files may contain invalid UTF-8, and the
@@ -173,7 +176,7 @@ impl KnowledgeEngine {
         if !file_chunks.is_empty() {
             let stored_hash = &file_chunks[0].hash;
             if stored_hash == &file_hash {
-                tracing::debug!(file = path_str, "file unchanged, skipping");
+                debug!(file = %path_str, "file unchanged, skipping");
                 return Ok(file_chunks.iter().map(|c| c.id).collect());
             }
             // File changed, delete old chunks
@@ -245,7 +248,12 @@ impl KnowledgeEngine {
             line_start = line_end + 1;
         }
 
-        tracing::debug!(file = path_str, chunks = chunk_ids.len(), "file indexed");
+        debug!(
+            file = %path_str,
+            chunks = chunk_ids.len(),
+            duration_ms = %start.elapsed().as_millis(),
+            "file indexed"
+        );
 
         Ok(chunk_ids)
     }

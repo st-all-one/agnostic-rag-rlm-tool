@@ -23,11 +23,11 @@
 
 use std::collections::HashMap;
 use std::time::Instant;
+use tracing::{info, instrument, warn};
 
 use anyhow::{Context, Result};
 use rusqlite::OptionalExtension;
 use rusqlite::params;
-use tracing::{info, instrument, warn};
 
 use arags_embedding::embedder::Embedding;
 use arags_search::qa_cache::cosine_similarity;

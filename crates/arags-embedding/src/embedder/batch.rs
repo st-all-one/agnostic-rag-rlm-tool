@@ -1,3 +1,7 @@
+use std::time::Instant;
+
+use tracing::debug;
+
 use super::{Embedder, Embedding, EmbeddingError, EmbeddingResult};
 use crate::embedder::cache::EmbeddingCache;
 
@@ -35,7 +39,7 @@ impl BatchEmbedder {
     ///
     /// Panics if internal bookkeeping is inconsistent (should not happen in practice).
     pub fn embed_with_cache(&self, texts: &[&str]) -> EmbeddingResult<Vec<Embedding>> {
-        let _timer = crate::Timer::new("batch_embed_with_cache");
+        let start = Instant::now();
 
         let mut results = Vec::with_capacity(texts.len());
         let mut uncached_indices = Vec::with_capacity(texts.len());
@@ -58,15 +62,22 @@ impl BatchEmbedder {
             }
         }
 
+        let cached_count = texts.len() - uncached_texts.len();
+
         // Phase 2: batch embed uncached texts
         if !uncached_texts.is_empty() {
-            let _timer = crate::Timer::new("batch_embed_model_inference");
-
+            let infer_start = Instant::now();
             let mut all_embeddings = Vec::with_capacity(uncached_texts.len());
             for chunk in uncached_texts.chunks(self.batch_size) {
                 let embeddings = self.inner.embed_batch(chunk)?;
                 all_embeddings.extend(embeddings);
             }
+            debug!(
+                uncached = uncached_texts.len(),
+                batch_size = self.batch_size,
+                duration_ms = %infer_start.elapsed().as_millis(),
+                "model inference over uncached texts"
+            );
 
             // Phase 3: fill results and store in cache
             for (idx_in_uncached, &orig_idx) in uncached_indices.iter().enumerate() {
@@ -78,6 +89,14 @@ impl BatchEmbedder {
                 }
             }
         }
+
+        debug!(
+            total = texts.len(),
+            cached = cached_count,
+            uncached = uncached_texts.len(),
+            duration_ms = %start.elapsed().as_millis(),
+            "embedded with cache"
+        );
 
         // SAFETY: all results are filled by the loops above
         results

@@ -10,6 +10,8 @@
 use anyhow::{Context, Result};
 use std::fmt::Write as _;
 
+use tracing::{debug, warn};
+
 use arags_llm::{CompletionRequest, LlmBackend, Message, Role};
 use arags_proto::proto::{
     GetAnswerByIdRequest, InvalidateCacheRequest, InvalidateMode, QueryWithCacheRequest,
@@ -105,7 +107,7 @@ pub fn run_ask(
         cache_id: resp.cache_id,
     };
     if let Err(e) = rt.block_on(client.store_answer(store_req)) {
-        tracing::warn!(error = %e, "StoreAnswer failed (answer already shown to user)");
+        warn!(error = %e, "StoreAnswer failed (answer already shown to user)");
     }
     Ok(())
 }
@@ -139,12 +141,12 @@ pub(crate) fn digest_chunks(
         }))
         .context("LLM digest failed")?;
     let elapsed_ms = start.elapsed().as_millis() as u64;
-    tracing::debug!(elapsed_ms, model, "llm digest call complete");
+    debug!(elapsed_ms, model, "llm digest call complete");
 
     let answer = response.content;
     let stripped = crate::llm_post::strip_cot(&answer);
     if stripped.len() != answer.len() {
-        tracing::debug!(
+        debug!(
             chars_removed = answer.len().saturating_sub(stripped.len()),
             "stripped chain-of-thought from digest"
         );

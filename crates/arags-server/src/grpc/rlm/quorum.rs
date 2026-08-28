@@ -6,6 +6,7 @@
 //! definitive response, or `Ok(None)` to fall through to it.
 
 use std::time::Instant;
+use tracing::{info, warn};
 
 use subtle::ConstantTimeEq;
 
@@ -44,7 +45,7 @@ pub(crate) async fn decide_quorum_submission(
     );
     let hmac_ok = bool::from(expected_hmac.as_bytes().ct_eq(provided_hmac.as_bytes()));
     if !hmac_ok {
-        tracing::warn!(
+        warn!(
             phase = "rlm_submission_verify",
             elapsed_ms = verify_elapsed_ms,
             job_id,
@@ -55,7 +56,7 @@ pub(crate) async fn decide_quorum_submission(
             "submission attestation failed: invalid or missing HMAC",
         ));
     }
-    tracing::info!(
+    info!(
         phase = "rlm_submission_verify",
         elapsed_ms = verify_elapsed_ms,
         job_id,
@@ -117,7 +118,7 @@ pub(crate) async fn decide_quorum_submission(
             .await
             .map_err(internal)?
             .unwrap_or_default();
-            tracing::info!(
+            info!(
                 job_id,
                 %node_id,
                 level = job.level,
@@ -132,7 +133,7 @@ pub(crate) async fn decide_quorum_submission(
             }))
         }
         Ok(crate::quorum::QuorumDecision::Rejected { .. }) => {
-            tracing::info!(job_id, level = job.level, volunteer = %ctx_username, "rlm quorum rejected (no consensus)");
+            info!(job_id, level = job.level, volunteer = %ctx_username, "rlm quorum rejected (no consensus)");
             Ok(Some(CompleteRlmJobResponse {
                 accepted: false,
                 reason: "quorum rejected: no consensus among volunteers".into(),
@@ -145,7 +146,7 @@ pub(crate) async fn decide_quorum_submission(
             ..CompleteRlmJobResponse::default()
         })),
         Err(e) => {
-            tracing::warn!(error = %e, job_id, "rlm quorum decision failed");
+            warn!(error = %e, job_id, "rlm quorum decision failed");
             Ok(Some(CompleteRlmJobResponse {
                 accepted: false,
                 reason: "quorum decision error".into(),

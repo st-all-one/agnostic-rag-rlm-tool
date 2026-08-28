@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use std::fmt::Write as _;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use arags_core::rlm::{DEFAULT_RLM_LEASE_MS, RlmJobPayload};
@@ -22,6 +23,7 @@ use parking_lot::Mutex;
 use crate::auth_client;
 use crate::backend::resolve_backend;
 use crate::user_config::{EffectiveUserConfig, VolunteerConfig};
+use tracing::{info, warn};
 
 /// Prompt templates per level ("arlm-v1"). Kept deliberately small so local
 /// models like llama 3.2 can follow them reliably; each output feeds the next
@@ -82,7 +84,7 @@ pub fn run(rt: &tokio::runtime::Runtime, cfg: &EffectiveUserConfig, once: bool) 
     })?;
     let (mut client, session_token) = auth_client::connect(rt, &client_config, auth)?;
 
-    tracing::info!(
+    info!(
         lease_secs = vol.lease_secs,
         max_level = vol.max_level,
         once,
@@ -94,7 +96,7 @@ pub fn run(rt: &tokio::runtime::Runtime, cfg: &EffectiveUserConfig, once: bool) 
         match claimed {
             Ok(None) => {
                 if once {
-                    tracing::info!("no jobs available");
+                    info!("no jobs available");
                     return Ok(());
                 }
                 std::thread::sleep(Duration::from_secs(vol.poll_secs.max(1)));
@@ -114,7 +116,7 @@ pub fn run(rt: &tokio::runtime::Runtime, cfg: &EffectiveUserConfig, once: bool) 
                     if once {
                         return Err(e);
                     }
-                    tracing::warn!(error = %e, "job processing failed; continuing");
+                    warn!(error = %e, "job processing failed; continuing");
                     std::thread::sleep(Duration::from_secs(vol.poll_secs.max(1)));
                 } else if once {
                     return Ok(());
@@ -124,7 +126,7 @@ pub fn run(rt: &tokio::runtime::Runtime, cfg: &EffectiveUserConfig, once: bool) 
                 if once {
                     return Err(e);
                 }
-                tracing::warn!(error = %e, "claim failed; retrying");
+                warn!(error = %e, "claim failed; retrying");
                 std::thread::sleep(Duration::from_secs(vol.poll_secs.max(1)));
             }
         }
@@ -146,6 +148,7 @@ async fn claim(
     vol: &VolunteerConfig,
 ) -> Result<Option<ClaimedJob>> {
     use arags_proto::proto::ClaimRlmJobRequest;
+    let start = Instant::now();
     let resp = client
         .claim_rlm_job(ClaimRlmJobRequest {
             lease_ms: i64::try_from(vol.lease_secs.saturating_mul(1000))
@@ -155,6 +158,7 @@ async fn claim(
         .await
         .context("ClaimRlmJob RPC failed")?
         .into_inner();
+    info!(duration_ms = %start.elapsed().as_millis(), "claim_rlm_job rpc");
     if !resp.available {
         return Ok(None);
     }
@@ -256,11 +260,13 @@ fn process(
         "synthesizing rlm summary"
     );
 
+    let llm_start = Instant::now();
     let response = rt
         .block_on(async { backend.complete(request).await })
         .inspect_err(|e| {
-            tracing::warn!(error = %e, job_id = job.id, "LLM synthesis failed");
+            warn!(error = %e, job_id = job.id, "LLM synthesis failed");
         })?;
+    info!(duration_ms = %llm_start.elapsed().as_millis(), job_id = job.id, "llm synthesis complete");
 
     let summary = response.content.trim().to_string();
     if !summary_acceptable(&summary) {
@@ -279,6 +285,7 @@ fn process(
         &summary,
     );
 
+    let submit_start = Instant::now();
     let resp = rt
         .block_on(client.complete_rlm_job(CompleteRlmJobRequest {
             job_id: job.id,
@@ -294,9 +301,10 @@ fn process(
             submission_hmac,
         }))?
         .into_inner();
+    info!(duration_ms = %submit_start.elapsed().as_millis(), job_id = job.id, "complete_rlm_job rpc");
 
     if resp.accepted {
-        tracing::info!(
+        info!(
             job_id = job.id,
             node_id = %resp.node_id,
             auto_approved = resp.auto_approved,
@@ -304,7 +312,7 @@ fn process(
         );
         Ok(true)
     } else {
-        tracing::warn!(job_id = job.id, reason = %resp.reason, "rlm submission rejected");
+        warn!(job_id = job.id, reason = %resp.reason, "rlm submission rejected");
         Ok(false)
     }
 }

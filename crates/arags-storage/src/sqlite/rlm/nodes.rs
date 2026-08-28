@@ -8,6 +8,7 @@ use std::fmt::Write as _;
 use super::super::conn::Storage;
 use super::super::tokens::now_ms;
 use super::{NODE_COLS, NewRlmNode, REVIEW_APPROVED, REVIEW_REJECTED, RlmNode, node_mapper};
+use tracing::{debug, info};
 
 impl Storage {
     /// Upsert a summary node keyed by `(project, level, subject)`. The new
@@ -36,15 +37,15 @@ impl Storage {
                 )?)
             })
             .context("upsert rlm_node")?;
-        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
-        tracing::debug!(
+        let elapsed_ms = start.elapsed().as_millis();
+        debug!(
             phase = "store_rlm_node",
             rowid = id,
             node_id = %node_id,
             level = input.level,
             project = %input.project,
             subject = %input.subject,
-            elapsed_ms = format!("{elapsed_ms:.2}"),
+            elapsed_ms,
             "rlm node stored (superseding prior active revision)"
         );
         Ok((id, node_id))
@@ -252,7 +253,7 @@ impl Storage {
             .context("review rlm_node")
         })?;
         let _ = reason; // recorded in tracing only for now (schema keeps it minimal)
-        tracing::info!(node_id, status, reviewer, "rlm node reviewed");
+        info!(node_id, status, reviewer, "rlm node reviewed");
         Ok(n > 0)
     }
 

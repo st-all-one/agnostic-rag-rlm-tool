@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 
 use super::super::conn::Storage;
 use super::super::tokens::now_ms;
+use tracing::info;
 
 /// One anchor whose stored hash no longer matches the current chunk hash.
 #[derive(Debug, Clone)]
@@ -113,7 +114,7 @@ impl Storage {
                     )
                     .context("mark exploration stale")?;
                 invalidated += n;
-                tracing::info!(
+                info!(
                     rowid,
                     exploration_id = %exploration_id,
                     project = %project,

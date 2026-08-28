@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use parking_lot::Mutex;
+use tracing::{debug, warn};
 use usearch::{Index, IndexOptions, MetricKind, ScalarKind};
 
 /// `usearch` index metric used by every secondary space (cosine).
@@ -240,7 +241,7 @@ impl VectorSpaceStore {
             // the data eligible for the next flush, but silence here would
             // hide an unwritable index until shutdown.
             if let Err(e) = self.persist() {
-                tracing::warn!(
+                warn!(
                     error = %e,
                     index = %self.index_path.display(),
                     "debounced vector index save failed"
@@ -250,11 +251,18 @@ impl VectorSpaceStore {
     }
 
     fn do_save(&self) -> Result<()> {
+        let start = std::time::Instant::now();
         let path_str = self.index_path.to_str().context("non-utf8 index path")?;
         self.index
             .lock()
             .save(path_str)
-            .map_err(|e| anyhow::anyhow!("failed to save {}: {e}", self.index_path.display()))
+            .map_err(|e| anyhow::anyhow!("failed to save {}: {e}", self.index_path.display()))?;
+        debug!(
+            index = %self.index_path.display(),
+            duration_ms = %start.elapsed().as_millis(),
+            "vector index saved"
+        );
+        Ok(())
     }
 }
 

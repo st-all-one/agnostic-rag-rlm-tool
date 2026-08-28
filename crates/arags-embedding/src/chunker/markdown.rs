@@ -1,4 +1,7 @@
 use std::path::Path;
+use std::time::Instant;
+
+use tracing::debug;
 
 use crate::chunker::{ChunkingStrategy, RawChunk};
 
@@ -18,7 +21,7 @@ impl MarkdownChunker {
 
 impl ChunkingStrategy for MarkdownChunker {
     fn chunk<'a>(&self, content: &'a str, _path: &Path) -> Vec<RawChunk<'a>> {
-        let _timer = crate::Timer::new("markdown_chunking");
+        let start = Instant::now();
 
         let mut chunks = Vec::with_capacity(64);
         let mut section_start = 0usize;
@@ -61,6 +64,12 @@ impl ChunkingStrategy for MarkdownChunker {
             }
         }
 
+        debug!(
+            chunk_count = chunks.len(),
+            chars = content.len(),
+            duration_ms = %start.elapsed().as_millis(),
+            "chunked markdown"
+        );
         chunks
     }
 }

@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
+use tracing::info;
 
 use super::{CHUNK_COLS, Chunk, NewChunk, chunk_mapper};
 use crate::sqlite::conn::Storage;
@@ -16,6 +17,7 @@ impl Storage {
         let conn = self.conn();
         let conn = conn.lock();
 
+        let start = std::time::Instant::now();
         conn.execute(
                 "INSERT INTO chunks (buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, language, chunk_type, token_count)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -35,7 +37,7 @@ impl Storage {
             .context("failed to insert chunk")?;
 
         let chunk_id = conn.last_insert_rowid();
-        tracing::info!(chunk_id, buffer_id = chunk.buffer_id, file = %chunk.file_path, "inserted chunk");
+        info!(chunk_id, buffer_id = chunk.buffer_id, file = %chunk.file_path, duration_ms = %start.elapsed().as_millis(), "inserted chunk");
 
         Ok(chunk_id)
     }

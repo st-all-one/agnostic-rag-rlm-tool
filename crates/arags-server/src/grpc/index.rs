@@ -10,13 +10,13 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Instant;
+use tracing::{debug, info, instrument, warn};
 
 use arags_embedding::embedder::EmbeddingResult;
 use arags_storage::VectorEntry;
 use futures::StreamExt;
 use tokio::task::JoinHandle;
 use tonic::{Request, Response, Status, Streaming};
-use tracing::{debug, info, instrument, warn};
 
 use arags_proto::proto::index_chunk;
 

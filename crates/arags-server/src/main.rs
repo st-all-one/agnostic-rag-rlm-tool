@@ -40,16 +40,16 @@ use anyhow::Result;
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
+        .with_target(true)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,arags_server=debug")),
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
-        .compact()
         .init();
 
     match std::env::args().nth(1).as_deref() {
         Some("status") => arags_server::lifecycle::status_check().await,
-        Some("admin") => arags_server::admin::run(),
+        Some("admin") => arags_server::admin::run().await,
         _ => arags_server::run().await,
     }
 }

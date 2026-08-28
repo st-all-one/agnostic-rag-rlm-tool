@@ -1,6 +1,9 @@
+use std::time::Instant;
+
 use anyhow::{Context, Result};
 
 use arags_storage::Storage;
+use tracing::{debug, info};
 
 use crate::ScopedTimer;
 
@@ -56,6 +59,7 @@ impl TransferEngine {
     ) -> Result<TransferResult> {
         let _timer = ScopedTimer::new("knowledge_transfer");
 
+        let verify_start = Instant::now();
         // Verify both projects exist
         let _source = self
             .storage
@@ -68,7 +72,14 @@ impl TransferEngine {
             .get_buffer(to_buffer_id)
             .context("failed to get target project")?
             .context("target project not found")?;
+        debug!(
+            from = from_buffer_id,
+            to = to_buffer_id,
+            duration_ms = %verify_start.elapsed().as_millis(),
+            "transfer project verification complete"
+        );
 
+        let list_start = Instant::now();
         let chunks = self
             .storage
             .list_chunks(from_buffer_id)
@@ -88,6 +99,14 @@ impl TransferEngine {
         };
 
         let limited: Vec<_> = filtered.into_iter().take(options.max_chunks).collect();
+        debug!(
+            from = from_buffer_id,
+            candidate_chunks = limited.len(),
+            duration_ms = %list_start.elapsed().as_millis(),
+            "transfer chunk selection complete"
+        );
+
+        let copy_start = Instant::now();
         let mut transferred: u64 = 0;
 
         for chunk in &limited {
@@ -119,8 +138,16 @@ impl TransferEngine {
 
             transferred += 1;
         }
+        debug!(
+            from = from_buffer_id,
+            to = to_buffer_id,
+            copied = transferred,
+            duration_ms = %copy_start.elapsed().as_millis(),
+            "transfer chunk copy complete"
+        );
 
         // Update target counts
+        let counts_start = Instant::now();
         let target_chunks = self
             .storage
             .count_chunks(to_buffer_id)
@@ -129,8 +156,14 @@ impl TransferEngine {
         self.storage
             .update_buffer_counts(to_buffer_id, target_chunks, 0)
             .context("failed to update target counts")?;
+        debug!(
+            to = to_buffer_id,
+            target_chunks,
+            duration_ms = %counts_start.elapsed().as_millis(),
+            "transfer count update complete"
+        );
 
-        tracing::info!(
+        info!(
             from = from_buffer_id,
             to = to_buffer_id,
             transferred,
@@ -171,7 +204,7 @@ impl TransferEngine {
             .map(|p| p.name)
             .collect();
 
-        tracing::info!(
+        info!(
             from = from_buffer_id,
             to = to_buffer_id,
             common_count = common.len(),

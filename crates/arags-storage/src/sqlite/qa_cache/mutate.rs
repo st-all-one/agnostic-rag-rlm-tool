@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use rusqlite::{params, params_from_iter};
 
 use crate::sqlite::conn::Storage;
+use tracing::warn;
 
 impl Storage {
     /// Mark an entry stale (soft invalidation) and record the audit trail.
@@ -31,7 +32,7 @@ impl Storage {
         // enqueue must not roll back the staleness mark.
         if n > 0 {
             if let Err(e) = self.enqueue_pending_qa_for_stale(id) {
-                tracing::warn!(error = %e, qa_id = id, "failed to enqueue re-digest job on stale");
+                warn!(error = %e, qa_id = id, "failed to enqueue re-digest job on stale");
             }
         }
         Ok(true)

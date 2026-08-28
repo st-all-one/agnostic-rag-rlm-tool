@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use rusqlite::params;
+use tracing::info;
 
 use super::conn::Storage;
 
@@ -31,6 +32,7 @@ impl Storage {
     ) -> Result<i64> {
         let conn = self.conn();
         let conn = conn.lock();
+        let start = std::time::Instant::now();
 
         let id = conn
             .execute(
@@ -40,7 +42,7 @@ impl Storage {
             .context("failed to insert finding")?;
 
         let finding_id = i64::try_from(id).context("finding id overflow")?;
-        tracing::info!(finding_id, task_id, finding_type, "inserted finding");
+        info!(finding_id, task_id, finding_type, duration_ms = %start.elapsed().as_millis(), "inserted finding");
 
         Ok(finding_id)
     }

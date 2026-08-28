@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use rusqlite::params;
+use tracing::info;
 
 use super::conn::Storage;
 
@@ -32,6 +33,7 @@ impl Storage {
     ) -> Result<i64> {
         let conn = self.conn();
         let conn = conn.lock();
+        let start = std::time::Instant::now();
 
         let id = conn
             .execute(
@@ -41,7 +43,7 @@ impl Storage {
             .context("failed to insert task")?;
 
         let task_id = i64::try_from(id).context("task id overflow")?;
-        tracing::info!(task_id, buffer_id, "inserted task");
+        info!(task_id, buffer_id, duration_ms = %start.elapsed().as_millis(), "inserted task");
 
         Ok(task_id)
     }
@@ -114,6 +116,7 @@ impl Storage {
     pub fn complete_task(&self, task_id: i64, result: &str) -> Result<()> {
         let conn = self.conn();
         let conn = conn.lock();
+        let start = std::time::Instant::now();
 
         conn.execute(
             "UPDATE tasks SET status = 'done', result = ?1, finished_at = unixepoch() WHERE id = ?2",
@@ -121,7 +124,7 @@ impl Storage {
         )
         .context("failed to complete task")?;
 
-        tracing::info!(task_id, "completed task");
+        info!(task_id, duration_ms = %start.elapsed().as_millis(), "completed task");
 
         Ok(())
     }

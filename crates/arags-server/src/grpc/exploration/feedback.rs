@@ -13,6 +13,7 @@ use arags_proto::proto::{
     ReviewExplorationRequest, ReviewExplorationResponse,
 };
 use tonic::{Request, Response, Status};
+use tracing::{info, warn};
 
 use crate::grpc::error::{internal, invalid_arg};
 use crate::state::AppState;
@@ -75,10 +76,10 @@ pub(crate) async fn handle_invalidate_exploration(
                 if let Some(vectors) = state.exploration_vector_store.as_ref() {
                     #[allow(clippy::cast_possible_truncation)] // rowids fit u64 here
                     if let Err(e) = vectors.delete(u64::try_from(row.id).unwrap_or(u64::MAX)) {
-                        tracing::warn!(error = %e, exploration_id = %req.exploration_id, "vector delete failed");
+                        warn!(error = %e, exploration_id = %req.exploration_id, "vector delete failed");
                     }
                 }
-                tracing::info!(exploration_id = %req.exploration_id, "exploration deleted");
+                info!(exploration_id = %req.exploration_id, "exploration deleted");
             }
             Ok(Response::new(InvalidateExplorationResponse { applied }))
         }

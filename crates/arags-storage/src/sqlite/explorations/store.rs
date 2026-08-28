@@ -13,6 +13,7 @@ use super::StoredExploration;
 use super::compress_body;
 use super::decompress_body;
 use super::parse_stale_reason;
+use tracing::debug;
 
 /// Column projection shared by all row queries (order fixed; see
 /// [`exploration_mapper`]).
@@ -153,8 +154,8 @@ impl Storage {
             tx.commit().context("commit exploration tx")?;
             Ok(rowid)
         })?;
-        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
-        tracing::debug!(
+        let elapsed_ms = start.elapsed().as_millis();
+        debug!(
             phase = "persist_exploration",
             rowid = id,
             exploration_id = %exploration_id,
@@ -162,7 +163,7 @@ impl Storage {
             goal = %input.goal,
             anchors = input.anchors.len(),
             bytes = body.len(),
-            elapsed_ms = format!("{elapsed_ms:.2}"),
+            elapsed_ms,
             "exploration persisted (superseding prior active revision)"
         );
 

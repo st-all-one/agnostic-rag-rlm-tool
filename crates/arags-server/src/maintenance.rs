@@ -11,11 +11,14 @@
 //! Both report counts through [`MaintenanceReport`] (mirrors the proto message)
 //! and honor a `dry_run` that computes the report without deleting anything.
 
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use arags_memory::consolidation::{ConsolidateOptions, ConsolidationEngine};
 use arags_search::decay::DecayConfig;
-use arags_storage::Storage;
+use arags_storage::{Storage, VectorStore};
 use rusqlite::params;
+use tracing::warn;
 
 use crate::store;
 
@@ -56,12 +59,24 @@ fn resolve_buffer_ids(storage: &Storage, project: &str) -> Result<Vec<i64>> {
 
 /// Consolidate memory for a project (or every project when `project` is empty).
 ///
+/// `vector_store` is the chunk usearch space; when provided, deduplicated chunks
+/// also have their vectors purged (issue `agnostic-rlm-rs-fa25`) so the semantic
+/// index stays in sync with SQLite.
+///
 /// # Errors
 ///
 /// Returns an error if storage access fails.
-pub fn consolidate(project: &str, storage: &Storage, dry_run: bool) -> Result<MaintenanceReport> {
+pub fn consolidate(
+    project: &str,
+    storage: &Storage,
+    vector_store: Option<Arc<VectorStore>>,
+    dry_run: bool,
+) -> Result<MaintenanceReport> {
     let buffer_ids = resolve_buffer_ids(storage, project)?;
-    let engine = ConsolidationEngine::new(storage.clone());
+    let mut engine = ConsolidationEngine::new(storage.clone());
+    if let Some(vs) = vector_store {
+        engine = engine.with_vector_store(vs);
+    }
     let options = ConsolidateOptions {
         dry_run,
         ..ConsolidateOptions::default()
@@ -79,12 +94,17 @@ pub fn consolidate(project: &str, storage: &Storage, dry_run: bool) -> Result<Ma
 /// Decay memory for a project (or every project when `project` is empty),
 /// removing chunks whose salience is below `score_floor`.
 ///
+/// `vector_store` is the chunk usearch space; when provided, decayed chunks also
+/// have their vectors purged (issue `agnostic-rlm-rs-fa25`) so the semantic index
+/// stays in sync with SQLite.
+///
 /// # Errors
 ///
 /// Returns an error if storage access fails.
 pub async fn decay(
     project: &str,
     storage: &Storage,
+    vector_store: Option<Arc<VectorStore>>,
     score_floor: f32,
     dry_run: bool,
 ) -> Result<MaintenanceReport> {
@@ -93,8 +113,15 @@ pub async fn decay(
 
     let mut report = MaintenanceReport::default();
     for bid in buffer_ids {
-        let count =
-            run_decay_for_buffer(storage.clone(), bid, decay_cfg, score_floor, dry_run).await?;
+        let count = run_decay_for_buffer(
+            storage.clone(),
+            vector_store.clone(),
+            bid,
+            decay_cfg,
+            score_floor,
+            dry_run,
+        )
+        .await?;
         report.decayed_chunks += count.decayed_chunks;
         report.kept += count.kept;
     }
@@ -112,6 +139,7 @@ struct DecayCount {
 /// deletes never re-lock the shared SQLite mutex.
 async fn run_decay_for_buffer(
     storage: Storage,
+    vector_store: Option<Arc<VectorStore>>,
     buffer_id: i64,
     decay_cfg: DecayConfig,
     score_floor: f32,
@@ -131,6 +159,9 @@ async fn run_decay_for_buffer(
                 .collect();
 
             let mut count = DecayCount::default();
+            // Chunk ids physically removed (non-dry-run) so their vectors can
+            // be purged from the usearch store afterwards.
+            let mut removed_chunk_ids: Vec<u64> = Vec::new();
             for (id, last_accessed) in rows {
                 let age_hours = DecayConfig::age_hours(last_accessed);
                 let decayed = decay_cfg.score(1.0, age_hours);
@@ -148,11 +179,29 @@ async fn run_decay_for_buffer(
                         .context("failed to delete chunk entities")?;
                         conn.execute("DELETE FROM chunks WHERE id = ?1", params![id])
                             .context("failed to delete chunk")?;
+                        removed_chunk_ids.push(id as u64);
                     }
                 } else {
                     count.kept += 1;
                 }
             }
+
+            // Drop the orphan vectors so the usearch chunk count matches SQLite
+            // and the server bootstrap no longer sees a divergence (issue
+            // `agnostic-rlm-rs-fa25`). Best-effort: a failure is logged.
+            if let Some(vs) = &vector_store {
+                if !removed_chunk_ids.is_empty() {
+                    if let Err(e) = vs.delete_chunk_ids_blocking(&removed_chunk_ids) {
+                        warn!(
+                            error = %e,
+                            buffer_id,
+                            count = removed_chunk_ids.len(),
+                            "failed to purge orphan vectors for decayed chunks"
+                        );
+                    }
+                }
+            }
+
             Ok(count)
         })
     })
@@ -168,11 +217,73 @@ async fn run_decay_for_buffer(
 pub async fn run_maintenance(
     project: &str,
     storage: &Storage,
+    vector_store: Option<Arc<VectorStore>>,
     score_floor: f32,
     dry_run: bool,
 ) -> Result<MaintenanceReport> {
-    let mut report = consolidate(project, storage, dry_run)?;
-    let decay_report = decay(project, storage, score_floor, dry_run).await?;
+    let mut report = consolidate(project, storage, vector_store.clone(), dry_run)?;
+    let decay_report = decay(project, storage, vector_store, score_floor, dry_run).await?;
     report.merge(&decay_report);
     Ok(report)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+    use std::sync::Arc;
+
+    use arags_storage::VectorStore;
+
+    /// End-to-end check that `consolidate` keeps the usearch chunk space in sync
+    /// with SQLite: deduplicated chunks also lose their vectors (issue
+    /// `agnostic-rlm-rs-fa25`), so the server bootstrap no longer sees a
+    /// count divergence that forces a full re-embed on restart.
+    #[tokio::test]
+    async fn consolidate_purges_orphan_vectors_for_duplicate_chunks() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::open(dir.path()).unwrap();
+        let dims = 384usize;
+        let vs = Arc::new(VectorStore::open_with_dims(dir.path(), dims).await.unwrap());
+
+        // One buffer, three chunks sharing the same content hash (duplicates).
+        storage
+            .connection()
+            .unwrap()
+            .execute(|c| {
+                c.execute(
+                    "INSERT INTO buffers (id, name, path) VALUES (1, 'p', '/tmp/p')",
+                    [],
+                )?;
+                for i in 0..3_i64 {
+                    c.execute(
+                        "INSERT INTO chunks \
+                         (id, buffer_id, file_path, offset_start, offset_end, line_start, line_end, hash, status) \
+                         VALUES (?1, 1, 'f.rs', 0, 1, 1, 1, X'07', 'active')",
+                        [i],
+                    )?;
+                }
+                Ok(())
+            })
+            .unwrap();
+
+        // Mirror SQLite in the vector store so the space starts in sync.
+        let entries: Vec<arags_storage::VectorEntry> = (0..3)
+            .map(|i| arags_storage::VectorEntry {
+                chunk_id: i as u64,
+                buffer_id: 1,
+                vector: vec![0.0f32; dims],
+            })
+            .collect();
+        vs.insert_vectors(&entries).await.unwrap();
+        assert_eq!(vs.count().await, 3);
+
+        let report = consolidate("", &storage, Some(vs.clone()), false).unwrap();
+        assert_eq!(report.duplicate_chunks_removed, 2);
+
+        // Only the kept chunk's vector remains; the two consolidated-away chunks
+        // had their vectors purged, so the store no longer diverges.
+        assert_eq!(vs.count().await, 1);
+    }
 }

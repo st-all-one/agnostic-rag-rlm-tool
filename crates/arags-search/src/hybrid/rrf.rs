@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use super::HybridSearch;
+use tracing::debug;
 
 use crate::types::HybridResult;
 
@@ -45,10 +46,10 @@ impl HybridSearch {
         });
         fused.truncate(top_k);
 
-        tracing::debug!(
+        debug!(
             lists = results_list.len(),
             fused = fused.len(),
-            elapsed_ms = start.elapsed().as_millis(),
+            duration_ms = %start.elapsed().as_millis(),
             "rrf_fuse completed"
         );
 

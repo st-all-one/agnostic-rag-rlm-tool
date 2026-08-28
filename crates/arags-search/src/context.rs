@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use arags_storage::Storage;
+use tracing::{debug, info};
 
 use crate::types::{ChunkWithText, HybridResult, OutputFormat, SearchResult};
 
@@ -40,11 +41,11 @@ pub fn build_context(
         OutputFormat::Markdown => format_markdown(results, &chunks),
     };
 
-    tracing::info!(
+    info!(
         format = %format,
         chunks_loaded = chunks.len(),
         max_tokens = ?max_tokens,
-        elapsed_ms = start.elapsed().as_millis(),
+        duration_ms = %start.elapsed().as_millis(),
         "context assembled"
     );
 
@@ -99,9 +100,9 @@ pub fn build_search_results(
         })
         .collect();
 
-    tracing::debug!(
+    debug!(
         results_count = search_results.len(),
-        elapsed_ms = start.elapsed().as_millis(),
+        duration_ms = %start.elapsed().as_millis(),
         "search results built"
     );
 
@@ -143,10 +144,10 @@ pub fn load_chunks(storage: &Storage, results: &[HybridResult]) -> Result<Vec<Ch
         }
     }
 
-    tracing::debug!(
+    debug!(
         requested = results.len(),
         loaded = chunks.len(),
-        elapsed_ms = start.elapsed().as_millis(),
+        duration_ms = %start.elapsed().as_millis(),
         "chunks loaded"
     );
 

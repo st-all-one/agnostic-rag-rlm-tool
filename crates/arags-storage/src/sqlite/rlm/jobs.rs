@@ -11,6 +11,7 @@ use super::{
     JOB_COLS, NewRlmJob, PRIORITY_CANCELLED, PRIORITY_PARKED, PRIORITY_RETRY, RlmJob, job_mapper,
     rlm_job_key,
 };
+use tracing::info;
 
 impl Storage {
     /// Enqueue (or refresh) a job. Idempotent per `(project, level, subject)`:
@@ -216,7 +217,7 @@ impl Storage {
             Ok(())
         })?;
         if cancelled > 0 {
-            tracing::info!(project, cancelled, "cancelled rlm jobs after source change");
+            info!(project, cancelled, "cancelled rlm jobs after source change");
         }
         Ok(cancelled)
     }

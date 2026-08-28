@@ -14,6 +14,7 @@ use rusqlite::params;
 
 use super::super::conn::Storage;
 use super::super::tokens::now_ms;
+use tracing::info;
 
 /// Outcome of a feedback submission.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,7 +121,7 @@ impl Storage {
                             false
                         };
                     tx.commit().context("commit feedback tx")?;
-                    tracing::info!(
+                    info!(
                         exploration_id = %exploration_id,
                         contradicted,
                         auto_retired,
@@ -162,7 +163,7 @@ impl Storage {
             })
             .context("failed to invalidate exploration")?;
         if changed {
-            tracing::info!(
+            info!(
                 exploration_id = %exploration_id,
                 invalidated_by = %invalidated_by,
                 reason = %reason,
@@ -212,7 +213,7 @@ impl Storage {
                 Ok(n > 0)
             })
             .context("failed to review exploration")?;
-        tracing::info!(exploration_id = %exploration_id, status, reviewer = %reviewer, "exploration reviewed");
+        info!(exploration_id = %exploration_id, status, reviewer = %reviewer, "exploration reviewed");
         Ok(changed)
     }
 

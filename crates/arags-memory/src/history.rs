@@ -1,5 +1,8 @@
+use std::time::Instant;
+
 use anyhow::{Context, Result};
 use rusqlite::params;
+use tracing::{debug, info};
 
 use arags_storage::Storage;
 
@@ -79,6 +82,7 @@ impl HistoryManager {
         user: &str,
     ) -> Result<i64> {
         let _timer = ScopedTimer::new("history_record");
+        let start = Instant::now();
 
         let conn = self.storage.conn();
         let conn = conn.lock();
@@ -104,7 +108,14 @@ impl HistoryManager {
             .context("failed to insert history")?;
 
         let history_id = i64::try_from(id).context("history id overflow")?;
-        tracing::info!(history_id, query_type, used_by, user, "query recorded");
+        info!(
+            history_id,
+            ?query_type,
+            ?used_by,
+            %user,
+            duration_ms = %start.elapsed().as_millis(),
+            "query recorded"
+        );
 
         Ok(history_id)
     }
@@ -135,6 +146,7 @@ impl HistoryManager {
         limit: i64,
     ) -> Result<Vec<QueryRecord>> {
         let _timer = ScopedTimer::new("history_recent");
+        let start = Instant::now();
 
         let conn = self.storage.conn();
         let conn = conn.lock();
@@ -166,7 +178,7 @@ impl HistoryManager {
         let params_refs: Vec<&dyn rusqlite::types::ToSql> =
             params_vec.iter().map(AsRef::as_ref).collect();
 
-        let rows = stmt
+        let rows: Vec<QueryRecord> = stmt
             .query_map(params_refs.as_slice(), |row| {
                 Ok(QueryRecord {
                     id: row.get(0)?,
@@ -182,6 +194,13 @@ impl HistoryManager {
             })?
             .filter_map(std::result::Result::ok)
             .collect();
+
+        debug!(
+            limit,
+            results = rows.len(),
+            duration_ms = %start.elapsed().as_millis(),
+            "history recent query complete"
+        );
 
         Ok(rows)
     }

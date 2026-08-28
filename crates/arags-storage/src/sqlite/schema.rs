@@ -40,6 +40,7 @@ pub const MIGRATION_COUNT: usize = MIGRATIONS.len();
 /// version cannot be read, a migration script fails, or the version record
 /// cannot be inserted.
 pub fn run_migrations(conn: &Connection) -> Result<()> {
+    let start = std::time::Instant::now();
     // Create schema_version table if it doesn't exist
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_version (
@@ -81,6 +82,7 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     debug!(
         version = current_version,
         applied = MIGRATIONS.len(),
+        duration_ms = %start.elapsed().as_millis(),
         "schema migrations applied"
     );
 

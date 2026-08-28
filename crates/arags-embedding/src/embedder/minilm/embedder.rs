@@ -3,9 +3,11 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Instant;
 
 use candle_core::{Device, Tensor};
 use tokenizers::Tokenizer;
+use tracing::{debug, error, info};
 
 use super::model::MiniLmModel;
 use crate::embedder::config::Quantization;
@@ -49,12 +51,15 @@ impl MinilmEmbedder {
         let tokenizer = Tokenizer::from_file(model_dir.join("tokenizer.json"))
             .map_err(|e| EmbeddingError::Tokenizer(format!("failed to load tokenizer: {e}")))?;
 
+        let load_start = Instant::now();
         let model = MiniLmModel::load(model_dir, &device, quantization.ggml_dtype())?;
+        let load_ms = load_start.elapsed().as_millis();
 
-        tracing::info!(
+        info!(
             model_dir = %model_dir.display(),
             dims = model.hidden_size(),
             ?quantization,
+            duration_ms = %load_ms,
             "loaded minilm embedder"
         );
 
@@ -155,14 +160,31 @@ impl Embedder for MinilmEmbedder {
     ///
     /// Returns an error if tokenization or model inference fails.
     fn embed(&self, text: &str) -> EmbeddingResult<Embedding> {
-        let (input_ids, attention_mask) = self.prepare_inputs(std::slice::from_ref(&text))?;
-        let output = self.model.forward(&input_ids, &attention_mask)?;
-        let embedding = Self::mean_pool(&output, &attention_mask)?;
-        embedding
-            .squeeze(0)
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))?
-            .to_vec1::<f32>()
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))
+        let start = Instant::now();
+        let result = (|| -> EmbeddingResult<Embedding> {
+            let (input_ids, attention_mask) = self.prepare_inputs(std::slice::from_ref(&text))?;
+            let output = self.model.forward(&input_ids, &attention_mask)?;
+            let embedding = Self::mean_pool(&output, &attention_mask)?;
+            embedding
+                .squeeze(0)
+                .map_err(|e| EmbeddingError::Candle(e.to_string()))?
+                .to_vec1::<f32>()
+                .map_err(|e| EmbeddingError::Candle(e.to_string()))
+        })();
+        match result {
+            Ok(embedding) => {
+                debug!(
+                    duration_us = %start.elapsed().as_micros(),
+                    dims = embedding.len(),
+                    "embedded single text"
+                );
+                Ok(embedding)
+            }
+            Err(e) => {
+                error!(error = %e, "minilm embed failed");
+                Err(e)
+            }
+        }
     }
 
     /// # Errors
@@ -172,13 +194,30 @@ impl Embedder for MinilmEmbedder {
         if texts.is_empty() {
             return Ok(Vec::new());
         }
-        let _timer = crate::Timer::new("minilm_embed_batch");
-        let (input_ids, attention_mask) = self.prepare_inputs(texts)?;
-        let output = self.model.forward(&input_ids, &attention_mask)?;
-        let embeddings = Self::mean_pool(&output, &attention_mask)?;
-        embeddings
-            .to_vec2::<f32>()
-            .map_err(|e| EmbeddingError::Candle(e.to_string()))
+        let start = Instant::now();
+        let result = (|| -> EmbeddingResult<Vec<Embedding>> {
+            let (input_ids, attention_mask) = self.prepare_inputs(texts)?;
+            let output = self.model.forward(&input_ids, &attention_mask)?;
+            let embeddings = Self::mean_pool(&output, &attention_mask)?;
+            embeddings
+                .to_vec2::<f32>()
+                .map_err(|e| EmbeddingError::Candle(e.to_string()))
+        })();
+        match result {
+            Ok(embeddings) => {
+                debug!(
+                    batch_size = texts.len(),
+                    duration_ms = %start.elapsed().as_millis(),
+                    dims = self.model.hidden_size(),
+                    "embedded batch"
+                );
+                Ok(embeddings)
+            }
+            Err(e) => {
+                error!(error = %e, batch_size = texts.len(), "minilm embed_batch failed");
+                Err(e)
+            }
+        }
     }
 
     fn dimensions(&self) -> usize {

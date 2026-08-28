@@ -25,6 +25,8 @@ use tonic::{Request, Response, Status, Streaming};
 
 use crate::state::AppState;
 
+use tracing::instrument;
+
 use arags_proto::proto::{
     AuthRefreshRequest, AuthRefreshResponse, ClaimPendingQaRequest, ClaimPendingQaResponse,
     ClaimRlmJobRequest, ClaimRlmJobResponse, CompletePendingQaRequest, CompletePendingQaResponse,
@@ -61,6 +63,7 @@ impl AragsGrpcService {
 impl AragsService for AragsGrpcService {
     // ── Project management ────────────────────────────────────────────────
 
+    #[instrument(skip(self, request))]
     async fn create_project(
         &self,
         request: Request<CreateProjectRequest>,
@@ -70,6 +73,7 @@ impl AragsService for AragsGrpcService {
         project::handle_create_project(&self.state, request.into_inner()).await
     }
 
+    #[instrument(skip(self, request))]
     async fn list_projects(
         &self,
         request: Request<()>,
@@ -79,6 +83,7 @@ impl AragsService for AragsGrpcService {
         project::handle_list_projects(&self.state).await
     }
 
+    #[instrument(skip(self, request))]
     async fn get_project(&self, request: Request<String>) -> Result<Response<ProjectInfo>, Status> {
         let _timer = crate::timing::Timer::new("handler.get_project");
         crate::auth::authenticate(request.metadata(), &self.state.storage)?;
@@ -87,6 +92,7 @@ impl AragsService for AragsGrpcService {
 
     // ── Indexing ──────────────────────────────────────────────────────────
 
+    #[instrument(skip(self, request))]
     async fn index_project(
         &self,
         request: Request<Streaming<IndexChunk>>,
@@ -107,6 +113,7 @@ impl AragsService for AragsGrpcService {
 
     // ── Search ────────────────────────────────────────────────────────────
 
+    #[instrument(skip(self, request))]
     async fn search(
         &self,
         request: Request<SearchRequest>,
@@ -115,6 +122,7 @@ impl AragsService for AragsGrpcService {
         search::handle_search(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn build_context(
         &self,
         request: Request<ContextRequest>,
@@ -126,6 +134,7 @@ impl AragsService for AragsGrpcService {
 
     // ── Server status ─────────────────────────────────────────────────────
 
+    #[instrument(skip(self, _request))]
     async fn get_server_status(
         &self,
         _request: Request<()>,
@@ -136,6 +145,7 @@ impl AragsService for AragsGrpcService {
 
     // ── Auth (plan 018) ────────────────────────────────────────────────────
 
+    #[instrument(skip(self, request))]
     async fn auth_refresh(
         &self,
         request: Request<AuthRefreshRequest>,
@@ -144,6 +154,7 @@ impl AragsService for AragsGrpcService {
         auth::handle_auth_refresh(&self.state, request.into_inner()).await
     }
 
+    #[instrument(skip(self, request))]
     async fn invalidate_cache(
         &self,
         request: Request<InvalidateCacheRequest>,
@@ -154,6 +165,7 @@ impl AragsService for AragsGrpcService {
 
     // ── Query-Answer Cache (plan 017, client-side digest-once) ────────────
 
+    #[instrument(skip(self, request))]
     async fn query_with_cache(
         &self,
         request: Request<QueryWithCacheRequest>,
@@ -162,6 +174,7 @@ impl AragsService for AragsGrpcService {
         query_cache::handle_query_with_cache(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn store_answer(
         &self,
         request: Request<StoreAnswerRequest>,
@@ -170,6 +183,7 @@ impl AragsService for AragsGrpcService {
         query_cache::handle_store_answer(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn get_answer_by_id(
         &self,
         request: Request<GetAnswerByIdRequest>,
@@ -180,6 +194,7 @@ impl AragsService for AragsGrpcService {
 
     // ── QA re-digest queue (issue `agnostic-rlm-rs-d172`) ────────────────
 
+    #[instrument(skip(self, request))]
     async fn claim_pending_qa(
         &self,
         request: Request<ClaimPendingQaRequest>,
@@ -188,6 +203,7 @@ impl AragsService for AragsGrpcService {
         query_cache::handle_claim_pending_qa(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn complete_pending_qa(
         &self,
         request: Request<CompletePendingQaRequest>,
@@ -198,6 +214,7 @@ impl AragsService for AragsGrpcService {
 
     // ── Memory / cache admin (plan 019) ──────────────────────────────────
 
+    #[instrument(skip(self, request))]
     async fn list_memory(
         &self,
         request: Request<ListMemoryRequest>,
@@ -206,6 +223,7 @@ impl AragsService for AragsGrpcService {
         memory::handle_list_memory(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn get_cache(
         &self,
         request: Request<GetCacheRequest>,
@@ -214,6 +232,7 @@ impl AragsService for AragsGrpcService {
         memory::handle_get_cache(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn trigger_maintenance(
         &self,
         request: Request<TriggerMaintenanceRequest>,
@@ -224,6 +243,7 @@ impl AragsService for AragsGrpcService {
 
     // ── History (plan 019, E) ────────────────────────────────────────────
 
+    #[instrument(skip(self, request))]
     async fn get_history(
         &self,
         request: Request<GetHistoryRequest>,
@@ -234,6 +254,7 @@ impl AragsService for AragsGrpcService {
 
     // ── RLM recursive summaries ──────────────────────────────────────────
 
+    #[instrument(skip(self, request))]
     async fn claim_rlm_job(
         &self,
         request: Request<ClaimRlmJobRequest>,
@@ -242,6 +263,7 @@ impl AragsService for AragsGrpcService {
         rlm::handle_claim_rlm_job(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn complete_rlm_job(
         &self,
         request: Request<CompleteRlmJobRequest>,
@@ -250,6 +272,7 @@ impl AragsService for AragsGrpcService {
         rlm::handle_complete_rlm_job(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn get_rlm_job_status(
         &self,
         request: Request<GetRlmJobStatusRequest>,
@@ -258,6 +281,7 @@ impl AragsService for AragsGrpcService {
         rlm::handle_get_rlm_job_status(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn review_rlm_node(
         &self,
         request: Request<ReviewRlmNodeRequest>,
@@ -266,6 +290,7 @@ impl AragsService for AragsGrpcService {
         rlm::handle_review_rlm_node(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn list_rlm_nodes(
         &self,
         request: Request<ListRlmNodesRequest>,
@@ -276,13 +301,16 @@ impl AragsService for AragsGrpcService {
 
     // ── Explorations (plan 022) ──────────────────────────────────────────
 
+    #[instrument(skip(self, request))]
     async fn persist_exploration(
         &self,
         request: Request<PersistExplorationRequest>,
     ) -> Result<Response<PersistExplorationResponse>, Status> {
+        let _timer = crate::timing::Timer::new("handler.persist_exploration");
         exploration::handle_persist_exploration(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn search_explorations(
         &self,
         request: Request<SearchExplorationsRequest>,
@@ -291,6 +319,7 @@ impl AragsService for AragsGrpcService {
         exploration::search::handle_search_explorations(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn get_exploration_by_id(
         &self,
         request: Request<GetExplorationByIdRequest>,
@@ -299,6 +328,7 @@ impl AragsService for AragsGrpcService {
         exploration::search::handle_get_exploration_by_id(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn invalidate_exploration(
         &self,
         request: Request<InvalidateExplorationRequest>,
@@ -307,6 +337,7 @@ impl AragsService for AragsGrpcService {
         exploration::feedback::handle_invalidate_exploration(&self.state, request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn review_exploration(
         &self,
         request: Request<ReviewExplorationRequest>,

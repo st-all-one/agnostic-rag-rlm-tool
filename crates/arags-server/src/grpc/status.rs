@@ -1,6 +1,7 @@
 //! Server status RPC: `GetServerStatus`.
 
 use tonic::{Response, Status};
+use tracing::info;
 
 use crate::state::AppState;
 use crate::store;
@@ -29,7 +30,7 @@ pub(crate) async fn handle_get_server_status(
 
     let (total_projects, total_chunks) = stats;
 
-    tracing::info!(total_projects, total_chunks, "server status queried");
+    info!(total_projects, total_chunks, "server status queried");
 
     Ok(Response::new(ServerStatus {
         version: env!("CARGO_PKG_VERSION").to_string(),

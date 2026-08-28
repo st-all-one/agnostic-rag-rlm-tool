@@ -22,6 +22,8 @@ pub mod persist;
 pub mod project;
 pub mod transfer;
 
+use tracing::info;
+
 pub use consolidation::{ConsolidateOptions, ConsolidateResult, ConsolidationEngine};
 pub use decay::{DecayConfig, SalienceInput, compute_salience, should_evict};
 pub use engine::{
@@ -46,7 +48,7 @@ impl ScopedTimer {
     /// Create a new timer with a label.
     #[must_use]
     pub fn new(label: &str) -> Self {
-        tracing::info!(label = label, "started");
+        info!(label = %label, "timer started");
         Self {
             label: label.to_string(),
             start: std::time::Instant::now(),
@@ -63,10 +65,10 @@ impl ScopedTimer {
 impl Drop for ScopedTimer {
     fn drop(&mut self) {
         let elapsed = self.start.elapsed();
-        tracing::info!(
-            label = self.label.as_str(),
-            elapsed_ms = elapsed.as_millis(),
-            "completed"
+        info!(
+            label = %self.label,
+            duration_ms = %elapsed.as_millis(),
+            "timer completed"
         );
     }
 }

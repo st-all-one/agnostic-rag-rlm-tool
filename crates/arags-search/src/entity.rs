@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use arags_storage::Storage;
+use tracing::info;
 
 use crate::types::EntityResult;
 
@@ -58,11 +59,11 @@ impl EntitySearch {
             })
             .collect();
 
-        tracing::info!(
+        info!(
             buffer_id,
             query_entities = ?query_entities,
             results_count = results.len(),
-            elapsed_ms = start.elapsed().as_millis(),
+            duration_ms = %start.elapsed().as_millis(),
             "entity search completed"
         );
 
@@ -91,10 +92,10 @@ impl EntitySearch {
             })
             .collect();
 
-        tracing::info!(
+        info!(
             query_entities = ?query_entities,
             results_count = results.len(),
-            elapsed_ms = start.elapsed().as_millis(),
+            duration_ms = %start.elapsed().as_millis(),
             "entity search_all completed"
         );
 
